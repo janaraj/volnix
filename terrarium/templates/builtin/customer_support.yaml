@@ -1,0 +1,76 @@
+# Customer Support World Template
+# ================================
+# This YAML file defines the default world structure for the customer
+# support template.  The Python template class may override or extend
+# these values based on runtime parameters.
+
+template:
+  id: customer_support
+  name: Customer Support
+  version: "0.1.0"
+
+services:
+  - name: email
+    category: communication
+    pack: email
+
+  - name: chat
+    category: communication
+    pack: chat
+
+  - name: tickets
+    category: work_management
+    pack: tickets
+
+  - name: payments
+    category: money_transactions
+    pack: payments
+
+actors:
+  - id: agent_1
+    type: agent
+    name: Support Agent 1
+    roles: [support_agent]
+
+  - id: agent_2
+    type: agent
+    name: Support Agent 2
+    roles: [support_agent]
+
+  - id: customer_1
+    type: human
+    name: Customer 1
+    roles: [customer]
+
+  - id: customer_2
+    type: human
+    name: Customer 2
+    roles: [customer]
+
+  - id: supervisor
+    type: human
+    name: Support Supervisor
+    roles: [supervisor]
+
+policies:
+  - id: refund_threshold
+    description: "Require supervisor approval for refunds above $100."
+    enforcement: hold
+    conditions:
+      action: refund_create
+      amount_gt: 100.0
+    approver_role: supervisor
+
+  - id: escalation_sla
+    description: "Auto-escalate tickets not responded to within 4 hours."
+    enforcement: escalate
+    conditions:
+      entity_type: ticket
+      idle_hours_gt: 4
+    target_role: supervisor
+
+seed_data:
+  tickets:
+    count: 5
+  emails:
+    count: 10

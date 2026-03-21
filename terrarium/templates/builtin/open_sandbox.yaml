@@ -1,0 +1,45 @@
+# Open Sandbox World Template
+# =============================
+# Minimal world with all service packs and no governance policies.
+
+template:
+  id: open_sandbox
+  name: Open Sandbox
+  version: "0.1.0"
+
+mode: ungoverned
+
+services:
+  - name: email
+    category: communication
+    pack: email
+
+  - name: chat
+    category: communication
+    pack: chat
+
+  - name: tickets
+    category: work_management
+    pack: tickets
+
+  - name: payments
+    category: money_transactions
+    pack: payments
+
+  - name: repos
+    category: code_devops
+    pack: repos
+
+  - name: calendar
+    category: scheduling
+    pack: calendar
+
+actors:
+  - id: agent
+    type: agent
+    name: Sandbox Agent
+    roles: [admin]
+
+policies: []
+
+seed_data: {}

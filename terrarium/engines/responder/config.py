@@ -1,0 +1,12 @@
+"""Configuration model for the world responder engine."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+
+class ResponderConfig(BaseModel):
+    """Configuration for the world responder engine."""
+
+    max_retries: int
+    fallback_enabled: bool
