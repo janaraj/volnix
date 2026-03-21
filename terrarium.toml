@@ -1,0 +1,194 @@
+# ══════════════════════════════════════════════════════════════
+# Terrarium Base Configuration
+# ══════════════════════════════════════════════════════════════
+# Override per-environment with terrarium.{env}.toml
+# Override locally (git-ignored) with terrarium.local.toml
+
+# ── Simulation ───────────────────────────────────────────────
+
+[simulation]
+seed = 42
+time_speed = 1.0                    # 1.0 = real-time, 2.0 = double speed
+mode = "governed"                   # "governed" | "ungoverned"
+
+[simulation.reality]
+preset = "realistic"                # "pristine" | "realistic" | "harsh"
+
+[simulation.fidelity]
+mode = "auto"                       # "auto" | "strict" | "exploratory"
+
+# ── Pipeline ─────────────────────────────────────────────────
+
+[pipeline]
+steps = [
+    "permission",
+    "policy",
+    "budget",
+    "capability",
+    "responder",
+    "validation",
+    "commit",
+]
+max_side_effect_depth = 3
+step_timeout_seconds = 30
+
+# ── Event Bus ────────────────────────────────────────────────
+
+[bus]
+db_path = "data/bus.db"
+queue_size = 1000
+persistence_enabled = true
+
+# ── Ledger ───────────────────────────────────────────────────
+
+[ledger]
+db_path = "data/ledger.db"
+retention_days = 90
+
+# ── Persistence ──────────────────────────────────────────────
+
+[persistence]
+base_dir = "data"
+wal_mode = true
+
+# ── State Engine ─────────────────────────────────────────────
+
+[state]
+db_path = "data/state.db"
+snapshot_dir = "snapshots"
+
+# ── Policy Engine ────────────────────────────────────────────
+
+[policy]
+condition_timeout_ms = 500
+max_policies_per_action = 50
+
+# ── Permission Engine ────────────────────────────────────────
+
+[permission]
+cache_ttl_seconds = 300
+
+# ── Budget Engine ────────────────────────────────────────────
+
+[budget]
+warning_threshold_pct = 80
+critical_threshold_pct = 95
+
+# ── Responder Engine ─────────────────────────────────────────
+
+[responder]
+max_retries = 2
+fallback_enabled = true
+
+# ── Animator Engine ──────────────────────────────────────────
+
+[animator]
+creativity_budget = 0.3             # fraction of LLM budget reserved for animator
+intensity = 0.5                     # 0.0 = minimal narration, 1.0 = maximal
+enabled = true
+
+# ── Adapter Engine ───────────────────────────────────────────
+
+[adapter]
+protocols = ["mcp", "http"]
+host = "0.0.0.0"
+port = 8100
+
+# ── Reporter Engine ──────────────────────────────────────────
+
+[reporter]
+output_formats = ["json", "markdown"]
+output_dir = "reports"
+
+# ── Feedback Engine ──────────────────────────────────────────
+
+[feedback]
+annotations_db_path = "data/annotations.db"
+external_sync_enabled = false
+
+# ── Dashboard ────────────────────────────────────────────────
+
+[dashboard]
+host = "127.0.0.1"
+port = 8200
+enabled = false
+
+# ── Gateway ──────────────────────────────────────────────────
+
+[gateway]
+host = "0.0.0.0"
+port = 8000
+middleware = ["auth", "rate_limit", "audit_log"]
+
+# ── Runs ─────────────────────────────────────────────────────
+
+[runs]
+data_dir = "data/runs"
+snapshot_on_complete = true
+
+# ══════════════════════════════════════════════════════════════
+# LLM Configuration
+# ══════════════════════════════════════════════════════════════
+
+# ── Defaults ─────────────────────────────────────────────────
+
+[llm.defaults]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+temperature = 0.7
+timeout_seconds = 60
+max_retries = 3
+
+# ── Provider Registry ────────────────────────────────────────
+
+[llm.providers.anthropic]
+type = "anthropic"
+api_key_ref = "ANTHROPIC_API_KEY"
+
+[llm.providers.openai]
+type = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key_ref = "OPENAI_API_KEY"
+
+[llm.providers.gemini]
+type = "openai_compatible"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+api_key_ref = "GEMINI_API_KEY"
+
+[llm.providers.ollama]
+type = "openai_compatible"
+base_url = "http://localhost:11434/v1"
+api_key_ref = ""                    # Ollama requires no API key
+
+# ── Task-Specific Routing ────────────────────────────────────
+
+[llm.routing.world_compiler]
+provider = "anthropic"
+model = "claude-opus-4-20250514"
+max_tokens = 8192
+temperature = 0.4
+
+[llm.routing.responder_tier2]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+temperature = 0.7
+
+[llm.routing.service_bootstrapper]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+temperature = 0.5
+
+[llm.routing.animator]
+provider = "anthropic"
+model = "claude-haiku-4-20250514"
+max_tokens = 2048
+temperature = 0.9
+
+[llm.routing.data_generator]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+temperature = 0.5

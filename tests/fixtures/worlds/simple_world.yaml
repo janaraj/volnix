@@ -1,0 +1,56 @@
+# Minimal world fixture for testing: 2 services, 1 agent, 5 customers.
+name: simple-test-world
+description: A minimal world definition used by integration tests.
+
+services:
+  - name: email
+    category: communication
+    primitives:
+      - send_email
+      - read_email
+
+  - name: tickets
+    category: work_management
+    primitives:
+      - create_ticket
+      - update_ticket
+      - close_ticket
+
+actors:
+  agents:
+    - id: agent-001
+      name: support-bot
+      role: customer_support
+      permissions:
+        - email.send_email
+        - email.read_email
+        - tickets.create_ticket
+        - tickets.update_ticket
+        - tickets.close_ticket
+
+  customers:
+    - id: cust-001
+      name: Alice
+    - id: cust-002
+      name: Bob
+    - id: cust-003
+      name: Carol
+    - id: cust-004
+      name: Dave
+    - id: cust-005
+      name: Eve
+
+policies:
+  - name: no-closing-without-response
+    description: Agent must respond to the customer before closing a ticket.
+    trigger: tickets.close_ticket
+    enforcement: block
+
+budget:
+  total_llm_calls: 100
+  total_cost_usd: 5.00
+  warning_threshold: 0.8
+
+simulation:
+  ticks: 20
+  fidelity_tier: tier2

@@ -1,0 +1,29 @@
+"""Tests for terrarium.engines.budget — budget tracking, deduction, and thresholds."""
+import pytest
+import pytest_asyncio
+from terrarium.engines.budget.engine import BudgetEngine
+
+
+@pytest.mark.asyncio
+async def test_budget_check_sufficient():
+    ...
+
+
+@pytest.mark.asyncio
+async def test_budget_check_exhausted():
+    ...
+
+
+@pytest.mark.asyncio
+async def test_budget_deduct():
+    ...
+
+
+@pytest.mark.asyncio
+async def test_budget_warning_threshold():
+    ...
+
+
+@pytest.mark.asyncio
+async def test_budget_spend_curve():
+    ...
