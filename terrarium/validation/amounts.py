@@ -6,6 +6,7 @@ and non-negativity invariants.
 
 from __future__ import annotations
 
+from terrarium.core.types import ValidationType
 from terrarium.validation.schema import ValidationResult
 
 
@@ -26,7 +27,19 @@ class AmountValidator:
         Returns:
             A :class:`ValidationResult` indicating validity.
         """
-        ...
+        if refund_amount > charge_amount:
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    f"Refund amount {refund_amount} exceeds "
+                    f"charge amount {charge_amount}"
+                ],
+                validation_type=ValidationType.AMOUNT,
+            )
+        return ValidationResult(
+            valid=True,
+            validation_type=ValidationType.AMOUNT,
+        )
 
     def validate_budget_deduction(
         self,
@@ -42,7 +55,19 @@ class AmountValidator:
         Returns:
             A :class:`ValidationResult` indicating validity.
         """
-        ...
+        if deduction > remaining + 1e-9:  # epsilon tolerance for float precision
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    f"Deduction {deduction} exceeds "
+                    f"remaining budget {remaining}"
+                ],
+                validation_type=ValidationType.AMOUNT,
+            )
+        return ValidationResult(
+            valid=True,
+            validation_type=ValidationType.AMOUNT,
+        )
 
     def validate_non_negative(
         self,
@@ -58,4 +83,15 @@ class AmountValidator:
         Returns:
             A :class:`ValidationResult` indicating validity.
         """
-        ...
+        if value < 0:
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    f"Field '{field_name}' has negative value: {value}"
+                ],
+                validation_type=ValidationType.AMOUNT,
+            )
+        return ValidationResult(
+            valid=True,
+            validation_type=ValidationType.AMOUNT,
+        )

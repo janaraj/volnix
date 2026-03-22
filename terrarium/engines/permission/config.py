@@ -8,4 +8,4 @@ from pydantic import BaseModel
 class PermissionConfig(BaseModel):
     """Configuration for the permission engine."""
 
-    cache_ttl_seconds: int
+    cache_ttl_seconds: int = 300

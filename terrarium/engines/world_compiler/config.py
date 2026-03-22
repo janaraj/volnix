@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class WorldCompilerConfig(BaseModel):
     """Configuration for the world compiler engine."""
 
-    default_seed: int
-    max_entities_per_type: int
+    default_seed: int = 42
+    max_entities_per_type: int = 1000

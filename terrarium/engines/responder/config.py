@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class ResponderConfig(BaseModel):
     """Configuration for the world responder engine."""
 
-    max_retries: int
-    fallback_enabled: bool
+    max_retries: int = 2
+    fallback_enabled: bool = True

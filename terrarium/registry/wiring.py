@@ -6,9 +6,13 @@ inter-engine dependencies, and initialising the full engine graph.
 
 from __future__ import annotations
 
+import logging
+
 from terrarium.core.engine import BaseEngine
 from terrarium.config.schema import TerrariumConfig
 from terrarium.registry.registry import EngineRegistry
+
+logger = logging.getLogger(__name__)
 
 
 async def wire_engines(
@@ -26,7 +30,36 @@ async def wire_engines(
         bus: The shared event bus instance.
         config: The root Terrarium configuration.
     """
-    ...
+    order = registry.resolve_initialization_order()
+    for engine_name in order:
+        engine = registry.get(engine_name)
+        config_obj = getattr(config, engine_name, None)
+        engine_config = config_obj.model_dump() if config_obj is not None else {}
+        await engine.initialize(engine_config, bus)
+        await inject_dependencies(engine, registry)
+        await engine.start()
+
+
+async def shutdown_engines(
+    registry: EngineRegistry,
+) -> None:
+    """Shut down all registered engines in reverse dependency order.
+
+    Args:
+        registry: The engine registry containing all engines to stop.
+    """
+    try:
+        order = registry.resolve_initialization_order()
+    except Exception as exc:
+        logger.warning("Could not resolve shutdown order, falling back to unordered: %s", exc)
+        order = registry.list_engines()
+    for engine_name in reversed(order):
+        engine = registry.get(engine_name)
+        try:
+            await engine.stop()
+            logger.info("Engine '%s' stopped", engine_name)
+        except Exception:
+            logger.exception("Failed to stop engine '%s'", engine_name)
 
 
 async def inject_dependencies(
@@ -42,4 +75,7 @@ async def inject_dependencies(
         engine: The engine to inject dependencies into.
         registry: The engine registry for dependency resolution.
     """
-    ...
+    resolved = {}
+    for dep_name in engine.dependencies:
+        resolved[dep_name] = registry.get(dep_name)
+    engine._dependencies = resolved

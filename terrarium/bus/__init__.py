@@ -18,16 +18,18 @@ from terrarium.bus.replay import ReplayEngine
 from terrarium.bus.types import BusMetrics, Subscriber, Subscription
 
 __all__ = [
+    # Public API
     "BusConfig",
     "BusMetrics",
-    "BusPersistence",
+    "BusMiddleware",
     "EventBus",
+    "ReplayEngine",
+    "Subscriber",
+    # Internal (exported for advanced use / testing)
+    "BusPersistence",
     "LoggingMiddleware",
     "MetricsMiddleware",
     "MiddlewareChain",
-    "BusMiddleware",
-    "ReplayEngine",
-    "Subscriber",
     "Subscription",
     "TopicFanout",
 ]

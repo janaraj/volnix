@@ -42,6 +42,7 @@ class BasePipelineStep(ABC):
         message: str = "",
         events: list[EventId] | None = None,
         metadata: dict[str, Any] | None = None,
+        duration_ms: float = 0.0,
     ) -> StepResult:
         """Construct a :class:`StepResult` with timing information.
 
@@ -50,8 +51,16 @@ class BasePipelineStep(ABC):
             message: Human-readable explanation.
             events: Optional list of event IDs generated.
             metadata: Optional metadata dictionary.
+            duration_ms: Wall-clock milliseconds the step took.
 
         Returns:
             A populated :class:`StepResult`.
         """
-        ...
+        return StepResult(
+            step_name=self.step_name,
+            verdict=verdict,
+            message=message,
+            events=events or [],
+            metadata=metadata or {},
+            duration_ms=duration_ms,
+        )

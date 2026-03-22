@@ -9,12 +9,20 @@ This package provides the two-tier service simulation abstraction:
 
 Re-exports the primary public API surface::
 
-    from terrarium.packs import ServicePack, ServiceProfile
+    from terrarium.packs import ServicePack, ServiceProfile, PackRegistry, PackRuntime
 """
 
-from terrarium.packs.base import ServicePack, ServiceProfile
+from terrarium.packs.base import ActionHandler, ServicePack, ServiceProfile
+from terrarium.packs.loader import discover_packs, discover_profiles
+from terrarium.packs.registry import PackRegistry
+from terrarium.packs.runtime import PackRuntime
 
 __all__ = [
+    "ActionHandler",
+    "PackRegistry",
+    "PackRuntime",
     "ServicePack",
     "ServiceProfile",
+    "discover_packs",
+    "discover_profiles",
 ]

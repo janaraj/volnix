@@ -7,11 +7,14 @@ results to the event bus and ledger.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from terrarium.core.context import ActionContext, StepResult
 from terrarium.core.events import Event
 from terrarium.core.protocols import LedgerProtocol, PipelineStep
+from terrarium.core.types import StepVerdict
+from terrarium.ledger.entries import PipelineStepEntry
 
 
 class PipelineDAG:
@@ -21,13 +24,26 @@ class PipelineDAG:
     the pipeline short-circuits and marks the context accordingly.
     """
 
+    # Field mapping from step name to ActionContext attribute
+    _FIELD_MAP: dict[str, str] = {
+        "permission": "permission_result",
+        "policy": "policy_result",
+        "budget": "budget_result",
+        "capability": "capability_result",
+        "responder": "responder_result",
+        "validation": "validation_result",
+        "commit": "commit_result",
+    }
+
     def __init__(
         self,
         steps: list[PipelineStep],
         bus: Any | None = None,
         ledger: LedgerProtocol | None = None,
     ) -> None:
-        ...
+        self._steps = list(steps)
+        self._bus = bus
+        self._ledger = ledger
 
     @property
     def step_names(self) -> list[str]:
@@ -36,7 +52,7 @@ class PipelineDAG:
         Returns:
             A list of step name strings.
         """
-        ...
+        return [s.step_name for s in self._steps]
 
     async def execute(self, ctx: ActionContext) -> ActionContext:
         """Execute all pipeline steps against the given context.
@@ -50,7 +66,43 @@ class PipelineDAG:
         Returns:
             The enriched action context after all (or short-circuited) steps.
         """
-        ...
+        for step in self._steps:
+            t0 = time.monotonic()
+            try:
+                result = await step.execute(ctx)
+            except Exception as exc:
+                elapsed_ms = (time.monotonic() - t0) * 1000.0
+                result = StepResult(
+                    step_name=step.step_name,
+                    verdict=StepVerdict.ERROR,
+                    message=str(exc),
+                    duration_ms=elapsed_ms,
+                )
+            else:
+                elapsed_ms = (time.monotonic() - t0) * 1000.0
+                # DAG always measures its own wall-clock duration (overrides step's value)
+                result = StepResult(
+                    step_name=result.step_name,
+                    verdict=result.verdict,
+                    message=result.message,
+                    events=result.events,
+                    metadata=result.metadata,
+                    duration_ms=elapsed_ms,
+                )
+
+            self._record_result(ctx, step.step_name, result)
+
+            await self._record_to_ledger(ctx, result)
+
+            for event in result.events:
+                await self._publish_step_event(event)
+
+            if result.is_terminal:
+                ctx.short_circuited = True
+                ctx.short_circuit_step = step.step_name
+                break
+
+        return ctx
 
     def _record_result(self, ctx: ActionContext, step_name: str, result: StepResult) -> None:
         """Record a step result onto the action context.
@@ -60,7 +112,30 @@ class PipelineDAG:
             step_name: The name of the step that produced the result.
             result: The step result to record.
         """
-        ...
+        field_name = self._FIELD_MAP.get(step_name)
+        if field_name is not None:
+            setattr(ctx, field_name, result)
+
+    async def _record_to_ledger(self, ctx: ActionContext, result: StepResult) -> None:
+        """Record a step execution to the ledger.
+
+        Args:
+            ctx: The action context for lineage data.
+            result: The step result to record.
+        """
+        if self._ledger is None:
+            return
+
+        entry = PipelineStepEntry(
+            step_name=result.step_name,
+            request_id=ctx.request_id,
+            actor_id=ctx.actor_id,
+            action=ctx.action,
+            verdict=str(result.verdict),
+            duration_ms=result.duration_ms,
+            message=result.message or "",
+        )
+        await self._ledger.append(entry)
 
     async def _publish_step_event(self, event: Event) -> None:
         """Publish a step-lifecycle event to the bus.
@@ -68,4 +143,6 @@ class PipelineDAG:
         Args:
             event: The event to publish.
         """
-        ...
+        if self._bus is None:
+            return
+        await self._bus.publish(event)

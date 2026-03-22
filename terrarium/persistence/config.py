@@ -7,10 +7,11 @@ connection pooling, and migration behaviour.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PersistenceConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     """Configuration for the Terrarium persistence layer.
 
     Attributes:

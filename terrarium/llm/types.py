@@ -6,7 +6,18 @@ all LLM providers and the routing layer.
 
 from __future__ import annotations
 
+import enum
+
 from pydantic import BaseModel
+
+
+class ProviderType(enum.StrEnum):
+    """Discriminator for the kind of LLM provider."""
+
+    API = "api"
+    ACP = "acp"
+    CLI = "cli"
+    MOCK = "mock"
 
 
 class LLMUsage(BaseModel, frozen=True):
@@ -25,7 +36,7 @@ class LLMUsage(BaseModel, frozen=True):
     cost_usd: float = 0.0
 
 
-class LLMRequest(BaseModel):
+class LLMRequest(BaseModel, frozen=True):
     """Request payload sent to an LLM provider.
 
     Attributes:
@@ -57,6 +68,7 @@ class LLMResponse(BaseModel, frozen=True):
         model: The model that generated the response.
         provider: The provider that served the request.
         latency_ms: Wall-clock latency in milliseconds.
+        error: Explicit error message when the request failed, or ``None`` on success.
     """
 
     content: str = ""
@@ -65,6 +77,7 @@ class LLMResponse(BaseModel, frozen=True):
     model: str = ""
     provider: str = ""
     latency_ms: float = 0.0
+    error: str | None = None
 
 
 class ProviderInfo(BaseModel, frozen=True):

@@ -6,10 +6,12 @@ reproducible test runs without requiring any external API access.
 
 from __future__ import annotations
 
+import hashlib
+import time
 from typing import ClassVar
 
 from terrarium.llm.provider import LLMProvider
-from terrarium.llm.types import LLMRequest, LLMResponse, ProviderInfo
+from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 
 
 class MockLLMProvider(LLMProvider):
@@ -26,7 +28,8 @@ class MockLLMProvider(LLMProvider):
         seed: int = 42,
         responses: dict[str, str] | None = None,
     ) -> None:
-        ...
+        self._seed = seed
+        self._responses = responses or {}
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Return a deterministic mock response.
@@ -40,7 +43,38 @@ class MockLLMProvider(LLMProvider):
         Returns:
             A deterministic :class:`LLMResponse`.
         """
-        ...
+        start = time.monotonic()
+
+        # Check for custom response mapping
+        if request.user_content in self._responses:
+            content = self._responses[request.user_content]
+        else:
+            # Deterministic hash-based response
+            seed_val = request.seed if request.seed is not None else self._seed
+            hash_input = f"{seed_val}:{request.system_prompt}:{request.user_content}"
+            digest = hashlib.sha256(hash_input.encode()).hexdigest()
+            content = f"Mock response [{digest[:12]}]: Processed '{request.user_content[:50]}'"
+
+        latency = (time.monotonic() - start) * 1000
+
+        # Estimate tokens from content length (rough: ~4 chars per token)
+        prompt_tokens = max(1, (len(request.system_prompt) + len(request.user_content)) // 4)
+        completion_tokens = max(1, len(content) // 4)
+
+        usage = LLMUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            cost_usd=0.0,
+        )
+
+        return LLMResponse(
+            content=content,
+            usage=usage,
+            model=request.model_override or "mock-model-1",
+            provider="mock",
+            latency_ms=latency,
+        )
 
     async def validate_connection(self) -> bool:
         """Always returns ``True`` for the mock provider.
@@ -48,15 +82,15 @@ class MockLLMProvider(LLMProvider):
         Returns:
             ``True``.
         """
-        ...
+        return True
 
     async def list_models(self) -> list[str]:
         """Return the list of mock model names.
 
         Returns:
-            A single-element list containing ``"mock"``.
+            A list containing two mock model identifiers.
         """
-        ...
+        return ["mock-model-1", "mock-model-2"]
 
     def get_info(self) -> ProviderInfo:
         """Return mock provider metadata.
@@ -64,4 +98,8 @@ class MockLLMProvider(LLMProvider):
         Returns:
             A :class:`ProviderInfo` for the mock provider.
         """
-        ...
+        return ProviderInfo(
+            name="mock",
+            type="mock",
+            available_models=["mock-model-1", "mock-model-2"],
+        )

@@ -7,10 +7,11 @@ per-engine routing rules.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LLMProviderEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
     """Configuration entry for a single LLM provider.
 
     Attributes:
@@ -21,6 +22,10 @@ class LLMProviderEntry(BaseModel):
         max_tokens: Default maximum tokens to generate.
         temperature: Default sampling temperature.
         timeout_seconds: Request timeout in seconds.
+        command: CLI command path (for ``"cli"`` type providers).
+        args: CLI command arguments (for ``"cli"`` type providers).
+        agent_url: ACP agent URL (for ``"acp"`` type providers).
+        agent_name: ACP agent name (for ``"acp"`` type providers).
     """
 
     type: str = ""
@@ -30,9 +35,18 @@ class LLMProviderEntry(BaseModel):
     max_tokens: int = 4096
     temperature: float = 0.7
     timeout_seconds: float = 30.0
+    # CLI-specific
+    command: str = ""
+    args: list[str] = []
+    # ACP-specific (stdio JSON-RPC)
+    auth_method: str = ""
+    # Legacy ACP-over-HTTP fields (unused by stdio provider, kept for compat)
+    agent_url: str = ""
+    agent_name: str = "default"
 
 
 class LLMRoutingEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
     """Routing rule mapping an engine/use-case to a specific provider and model.
 
     Attributes:
@@ -49,6 +63,7 @@ class LLMRoutingEntry(BaseModel):
 
 
 class LLMConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     """Top-level LLM configuration aggregating providers and routing rules.
 
     Attributes:

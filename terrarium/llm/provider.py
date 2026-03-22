@@ -1,7 +1,8 @@
 """Abstract base class for LLM providers.
 
-All concrete providers (Anthropic, OpenAI-compatible, Google, mock) implement
-this interface so that the router and registry can treat them uniformly.
+All concrete providers (Anthropic, OpenAI-compatible, Google, ACP, CLI, mock)
+implement this interface so that the router and registry can treat them
+uniformly.
 """
 
 from __future__ import annotations
@@ -29,29 +30,26 @@ class LLMProvider(ABC):
         """
         ...
 
-    @abstractmethod
     async def validate_connection(self) -> bool:
         """Check that the provider is reachable and credentials are valid.
 
         Returns:
             ``True`` if the connection is healthy, ``False`` otherwise.
         """
-        ...
+        return True
 
-    @abstractmethod
     async def list_models(self) -> list[str]:
         """List the models available from this provider.
 
         Returns:
             A list of model identifier strings.
         """
-        ...
+        return []
 
-    @abstractmethod
     def get_info(self) -> ProviderInfo:
         """Return metadata about this provider instance.
 
         Returns:
             A :class:`ProviderInfo` with provider details.
         """
-        ...
+        return ProviderInfo(name=self.provider_name, type=self.provider_name)

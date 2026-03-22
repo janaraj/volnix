@@ -60,5 +60,10 @@ def make_world_event():
 
 @pytest.fixture
 async def temp_sqlite_db(tmp_path):
-    """Create an in-memory SQLite database for integration tests."""
-    ...
+    """Create a temporary SQLite database for integration tests."""
+    from terrarium.persistence.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "test.db"))
+    await db.connect()
+    yield db
+    await db.close()
