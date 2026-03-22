@@ -275,3 +275,119 @@ class LedgerError(TerrariumError):
     """Base error for append-only ledger operations."""
 
     pass
+
+
+# ---------------------------------------------------------------------------
+# Reality errors
+# ---------------------------------------------------------------------------
+
+
+class RealityError(TerrariumError):
+    """Base error for reality dimension operations."""
+
+    pass
+
+
+class InvalidLabelError(RealityError):
+    """An unrecognized dimension label was provided."""
+
+    pass
+
+
+class InvalidPresetError(RealityError):
+    """An unrecognized reality preset was requested."""
+
+    pass
+
+
+class DimensionValueError(RealityError):
+    """A dimension attribute value is out of the valid range."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Actor errors
+# ---------------------------------------------------------------------------
+
+
+class ActorError(TerrariumError):
+    """Base error for actor-related failures."""
+
+    pass
+
+
+class ActorNotFoundError(ActorError):
+    """The requested actor does not exist in the registry."""
+
+    pass
+
+
+class DuplicateActorError(ActorError):
+    """An actor with the same ID is already registered."""
+
+    pass
+
+
+class ActorGenerationError(ActorError):
+    """Actor generation (personality, friction, batch) failed."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Kernel errors
+# ---------------------------------------------------------------------------
+
+
+class KernelError(TerrariumError):
+    """Base error for semantic kernel operations."""
+
+    pass
+
+
+class ServiceResolutionError(KernelError):
+    """A service could not be resolved to a ServiceSurface."""
+
+    pass
+
+
+class SpecParseError(KernelError):
+    """An API specification could not be parsed."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Compiler errors
+# ---------------------------------------------------------------------------
+
+
+class CompilerError(TerrariumError):
+    """Base error for world compiler operations."""
+
+    pass
+
+
+class YAMLParseError(CompilerError):
+    """A YAML world definition or compiler settings file could not be parsed."""
+
+    pass
+
+
+class NLParseError(CompilerError):
+    """Natural language parsing (LLM translation) failed."""
+
+    pass
+
+
+class ServiceResolutionFailedError(CompilerError):
+    """A service could not be resolved during world compilation."""
+
+    pass
+
+
+class WorldPlanValidationError(CompilerError):
+    """The assembled WorldPlan failed validation."""
+
+    pass

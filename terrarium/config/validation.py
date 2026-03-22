@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from terrarium.config.schema import TerrariumConfig
 
-_VALID_REALITY_PRESETS = {"pristine", "realistic", "harsh"}
+_VALID_REALITY_PRESETS = {"ideal", "messy", "hostile"}
 _VALID_FIDELITY_MODES = {"auto", "strict", "exploratory"}
 _VALID_SIMULATION_MODES = {"governed", "ungoverned"}
 

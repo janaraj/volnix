@@ -10,9 +10,10 @@
 seed = 42
 time_speed = 1.0                    # 1.0 = real-time, 2.0 = double speed
 mode = "governed"                   # "governed" | "ungoverned"
+behavior = "dynamic"                # "static" | "reactive" | "dynamic"
 
 [simulation.reality]
-preset = "realistic"                # "pristine" | "realistic" | "harsh"
+preset = "messy"                    # "ideal" | "messy" | "hostile"
 
 [simulation.fidelity]
 mode = "auto"                       # "auto" | "strict" | "exploratory"
@@ -133,13 +134,18 @@ snapshot_on_complete = true
 # ── Defaults ─────────────────────────────────────────────────
 
 [llm.defaults]
-type = "anthropic"
-default_model = "claude-sonnet-4-6"
+type = "google"
+default_model = "gemini-2.5-flash"
 max_tokens = 4096
 temperature = 0.7
 timeout_seconds = 60
 
 # ── Provider Registry ────────────────────────────────────────
+
+[llm.providers.gemini]
+type = "google"
+api_key_ref = "GOOGLE_API_KEY"
+default_model = "gemini-2.5-flash"
 
 [llm.providers.anthropic]
 type = "anthropic"
@@ -150,10 +156,11 @@ type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key_ref = "OPENAI_API_KEY"
 
-[llm.providers.gemini]
+[llm.providers.gemini_openai]
 type = "openai_compatible"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-api_key_ref = "GEMINI_API_KEY"
+api_key_ref = "GOOGLE_API_KEY"
+default_model = "gemini-2.5-flash"
 
 [llm.providers.ollama]
 type = "openai_compatible"
@@ -202,31 +209,31 @@ timeout_seconds = 300
 # ── Task-Specific Routing ────────────────────────────────────
 
 [llm.routing.world_compiler]
-provider = "anthropic"
-model = "claude-opus-4-6"
+provider = "codex_acp"
+model = ""
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.responder_tier2]
-provider = "anthropic"
-model = "claude-sonnet-4-6"
+provider = "codex_acp"
+model = ""
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
-provider = "anthropic"
-model = "claude-sonnet-4-6"
+provider = "codex_acp"
+model = ""
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.animator]
-provider = "anthropic"
-model = "claude-haiku-4-5"
+provider = "codex_acp"
+model = ""
 max_tokens = 2048
 temperature = 0.9
 
 [llm.routing.data_generator]
-provider = "anthropic"
-model = "claude-sonnet-4-6"
+provider = "codex_acp"
+model = "gemini-2.5-flash"
 max_tokens = 4096
 temperature = 0.5

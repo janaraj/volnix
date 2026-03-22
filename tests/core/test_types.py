@@ -3,6 +3,7 @@ import pytest
 from terrarium.core.types import (
     EntityId, ActorId, ServiceId, EventId, ToolName, RunId,
     FidelityTier, FidelitySource, FidelityMode, RealityPreset,
+    BehaviorMode,
     StepVerdict, EnforcementMode,
     FidelityMetadata, ActionCost, BudgetState, StateDelta, SideEffect,
 )
@@ -86,11 +87,18 @@ class TestFidelityAndRealityEnums:
         assert len(FidelitySource) == 3
 
     def test_reality_preset_values(self):
-        """RealityPreset has pristine, realistic, harsh."""
-        assert RealityPreset.PRISTINE == "pristine"
-        assert RealityPreset.REALISTIC == "realistic"
-        assert RealityPreset.HARSH == "harsh"
+        """RealityPreset has ideal, messy, hostile."""
+        assert RealityPreset.IDEAL == "ideal"
+        assert RealityPreset.MESSY == "messy"
+        assert RealityPreset.HOSTILE == "hostile"
         assert len(RealityPreset) == 3
+
+    def test_behavior_mode_values(self):
+        """BehaviorMode has static, reactive, dynamic."""
+        assert BehaviorMode.STATIC == "static"
+        assert BehaviorMode.REACTIVE == "reactive"
+        assert BehaviorMode.DYNAMIC == "dynamic"
+        assert len(BehaviorMode) == 3
 
     def test_fidelity_mode_values(self):
         """FidelityMode has auto, strict, exploratory."""

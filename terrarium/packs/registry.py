@@ -127,7 +127,7 @@ class PackRegistry:
                 "pack_name": p.pack_name,
                 "category": p.category,
                 "fidelity_tier": p.fidelity_tier,
-                "tools": [t["name"] for t in p.get_tools()],
+                "tools": [t["name"] for t in (p.get_tools() or [])],
             }
             for p in self._packs.values()
         ]

@@ -1,87 +1,48 @@
-"""Actor generator -- create actor personalities from reality conditions.
+"""Actor personality generator protocol.
 
-The :class:`ActorGenerator` uses an LLM router (when available) to produce
-realistic personalities, adversarial profiles, and human behaviour traits
-that are consistent with the world's reality conditions.
+Defines the :class:`ActorPersonalityGenerator` protocol that all generator
+implementations must satisfy.  D2 provides :class:`SimpleActorGenerator`
+(heuristic); D4 will add an LLM-based implementation.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import Personality
+from terrarium.actors.personality import FrictionProfile, Personality
 from terrarium.reality.dimensions import WorldConditions
 
 
-class ActorGenerator:
-    """Generate actor personalities from reality conditions."""
+@runtime_checkable
+class ActorPersonalityGenerator(Protocol):
+    """Protocol for actor personality generation."""
 
-    def __init__(self, llm_router: Any = None) -> None:
-        ...
-
-    async def generate_personalities(
-        self,
-        actors: list[ActorDefinition],
-        conditions: WorldConditions,
-    ) -> list[ActorDefinition]:
-        """Assign personalities to actors based on world conditions.
-
-        Parameters
-        ----------
-        actors:
-            List of actor definitions (may lack personalities).
-        conditions:
-            The world conditions that influence personality generation.
-
-        Returns
-        -------
-        list[ActorDefinition]:
-            Actors with populated personality fields.
-        """
-        ...
-
-    async def generate_adversarial_actors(
-        self,
-        count: int,
-        sophistication: str,
-        domain_context: str,
-    ) -> list[ActorDefinition]:
-        """Generate adversarial actors (hostile customers, etc.).
-
-        Parameters
-        ----------
-        count:
-            Number of adversarial actors to generate.
-        sophistication:
-            Sophistication level (low | medium | high).
-        domain_context:
-            Description of the domain for realistic generation.
-
-        Returns
-        -------
-        list[ActorDefinition]:
-            Newly generated adversarial actor definitions.
-        """
-        ...
-
-    async def generate_human_personality(
+    async def generate_personality(
         self,
         role: str,
-        domain_context: str,
+        personality_hint: str,
+        conditions: WorldConditions,
+        domain_context: str = "",
     ) -> Personality:
-        """Generate a realistic personality for a human actor.
+        """Generate a personality for the given role and conditions."""
+        ...
 
-        Parameters
-        ----------
-        role:
-            The actor's role (e.g. "supervisor", "customer").
-        domain_context:
-            Description of the domain for realistic generation.
+    async def generate_friction_profile(
+        self,
+        category: str,
+        intensity: int,
+        sophistication: Literal["low", "medium", "high"],
+        domain_context: str = "",
+    ) -> FrictionProfile:
+        """Generate a friction profile for the given category."""
+        ...
 
-        Returns
-        -------
-        Personality:
-            A fully populated personality model.
-        """
+    async def generate_batch(
+        self,
+        actor_specs: list[dict[str, Any]],
+        conditions: WorldConditions,
+        domain_context: str = "",
+    ) -> list[ActorDefinition]:
+        """Generate a batch of actors from YAML-style specs."""
         ...

@@ -54,6 +54,7 @@ class SimulationConfig(BaseModel):
     seed: int = 42
     time_speed: float = 1.0
     mode: str = "governed"  # governed | ungoverned
+    behavior: str = "dynamic"  # static | reactive | dynamic
     reality: RealityConfig = Field(default_factory=RealityConfig)
     fidelity: FidelityConfig = Field(default_factory=FidelityConfig)
     seeds: list[SeedConfig] = Field(default_factory=list)

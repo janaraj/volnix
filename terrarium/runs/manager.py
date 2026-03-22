@@ -29,7 +29,7 @@ class RunManager:
         world_def: dict,
         config_snapshot: dict,
         mode: str = "governed",
-        reality_preset: str = "realistic",
+        reality_preset: str = "messy",
         fidelity_mode: str = "auto",
     ) -> RunId:
         """Create a new run record and return its identifier.

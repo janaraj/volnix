@@ -45,10 +45,17 @@ class GoogleNativeProvider(LLMProvider):
                 if request.system_prompt
                 else request.user_content
             )
+            config = {
+                "max_output_tokens": request.max_tokens,
+                "temperature": request.temperature,
+            }
+            if request.seed is not None:
+                config["seed"] = request.seed
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
                 model=model,
                 contents=prompt,
+                config=config,
             )
             latency = (time.monotonic() - start) * 1000
             content = response.text if response.text else ""
@@ -73,13 +80,21 @@ class GoogleNativeProvider(LLMProvider):
             )
         except Exception as e:
             latency = (time.monotonic() - start) * 1000
+            error_str = str(e)
+            # Rate limit errors should propagate so callers can retry
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                from terrarium.core.errors import LLMError
+                raise LLMError(
+                    f"Gemini rate limit exceeded. {error_str[:200]}",
+                    context={"provider": "google", "model": model},
+                )
             return LLMResponse(
                 content="",
                 usage=LLMUsage(),
                 model=model,
                 provider="google",
                 latency_ms=latency,
-                error=f"{type(e).__name__}: {str(e)[:500]}",
+                error=f"{type(e).__name__}: {error_str[:500]}",
             )
 
     async def validate_connection(self) -> bool:

@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════
+# COMPILER SETTINGS — Acme Support Organization
+# ═══════════════════════════════════════════════════════════
+
+compiler:
+  seed: 42
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+
+  # ─── Reality dimensions ───
+  reality:
+    preset: messy
+
+    information: somewhat_neglected
+    reliability: occasionally_flaky
+    friction: some_difficult_people
+    complexity: moderately_challenging
+    boundaries: a_few_gaps
+
+  # ─── Animator settings ───
+  animator:
+    creativity: medium
+    event_frequency: moderate
+    contextual_targeting: true
+    escalation_on_inaction: true

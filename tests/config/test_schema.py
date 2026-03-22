@@ -21,7 +21,7 @@ def test_terrarium_config_defaults():
 def test_simulation_config_has_reality():
     """SimulationConfig has a nested reality section with defaults."""
     sim = SimulationConfig()
-    assert sim.reality.preset == "realistic"
+    assert sim.reality.preset == "messy"
     assert sim.fidelity.mode == "auto"
     assert sim.time_speed == 1.0
 
@@ -96,11 +96,11 @@ def test_simulation_config_nested():
     data = {
         "simulation": {
             "seed": 7,
-            "reality": {"preset": "harsh"},
+            "reality": {"preset": "hostile"},
             "fidelity": {"mode": "strict"},
         }
     }
     config = TerrariumConfig.model_validate(data)
     assert config.simulation.seed == 7
-    assert config.simulation.reality.preset == "harsh"
+    assert config.simulation.reality.preset == "hostile"
     assert config.simulation.fidelity.mode == "strict"

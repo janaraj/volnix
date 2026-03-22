@@ -1,0 +1,9 @@
+world:
+  name: "Minimal Test World"
+  description: "A simple test world"
+  services:
+    email: verified/email
+  actors:
+    - role: agent
+      type: external
+      count: 1

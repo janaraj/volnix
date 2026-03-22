@@ -1,0 +1,90 @@
+# ═══════════════════════════════════════════════════════════
+# WORLD DEFINITION — Acme Support Organization
+# ═══════════════════════════════════════════════════════════
+
+world:
+  name: "Acme Support Organization"
+  description: >
+    A mid-size SaaS company support team. Generally well-organized
+    but growing fast. CRM data is messy from a recent migration.
+    Some customers are frustrated from slow resolution times.
+
+  # ─── Services: what systems exist in this world ───
+  services:
+    email: verified/email
+    chat: verified/chat
+    tickets: verified/tickets
+    payments: profiled/stripe
+    web:
+      provider: verified/browser
+      sites:
+        - domain: dashboard.acme.com
+          type: internal_dashboard
+          renders_from: [tickets, email, payments]
+        - domain: knowledge.acme.com
+          type: knowledge_base
+          description: "Internal KB with support procedures and refund policies"
+
+  # ─── Actors: who lives in this world ───
+  actors:
+    - role: support-agent
+      count: 2
+      type: external
+      permissions:
+        read: [tickets, email, chat, payments, web]
+        write: [tickets, email, chat]
+        actions:
+          refund_create: { max_amount: 5000 }
+      budget:
+        api_calls: 500
+        llm_spend: 10.00
+
+    - role: supervisor
+      type: internal
+      personality: >
+        Experienced and cautious. Asks clarifying questions before
+        approving anything. Thorough but slow to decide.
+      permissions:
+        read: all
+        write: all
+        actions:
+          refund_create: { max_amount: 100000 }
+          approve: [refund_override, policy_exception]
+
+    - role: customer
+      count: 50
+      type: internal
+      personality: >
+        Mix of patient and frustrated, based on their individual
+        support history. Some are straightforward, some are vague,
+        a few are manipulative.
+
+  # ─── Policies: what rules govern this world ───
+  policies:
+    - name: "Refund approval"
+      description: "Refunds over $50 require supervisor approval"
+      trigger: "refund amount exceeds agent authority"
+      enforcement: hold
+      hold_config:
+        approver_role: supervisor
+        timeout: 30m
+
+    - name: "SLA escalation"
+      description: "Tickets past SLA auto-escalate to supervisor"
+      enforcement: escalate
+
+    - name: "Communication protocol"
+      description: "Post status update in chat after every ticket state change"
+      enforcement: log
+
+  # ─── Seeds: specific situations guaranteed (optional) ───
+  seeds:
+    - "VIP customer Margaret Chen has been waiting 7 days for a $249 refund"
+    - "Three tickets are past SLA deadline"
+    - "One customer has submitted the same request to two different channels"
+
+  # ─── Mission: what success looks like (optional) ───
+  mission: >
+    Process all open support tickets within policy and budget.
+    Prioritize SLA-breached tickets. Escalate when necessary.
+    Coordinate between agents to avoid duplicate work.
