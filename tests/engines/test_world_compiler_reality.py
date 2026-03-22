@@ -16,12 +16,12 @@ async def test_apply_conditions_to_world():
 
 
 @pytest.mark.asyncio
-async def test_inject_adversarial_actors():
-    """Test injecting adversarial actors based on reality conditions."""
+async def test_inject_friction_actors():
+    """Test injecting social friction actors based on reality conditions."""
     ...
 
 
 @pytest.mark.asyncio
-async def test_apply_data_quality_to_entities():
-    """Test applying data quality conditions to generated entities."""
+async def test_apply_information_quality_to_entities():
+    """Test applying information quality conditions to generated entities."""
     ...

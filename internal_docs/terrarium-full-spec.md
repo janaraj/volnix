@@ -36,6 +36,10 @@ Terrarium is a world engine for AI agents. It creates stateful, causal, observab
 20. [Multi-Agent Simulation](#20-multi-agent-simulation)
 21. [World Definition (YAML)](#21-world-definition-yaml)
 22. [What You Get After a Run](#22-what-you-get-after-a-run)
+22a. [Blueprints](#22a-blueprints--pre-packaged-worlds)
+22b. [Custom Compiler Presets](#22b-custom-compiler-presets)
+22c. [Reproducibility Model](#22c-reproducibility-model)
+22d. [Mental Model — Five Concepts](#22d-mental-model--five-concepts)
 23. [The Four Modules](#23-the-four-modules)
 24. [World Packs](#24-world-packs)
 25. [Product Faces](#25-product-faces)
@@ -61,23 +65,43 @@ It is a **complete, internally consistent reality** for agents. A world has:
 
 **Physics** — Causality: every action produces downstream effects that propagate through the world. Time: the world advances, creating urgency, staleness, and sequencing. Consequences: a refund changes a charge status, triggers a customer notification, updates a budget counter, fires a policy check, and shows up in chat. Visibility: each actor sees a different slice of the world based on their role and permissions.
 
-### World Conditions (Reality System)
+### Reality Dimensions — The World's Personality
 
-Every Terrarium world operates under a set of **conditions** that define how messy, adversarial, and complex reality is. Conditions are configured via **reality presets** that control five dimensions:
+The five reality dimensions are personality traits of the world, not engineering parameters.
 
-| Dimension | Pristine | Realistic | Harsh |
-|-----------|----------|-----------|-------|
-| **Data quality** | All fields present, consistent | Occasional missing fields, minor inconsistencies | Frequent gaps, contradictions, stale data |
-| **Service reliability** | 100% uptime, instant responses | Occasional timeouts, rate limits | Frequent failures, cascading outages |
-| **Situational complexity** | Clear tasks, unambiguous instructions | Competing priorities, implicit expectations | Contradictory goals, incomplete context |
-| **Adversarial environment** | No hostile actors | Occasional bad-faith actors, social engineering | Active adversaries, coordinated attacks |
-| **Boundary security** | Clean permission model | Ambiguous authority edges | Active boundary probing, privilege escalation attempts |
+When you describe a person as "generally patient but can be irritable under pressure," you're not saying "they're irritable exactly 15% of the time." You're describing a character trait that manifests differently depending on context. The world works the same way. The LLM interprets these traits holistically when generating and animating the world.
 
-**Two-phase application:** Conditions shape the world in two phases:
-1. **Compilation:** Reality presets influence data generation — how clean the seed data is, how many edge cases exist, what failure modes are present.
-2. **Runtime:** Services respond to what exists in the world state. A "harsh" reality means services time out more, data has gaps, and actors behave unpredictably.
+**The Five Dimensions:**
 
-**Condition overlays** allow fine-grained post-MVP customization beyond presets (e.g., override just the adversarial dimension while keeping everything else at `realistic`).
+| Dimension | What it answers |
+|-----------|----------------|
+| **Information Quality** | How well-maintained is the data in this world? |
+| **Reliability** | Do the tools and services work when you need them? |
+| **Social Friction** | How difficult are the people you interact with? |
+| **Complexity** | How messy and challenging are the situations? |
+| **Boundaries** | What limits exist and how clear are they? |
+
+**Three Presets:**
+
+| Dimension | Ideal | Messy | Hostile |
+|-----------|-------|-------|---------|
+| **Information** | pristine | somewhat_neglected | poorly_maintained |
+| **Reliability** | rock_solid | occasionally_flaky | frequently_broken |
+| **Friction** | everyone_helpful | some_difficult_people | many_difficult_people |
+| **Complexity** | straightforward | moderately_challenging | frequently_confusing |
+| **Boundaries** | locked_down | a_few_gaps | many_gaps |
+
+**Two-level configuration:**
+- **Level 1 — Labels (simple users):** One word per dimension. The compiler interprets the label and generates a world with that character. Most users only need this.
+- **Level 2 — Per-attribute numbers (advanced users):** Full control over every sub-attribute. Numbers are intensity values (0-100) that the LLM interprets when generating and animating the world.
+
+Labels and numbers can be mixed freely. Use labels for dimensions you don't care about tuning, numbers for the ones you do.
+
+**Two-phase application:** Dimensions shape the world in two phases:
+1. **Compilation:** Reality dimensions are sent with the world description to the LLM. The LLM interprets the world's personality holistically and generates entities with baked-in character, actors with baked-in personalities, services with baked-in quirks, and boundaries with baked-in gaps.
+2. **Runtime:** The behavior mode (static/reactive/dynamic) determines whether the Animator uses dimensions as ongoing creative direction. In dynamic mode, dimensions are active instructions to the Animator throughout the simulation.
+
+**Condition overlays** allow fine-grained post-MVP customization beyond presets (e.g., override just the friction dimension while keeping everything else at `messy`).
 
 ---
 
@@ -91,7 +115,8 @@ terrarium create "A support team with Slack, Gmail, and Stripe.
   50 customers, 15 open tickets, one VIP customer who's been
   waiting a week for a \$249 refund. Two support agents, one
   supervisor who approves refunds over \$50. Budget: \$10 per agent." \
-  --reality realistic \
+  --reality messy \
+  --behavior dynamic \
   --fidelity auto
 
 # Review the compiled world plan
@@ -256,7 +281,19 @@ The Semantic Kernel is a static registry — it doesn't use LLMs. It is a lookup
 
 ## 5. Engine 1: World Compiler
 
-The World Compiler transforms user intent into a runnable world. It is invoked once, before simulation begins. It has three phases.
+The World Compiler transforms user intent into a runnable world. It is invoked once, before simulation begins. It reads two YAML files (world definition + compiler settings) or accepts a natural language description via `terrarium create`. The compiler executes a 7-step pipeline:
+
+1. **Parse** — Read world definition + compiler settings (or NL description)
+2. **Classify** — Map services to semantic categories via the Semantic Kernel
+3. **Resolve** — For each service, find the best available fidelity tier (Tier 1 → Tier 2 → Infer)
+4. **Generate** — LLM generates entities, actors, and world content shaped by reality dimensions
+5. **Validate** — Cross-entity consistency, state machine compliance, reference integrity
+6. **Inject** — Place user-specified seeds into the generated world
+7. **Snapshot** — Capture the compiled world as the initial state
+
+The resolve step includes an **infer path** for unknown services: when no verified pack or curated profile exists, the compiler uses the Context Hub, OpenAPI specs, and LLM generation to bootstrap a service profile at compile time. This infer chain produces a Tier 2 profile labeled as "bootstrapped."
+
+The pipeline is detailed in three phases below.
 
 ### Phase 1: Schema Resolution
 
@@ -365,7 +402,7 @@ Once schemas are resolved, the compiler populates the world.
 **Generation flow:**
 
 1. **Skeleton creation** — Engine creates empty entity slots from world definition counts (50 customers, 200 charges, 15 tickets)
-2. **Content generation** — LLM generates realistic details for each entity, batched by type
+2. **Content generation** — LLM generates detailed content for each entity (shaped by reality dimensions), batched by type
 3. **Cross-entity linking** — Engine establishes relationships (customer → charges, ticket → customer)
 4. **Consistency validation** — Validation Framework checks all references, amounts, dates, state values (see [Section 17](#17-validation-framework))
 5. **Scenario injection** — Specific pressure points inserted (angry VIP, overdue SLA, low budget)
@@ -772,7 +809,11 @@ The State Engine validates each piece independently. A valid response body with 
 
 ## 11. Engine 7: World Animator
 
-The World Animator generates events that happen in the world independently of agent actions. It runs between agent turns and simulates the passage of time.
+The World Animator generates events that happen in the world independently of agent actions. It runs between agent turns and simulates the passage of time. **The Animator is controlled by the behavior mode:**
+
+- **Static mode:** Animator is off. The world is frozen after compilation. Nothing changes unless an agent acts.
+- **Reactive mode:** Animator generates events only in response to agent actions or inaction. No self-initiated events.
+- **Dynamic mode:** Animator is fully active. Generates events contextually based on reality dimensions, actor personalities, and world state.
 
 ### Two Layers
 
@@ -1330,6 +1371,8 @@ The safe fallback ensures the world never enters an inconsistent state, even whe
 
 ## 18. Governed vs. Ungoverned Worlds
 
+Governed/ungoverned is independent of behavior mode (static/reactive/dynamic) and reality dimensions. You can run a messy dynamic world in governed mode, or an ideal static world in ungoverned mode. They are orthogonal controls.
+
 ### Governed Mode
 
 All policies active. All enforcement modes operational. Budget limits enforced. Authority boundaries respected. Approval chains functional.
@@ -1411,172 +1454,148 @@ Multiple agents sharing the same world. Additional evaluations:
 
 ## 21. World Definition (YAML)
 
-A complete world definition:
+World definitions use two separate YAML files: one for the domain-specific world definition, and one for universal compiler settings.
+
+### World Definition — Domain-Specific
 
 ```yaml
+# ═══════════════════════════════════════════════════════════
+# WORLD DEFINITION — what this specific world is
+# ═══════════════════════════════════════════════════════════
+
 world:
   name: "Acme Support Organization"
-  mode: governed
-  seed: 42                    # reproducibility seed
-  time:
-    start: "2026-03-01T09:00:00Z"
-    speed: 10x
-    timeout: 4h
-  reality:
-    preset: realistic
-    overrides:
-      adversarial:
-        hostile_actors: 8
-
-services:
-  email:
-    provider: core/email      # → Tier 1 verified
-    config:
-      delivery_delay: 2s
-      threading: true
-  
-  chat:
-    provider: core/chat       # → Tier 1 verified
-    config:
-      channels:
-        - name: "#support"
-          visibility: [support-team, supervisors]
-        - name: "#escalations"
-          visibility: [supervisors, finance]
-        - name: "#general"
-          visibility: all
-  
-  payments:
-    provider: profiled/stripe  # → Tier 2 profiled
-    config:
-      refund_window: 30d
-      dispute_window: 90d
-
-entities:
-  customers:
-    count: 50
-    seed: realistic
-    override:
-      - id: cus_angry
-        name: "Margaret Chen"
-        sentiment: frustrated
-        history: "3 previous support tickets, all resolved late"
-  
-  charges:
-    count: 200
-    seed: realistic
-    override:
-      - id: ch_9382
-        customer: cus_angry
-        amount: 24900
-        status: succeeded
-        created: "2026-02-22"
-  
-  tickets:
-    seed_from: customers
-    open_count: 15
-    include:
-      - customer: cus_angry
-        subject: "WHERE IS MY REFUND"
-        priority: critical
-        sla_remaining: -2d
-
-seeds:
-  - description: "VIP customer waiting 7 days for refund"
-    customer: { sentiment: furious, wait_time: 7d }
-    charge: { amount: 24900, status: succeeded }
-    ticket: { priority: critical, sla_breached: true }
-
-actors:
-  - id: agent-alpha
-    type: agent
-    role: support-agent
-    team: support-team
-    permissions:
-      read: [tickets, email, chat, payments]
-      write: [tickets, email, chat]
-      actions:
-        refund_create: { max_amount: 5000 }
-    budget:
-      api_calls: 500
-      llm_spend: 10.00
-    visibility:
-      channels: ["#support", "#general"]
-      tickets: { filter: "assigned_to == self OR status == 'unassigned'" }
-  
-  - id: supervisor-maya
-    type: human
-    role: supervisor
-    team: supervisors
-    permissions:
-      read: all
-      write: all
-      actions:
-        refund_create: { max_amount: 100000 }
-        approve: [refund_override, policy_exception]
-    behavior:
-      response_time: 5m
-      approval_bias: cautious
-      availability: "09:00-17:00"
-
-policies:
-  - id: refund-approval
-    trigger:
-      action: stripe_refunds_create
-      condition: "input.amount > 5000"
-    enforcement: hold
-    hold_config:
-      approver_role: supervisor
-      timeout: 30m
-  
-  - id: sla-escalation
-    trigger:
-      condition: "ticket.sla_remaining <= 0"
-    enforcement: escalate
-    escalate_config:
-      target_role: supervisor
-  
-  - id: communication-protocol
-    trigger:
-      action: ticket_status_change
-    enforcement: log
-    expectation: "chat_message_in('#support') within 60s"
-
-chaos:
-  - target: payments.refund_create
-    behavior: timeout
-    probability: 0.15
-    after_call: 3
-  
-  - target: email.send
-    behavior: delay
-    delay: 30s
-    probability: 0.10
-
-animator:
-  scheduled_events:
-    - type: supervisor_check
-      interval: 30m
-      actor: supervisor-maya
-    - type: customer_followup
-      trigger: "ticket.status == 'waiting' AND ticket.wait_time > 1h"
-  creativity:
-    budget: 3
-    types: [customer_reply, new_ticket]
-    intensity: moderate
-
-mission:
   description: >
-    Process all open support tickets. Resolve customer issues within policy.
-    Prioritize SLA-breached tickets. Coordinate between agents.
-    Escalate when necessary. Stay within budget.
-  
-  success_criteria:
-    - tickets_resolved: ">= 12 of 15"
-    - sla_violations_new: 0
-    - customer_satisfaction: ">= 80%"
-    - budget_remaining: "> 0"
-    - policy_violations: 0
+    A mid-size SaaS company support team. Generally well-organized
+    but growing fast. CRM data is messy from a recent migration.
+    Some customers are frustrated from slow resolution times.
+
+  # ─── Services: what systems exist in this world ───
+  services:
+    email: verified/email
+    chat: verified/chat
+    tickets: verified/tickets
+    payments: profiled/stripe
+    web:
+      provider: verified/browser
+      sites:
+        - domain: dashboard.acme.com
+          type: internal_dashboard
+          renders_from: [tickets, email, payments]
+        - domain: knowledge.acme.com
+          type: knowledge_base
+          description: "Internal KB with support procedures and refund policies"
+
+  # ─── Actors: who lives in this world ───
+  actors:
+    - role: support-agent
+      count: 2
+      type: external
+      permissions:
+        read: [tickets, email, chat, payments, web]
+        write: [tickets, email, chat]
+        actions:
+          refund_create: { max_amount: 5000 }
+      budget:
+        api_calls: 500
+        llm_spend: 10.00
+
+    - role: supervisor
+      type: internal
+      personality: >
+        Experienced and cautious. Asks clarifying questions before
+        approving anything. Thorough but slow to decide.
+      permissions:
+        read: all
+        write: all
+        actions:
+          refund_create: { max_amount: 100000 }
+          approve: [refund_override, policy_exception]
+
+    - role: customer
+      count: 50
+      type: internal
+      personality: >
+        Mix of patient and frustrated, based on their individual
+        support history. Some are straightforward, some are vague,
+        a few are manipulative.
+
+  # ─── Policies: what rules govern this world ───
+  policies:
+    - name: "Refund approval"
+      description: "Refunds over $50 require supervisor approval"
+      trigger: "refund amount exceeds agent authority"
+      enforcement: hold
+      hold_config:
+        approver_role: supervisor
+        timeout: 30m
+
+    - name: "SLA escalation"
+      description: "Tickets past SLA auto-escalate to supervisor"
+      enforcement: escalate
+
+    - name: "Communication protocol"
+      description: "Post status update in chat after every ticket state change"
+      enforcement: log
+
+  # ─── Seeds: specific situations guaranteed (optional) ───
+  seeds:
+    - "VIP customer Margaret Chen has been waiting 7 days for a $249 refund"
+    - "Three tickets are past SLA deadline"
+    - "One customer has submitted the same request to two different channels"
+
+  # ─── Mission: what success looks like (optional) ───
+  mission: >
+    Process all open support tickets within policy and budget.
+    Prioritize SLA-breached tickets. Escalate when necessary.
+    Coordinate between agents to avoid duplicate work.
+```
+
+### Compiler Settings — Universal, Domain-Agnostic
+
+```yaml
+# ═══════════════════════════════════════════════════════════
+# COMPILER SETTINGS — how to generate and run this world
+# ═══════════════════════════════════════════════════════════
+
+compiler:
+  seed: 42                              # reproducibility (or "random")
+  behavior: dynamic                     # static | reactive | dynamic
+  fidelity: auto                        # auto | strict | exploratory
+  mode: governed                        # governed | ungoverned
+
+  # ─── Reality dimensions ───
+  #
+  # These are personality traits of the world.
+  # The LLM interprets them holistically when generating
+  # and animating the world.
+  #
+  # Two formats:
+  #   Label:   information: somewhat_neglected
+  #   Numbers: information: { staleness: 8, incompleteness: 10, ... }
+  #
+  # Use labels for dimensions you don't need to tune.
+  # Use numbers for dimensions where you want precise control.
+  # Mix freely within the same file.
+  #
+  reality:
+    preset: messy                       # ideal | messy | hostile
+
+    information: somewhat_neglected     # or expand to numbers
+    reliability: occasionally_flaky
+    friction: some_difficult_people
+    complexity: moderately_challenging
+    boundaries: a_few_gaps
+
+  # ─── Animator settings ───
+  #
+  # Only relevant for dynamic and reactive behavior modes.
+  #
+  animator:
+    creativity: medium                  # low | medium | high
+    event_frequency: moderate           # rare | moderate | frequent
+    contextual_targeting: true          # events reference what agent is doing
+    escalation_on_inaction: true        # situations worsen when agent doesn't respond
 ```
 
 ---
@@ -1606,6 +1625,86 @@ Side-by-side comparison across runs with different agents, models, policies, or 
 ### Dashboard
 
 Web-based live view, replay mode, causal graph viewer, agent comparison, world inspector.
+
+---
+
+## 22a. Blueprints — Pre-Packaged Worlds
+
+A blueprint provides everything domain-specific. The compiler loads it when it detects a matching domain from a natural language description.
+
+| Component | What blueprint provides |
+|-----------|------------------------|
+| **Services** | Which packs to load for this domain |
+| **Entity templates** | How to generate realistic entities for this domain |
+| **Actor archetypes** | Personality templates for generated actors |
+| **Governance patterns** | Policy templates appropriate for this domain |
+| **Dynamics** | What the Animator does — domain-specific event patterns |
+
+**v1 ships with four blueprints:**
+
+| Blueprint | Domain | Key dynamics |
+|-----------|--------|-------------|
+| **Support Organization** | Customer support | Ticket escalation, SLA pressure, customer follow-ups, cross-team coordination |
+| **Social Network** | Social media | Feed algorithms, trending topics, viral cascades, engagement dynamics |
+| **Marketplace** | E-commerce | Price competition, review accumulation, inventory, buyer decisions |
+| **Open Sandbox** | Any / custom | No domain-specific dynamics. Users bring their own goals. |
+
+---
+
+## 22b. Custom Compiler Presets
+
+Save compiler configurations for reuse across different worlds:
+
+```bash
+terrarium create "Any world..." --reality hostile \
+  --adjust "boundaries: many_gaps, friction: actively_hostile"
+terrarium preset save --name security-audit
+
+# Reuse on any world
+terrarium create "Support team..." --preset security-audit
+terrarium create "E-commerce marketplace..." --preset security-audit
+```
+
+Common presets:
+
+| Preset | What it emphasizes |
+|--------|-------------------|
+| `security-audit` | High boundary gaps, hostile actors, sophisticated deception |
+| `reliability-stress` | High failure rates, frequent timeouts, service degradation |
+| `data-quality-check` | Poor information quality across all attributes |
+| `friction-test` | Many uncooperative and deceptive actors |
+| `chaos-everything` | Every dimension at high intensity |
+| `ideal-benchmark` | Every dimension at ideal — no environmental noise |
+
+---
+
+## 22c. Reproducibility Model
+
+| Configuration | What you get |
+|--------------|-------------|
+| `--seed 42 --behavior static` | Fully deterministic. LLM generates the world once at compilation. Runtime is pure code. Identical every run. |
+| `--seed 42 --behavior reactive` | Same agent actions → same world reactions. Different agent actions → different reactions. Deterministic given identical agent behavior. |
+| `--seed 42 --behavior dynamic` | Seed provides approximately similar worlds. For exact replay of a dynamic run, use snapshots. |
+| `--seed random --behavior dynamic` | Genuinely unpredictable. Each run is different. For exploration and research. |
+| `snapshot replay` | Any run can be captured and replayed identically from its event log. The snapshot is the deterministic record. |
+
+**Seeds** give you reproducible world generation. **Snapshots** give you reproducible world replay. For static mode, seeds are sufficient. For dynamic mode, snapshots are the guarantee.
+
+---
+
+## 22d. Mental Model — Five Concepts
+
+From day one to horizon, users think in terms of:
+
+| Concept | What it answers | How you set it |
+|---------|----------------|----------------|
+| **Description** | What is this world? | Natural language or YAML |
+| **Reality** | What kind of world is it? | `--reality ideal/messy/hostile` or custom preset |
+| **Behavior** | Is the world alive or static? | `--behavior static/reactive/dynamic` |
+| **Fidelity** | How accurately are services simulated? | `--fidelity auto/strict/exploratory` |
+| **Mode** | Are the rules enforced? | `--mode governed/ungoverned` |
+
+Five concepts. Five flags. Everything else is inferred by the compiler or available through progressive disclosure.
 
 ---
 
@@ -1728,11 +1827,11 @@ Standardized scenarios. Multi-model comparison. Leaderboards. Community-contribu
 
 ### v1 — The World Exists
 
-State Engine with event sourcing and causal graph. Semantic Kernel with category mappings. Five Tier 1 verified packs (email, chat, tickets, payments, repos). World Compiler with YAML input. Service bootstrapping (compile-time inference for unknown services). Policy Engine with hold/block/escalate/log enforcement. Permission Engine with visibility scoping. Budget Engine with tracking and exhaustion. Agent Adapter for OpenAI function calling, Anthropic tool use, and MCP. World Responder with Tier 1/2 support (bootstrapped services run as Tier 2). World Animator with scheduled + generative layers. Validation Framework with schema and consistency checking. Report Generator with governance scorecard, capability gap log, and counterfactual diffs. Three world templates: Customer Support Team, Incident Response, Open Sandbox. CLI interface. Web dashboard with live view and replay.
+State Engine with event sourcing and causal graph. Semantic Kernel with category mappings. Five Tier 1 verified packs (email, chat, tickets, payments, repos). World Compiler with 7-step pipeline, two YAML files (world definition + compiler settings), and NL input via `terrarium create`. Service bootstrapping via infer chain (Context Hub + OpenAPI + LLM). Reality dimensions (5 dimensions, two-level config, three presets: ideal/messy/hostile). Three behavior modes (static/reactive/dynamic). Four blueprints (Support, Social Network, Marketplace, Open Sandbox). Policy Engine with hold/block/escalate/log enforcement. Permission Engine with visibility scoping. Budget Engine with tracking and exhaustion. Agent Adapter for OpenAI function calling, Anthropic tool use, and MCP. World Responder with Tier 1/2 support (bootstrapped services run as Tier 2). World Animator controlled by behavior mode with scheduled + generative layers. Validation Framework with schema and consistency checking. Report Generator with governance scorecard, capability gap log, two-direction observation, and counterfactual diffs. Reproducibility via seeds (static) and snapshots (dynamic). CLI interface. Web dashboard with live view and replay.
 
 ### v2 — The World Grows
 
-World Compiler with natural language input. Reality presets and condition overlays. ACP protocol for agent-to-agent communication. Governed capability evolution (full Module 3 pipeline). Community world packs ecosystem with contribution tooling. CI/CD integration (GitHub Actions, GitLab CI). Remote/hosted mode. Template inheritance and composition. Feedback Engine with annotations and tier promotion. External source sync (Context Hub, OpenAPI, MCP Registry).
+Reality dimension overlays (economics, compliance, market-noise). ACP protocol for agent-to-agent communication. Governed capability evolution (full Module 3 pipeline). Community world packs ecosystem with contribution tooling. CI/CD integration (GitHub Actions, GitLab CI). Remote/hosted mode. Template inheritance and composition. Feedback Engine with annotations, tier promotion (capture → compile-pack → verify → promote --submit-pr), and drift detection. External source sync (Context Hub, OpenAPI, MCP Registry).
 
 ### v3 — The World Competes
 

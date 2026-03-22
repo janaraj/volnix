@@ -31,7 +31,7 @@ class BaseTemplate(ABC):
     async def generate(
         self,
         parameters: dict | None = None,
-        reality: str = "realistic",
+        reality: str = "messy",
         fidelity: str = "auto",
         mode: str = "governed",
     ) -> dict:
@@ -39,7 +39,7 @@ class BaseTemplate(ABC):
 
         Args:
             parameters: Optional parameter overrides for template generation.
-            reality: Reality preset (pristine, realistic, harsh).
+            reality: Reality preset (ideal, messy, hostile).
             fidelity: Fidelity mode (auto, strict, exploratory).
             mode: World mode (governed, ungoverned).
 

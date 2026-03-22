@@ -76,9 +76,17 @@ class FidelitySource(enum.StrEnum):
 class RealityPreset(enum.StrEnum):
     """World reality presets."""
 
-    PRISTINE = "pristine"
-    REALISTIC = "realistic"
-    HARSH = "harsh"
+    IDEAL = "ideal"
+    MESSY = "messy"
+    HOSTILE = "hostile"
+
+
+class BehaviorMode(enum.StrEnum):
+    """World behavior mode — how the world evolves over time."""
+
+    STATIC = "static"
+    REACTIVE = "reactive"
+    DYNAMIC = "dynamic"
 
 
 class FidelityMode(enum.StrEnum):

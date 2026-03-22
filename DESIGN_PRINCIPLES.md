@@ -103,15 +103,21 @@ Agents share world state but see different slices via visibility scoping. Each a
 Policies use a YAML condition language with registered functions (`time_since`, `count_today`, `has_role`, etc.). Community templates provide starting points. Policies can be created, modified, and deleted at runtime. The condition language is intentionally not Turing-complete — it supports boolean logic, comparisons, and registered functions, but not loops or arbitrary computation.
 
 **The Two-Phase Model:**
-- Phase A (compilation) generates all world data via LLM, seeded for reproducibility, shaped by reality conditions. Conditions determine what IS in the world (stale data, adversarial actors, auth gaps) — they are baked into entities at compile time.
+- Phase A (compilation) generates all world data via LLM, seeded for reproducibility, shaped by reality dimensions. Dimensions determine what IS in the world (stale data, difficult actors, auth gaps) — they are baked into entities at compile time.
 - Phase B (runtime) has services respond to whatever exists in state. Services don't decide "should this be stale?" — the data already IS stale. Services return reality as it exists.
-- This separation applies to every tier: Tier 1 packs and Tier 2 profiles both serve data that was shaped by conditions during compilation.
+- This separation applies to every tier: Tier 1 packs and Tier 2 profiles both serve data that was shaped by dimensions during compilation.
+
+**Behavior Modes:**
+- Worlds have three behavior modes: static (frozen after compilation), reactive (responds to agent actions), dynamic (alive, generates events). The behavior mode controls the Animator, not the reality dimensions.
+
+**Reality Dimensions Are Personality Traits:**
+- Reality dimensions are personality traits of the world, not engineering parameters. They guide LLM generation and animation, not code-applied percentages. "Somewhat neglected information" means the LLM creates a world where data management has been neglected — contextually and narratively coherent, not randomly distributed. Two-level config: labels for simple users, per-attribute numbers for advanced.
 
 **Five User-Facing Concepts (the stable mental model):**
-- World description, reality level, service fidelity, mode, seeds — these are the API contract from day one to horizon. The surface stays simple as internals grow. This is the design constraint that prevents feature creep.
+- Description, reality, behavior, fidelity, mode — these are the API contract from day one to horizon. The surface stays simple as internals grow. This is the design constraint that prevents feature creep.
 
 **Progressive Disclosure:**
-- Level 1: one-line CLI with preset -> Level 2: preset + overrides -> Level 3: full YAML -> Level 4: custom packs + plugins.
+- Level 1: one-line CLI with preset (ideal/messy/hostile) -> Level 2: preset + dimension overrides (labels or per-attribute numbers) -> Level 3: full YAML (two files: world definition + compiler settings) -> Level 4: custom packs + plugins.
 - Every level produces the same internal WorldPlan. More depth is optional, never forced.
 
 **Governed vs. Ungoverned:**
@@ -122,7 +128,7 @@ Policies use a YAML condition language with registered functions (`time_since`, 
 - There is no Tier 3 runtime mode. Unknown services are bootstrapped at compile time (inference produces a Tier 2-like surface). At runtime, only Tier 1 and Tier 2 exist.
 
 **Condition Overlays (post-MVP growth strategy):**
-- World conditions expand via focused overlays (economics, compliance, market-noise), not by growing a flat parameter list. Each overlay is self-contained and additive.
+- Reality dimensions expand via focused overlays (economics, compliance, market-noise), not by growing a flat parameter list. Each overlay is self-contained and additive.
 
 ---
 

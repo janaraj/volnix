@@ -1,0 +1,3 @@
+
+[notice] A new release of pip is available: 25.3 -> 26.0.1
+[notice] To update, run: /Users/jana/workspace/terrarium/.venv/bin/python3.12 -m pip install --upgrade pip

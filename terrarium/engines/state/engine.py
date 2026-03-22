@@ -14,11 +14,13 @@ from typing import Any, ClassVar
 
 from terrarium.core import (
     ActionContext,
+    ActorId,
     BaseEngine,
     EntityId,
     Event,
     EventId,
     PipelineStep,
+    ServiceId,
     SnapshotId,
     StateDelta,
     StepResult,
@@ -228,6 +230,90 @@ class StateEngine(BaseEngine):
         """Query entities of a given type with optional filters."""
         return await self._store.query(entity_type, filters)
 
+    async def populate_entities(
+        self, entities: dict[str, list[dict[str, Any]]]
+    ) -> int:
+        """Bulk-create entities for world generation.
+
+        Creates entities in EntityStore AND records each creation to:
+        - Event Log (WorldEvent per entity — full audit trail)
+        - Ledger (StateMutationEntry per entity — queryable history)
+        - EventBus (published for subscribers)
+
+        This ensures world generation is fully traceable, just like
+        pipeline-driven entity creation via execute().
+
+        Parameters
+        ----------
+        entities:
+            Dict mapping entity_type -> list of entity dicts.
+            Each entity dict MUST have an "id" field.
+
+        Returns
+        -------
+        int:
+            Total number of entities created.
+        """
+        count = 0
+        created_events: list[WorldEvent] = []
+        now = datetime.now(timezone.utc)
+
+        async with self._db.transaction():
+            for entity_type, entity_list in entities.items():
+                for entity in entity_list:
+                    entity_id = EntityId(
+                        entity.get("id", f"{entity_type}_{count}")
+                    )
+                    fields = {
+                        k: v
+                        for k, v in entity.items()
+                        if not k.startswith("_")
+                    }
+                    await self._store.create(entity_type, entity_id, fields)
+                    count += 1
+
+                    # Create WorldEvent for traceability
+                    event = WorldEvent(
+                        event_type=f"world.populate.{entity_type}",
+                        timestamp=Timestamp(
+                            world_time=now, wall_time=now, tick=0
+                        ),
+                        actor_id=ActorId("world_compiler"),
+                        service_id=ServiceId("world_compiler"),
+                        action="populate",
+                        target_entity=entity_id,
+                        input_data=fields,
+                    )
+                    await self._event_log.append(event)
+                    created_events.append(event)
+
+        # Record to ledger (outside transaction — ledger is separate DB)
+        if self._ledger is not None:
+            from terrarium.ledger.entries import StateMutationEntry
+
+            for event in created_events:
+                entry = StateMutationEntry(
+                    entity_type=event.event_type.rsplit(".", 1)[-1],
+                    entity_id=event.target_entity or EntityId(""),
+                    operation="create",
+                    before=None,
+                    after=event.input_data,
+                    event_id=event.event_id,
+                )
+                await self._ledger.append(entry)
+
+        # Publish to bus for subscribers
+        for event in created_events:
+            await self.publish(event)
+
+        logger.info(
+            "Populated %d entities across %d types (traced: %d events)",
+            count,
+            len(entities),
+            len(created_events),
+        )
+        return count
+
     async def propose_mutation(self, deltas: list[StateDelta]) -> list[StateDelta]:
         """Validate proposed state mutations (dry run).
 
@@ -249,11 +335,41 @@ class StateEngine(BaseEngine):
         return event_id
 
     async def snapshot(self, label: str) -> SnapshotId:
-        """Create an immutable point-in-time snapshot of the world state."""
+        """Create an immutable point-in-time snapshot of the world state.
+
+        Records to Ledger (SnapshotEntry) and publishes to EventBus.
+        """
         from terrarium.core.types import RunId
 
         run_id = RunId(self._config.get("run_id", "default"))
-        return await self._snapshot_store.save_snapshot(run_id, label, self._db)
+        snapshot_id = await self._snapshot_store.save_snapshot(
+            run_id, label, self._db
+        )
+
+        # Record to ledger (SnapshotEntry exists but was never used — now it is)
+        if self._ledger is not None:
+            from terrarium.ledger.entries import SnapshotEntry
+
+            entity_count = await self._get_total_entity_count()
+            entry = SnapshotEntry(
+                snapshot_id=snapshot_id,
+                run_id=run_id,
+                tick=0,
+                entity_count=entity_count,
+            )
+            await self._ledger.append(entry)
+
+        logger.info(
+            "Snapshot '%s' created: %s", label, snapshot_id
+        )
+        return snapshot_id
+
+    async def _get_total_entity_count(self) -> int:
+        """Count all entities across all types for snapshot metadata."""
+        row = await self._db.fetchone(
+            "SELECT COUNT(*) as cnt FROM entities"
+        )
+        return row["cnt"] if row else 0
 
     async def fork(self, snapshot_id: SnapshotId) -> WorldId:
         """Fork a new world from an existing snapshot.

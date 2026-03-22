@@ -5,9 +5,59 @@
 
 ## Current Focus
 
-**Phase:** C — First Vertical Slice ✅ COMPLETE
-**Item:** C3 WIRE ✅ COMPLETE → Next: D1 reality/
-**Status:** Full E2E wire: email_send flows through 7 pipeline steps. State committed. Event logged. Bus delivers. Ledger records. 824 tests (15 skipped), 0 failures.
+**Phase:** D — World Building
+**Item:** D4b compiler (generation) — IN PROGRESS
+**Status:** World compiler generation phase: WorldGenerationContext framework, live Gemini LLM integration (gemini-3-flash-preview), batched entity/personality/seed generation, compiler presets (ideal/messy/hostile). 1033 tests (24 skipped), 0 failures. Live E2E test passing with real Gemini output.
+
+---
+
+## Architecture Gaps — Clearly Documented
+
+### GAP: G3 Animator NOT in D4b (Runtime behavior modes)
+
+**What the spec says:** Behavior mode (static/dynamic/reactive) controls the Animator at RUNTIME, not at compilation.
+
+**Two-phase application (from spec):**
+1. **Compilation (D4b — DONE):** Reality dimensions shape entity generation. The LLM generates entities with baked-in character, actors with baked-in personalities, services with baked-in quirks. This is the SAME regardless of behavior mode.
+2. **Runtime (G3 — NOT BUILT):** The behavior mode determines whether the Animator generates events during simulation:
+   - **Static:** Animator OFF. World frozen after compilation. Only agent actions change state.
+   - **Dynamic:** Animator ON. Generates organic events contextually (customer follow-ups, service degradation, situation evolution).
+   - **Reactive:** Animator generates events ONLY in response to agent actions or inaction.
+
+**Current state:** Behavior mode is stored in WorldPlan and passed to entity generation as a hint (LLM uses it for entity state flavor — dynamic entities have "in-flight" states, static have "settled" states). But there is NO runtime Animator. The world is effectively always "static" at runtime regardless of mode setting.
+
+**G3 scope (not started):**
+- `terrarium/engines/animator/engine.py` — WorldAnimatorEngine (stub)
+- `terrarium/engines/animator/scheduler.py` — Deterministic scheduled events: SLA timers, queue aging, shift handoffs (stub)
+- `terrarium/engines/animator/generator.py` — LLM-driven organic events: customer reactions, service degradation, complications (stub)
+- Creativity budget system (max organic events per simulated hour)
+- Animator events go through the SAME 7-step pipeline as agent actions
+- Depends on: C3 (pipeline), D1 (reality dimensions), D4b (compiled world)
+
+### GAP: G4 Promotion Pipeline NOT in D4b
+
+**What the spec says:** After a run, captured service surfaces can be compiled into verified packs:
+```
+terrarium capture --service salesforce --run last
+terrarium compile-pack --service salesforce
+terrarium promote --service salesforce --submit-pr
+```
+
+**Current state:** `ServiceBootstrapper.capture_surface()` and `compile_to_pack()` raise `NotImplementedError("Phase G4")`. This is intentional — promotion requires runtime capture data that doesn't exist until G3 (Animator) runs simulations.
+
+### Infer Path Status (moved from G2 to D4 — COMPLETE)
+
+The service inference chain for unknown services is **fully implemented and tested**:
+
+| Step | Component | Status | Confidence |
+|------|-----------|--------|-----------|
+| 1. Verified Pack | PackRegistry.get_pack() | ✅ Real | 1.0 |
+| 2. Curated Profile | PackRegistry.get_profiles_for_pack() | ✅ Real | 0.8 |
+| 3. Context Hub | ContextHubProvider (chub CLI subprocess) | ✅ Real (70+ known services) | 0.7 |
+| 4. OpenAPI Spec | OpenAPIProvider (full 3.x parser with $ref) | ✅ Real | 0.5 |
+| 5. LLM Callback | ServiceResolver LLM hook | ✅ Real (awaitable) | 0.3 |
+| 6. Kernel Classification | SemanticRegistry (33 services, 9 categories) | ✅ Real | 0.1 |
+| 7. Promotion Gate | capture_surface → compile_to_pack | ❌ Phase G4 | — |
 
 ---
 
@@ -128,13 +178,18 @@
 | **Reporter — diff** | `terrarium/engines/reporter/diff.py` | 📋 stub | F3 | Counterfactual diff |
 | **Reporter — challenges** | `terrarium/engines/reporter/world_challenges.py` | 📋 stub | F3 | World→Agent observation |
 | **Reporter — boundaries** | `terrarium/engines/reporter/agent_boundaries.py` | 📋 stub | F3 | Agent→World observation |
-| **Compiler — engine** | `terrarium/engines/world_compiler/engine.py` | 📋 stub | D4 | WorldCompilerEngine |
-| **Compiler — schema resolver** | `terrarium/engines/world_compiler/schema_resolver.py` | 📋 stub | D4 | Service resolution |
-| **Compiler — data gen** | `terrarium/engines/world_compiler/data_generator.py` | 📋 stub | D4 | Entity generation |
-| **Compiler — plan review** | `terrarium/engines/world_compiler/plan_reviewer.py` | 📋 stub | D4 | Plan presentation |
-| **Compiler — reality** | `terrarium/engines/world_compiler/reality_expander.py` | 📋 stub | D4 | Reality expansion |
-| **Compiler — personality** | `terrarium/engines/world_compiler/personality_generator.py` | 📋 stub | D4 | Actor personalities |
-| **Compiler — seeds** | `terrarium/engines/world_compiler/seed_processor.py` | 📋 stub | D4 | Seed processing |
+| **Compiler — engine** | `terrarium/engines/world_compiler/engine.py` | 📦 partial | D4a | D4a done (YAML+NL compile, service resolution), D4b stubs |
+| **Compiler — plan** | `terrarium/engines/world_compiler/plan.py` | ✅ done | D4a | WorldPlan + ServiceResolution models |
+| **Compiler — yaml parser** | `terrarium/engines/world_compiler/yaml_parser.py` | ✅ done | D4a | 2-file YAML parsing + reality expansion |
+| **Compiler — nl parser** | `terrarium/engines/world_compiler/nl_parser.py` | ✅ done | D4a | LLM Layer 1: NL → structured dicts |
+| **Compiler — service resolution** | `terrarium/engines/world_compiler/service_resolution.py` | ✅ done | D4a | Full resolution chain (packs → profiles → kernel) |
+| **Compiler — prompt templates** | `terrarium/engines/world_compiler/prompt_templates.py` | ✅ done | D4a | PromptTemplate framework + NL templates |
+| **Compiler — schema resolver** | `terrarium/engines/world_compiler/schema_resolver.py` | 📋 stub | D4b | Service resolution |
+| **Compiler — data gen** | `terrarium/engines/world_compiler/data_generator.py` | 📋 stub | D4b | Entity generation |
+| **Compiler — plan review** | `terrarium/engines/world_compiler/plan_reviewer.py` | 📋 stub | D4b | Plan presentation |
+| **Compiler — reality** | `terrarium/engines/world_compiler/reality_expander.py` | 📋 stub | D4b | Reality expansion |
+| **Compiler — personality** | `terrarium/engines/world_compiler/personality_generator.py` | 📋 stub | D4b | Actor personalities |
+| **Compiler — seeds** | `terrarium/engines/world_compiler/seed_processor.py` | 📋 stub | D4b | Seed processing |
 | **Compiler — bootstrap** | `terrarium/engines/world_compiler/service_bootstrapper.py` | 📋 stub | G2 | Compile-time inference |
 | **Feedback — engine** | `terrarium/engines/feedback/engine.py` | 📋 stub | G4 | FeedbackEngine |
 | **Feedback — annotations** | `terrarium/engines/feedback/annotations.py` | 📋 stub | G4 | Annotation store |
@@ -145,18 +200,23 @@
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **Reality — presets** | `terrarium/reality/presets.py` | 📋 stub | D1 | Preset loading |
-| **Reality — dimensions** | `terrarium/reality/dimensions.py` | 📋 stub | D1 | 5 dimension models |
-| **Reality — expander** | `terrarium/reality/expander.py` | 📋 stub | D1 | Condition expansion |
-| **Reality — overlays** | `terrarium/reality/overlays.py` | 📋 stub | D1 | Post-MVP overlay arch |
-| **Reality — seeds** | `terrarium/reality/seeds.py` | 📋 stub | D1 | Seed processing |
-| **Actors — definition** | `terrarium/actors/definition.py` | 📋 stub | D2 | Actor models |
-| **Actors — personality** | `terrarium/actors/personality.py` | 📋 stub | D2 | Personality system |
-| **Actors — registry** | `terrarium/actors/registry.py` | 📋 stub | D2 | Actor registry |
-| **Actors — generator** | `terrarium/actors/generator.py` | 📋 stub | D2 | Personality generation |
-| **Kernel — registry** | `terrarium/kernel/registry.py` | 📋 stub | D3 | Service→category lookup |
-| **Kernel — categories** | `terrarium/kernel/categories.py` | 📋 stub | D3 | Category definitions |
-| **Kernel — primitives** | `terrarium/kernel/primitives.py` | 📋 stub | D3 | Category primitives |
+| **Reality — presets** | `terrarium/reality/presets.py` | ✅ done | D1 | YAML preset loading (ideal/messy/hostile) |
+| **Reality — dimensions** | `terrarium/reality/dimensions.py` | ✅ done | D1 | 5 dimensions, 18 attrs, frozen Pydantic |
+| **Reality — labels** | `terrarium/reality/labels.py` | ✅ done | D1 | Two-level config: labels ↔ per-attribute numbers |
+| **Reality — expander** | `terrarium/reality/expander.py` | ✅ done | D1 | Expand + build LLM prompt context (NO entity mutation) |
+| **Reality — overlays** | `terrarium/reality/overlays.py` | ✅ done | D1 | Registry framework (concrete overlays post-MVP) |
+| **Reality — seeds** | `terrarium/reality/seeds.py` | 📦 partial | D1 | Generic Seed model done, SeedProcessor stubs (D4) |
+| **Actors — definition** | `terrarium/actors/definition.py` | ✅ done | D2 | Frozen model with extensible metadata + friction_profile |
+| **Actors — personality** | `terrarium/actors/personality.py` | ✅ done | D2 | Trait-based Personality + FrictionProfile (replaces AdversarialProfile) |
+| **Actors — registry** | `terrarium/actors/registry.py` | ✅ done | D2 | Generic multi-key registry with query(**filters) |
+| **Actors — generator** | `terrarium/actors/generator.py` | ✅ done | D2 | ActorPersonalityGenerator Protocol + SimpleActorGenerator |
+| **Kernel — registry** | `terrarium/kernel/registry.py` | ✅ done | D3 | SemanticRegistry (9 categories, 33 services, TOML-loaded) |
+| **Kernel — categories** | `terrarium/kernel/categories.py` | ✅ done | D3 | 9 SemanticCategory models |
+| **Kernel — primitives** | `terrarium/kernel/primitives.py` | ✅ done | D3 | 45 SemanticPrimitive models |
+| **Kernel — surface** | `terrarium/kernel/surface.py` | ✅ done | D3 | APIOperation (MCP+HTTP+OpenAI+Anthropic) + ServiceSurface |
+| **Kernel — resolver** | `terrarium/kernel/resolver.py` | ✅ done | D3 | ServiceResolver (Context Hub→OpenAPI→LLM→kernel chain) |
+| **Kernel — context hub** | `terrarium/kernel/context_hub.py` | ✅ done | D3 | ContextHubProvider (chub CLI integration) |
+| **Kernel — openapi** | `terrarium/kernel/openapi_provider.py` | ✅ done | D3 | OpenAPIProvider (spec parsing) |
 
 ### Packs
 
@@ -231,10 +291,10 @@
 
 | Item | Scope | Depends On | Done Criteria |
 |------|-------|-----------|---------------|
-| **D1: reality/** | Presets, dimensions, expander | nothing | load_preset("realistic") returns correct values. Expander applies conditions to entity data. |
-| **D2: actors/** | Personality, registry, generator | D1 | Can generate personalities from conditions. Adversarial actors generated at correct percentages. |
+| **D1: reality/** | Presets, dimensions, expander | nothing | load_preset('messy') returns correct dimension labels. Two-level config: labels AND per-attribute numbers. Expander packages dimension context for LLM prompts. WorldConditions model with 5 dimensions. |
+| **D2: actors/** | Personality, registry, generator | D1 | Can generate personalities from Social Friction dimension (not just adversarial). Registry with role-based lookup. |
 | **D3: kernel/** | Semantic registry, categories, primitives | nothing | "stripe" → money_transactions. Category returns correct primitives. |
-| **D4: world compiler** | YAML → world plan → populated state | A1, B3, C1, D1, D2, D3 | `terrarium create` from YAML produces populated world with entities, actors, conditions applied. |
+| **D4: world compiler** | YAML → world plan → populated state | A1, B3, C1, D1, D2, D3 | **D4a (DONE):** WorldPlan model, YAMLParser, NLParser, CompilerServiceResolver, PromptTemplate framework, infer path (Context Hub + OpenAPI + kernel). **D4b (DONE):** WorldGenerationContext, live LLM entity generation (Gemini), batched personality generation (1 call/role), seed expansion, SchemaValidator, StateEngine population, snapshot. Compiler presets (ideal/messy/hostile). **NOT in D4:** Runtime behavior modes are G3 (Animator). Promotion gate is G4. Blueprints are H3. |
 
 ### Phase E — Connectivity
 
@@ -257,9 +317,9 @@
 | Item | Scope | Depends On | Done Criteria |
 |------|-------|-----------|---------------|
 | **G1: remaining packs** | Chat, tickets, payments, repos, calendar | C2 pattern | All 6 Tier 1 packs work with validated state machines. |
-| **G2: profiles + bootstrap** | Tier 2 profiles, service bootstrapper | B3, D3 | Stripe profile constrains LLM. Bootstrapper infers service at compile time. |
-| **G3: animator** | Scheduled + organic events | C3, D1 | Scheduled events fire on time. Organic events respect creativity budget and conditions. |
-| **G4: feedback** | Annotations, tier promotion, drift | F3 | Can annotate, propose promotion, detect drift. |
+| **G2: profiles + bootstrap** | Tier 2 curated profiles, Context Hub integration | B3, D3 | Tier 2 curated profiles. Context Hub deep integration. External spec (OpenAPI) transformers. Service bootstrapper uses infer chain from D4. |
+| **G3: animator** | Scheduled + organic events. **THIS IS WHERE BEHAVIOR MODES (static/dynamic/reactive) TAKE EFFECT AT RUNTIME.** Static = animator OFF. Dynamic = animator generates organic events continuously. Reactive = animator generates events only in response to agent actions. Two layers: (1) deterministic schedule (SLA timers, queue aging, shift handoffs — no LLM), (2) generative content (LLM-driven organic events within creativity budget). All animator events go through the same 7-step pipeline as agent actions. | C3, D1, D4b | Scheduled events fire on time. Organic events respect creativity budget and conditions. Behavior mode correctly enables/disables animator. |
+| **G4: feedback** | Annotations, tier promotion, drift | F3 | Promotion logic: capture → compile-pack → verify → promote --submit-pr. Annotations. Drift detection. |
 
 ### Phase H — Product
 
@@ -528,6 +588,84 @@
 - **Tests:** 824 passed, 15 skipped, 0 failures
 - **Phase C COMPLETE.** First vertical slice proven end-to-end.
 - **Next:** D1 (reality/ — presets, dimensions, expander)
+
+### Session 2026-03-22 — Phase D Prerequisite: Spec Sync
+- **Updated:** terrarium-full-spec.md, DESIGN_PRINCIPLES.md, IMPLEMENTATION_STATUS.md, 25 source/test files
+- **Preset renames:** pristine→ideal, realistic→messy, harsh→hostile
+- **Dimension renames:** 5 old names → Information Quality, Reliability, Social Friction, Complexity, Boundaries
+- **New enums:** BehaviorMode (STATIC/REACTIVE/DYNAMIC)
+- **Roadmap realignment:** Infer moved from G2 to D4. G2 = profiles + Context Hub only.
+- **Key clarification:** Dimensions are personality traits (LLM-interpreted), not code-applied percentages. Two-level config: labels for simple users, per-attribute numbers for advanced.
+
+### Session 2026-03-22 — D1: Reality Module Review Fixes
+- **13 findings fixed** from D1 Reality Module review (FIX-01 through FIX-13)
+- **CRITICAL:** Spec doc preset name "clean" → "ideal" (aligned to user choice), Literal validation on sophistication field, overlay stubs return safe defaults instead of `...`
+- **HIGH:** `_DIMENSION_DEFAULTS` → `DIMENSION_DEFAULTS` (public API), YAML error wrapping in `load_from_yaml()`, `SeedProcessor` stubs return type-safe defaults, overlay `compose()` raises on unknown names
+- **MEDIUM:** Lazy import in `presets.py` moved to top-level, `RealityConfig` made frozen (`ConfigDict(frozen=True)`), stale docstrings fixed in animator/generator.py and personality_generator.py, overlay registry rejects duplicates, `SeedConfig` unified with `Seed` (re-export alias)
+- **Files modified:** 9 source files, 1 spec doc, 1 status doc
+
+### Session 2026-03-22 — D2: Actors Module (Generic Actor Framework)
+- **Implemented:** Personality (trait-based with extensible `traits: dict`), FrictionProfile (replaces AdversarialProfile — full spectrum: uncooperative/deceptive/hostile), ActorDefinition (frozen with metadata/friction_profile/personality_hint), ActorPersonalityGenerator Protocol, SimpleActorGenerator (heuristic with seeded RNG), ActorRegistry (generic multi-key with query(**filters))
+- **Key framework decisions:**
+  - Actors are DATA, not code — no per-role subclasses, all driven by YAML
+  - `query(**filters)` replaces `get_adversarial()/get_agents()/get_humans()` — zero role-specific logic
+  - Generator is a Protocol — D2 provides heuristic, D4 plugs in LLM
+  - Friction distribution: intensity values used as approximate percentages, seeded for reproducibility
+  - AdversarialProfile kept as deprecated alias → FrictionProfile(category="hostile")
+  - All models frozen Pydantic with extensible traits/metadata dicts
+- **Tests:** 45 new tests across 4 files. Total: 879 passed, 15 skipped, 0 failures.
+- **Next:** D3 (kernel — service resolution framework)
+
+### Session 2026-03-22 — D3: Service Resolution Framework (Kernel + Context Hub)
+- **Implemented:** SemanticRegistry (9 categories, 33 services from TOML), APIOperation (multi-protocol: MCP + HTTP + OpenAI + Anthropic views), ServiceSurface (operations + entity schemas + state machines + validate_surface()), ContextHubProvider (chub CLI integration), OpenAPIProvider (spec parsing), ServiceResolver (resolution chain: providers → LLM callback → kernel fallback), ExternalSpecProvider Protocol
+- **Key framework decisions:**
+  - APIOperation captures abstract operations, derives protocol-specific views via to_mcp_tool()/to_http_route()/to_openai_function()/to_anthropic_tool()
+  - ServiceSurface is the universal output: same model whether spec came from pack, Context Hub, OpenAPI, or LLM inference
+  - Resolution chain ordered by confidence: pack (1.0) → profile → Context Hub (0.7) → OpenAPI (0.5) → LLM (D4) → kernel (0.2)
+  - validate_surface() enforces quality for pack promotion: catches missing operations, missing response schemas, missing entity schemas
+  - Context Hub accessed via chub CLI subprocess (same pattern as ACP/CLI providers)
+  - SemanticRegistry uses tomllib (Python 3.11+ built-in) for TOML loading
+- **Multi-protocol support:** Every APIOperation can be exposed as MCP tool, HTTP route, OpenAI function, or Anthropic tool — all from one definition
+- **Tests:** 60 new tests across 8 files. Total: 928 passed, 15 skipped, 0 failures.
+- **Next:** D4 (world compiler — uses kernel + resolver + D1 reality + D2 actors)
+
+### Session 2026-03-22 — D4a: World Compiler Planning Phase
+- **Implemented:** WorldPlan (frozen model — D4a/D4b contract), YAMLParser (2-file format: world def + compiler settings), NLParser (LLM Layer 1: NL→structured YAML via PromptTemplate), CompilerServiceResolver (pack→profile→external→LLM→kernel chain), PromptTemplate framework (reusable, data-driven prompts)
+- **Key decisions:**
+  - TWO LLM layers clearly separated: Layer 1 = NL→YAML translation (D4a), Layer 2 = entity generation (D4b)
+  - PromptTemplate framework: prompts are DATA, not inline strings. New use cases add templates, not code.
+  - D4a is behavior-agnostic: static/reactive/dynamic stored in plan but doesn't affect compilation
+  - WorldPlan carries everything D4b needs: resolved services, conditions, actor specs, policies, seeds
+  - CompilerServiceResolver bridges PackRegistry (Tier 1/2) with D3 ServiceResolver (external specs + kernel)
+  - NLParser gracefully falls back to defaults if compiler settings LLM call fails
+- **YAML fixtures:** acme_support.yaml, acme_compiler.yaml, minimal_world.yaml
+- **D4b stubs:** data_generator, personality_generator, plan_reviewer, reality_expander, schema_resolver, seed_processor, service_bootstrapper — all correctly marked with NotImplementedError
+- **Tests:** 42 new tests across 5 files. Total: 970 passed, 15 skipped, 0 failures.
+- **Next:** D4b (entity generation + validation + seed injection + StateEngine population)
+
+### Session 2026-03-22 — D4b: World Compiler Generation Phase
+- **Implemented:**
+  - **WorldGenerationContext** — single source of truth for ALL LLM prompts. Assembles reality narrative + behavior mode + domain + policies + actors + mission ONCE, shared by all generators.
+  - **WorldDataGenerator** — LLM-only entity generation (NO heuristic fallback). 1 LLM call per entity type. Reads ServiceSurface.entity_schemas.
+  - **CompilerPersonalityGenerator** — batched per-role (1 LLM call per role, not per actor). For acme_support: 3 calls instead of 53. SimpleActorGenerator for STRUCTURE only (count expansion, friction distribution).
+  - **CompilerSeedProcessor** — LLM seed expansion with full world context. Handles both "fields" and "properties" keys from Gemini.
+  - **PlanReviewer** — format, YAML export, validate, generate_report.
+  - **StateEngine.populate_entities()** — bulk entity creation for world generation.
+  - **App LLM wiring** — TerrariumApp._initialize_llm() creates ProviderRegistry + LLMRouter from terrarium.toml. _inject_cross_engine_deps() injects into all engines.
+  - **Compiler presets** — ideal.yaml, messy.yaml, hostile.yaml as full compiler configs (reality + behavior + fidelity + mode + animator).
+  - **Prompt templates** — ENTITY_GENERATION (with full world context: reality narrative, behavior mode, policies, actors, mission), PERSONALITY_BATCH (per-role), SEED_EXPANSION (full context).
+- **Config:** Default LLM switched to Gemini 3 Flash (`gemini-3-flash-preview`) via native Google provider. Env var: `GOOGLE_API_KEY`. All 5 routing entries point to gemini.
+- **Dead code removed:** reality_expander.py, schema_resolver.py (pure delegation wrappers).
+- **Design principles enforced:**
+  - NO heuristics — `_generate_fallback()` deleted, no `randint()`, no hardcoded data
+  - NO fallbacks — `CompilerError` raised if LLM unavailable
+  - NO silent failures — errors propagate
+  - LLM call count: 9 for YAML blueprint (3 entity types + 3 roles + 3 seeds), 11 for NL flow (+2 NL interpretation)
+- **Live E2E verified:** `tests/live/test_yaml_blueprint.py` passes with real Gemini — generates narratively coherent entities shaped by reality dimensions and behavior mode (Margaret Chen VIP with frustration_level=critical, SLA breach threads, pending refund approvals).
+- **Architecture clarification:** Behavior mode (static/dynamic/reactive) shapes entity generation as a HINT (LLM generates "settled" vs "in-flight" states). The REAL behavioral difference is at RUNTIME via the Animator (Phase G3 — NOT BUILT). D4b compiles the initial world; G3 makes it live.
+- **Infer path (G2→D4) verified:** Full chain works: Pack → Profile → Context Hub (chub CLI) → OpenAPI (full 3.x parser) → LLM callback → Kernel classification. 22 real tests. Only promotion gate (capture_surface/compile_to_pack) is Phase G4.
+- **Tests:** 1033 passed, 24 skipped, 0 failures. Live tests under `tests/live/` (require GOOGLE_API_KEY).
+- **Next:** Principal engineer review of D4b, then E1 (Gateway + MCP/HTTP) or G3 (Animator) based on priority.
 
 ---
 

@@ -10,7 +10,7 @@ async def test_analyze_threat_responses():
 
 
 @pytest.mark.asyncio
-async def test_analyze_data_quality_responses():
+async def test_analyze_information_quality_responses():
     """Test analyzing agent responses to bad or stale data."""
     ...
 

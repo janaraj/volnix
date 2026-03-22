@@ -38,6 +38,6 @@ class OrganicGenerator:
     def _apply_condition_probabilities(self, event_type: str, conditions: Any) -> bool:
         """Apply condition probabilities to decide if an organic event occurs.
 
-        E.g., if injection_content is 5%, 5% of generated messages contain manipulation.
+        E.g., if the deceptive attribute is set, some generated messages contain manipulation.
         """
         ...

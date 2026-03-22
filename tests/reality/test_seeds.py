@@ -1,31 +1,52 @@
-"""Tests for terrarium.reality.seeds -- Seed model and SeedProcessor."""
+"""Tests for terrarium.reality.seeds -- Seed model.
+
+Tests creation, immutability, and default values for the generic Seed model.
+The Seed model uses description + entity_hints + actor_hints (no domain-specific fields).
+"""
+
+from __future__ import annotations
 
 import pytest
 
-from terrarium.reality.seeds import Seed, SeedProcessor
+from terrarium.reality.seeds import Seed
 
 
-class TestSeedModel:
-    """Verify the Seed Pydantic model."""
+class TestSeedCreation:
+    """A Seed can be created with a description and optional hint dicts."""
 
-    def test_seed_model_creation(self) -> None:
-        """A Seed can be created with a description and optional fields."""
-        ...
+    def test_seed_creation(self) -> None:
+        seed = Seed(description="Customer disputes a legitimate charge")
+        assert seed.description == "Customer disputes a legitimate charge"
 
 
-class TestSeedProcessor:
-    """Verify SeedProcessor methods."""
+class TestSeedFrozen:
+    """Seed model is frozen and cannot be mutated after creation."""
 
-    @pytest.mark.asyncio
-    async def test_process_seeds_inserts_entities(self) -> None:
-        """Processing seeds adds entries to the entity dictionary."""
-        ...
+    def test_seed_frozen(self) -> None:
+        seed = Seed(description="A scenario")
+        with pytest.raises(Exception):
+            seed.description = "Changed"  # type: ignore[misc]
 
-    @pytest.mark.asyncio
-    async def test_expand_nl_seed(self) -> None:
-        """A natural-language description is expanded into a structured Seed."""
-        ...
 
-    def test_validate_seeds(self) -> None:
-        """Validation returns errors for seeds inconsistent with schemas."""
-        ...
+class TestEmptyHints:
+    """Default hint dicts are empty."""
+
+    def test_empty_hints(self) -> None:
+        seed = Seed(description="Simple scenario")
+        assert seed.entity_hints == {}
+        assert seed.actor_hints == {}
+
+
+class TestSeedWithHints:
+    """Seed can be created with populated entity_hints and actor_hints."""
+
+    def test_seed_with_hints(self) -> None:
+        seed = Seed(
+            description="Complex scenario",
+            entity_hints={"customer_type": "enterprise", "region": "EMEA"},
+            actor_hints={"personality": "aggressive", "experience": "senior"},
+        )
+        assert seed.entity_hints["customer_type"] == "enterprise"
+        assert seed.entity_hints["region"] == "EMEA"
+        assert seed.actor_hints["personality"] == "aggressive"
+        assert seed.actor_hints["experience"] == "senior"

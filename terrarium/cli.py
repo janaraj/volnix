@@ -17,8 +17,8 @@ def create(
     description: Annotated[str, typer.Argument(help="Natural language description of the world")],
     reality: Annotated[
         str,
-        typer.Option("--reality", "-r", help="Reality preset: pristine, realistic, harsh"),
-    ] = "realistic",
+        typer.Option("--reality", "-r", help="Reality preset: ideal, messy, hostile"),
+    ] = "messy",
     fidelity: Annotated[
         str,
         typer.Option("--fidelity", help="Fidelity mode: auto, strict, exploratory"),
