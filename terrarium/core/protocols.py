@@ -30,6 +30,33 @@ from terrarium.core.types import (
 
 
 # ---------------------------------------------------------------------------
+# Event Bus
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class EventBusProtocol(Protocol):
+    """Interface for the event bus pub/sub system."""
+
+    async def publish(self, event: Event) -> None:
+        """Publish an event to all subscribers."""
+        ...
+
+    async def subscribe(
+        self,
+        topic: str,
+        callback: Any,
+        queue_size: int = 1000,
+    ) -> Any:
+        """Subscribe to events on a given topic."""
+        ...
+
+    async def unsubscribe(self, event_type: str, callback: Any) -> None:
+        """Remove a subscription by event type and callback reference."""
+        ...
+
+
+# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
@@ -64,8 +91,8 @@ class PipelineStep(Protocol):
 class StateEngineProtocol(Protocol):
     """Interface to the world-state store."""
 
-    async def get_entity(self, entity_id: EntityId) -> dict[str, Any]:
-        """Retrieve a single entity by its identifier."""
+    async def get_entity(self, entity_type: str, entity_id: EntityId) -> dict[str, Any]:
+        """Retrieve a single entity by type and identifier."""
         ...
 
     async def query_entities(
@@ -78,16 +105,16 @@ class StateEngineProtocol(Protocol):
 
     async def propose_mutation(
         self,
-        delta: StateDelta,
-    ) -> StateDelta:
-        """Validate and return a proposed state mutation (dry run)."""
+        deltas: list[StateDelta],
+    ) -> list[StateDelta]:
+        """Validate proposed state mutations (dry run). Returns validated deltas."""
         ...
 
-    async def commit_event(self, event: Event) -> None:
-        """Persist an event and apply its state deltas atomically."""
+    async def commit_event(self, event: Event) -> EventId:
+        """Persist an event and record its causal edges. Returns the event ID."""
         ...
 
-    async def snapshot(self) -> SnapshotId:
+    async def snapshot(self, label: str = "default") -> SnapshotId:
         """Create an immutable point-in-time snapshot of the entire world state."""
         ...
 
@@ -99,21 +126,23 @@ class StateEngineProtocol(Protocol):
         self,
         snapshot_a: SnapshotId,
         snapshot_b: SnapshotId,
-    ) -> list[StateDelta]:
+    ) -> list[StateDelta] | dict[str, Any]:
         """Compute the set of deltas between two snapshots."""
         ...
 
-    async def get_causal_chain(self, event_id: EventId) -> list[Event]:
-        """Walk the causal ancestry of an event."""
+    async def get_causal_chain(
+        self, event_id: EventId, direction: str = "backward"
+    ) -> list[Event]:
+        """Walk the causal ancestry or descendants of an event."""
         ...
 
     async def get_timeline(
         self,
-        entity_id: EntityId,
-        start: Timestamp | None = None,
-        end: Timestamp | None = None,
+        start: Any = None,
+        end: Any = None,
+        entity_id: EntityId | None = None,
     ) -> list[Event]:
-        """Return the ordered event timeline for an entity."""
+        """Return the ordered event timeline, optionally filtered by entity."""
         ...
 
 
@@ -450,10 +479,21 @@ class GatewayProtocol(Protocol):
 
 @runtime_checkable
 class LedgerProtocol(Protocol):
-    """Interface for the append-only event ledger."""
+    """Interface for the append-only audit ledger.
 
-    async def append(self, event: Event) -> EventId:
-        """Append an event to the ledger and return its ID."""
+    Records operational entries (pipeline steps, LLM calls, gateway requests, etc.)
+    This is separate from the event bus — the bus carries domain events between engines,
+    the ledger records what the system did for observability and audit.
+    """
+
+    async def append(self, entry: Any) -> int:
+        """Append a ledger entry and return its sequence ID.
+
+        Args:
+            entry: A LedgerEntry subclass (PipelineStepEntry, LLMCallEntry, etc.)
+        Returns:
+            int: The auto-assigned sequence ID.
+        """
         ...
 
     async def query(
@@ -461,13 +501,22 @@ class LedgerProtocol(Protocol):
         filters: dict[str, Any] | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Event]:
-        """Query events with optional filters, pagination."""
+    ) -> list[Any]:
+        """Query ledger entries with optional filters.
+
+        Args:
+            filters: Optional filter criteria (entry_type, time range, actor, etc.)
+            limit: Maximum entries to return.
+            offset: Pagination offset.
+        Returns:
+            list: Matching ledger entries.
+        """
         ...
 
-    async def export(
-        self,
-        format: str = "json",
-    ) -> Any:
-        """Export the full ledger in the requested format."""
+    async def get_count(self, entry_type: str | None = None) -> int:
+        """Return the total number of ledger entries.
+
+        Args:
+            entry_type: If provided, count only entries of this type.
+        """
         ...

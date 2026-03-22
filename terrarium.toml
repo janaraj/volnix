@@ -29,8 +29,8 @@ steps = [
     "validation",
     "commit",
 ]
-max_side_effect_depth = 3
-step_timeout_seconds = 30
+side_effect_max_depth = 3
+timeout_per_step_seconds = 30
 
 # ── Event Bus ────────────────────────────────────────────────
 
@@ -133,12 +133,11 @@ snapshot_on_complete = true
 # ── Defaults ─────────────────────────────────────────────────
 
 [llm.defaults]
-provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+type = "anthropic"
+default_model = "claude-sonnet-4-6"
 max_tokens = 4096
 temperature = 0.7
 timeout_seconds = 60
-max_retries = 3
 
 # ── Provider Registry ────────────────────────────────────────
 
@@ -161,34 +160,73 @@ type = "openai_compatible"
 base_url = "http://localhost:11434/v1"
 api_key_ref = ""                    # Ollama requires no API key
 
+# ── CLI Providers (local tools, no API key needed) ───────────
+
+[llm.providers.claude_cli]
+type = "cli"
+command = "claude"
+args = ["-p"]                       # -p = non-interactive print mode
+default_model = "claude-sonnet-4-6"
+
+[llm.providers.codex_cli]
+type = "cli"
+command = "codex"
+args = ["exec"]                     # exec = non-interactive subcommand
+
+[llm.providers.gemini_cli]
+type = "cli"
+command = "gemini"
+args = []                           # positional prompt for one-shot
+
+# ── ACP Providers (stdio JSON-RPC, bidirectional) ────────────
+
+[llm.providers.claude_acp]
+type = "acp"
+command = "claude-agent-acp"
+auth_method = ""                    # claude uses its own stored credentials
+timeout_seconds = 300
+
+[llm.providers.codex_acp]
+type = "acp"
+command = "codex-acp"
+auth_method = "openai-api-key"
+timeout_seconds = 300
+
+[llm.providers.gemini_acp]
+type = "acp"
+command = "gemini"
+args = ["--experimental-acp"]       # gemini CLI v0.21+ uses --experimental-acp
+auth_method = ""                    # gemini uses its own credentials
+timeout_seconds = 300
+
 # ── Task-Specific Routing ────────────────────────────────────
 
 [llm.routing.world_compiler]
 provider = "anthropic"
-model = "claude-opus-4-20250514"
+model = "claude-opus-4-6"
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.responder_tier2]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-4-6"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-4-6"
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.animator]
 provider = "anthropic"
-model = "claude-haiku-4-20250514"
+model = "claude-haiku-4-5"
 max_tokens = 2048
 temperature = 0.9
 
 [llm.routing.data_generator]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-4-6"
 max_tokens = 4096
 temperature = 0.5

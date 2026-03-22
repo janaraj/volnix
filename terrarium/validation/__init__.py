@@ -9,7 +9,9 @@ Re-exports the primary public API surface::
     from terrarium.validation import ValidationPipeline, ValidationResult
 """
 
+from terrarium.core.types import ValidationType
 from terrarium.validation.amounts import AmountValidator
+from terrarium.validation.config import ValidationConfig
 from terrarium.validation.consistency import ConsistencyValidator
 from terrarium.validation.pipeline import ValidationPipeline
 from terrarium.validation.schema import SchemaValidator, ValidationResult
@@ -22,6 +24,8 @@ __all__ = [
     "SchemaValidator",
     "StateMachineValidator",
     "TemporalValidator",
+    "ValidationConfig",
     "ValidationPipeline",
     "ValidationResult",
+    "ValidationType",
 ]

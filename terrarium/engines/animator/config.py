@@ -8,6 +8,6 @@ from pydantic import BaseModel
 class AnimatorConfig(BaseModel):
     """Configuration for the world animator engine."""
 
-    creativity_budget: int
-    intensity: str
-    enabled: bool
+    creativity_budget: float = 0.3
+    intensity: float = 0.5
+    enabled: bool = True

@@ -6,10 +6,11 @@ ordering, retry limits, timeouts, and side-effect depth bounds.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PipelineConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     """Configuration for the governance pipeline.
 
     Attributes:
@@ -19,7 +20,15 @@ class PipelineConfig(BaseModel):
         side_effect_max_depth: Maximum recursion depth for side-effect chains.
     """
 
-    steps: list[str] = []
+    steps: list[str] = [
+        "permission",
+        "policy",
+        "budget",
+        "capability",
+        "responder",
+        "validation",
+        "commit",
+    ]
     max_retries: int = 0
     timeout_per_step_seconds: float = 30.0
     side_effect_max_depth: int = 10

@@ -6,7 +6,7 @@
 
 [simulation]
 seed = 1
-mode = "interactive"
+mode = "governed"
 
 [bus]
 db_path = ":memory:"

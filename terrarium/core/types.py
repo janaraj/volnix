@@ -132,6 +132,16 @@ class GapResponse(enum.StrEnum):
     SKIPPED = "skipped"
 
 
+class ValidationType(enum.StrEnum):
+    """Categories of validation checks."""
+
+    SCHEMA = "schema"
+    STATE_MACHINE = "state_machine"
+    CONSISTENCY = "consistency"
+    TEMPORAL = "temporal"
+    AMOUNT = "amount"
+
+
 # ---------------------------------------------------------------------------
 # Frozen value objects
 # ---------------------------------------------------------------------------

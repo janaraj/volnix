@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class PolicyConfig(BaseModel):
     """Configuration for the policy engine."""
 
-    condition_timeout_ms: int
-    max_policies_per_action: int
+    condition_timeout_ms: int = 500
+    max_policies_per_action: int = 50

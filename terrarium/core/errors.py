@@ -34,7 +34,9 @@ class TerrariumError(Exception):
     """
 
     def __init__(self, message: str = "", context: dict[str, Any] | None = None) -> None:
-        ...
+        super().__init__(message)
+        self.message = message
+        self.context = context or {}
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +80,8 @@ class EngineError(TerrariumError):
         engine_name: str = "",
         context: dict[str, Any] | None = None,
     ) -> None:
-        ...
+        super().__init__(message, context)
+        self.engine_name = engine_name
 
 
 class EngineInitError(EngineError):
@@ -117,7 +120,8 @@ class PipelineStepError(PipelineError):
         step_name: str = "",
         context: dict[str, Any] | None = None,
     ) -> None:
-        ...
+        super().__init__(message, context)
+        self.step_name = step_name
 
 
 class PipelineShortCircuit(PipelineError):
@@ -166,7 +170,8 @@ class ValidationError(TerrariumError):
         validation_type: str = "",
         context: dict[str, Any] | None = None,
     ) -> None:
-        ...
+        super().__init__(message, context)
+        self.validation_type = validation_type
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +193,35 @@ class EntityNotFoundError(StateError):
 
 class InvalidTransitionError(StateError):
     """A proposed state transition violates domain invariants."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Pack errors
+# ---------------------------------------------------------------------------
+
+
+class PackError(TerrariumError):
+    """Base error for service pack operations."""
+
+    pass
+
+
+class PackNotFoundError(PackError):
+    """No pack registered for the requested name or tool."""
+
+    pass
+
+
+class PackLoadError(PackError):
+    """A pack module could not be loaded from disk."""
+
+    pass
+
+
+class DuplicatePackError(PackError):
+    """A pack with the same pack_name is already registered."""
 
     pass
 

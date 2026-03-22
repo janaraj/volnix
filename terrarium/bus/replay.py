@@ -4,7 +4,6 @@ ReplayEngine coordinates with the persistence layer and the topic fanout
 dispatcher to replay events by sequence range, time range, or to a
 specific callback.
 """
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -23,7 +22,8 @@ class ReplayEngine:
     """
 
     def __init__(self, persistence: BusPersistence, fanout: TopicFanout) -> None:
-        ...
+        self._persistence = persistence
+        self._fanout = fanout
 
     async def replay_range(
         self,
@@ -42,10 +42,23 @@ class ReplayEngine:
         Returns:
             Number of events replayed.
         """
-        ...
+        events = await self._persistence.query(
+            from_sequence=from_sequence,
+            to_sequence=to_sequence,
+            event_types=event_types,
+        )
+
+        count = 0
+        for event in events:
+            await self._fanout.fanout(event)
+            count += 1
+
+        return count
 
     async def replay_timerange(self, start: datetime, end: datetime) -> int:
         """Replay events that occurred within a wall-clock time range.
+
+        Uses the ``created_at`` column from the persistence layer.
 
         Args:
             start: Start of the time range (inclusive).
@@ -54,7 +67,17 @@ class ReplayEngine:
         Returns:
             Number of events replayed.
         """
-        ...
+        start_iso = start.strftime("%Y-%m-%d %H:%M:%S")
+        end_iso = end.strftime("%Y-%m-%d %H:%M:%S")
+
+        events = await self._persistence.query_by_time(start_iso, end_iso)
+
+        count = 0
+        for event in events:
+            await self._fanout.fanout(event)
+            count += 1
+
+        return count
 
     async def replay_to_callback(
         self,
@@ -72,4 +95,14 @@ class ReplayEngine:
         Returns:
             Number of events replayed.
         """
-        ...
+        events = await self._persistence.query(
+            from_sequence=from_sequence,
+            event_types=event_types,
+        )
+
+        count = 0
+        for event in events:
+            await callback(event)
+            count += 1
+
+        return count

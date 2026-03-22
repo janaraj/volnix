@@ -8,10 +8,14 @@ tools, entity schemas, and state machines.  :class:`ServiceProfile`
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import Any, Awaitable, Callable, ClassVar
 
 from terrarium.core.context import ResponseProposal
+from terrarium.core.errors import PackNotFoundError
 from terrarium.core.types import ToolName
+
+# Type alias for pack action handlers
+ActionHandler = Callable[[dict[str, Any], dict[str, Any]], Awaitable[ResponseProposal]]
 
 
 class ServicePack(ABC):
@@ -76,6 +80,41 @@ class ServicePack(ABC):
             A :class:`ResponseProposal` with the simulated result.
         """
         ...
+
+    # ---- Concrete dispatch helper ----
+    _handlers: ClassVar[dict[str, ActionHandler]] = {}
+
+    async def dispatch_action(
+        self,
+        action: ToolName,
+        input_data: dict[str, Any],
+        state: dict[str, Any],
+    ) -> ResponseProposal:
+        """Data-driven dispatch to registered _handlers.
+
+        Packs that populate _handlers as a ClassVar can delegate
+        handle_action to this method in a single line:
+            async def handle_action(self, action, input_data, state):
+                return await self.dispatch_action(action, input_data, state)
+
+        Raises:
+            PackNotFoundError: If no handler is registered for the action.
+        """
+        handler = self._handlers.get(str(action))
+        if handler is None:
+            known = sorted(self._handlers.keys())
+            raise PackNotFoundError(
+                f"Pack '{self.pack_name}' has no handler for action '{action}'. "
+                f"Available: {known}"
+            )
+        return await handler(input_data, state)
+
+    def get_tool_names(self) -> list[str]:
+        """Return just the tool name strings (convenience)."""
+        tools = self.get_tools()
+        if not isinstance(tools, list):
+            return []
+        return [t.get("name", "") for t in tools if isinstance(t, dict)]
 
 
 class ServiceProfile(ABC):

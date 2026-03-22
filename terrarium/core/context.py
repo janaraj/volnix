@@ -20,11 +20,13 @@ from terrarium.core.types import (
     EntityId,
     EventId,
     FidelityMetadata,
+    RealityPreset,
     RunId,
     ServiceId,
     SideEffect,
     StateDelta,
     StepVerdict,
+    WorldMode,
 )
 
 
@@ -48,14 +50,19 @@ class StepResult(BaseModel, frozen=True):
     step_name: str
     verdict: StepVerdict
     message: str = ""
-    events: list[EventId] = Field(default_factory=list)
+    events: list[Any] = Field(default_factory=list)  # Event objects (not EventId strings)
     metadata: dict[str, Any] = Field(default_factory=dict)
     duration_ms: float = 0.0
 
     @property
     def is_terminal(self) -> bool:
         """Return ``True`` if this verdict should stop the pipeline."""
-        ...
+        return self.verdict in (
+            StepVerdict.DENY,
+            StepVerdict.HOLD,
+            StepVerdict.ESCALATE,
+            StepVerdict.ERROR,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -140,13 +147,14 @@ class ActionContext(BaseModel):
     policy_result: StepResult | None = None
     budget_result: StepResult | None = None
     capability_result: StepResult | None = None
+    responder_result: StepResult | None = None
     response_proposal: ResponseProposal | None = None
     validation_result: StepResult | None = None
     commit_result: StepResult | None = None
 
     # World simulation context
-    world_mode: str | None = None  # governed / ungoverned
-    reality_preset: str | None = None
+    world_mode: WorldMode | str | None = None
+    reality_preset: RealityPreset | str | None = None
 
     # Accumulated flags and metadata
     policy_flags: list[str] = Field(default_factory=list)

@@ -7,7 +7,7 @@ Pydantic model carrying a timestamp and structured metadata.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -38,7 +38,7 @@ class LedgerEntry(BaseModel, frozen=True):
 
     entry_id: int = 0
     entry_type: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -59,12 +59,14 @@ class PipelineStepEntry(LedgerEntry):
         duration_ms: Wall-clock milliseconds the step took.
     """
 
+    entry_type: str = "pipeline_step"
     step_name: str
     request_id: str
     actor_id: ActorId
     action: str
     verdict: str
     duration_ms: float = 0.0
+    message: str = ""
 
 
 class StateMutationEntry(LedgerEntry):
@@ -79,6 +81,7 @@ class StateMutationEntry(LedgerEntry):
         event_id: The event that caused this mutation.
     """
 
+    entry_type: str = "state_mutation"
     entity_type: str
     entity_id: EntityId
     operation: str
@@ -102,6 +105,7 @@ class LLMCallEntry(LedgerEntry):
         use_case: Description of what the LLM call was used for.
     """
 
+    entry_type: str = "llm_call"
     provider: str
     model: str
     prompt_tokens: int = 0
@@ -124,6 +128,7 @@ class GatewayRequestEntry(LedgerEntry):
         latency_ms: Total request handling latency in milliseconds.
     """
 
+    entry_type: str = "gateway_request"
     protocol: str
     actor_id: ActorId
     action: str
@@ -141,6 +146,7 @@ class ValidationEntry(LedgerEntry):
         details: Structured details about the validation outcome.
     """
 
+    entry_type: str = "validation"
     validation_type: str
     target: str
     passed: bool
@@ -157,6 +163,7 @@ class EngineLifecycleEntry(LedgerEntry):
         details: Additional details about the transition.
     """
 
+    entry_type: str = "engine_lifecycle"
     engine_name: str
     event_type: str
     details: dict[str, Any] = Field(default_factory=dict)
@@ -173,8 +180,35 @@ class SnapshotEntry(LedgerEntry):
         size_bytes: Approximate size of the snapshot in bytes.
     """
 
+    entry_type: str = "snapshot"
     snapshot_id: SnapshotId
     run_id: RunId
     tick: int = 0
     entity_count: int = 0
     size_bytes: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Entry registry for typed deserialization
+# ---------------------------------------------------------------------------
+
+ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
+    "pipeline_step": PipelineStepEntry,
+    "state_mutation": StateMutationEntry,
+    "llm_call": LLMCallEntry,
+    "gateway_request": GatewayRequestEntry,
+    "validation": ValidationEntry,
+    "engine_lifecycle": EngineLifecycleEntry,
+    "snapshot": SnapshotEntry,
+}
+
+
+def deserialize_entry(row: dict) -> LedgerEntry:
+    """Typed deserialization via entry registry.
+
+    Looks up the entry_type in the row, finds the correct LedgerEntry
+    subclass, and deserializes the JSON payload to that type.
+    """
+    entry_type = row.get("entry_type", "")
+    cls = ENTRY_REGISTRY.get(entry_type, LedgerEntry)
+    return cls.model_validate_json(row["payload"])

@@ -6,6 +6,7 @@ authority boundaries as a pipeline step.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from terrarium.core import (
@@ -16,11 +17,14 @@ from terrarium.core import (
     Event,
     PipelineStep,
     StepResult,
+    StepVerdict,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PermissionEngine(BaseEngine):
-    """RBAC / capability-based permission engine.
+    """PASS-THROUGH (Phase F2): Returns ALLOW without checks.
 
     Also acts as the ``permission`` pipeline step.
     """
@@ -37,27 +41,35 @@ class PermissionEngine(BaseEngine):
         return "permission"
 
     async def execute(self, ctx: ActionContext) -> StepResult:
-        """Execute the permission pipeline step."""
-        ...
+        """PASS-THROUGH (Phase F2): Returns ALLOW without checks.
+
+        This is the correct Phase C behavior. When Phase F2 implements
+        real governance, replace this method body with actual logic.
+        The method signature and return type MUST NOT change.
+        """
+        logger.debug("%s: allowing action '%s' for actor '%s' (pass-through)",
+                     self.step_name, ctx.action, ctx.actor_id)
+        return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW,
+                          message="pass-through")
 
     # -- BaseEngine hook -------------------------------------------------------
 
     async def _handle_event(self, event: Event) -> None:
-        """Handle an inbound event from the bus."""
-        ...
+        """PASS-THROUGH (Phase F2): Logs event without processing."""
+        logger.debug("%s: received event %s (pass-through)", self.engine_name, event.event_type)
 
     # -- Permission operations -------------------------------------------------
 
     async def check_permission(self, ctx: ActionContext) -> StepResult:
-        """Check whether the actor in *ctx* is permitted to perform the action."""
+        """Stub -- Phase F2 implementation."""
         ...
 
     async def get_visible_entities(
         self, actor_id: ActorId, entity_type: str
     ) -> list[EntityId]:
-        """Return entity IDs visible to the given actor for a type."""
+        """Stub -- Phase F2 implementation."""
         ...
 
     async def get_actor_permissions(self, actor_id: ActorId) -> dict[str, Any]:
-        """Return the full permission set for an actor."""
+        """Stub -- Phase F2 implementation."""
         ...

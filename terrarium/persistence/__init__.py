@@ -9,6 +9,7 @@ Re-exports the primary public API surface so downstream code can do::
     from terrarium.persistence import ConnectionManager, Database
 """
 
+from terrarium.persistence.append_log import AppendOnlyLog
 from terrarium.persistence.config import PersistenceConfig
 from terrarium.persistence.database import Database
 from terrarium.persistence.manager import ConnectionManager
@@ -17,11 +18,14 @@ from terrarium.persistence.snapshot import SnapshotStore
 from terrarium.persistence.sqlite import SQLiteDatabase
 
 __all__ = [
+    # Public API — use Database ABC, not SQLiteDatabase directly
+    "AppendOnlyLog",
     "ConnectionManager",
     "Database",
     "Migration",
     "MigrationRunner",
     "PersistenceConfig",
     "SnapshotStore",
+    # Concrete impl (composition root only)
     "SQLiteDatabase",
 ]

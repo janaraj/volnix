@@ -6,10 +6,13 @@ using the Anthropic Messages API.
 
 from __future__ import annotations
 
+import time
 from typing import ClassVar
 
+from anthropic import AsyncAnthropic
+
 from terrarium.llm.provider import LLMProvider
-from terrarium.llm.types import LLMRequest, LLMResponse, ProviderInfo
+from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 
 
 class AnthropicProvider(LLMProvider):
@@ -17,8 +20,9 @@ class AnthropicProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "anthropic"
 
-    def __init__(self, api_key: str, default_model: str = "claude-sonnet-4-20250514") -> None:
-        ...
+    def __init__(self, api_key: str, default_model: str = "claude-sonnet-4-6") -> None:
+        self._client = AsyncAnthropic(api_key=api_key)
+        self._default_model = default_model
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Send a request to the Anthropic API.
@@ -29,7 +33,43 @@ class AnthropicProvider(LLMProvider):
         Returns:
             The LLM response.
         """
-        ...
+        model = request.model_override or self._default_model
+        start = time.monotonic()
+        try:
+            message = await self._client.messages.create(
+                model=model,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                system=request.system_prompt or "You are a helpful assistant.",  # TODO: ISS-056 move default to config
+                messages=[{"role": "user", "content": request.user_content}],
+            )
+            latency = (time.monotonic() - start) * 1000
+            content = message.content[0].text if message.content else ""
+            usage = LLMUsage(
+                prompt_tokens=message.usage.input_tokens,
+                completion_tokens=message.usage.output_tokens,
+                total_tokens=message.usage.input_tokens + message.usage.output_tokens,
+                cost_usd=self._estimate_cost(
+                    model, message.usage.input_tokens, message.usage.output_tokens
+                ),
+            )
+            return LLMResponse(
+                content=content,
+                usage=usage,
+                model=model,
+                provider="anthropic",
+                latency_ms=latency,
+            )
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return LLMResponse(
+                content="",
+                usage=LLMUsage(),
+                model=model,
+                provider="anthropic",
+                latency_ms=latency,
+                error=f"{type(e).__name__}: {str(e)[:500]}",
+            )
 
     async def validate_connection(self) -> bool:
         """Validate connectivity to the Anthropic API.
@@ -37,7 +77,30 @@ class AnthropicProvider(LLMProvider):
         Returns:
             ``True`` if reachable with valid credentials.
         """
-        ...
+        try:
+            # Minimal request to verify credentials
+            await self._client.messages.create(
+                model=self._default_model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            return True
+        except Exception:
+            return False
+
+    # Known models — override via subclass or config for new models
+    KNOWN_MODELS: list[str] = [
+        "claude-sonnet-4-6",
+        "claude-opus-4-6",
+        "claude-haiku-4-5",
+    ]
+
+    # Cost per 1M tokens: (input_usd, output_usd)
+    COST_TABLE: dict[str, tuple[float, float]] = {
+        "claude-sonnet-4-6": (3.0, 15.0),
+        "claude-opus-4-6": (5.0, 25.0),
+        "claude-haiku-4-5": (1.0, 5.0),
+    }
 
     async def list_models(self) -> list[str]:
         """List available Anthropic models.
@@ -45,7 +108,7 @@ class AnthropicProvider(LLMProvider):
         Returns:
             A list of model identifier strings.
         """
-        ...
+        return list(self.KNOWN_MODELS)
 
     def get_info(self) -> ProviderInfo:
         """Return provider metadata.
@@ -53,4 +116,23 @@ class AnthropicProvider(LLMProvider):
         Returns:
             A :class:`ProviderInfo` describing this Anthropic provider.
         """
-        ...
+        return ProviderInfo(
+            name="anthropic",
+            type="anthropic",
+            base_url="https://api.anthropic.com",
+            available_models=list(self.KNOWN_MODELS),
+        )
+
+    def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Estimate the cost of a request in USD.
+
+        Args:
+            model: The model identifier.
+            input_tokens: Number of input tokens.
+            output_tokens: Number of output tokens.
+
+        Returns:
+            Estimated cost in US dollars.
+        """
+        in_cost, out_cost = self.COST_TABLE.get(model, (3.0, 15.0))
+        return (input_tokens * in_cost + output_tokens * out_cost) / 1_000_000

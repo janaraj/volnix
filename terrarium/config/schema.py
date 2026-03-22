@@ -1,48 +1,56 @@
-"""Pydantic configuration section models for the Terrarium framework.
+"""Root configuration schema for Terrarium.
 
-Every TOML configuration section maps to a frozen or mutable Pydantic model
-defined here.  The root :class:`TerrariumConfig` aggregates all sections and
-is the output of :class:`~terrarium.config.loader.ConfigLoader`.
+This module imports config models from their owning subsystem modules
+and assembles them into the root TerrariumConfig. Each subsystem owns
+its config definition (SRP). No duplicate definitions.
 """
-
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-
-# ---------------------------------------------------------------------------
-# Individual section models
-# ---------------------------------------------------------------------------
-
-
-class RealityConfig(BaseModel):
-    """Configuration for world reality conditions."""
-
-    preset: str = "realistic"
-    overrides: dict[str, Any] = Field(default_factory=dict)
-    overlays: list[str] = Field(default_factory=list)
+# Import from subsystem config files (each module owns its definition)
+from terrarium.persistence.config import PersistenceConfig
+from terrarium.bus.config import BusConfig
+from terrarium.ledger.config import LedgerConfig
+from terrarium.pipeline.config import PipelineConfig
+from terrarium.llm.config import LLMConfig
+from terrarium.gateway.config import GatewayConfig
+from terrarium.reality.config import RealityConfig, SeedConfig
+from terrarium.runs.config import RunConfig
+from terrarium.actors.config import ActorConfig
+from terrarium.templates.config import TemplateConfig
+from terrarium.engines.state.config import StateConfig
+from terrarium.engines.policy.config import PolicyConfig
+from terrarium.engines.permission.config import PermissionConfig
+from terrarium.engines.budget.config import BudgetConfig
+from terrarium.engines.responder.config import ResponderConfig
+from terrarium.engines.animator.config import AnimatorConfig
+from terrarium.engines.adapter.config import AdapterConfig
+from terrarium.engines.reporter.config import ReporterConfig
+from terrarium.engines.feedback.config import FeedbackConfig
+from terrarium.engines.world_compiler.config import WorldCompilerConfig
+from terrarium.validation.config import ValidationConfig
 
 
 class FidelityConfig(BaseModel):
-    """Configuration for service fidelity resolution."""
-
+    """Service fidelity resolution mode."""
+    model_config = ConfigDict(frozen=True)
     mode: str = "auto"  # auto | strict | exploratory
 
 
-class SeedConfig(BaseModel):
-    """Configuration for a single seed data injection."""
-
-    description: str = ""
-    customer: dict[str, Any] | None = None
-    charge: dict[str, Any] | None = None
-    ticket: dict[str, Any] | None = None
+class DashboardConfig(BaseModel):
+    """Web dashboard configuration."""
+    model_config = ConfigDict(frozen=True)
+    host: str = "127.0.0.1"
+    port: int = 8200
+    enabled: bool = False
 
 
 class SimulationConfig(BaseModel):
-    """Configuration for the simulation runtime."""
-
+    """Top-level simulation orchestration config."""
+    model_config = ConfigDict(frozen=True)
     seed: int = 42
     time_speed: float = 1.0
     mode: str = "governed"  # governed | ungoverned
@@ -51,167 +59,28 @@ class SimulationConfig(BaseModel):
     seeds: list[SeedConfig] = Field(default_factory=list)
 
 
-class PipelineConfig(BaseModel):
-    """Configuration for the governance pipeline steps and behaviour."""
-
-    steps: list[str] = []
-    max_retries: int = 0
-    timeout_per_step_seconds: float = 30.0
-    side_effect_max_depth: int = 10
-
-
-class BusConfig(BaseModel):
-    """Configuration for the event bus."""
-
-    ...
-
-
-class LedgerConfig(BaseModel):
-    """Configuration for the append-only event ledger."""
-
-    ...
-
-
-class PersistenceConfig(BaseModel):
-    """Configuration for state persistence."""
-
-    ...
-
-
-class StateConfig(BaseModel):
-    """Configuration for the world-state engine."""
-
-    ...
-
-
-class PolicyConfig(BaseModel):
-    """Configuration for the policy engine."""
-
-    ...
-
-
-class PermissionConfig(BaseModel):
-    """Configuration for the permission engine."""
-
-    ...
-
-
-class BudgetConfig(BaseModel):
-    """Configuration for the budget engine."""
-
-    ...
-
-
-class ResponderConfig(BaseModel):
-    """Configuration for the responder engine."""
-
-    ...
-
-
-class AnimatorConfig(BaseModel):
-    """Configuration for the animator engine."""
-
-    ...
-
-
-class AdapterConfig(BaseModel):
-    """Configuration for the adapter layer."""
-
-    ...
-
-
-class ReporterConfig(BaseModel):
-    """Configuration for the reporter engine."""
-
-    ...
-
-
-class FeedbackConfig(BaseModel):
-    """Configuration for the feedback engine."""
-
-    ...
-
-
-class DashboardConfig(BaseModel):
-    """Configuration for the dashboard UI."""
-
-    ...
-
-
-class GatewayConfig(BaseModel):
-    """Configuration for the external gateway."""
-
-    host: str = "127.0.0.1"
-    port: int = 8080
-    middleware: list[str] = []
-    rate_limit_enabled: bool = False
-    rate_limits: dict[str, int] = {}
-    auth_enabled: bool = False
-
-
-class RunConfig(BaseModel):
-    """Configuration for evaluation runs."""
-
-    ...
-
-
-# ---------------------------------------------------------------------------
-# LLM configuration models
-# ---------------------------------------------------------------------------
-
-
-class LLMProviderConfig(BaseModel):
-    """Configuration for a single LLM provider."""
-
-    type: str = ""
-    base_url: str | None = None
-    api_key_ref: str = ""
-    default_model: str = ""
-    max_tokens: int = 4096
-    temperature: float = 0.7
-    timeout_seconds: float = 30.0
-
-
-class LLMRoutingEntry(BaseModel):
-    """A single routing rule mapping an engine/use-case to a provider+model."""
-
-    provider: str = ""
-    model: str = ""
-    max_tokens: int | None = None
-    temperature: float | None = None
-
-
-class LLMConfig(BaseModel):
-    """Top-level LLM configuration with provider definitions and routing table."""
-
-    defaults: LLMProviderConfig = LLMProviderConfig()
-    providers: dict[str, LLMProviderConfig] = {}
-    routing: dict[str, LLMRoutingEntry] = {}
-
-
-# ---------------------------------------------------------------------------
-# Root configuration
-# ---------------------------------------------------------------------------
-
-
 class TerrariumConfig(BaseModel):
-    """Root configuration model aggregating all Terrarium subsystem sections."""
-
-    simulation: SimulationConfig = SimulationConfig()
-    pipeline: PipelineConfig = PipelineConfig()
-    bus: BusConfig = BusConfig()
-    ledger: LedgerConfig = LedgerConfig()
-    persistence: PersistenceConfig = PersistenceConfig()
-    state: StateConfig = StateConfig()
-    policy: PolicyConfig = PolicyConfig()
-    permission: PermissionConfig = PermissionConfig()
-    budget: BudgetConfig = BudgetConfig()
-    responder: ResponderConfig = ResponderConfig()
-    animator: AnimatorConfig = AnimatorConfig()
-    adapter: AdapterConfig = AdapterConfig()
-    reporter: ReporterConfig = ReporterConfig()
-    feedback: FeedbackConfig = FeedbackConfig()
-    dashboard: DashboardConfig = DashboardConfig()
-    gateway: GatewayConfig = GatewayConfig()
-    run: RunConfig = RunConfig()
-    llm: LLMConfig = LLMConfig()
+    """Root configuration — assembles all subsystem configs."""
+    model_config = ConfigDict(frozen=True)
+    simulation: SimulationConfig = Field(default_factory=SimulationConfig)
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    bus: BusConfig = Field(default_factory=BusConfig)
+    ledger: LedgerConfig = Field(default_factory=LedgerConfig)
+    persistence: PersistenceConfig = Field(default_factory=PersistenceConfig)
+    state: StateConfig = Field(default_factory=StateConfig)
+    policy: PolicyConfig = Field(default_factory=PolicyConfig)
+    permission: PermissionConfig = Field(default_factory=PermissionConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    responder: ResponderConfig = Field(default_factory=ResponderConfig)
+    animator: AnimatorConfig = Field(default_factory=AnimatorConfig)
+    adapter: AdapterConfig = Field(default_factory=AdapterConfig)
+    reporter: ReporterConfig = Field(default_factory=ReporterConfig)
+    feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
+    dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
+    gateway: GatewayConfig = Field(default_factory=GatewayConfig)
+    runs: RunConfig = Field(default_factory=RunConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    actors: ActorConfig = Field(default_factory=ActorConfig)
+    templates: TemplateConfig = Field(default_factory=TemplateConfig)
+    world_compiler: WorldCompilerConfig = Field(default_factory=WorldCompilerConfig)
+    validation: ValidationConfig = Field(default_factory=ValidationConfig)

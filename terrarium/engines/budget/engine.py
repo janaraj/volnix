@@ -6,6 +6,7 @@ and enforces limits as a pipeline step.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from terrarium.core import (
@@ -17,11 +18,14 @@ from terrarium.core import (
     Event,
     PipelineStep,
     StepResult,
+    StepVerdict,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class BudgetEngine(BaseEngine):
-    """Resource budget tracking and enforcement engine.
+    """PASS-THROUGH (Phase F2): Returns ALLOW without budget checks.
 
     Also acts as the ``budget`` pipeline step.
     """
@@ -38,29 +42,37 @@ class BudgetEngine(BaseEngine):
         return "budget"
 
     async def execute(self, ctx: ActionContext) -> StepResult:
-        """Execute the budget pipeline step."""
-        ...
+        """PASS-THROUGH (Phase F2): Returns ALLOW without budget checks.
+
+        This is the correct Phase C behavior. When Phase F2 implements
+        real governance, replace this method body with actual logic.
+        The method signature and return type MUST NOT change.
+        """
+        logger.debug("%s: allowing action '%s' for actor '%s' (pass-through)",
+                     self.step_name, ctx.action, ctx.actor_id)
+        return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW,
+                          message="pass-through")
 
     # -- BaseEngine hook -------------------------------------------------------
 
     async def _handle_event(self, event: Event) -> None:
-        """Handle an inbound event from the bus."""
-        ...
+        """PASS-THROUGH (Phase F2): Logs event without processing."""
+        logger.debug("%s: received event %s (pass-through)", self.engine_name, event.event_type)
 
     # -- Budget operations -----------------------------------------------------
 
     async def check_budget(self, ctx: ActionContext) -> StepResult:
-        """Check whether the actor's budget allows the proposed action."""
+        """Stub -- Phase F2 implementation."""
         ...
 
     async def deduct(self, actor_id: ActorId, cost: ActionCost) -> BudgetState:
-        """Deduct resources from an actor's budget and return the new state."""
+        """Stub -- Phase F2 implementation."""
         ...
 
     async def get_remaining(self, actor_id: ActorId) -> BudgetState:
-        """Return the actor's current remaining budget."""
+        """Stub -- Phase F2 implementation."""
         ...
 
     async def get_spend_curve(self, actor_id: ActorId) -> list[dict[str, Any]]:
-        """Return a time-series of the actor's spend across budget dimensions."""
+        """Stub -- Phase F2 implementation."""
         ...

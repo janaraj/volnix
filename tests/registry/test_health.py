@@ -1,14 +1,80 @@
-"""Tests for terrarium.registry.health — engine health checks."""
+"""Tests for terrarium.registry.health."""
 import pytest
-import pytest_asyncio
+from unittest.mock import AsyncMock
+from terrarium.registry.registry import EngineRegistry
 from terrarium.registry.health import HealthAggregator
+from terrarium.registry.wiring import wire_engines
+from terrarium.config.schema import TerrariumConfig
+from tests.registry.conftest import make_mock_engine, make_mock_bus
 
 
 @pytest.mark.asyncio
 async def test_health_check_all():
-    ...
+    reg = EngineRegistry()
+    reg.register(make_mock_engine("state"))
+    reg.register(make_mock_engine("policy", deps=["state"]))
+    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    health = HealthAggregator(reg)
+    results = await health.check_all()
+    assert len(results) == 2
+    assert results["state"]["healthy"] is True
+    assert results["policy"]["healthy"] is True
 
 
 @pytest.mark.asyncio
 async def test_health_check_single():
-    ...
+    reg = EngineRegistry()
+    reg.register(make_mock_engine("state"))
+    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    health = HealthAggregator(reg)
+    result = await health.check_engine("state")
+    assert result["engine"] == "state"
+    assert result["started"] is True
+
+
+@pytest.mark.asyncio
+async def test_is_healthy_all_pass():
+    reg = EngineRegistry()
+    reg.register(make_mock_engine("state"))
+    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    health = HealthAggregator(reg)
+    await health.check_all()
+    assert health.is_healthy() is True
+
+
+@pytest.mark.asyncio
+async def test_is_healthy_one_fail():
+    reg = EngineRegistry()
+    reg.register(make_mock_engine("state"))
+    reg.register(make_mock_engine("policy", deps=["state"]))
+    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    reg.get("policy")._healthy = False
+    health = HealthAggregator(reg)
+    await health.check_all()
+    assert health.is_healthy() is False
+
+
+def test_is_healthy_before_check():
+    reg = EngineRegistry()
+    health = HealthAggregator(reg)
+    assert health.is_healthy() is False
+
+
+@pytest.mark.asyncio
+async def test_health_check_error():
+    reg = EngineRegistry()
+    engine = make_mock_engine("broken")
+    reg.register(engine)
+    engine.health_check = AsyncMock(side_effect=RuntimeError("crash"))
+    health = HealthAggregator(reg)
+    results = await health.check_all()
+    assert results["broken"]["healthy"] is False
+    assert "error" in results["broken"]
+
+
+@pytest.mark.asyncio
+async def test_check_missing_engine():
+    reg = EngineRegistry()
+    health = HealthAggregator(reg)
+    with pytest.raises(KeyError):
+        await health.check_engine("nonexistent")

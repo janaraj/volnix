@@ -7,6 +7,8 @@ producing a validated :class:`~terrarium.config.schema.TerrariumConfig`.
 
 from __future__ import annotations
 
+import os
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +27,8 @@ class ConfigLoader:
     """
 
     def __init__(self, base_dir: Path | None = None, env: str = "development") -> None:
-        ...
+        self._base_dir = base_dir or Path.cwd()
+        self._env = env
 
     def load(self) -> TerrariumConfig:
         """Load, merge, and validate all configuration layers.
@@ -33,7 +36,45 @@ class ConfigLoader:
         Returns:
             A fully resolved and validated :class:`TerrariumConfig`.
         """
-        ...
+        config: dict[str, Any] = {}
+
+        # Layer 1: base config
+        base_path = self._base_dir / "terrarium.toml"
+        if base_path.is_file():
+            config = self._load_toml(base_path)
+
+        # Layer 2: environment-specific overrides
+        env_path = self._base_dir / f"terrarium.{self._env}.toml"
+        if env_path.is_file():
+            env_config = self._load_toml(env_path)
+            config = self._deep_merge(config, env_config)
+
+        # Layer 3: local overrides
+        local_path = self._base_dir / "terrarium.local.toml"
+        if local_path.is_file():
+            local_config = self._load_toml(local_path)
+            config = self._deep_merge(config, local_config)
+
+        # Layer 4: environment variable overrides
+        config = self._apply_env_overrides(config)
+
+        # Layer 5: resolve secure refs
+        config = self._resolve_refs(config)
+
+        return TerrariumConfig.model_validate(config)
+
+    @staticmethod
+    def _load_toml(path: Path) -> dict[str, Any]:
+        """Load a TOML file and return its contents as a dictionary.
+
+        Args:
+            path: Path to the TOML file.
+
+        Returns:
+            The parsed TOML dictionary.
+        """
+        with open(path, "rb") as f:
+            return tomllib.load(f)
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -46,7 +87,17 @@ class ConfigLoader:
         Returns:
             A new merged dictionary.
         """
-        ...
+        merged = dict(base)
+        for key, value in override.items():
+            if (
+                key in merged
+                and isinstance(merged[key], dict)
+                and isinstance(value, dict)
+            ):
+                merged[key] = ConfigLoader._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
     def _apply_env_overrides(self, config: dict[str, Any]) -> dict[str, Any]:
         """Apply environment-variable overrides to the configuration dict.
@@ -60,10 +111,21 @@ class ConfigLoader:
         Returns:
             The configuration dictionary with env overrides applied.
         """
-        ...
+        prefix = "TERRARIUM__"
+        for env_key, env_value in os.environ.items():
+            if env_key.startswith(prefix):
+                parts = env_key[len(prefix) :].lower().split("__")
+                if parts:
+                    self._set_nested(config, parts, env_value)
+        return config
 
     def _resolve_refs(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Resolve ``${section.key}`` cross-reference placeholders.
+        """Resolve secure ``*_ref`` fields from environment variables.
+
+        Any field ending in ``_ref`` whose value is a non-empty string will be
+        looked up as an environment variable. If the env var exists, a
+        corresponding field without the ``_ref`` suffix is set to its value.
+        If the env var does not exist, the ref is left as-is.
 
         Args:
             config: The configuration dictionary containing potential refs.
@@ -71,7 +133,21 @@ class ConfigLoader:
         Returns:
             The configuration dictionary with all refs resolved.
         """
-        ...
+        return self._resolve_refs_recursive(config)
+
+    @staticmethod
+    def _resolve_refs_recursive(config: dict[str, Any]) -> dict[str, Any]:
+        """Recursively walk the config dict resolving *_ref fields."""
+        result = dict(config)
+        for key, value in list(result.items()):
+            if isinstance(value, dict):
+                result[key] = ConfigLoader._resolve_refs_recursive(value)
+            elif isinstance(key, str) and key.endswith("_ref") and isinstance(value, str) and value:
+                resolved_key = key[: -len("_ref")]
+                env_val = os.environ.get(value)
+                if env_val is not None:
+                    result[resolved_key] = env_val
+        return result
 
     @staticmethod
     def _coerce(value: str) -> Any:
@@ -83,7 +159,20 @@ class ConfigLoader:
         Returns:
             The coerced value (bool, int, float, or str).
         """
-        ...
+        # Check int/float BEFORE boolean to avoid "0"→False, "1"→True
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        if value.lower() in ("true", "yes", "on"):
+            return True
+        if value.lower() in ("false", "no", "off"):
+            return False
+        return value
 
     @staticmethod
     def _set_nested(config: dict[str, Any], keys: list[str], value: str) -> None:
@@ -94,4 +183,9 @@ class ConfigLoader:
             keys: The key path as a list of string segments.
             value: The value to set.
         """
-        ...
+        current = config
+        for key in keys[:-1]:
+            if key not in current or not isinstance(current[key], dict):
+                current[key] = {}
+            current = current[key]
+        current[keys[-1]] = ConfigLoader._coerce(value)

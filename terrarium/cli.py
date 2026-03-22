@@ -216,3 +216,44 @@ def promote(
 ) -> None:
     """Promote a captured service to Tier 2 community profile."""
     raise NotImplementedError
+
+
+@app.command()
+def setup(
+    provider: Annotated[
+        Optional[str],
+        typer.Argument(help="Provider to set up: anthropic, openai, google, claude-acp, codex-acp, all"),
+    ] = "all",
+) -> None:
+    """Interactive setup wizard — configure LLM providers and ACP servers.
+
+    Detects installed CLIs, prompts for API keys, starts ACP servers,
+    and validates connections. Run this after installing Terrarium.
+
+    \b
+    Examples:
+        terrarium setup              # set up all available providers
+        terrarium setup anthropic    # set up Anthropic API only
+        terrarium setup claude-acp   # set up Claude Code via ACP
+    """
+    raise NotImplementedError
+
+
+@app.command()
+def check(
+    test: Annotated[
+        bool,
+        typer.Option("--test", "-t", help="Run real API tests for configured providers"),
+    ] = False,
+) -> None:
+    """Check system requirements and provider connectivity.
+
+    Shows which CLIs are installed, which API keys are set,
+    which ACP servers are running, and which Python SDKs are available.
+
+    \b
+    Examples:
+        terrarium check          # show provider availability
+        terrarium check --test   # also run real API tests
+    """
+    raise NotImplementedError

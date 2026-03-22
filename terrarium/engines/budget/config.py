@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class BudgetConfig(BaseModel):
     """Configuration for the budget engine."""
 
-    warning_threshold_pct: float
-    critical_threshold_pct: float
+    warning_threshold_pct: float = 80.0
+    critical_threshold_pct: float = 95.0

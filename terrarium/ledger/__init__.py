@@ -11,6 +11,7 @@ Re-exports the primary public API surface so downstream code can do::
 
 from terrarium.ledger.config import LedgerConfig
 from terrarium.ledger.entries import (
+    ENTRY_REGISTRY,
     EngineLifecycleEntry,
     GatewayRequestEntry,
     LedgerEntry,
@@ -19,12 +20,14 @@ from terrarium.ledger.entries import (
     SnapshotEntry,
     StateMutationEntry,
     ValidationEntry,
+    deserialize_entry,
 )
 from terrarium.ledger.export import LedgerExporter
 from terrarium.ledger.ledger import Ledger
 from terrarium.ledger.query import LedgerAggregation, LedgerQuery, LedgerQueryBuilder
 
 __all__ = [
+    # Public API
     "EngineLifecycleEntry",
     "GatewayRequestEntry",
     "Ledger",
@@ -39,4 +42,7 @@ __all__ = [
     "SnapshotEntry",
     "StateMutationEntry",
     "ValidationEntry",
+    # Internal (exported for advanced use / testing)
+    "ENTRY_REGISTRY",
+    "deserialize_entry",
 ]

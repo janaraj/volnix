@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class StateConfig(BaseModel):
     """Configuration for the state engine."""
 
-    db_path: str
-    snapshot_dir: str
+    db_path: str = "data/state.db"
+    snapshot_dir: str = "snapshots"

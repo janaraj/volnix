@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class FeedbackConfig(BaseModel):
     """Configuration for the feedback engine."""
 
-    annotations_db_path: str
-    external_sync_enabled: bool
+    annotations_db_path: str = "data/annotations.db"
+    external_sync_enabled: bool = False
