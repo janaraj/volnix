@@ -74,6 +74,7 @@ class APIOperation(BaseModel, frozen=True):
             "method": self.http_method,
             "path": self.http_path,
             "content_type": self.content_type,
+            "tool_name": self.name,
         }
 
     def to_openai_function(self) -> dict[str, Any]:
@@ -132,13 +133,15 @@ class ServiceSurface(BaseModel, frozen=True):
     def from_pack(cls, pack: Any) -> ServiceSurface:
         """Convert a ServicePack to a ServiceSurface."""
         operations = []
-        for tool in pack.get_tools():
+        for tool in (pack.get_tools() or []):
             params = tool.get("parameters", {}).get("properties", {})
             required = tool.get("parameters", {}).get("required", [])
             operations.append(APIOperation(
                 name=tool["name"],
                 service=pack.pack_name,
                 description=tool.get("description", ""),
+                http_path=tool.get("http_path", ""),
+                http_method=tool.get("http_method", "POST"),
                 parameters=params,
                 required_params=required,
             ))

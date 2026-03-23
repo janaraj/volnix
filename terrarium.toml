@@ -196,7 +196,7 @@ timeout_seconds = 300
 [llm.providers.codex_acp]
 type = "acp"
 command = "codex-acp"
-auth_method = "openai-api-key"
+auth_method = ""                    # codex uses its own stored credentials (codex login)
 timeout_seconds = 300
 
 [llm.providers.gemini_acp]

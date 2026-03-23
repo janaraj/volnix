@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Background layers (spec hex → OKLCH) ─────────────────────────────── */
+  --color-bg-base: oklch(0.06 0.005 250);       /* #0a0a0b */
+  --color-bg-surface: oklch(0.09 0.005 250);     /* #111113 */
+  --color-bg-elevated: oklch(0.13 0.005 250);    /* #1a1a1e */
+  --color-bg-hover: oklch(0.17 0.008 250);       /* #222228 */
+
+  /* ── Text ──────────────────────────────────────────────────────────────── */
+  --color-text-primary: oklch(0.95 0.003 250);   /* #ededef */
+  --color-text-secondary: oklch(0.63 0.005 250); /* #8b8b8e */
+  --color-text-muted: oklch(0.45 0.005 250);     /* #5c5c5f */
+
+  /* ── Semantic colors — used only for meaning ───────────────────────────── */
+  --color-success: oklch(0.72 0.19 155);          /* #22c55e — successful actions */
+  --color-warning: oklch(0.80 0.17 75);           /* #f59e0b — policy holds, warnings */
+  --color-error: oklch(0.63 0.22 27);             /* #ef4444 — denials, failures */
+  --color-info: oklch(0.62 0.19 260);             /* #3b82f6 — world events, info */
+  --color-neutral: oklch(0.55 0.015 250);         /* #6b7280 — neutral/pending */
+
+  /* ── Accent ────────────────────────────────────────────────────────────── */
+  --color-accent: oklch(0.55 0.22 285);           /* #8b5cf6 — interactive, selections */
+
+  /* ── Score gradient ────────────────────────────────────────────────────── */
+  --color-score-excellent: oklch(0.72 0.19 155);  /* #22c55e — 90-100 */
+  --color-score-good: oklch(0.76 0.18 130);       /* #84cc16 — 75-89 */
+  --color-score-fair: oklch(0.80 0.17 75);        /* #f59e0b — 60-74 */
+  --color-score-poor: oklch(0.63 0.22 27);        /* #ef4444 — 0-59 */
+
+  /* ── Fidelity tiers ────────────────────────────────────────────────────── */
+  --color-tier-1: oklch(0.72 0.19 155);           /* green — verified */
+  --color-tier-2: oklch(0.80 0.17 75);            /* amber — profiled */
+
+  /* ── Border & Ring ─────────────────────────────────────────────────────── */
+  --color-border: oklch(0.18 0.005 250);          /* subtle, matches bg-elevated */
+  --color-ring: oklch(0.55 0.22 285);             /* matches accent for focus */
+
+  /* ── Fonts ─────────────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* All data displays use monospace */
+.font-data {
+  font-family: var(--font-mono);
+}

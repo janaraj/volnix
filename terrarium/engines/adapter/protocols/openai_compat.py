@@ -1,4 +1,9 @@
-"""OpenAI function calling compatible endpoint."""
+"""Phase E2: OpenAI function calling compatibility. Not implemented in E1.
+
+This adapter will translate OpenAI function-calling requests/responses
+into Terrarium ActionContexts, allowing agents using the OpenAI SDK to
+interact with a Terrarium world directly.
+"""
 
 from __future__ import annotations
 

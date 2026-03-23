@@ -59,6 +59,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_send",
         "description": "Send an email message.",
+        "http_path": "/email/v1/messages/send",
+        "http_method": "POST",
         "parameters": {
             "type": "object",
             "required": ["from_addr", "to_addr", "subject", "body"],
@@ -73,6 +75,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_list",
         "description": "List emails in a mailbox.",
+        "http_path": "/email/v1/messages",
+        "http_method": "GET",
         "parameters": {
             "type": "object",
             "required": ["mailbox_owner"],
@@ -86,6 +90,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_read",
         "description": "Read a specific email by ID.",
+        "http_path": "/email/v1/messages/{email_id}",
+        "http_method": "GET",
         "parameters": {
             "type": "object",
             "required": ["email_id"],
@@ -97,6 +103,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_search",
         "description": "Search emails by query, sender, or subject.",
+        "http_path": "/email/v1/messages/search",
+        "http_method": "POST",
         "parameters": {
             "type": "object",
             "required": [],
@@ -110,6 +118,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_reply",
         "description": "Reply to an existing email.",
+        "http_path": "/email/v1/messages/{email_id}/reply",
+        "http_method": "POST",
         "parameters": {
             "type": "object",
             "required": ["email_id", "from_addr", "body"],
@@ -123,6 +133,8 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_mark_read",
         "description": "Mark one or more emails as read.",
+        "http_path": "/email/v1/messages/mark-read",
+        "http_method": "POST",
         "parameters": {
             "type": "object",
             "required": ["email_ids"],

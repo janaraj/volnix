@@ -406,8 +406,9 @@ class TestDriftPrevention:
     async def test_pipeline_short_circuit(self, app):
         """D3: A step returning terminal verdict short-circuits the pipeline.
 
-        We verify this by sending an unknown action -- the responder step
-        returns ERROR, which is terminal, so the pipeline stops there.
+        We verify this by sending an unknown action -- the capability step
+        returns ERROR (tool not found), which is terminal, so the pipeline
+        stops there. (Phase E1: capability check uses PackRegistry.has_tool())
         """
         result = await app.handle_action(
             "a1", "email", "nonexistent_action",
@@ -419,11 +420,11 @@ class TestDriftPrevention:
         entries = await app.ledger.query(
             LedgerQuery(entry_type="pipeline_step", limit=50),
         )
-        # Steps before and including responder should be there,
-        # but validation and commit should NOT be there
+        # Steps before and including capability should be there,
+        # but responder, validation, and commit should NOT be there
         step_names = [e.step_name for e in entries]
-        # responder should be present (it returned ERROR)
-        assert "responder" in step_names
+        # capability should be present (it returned ERROR)
+        assert "capability" in step_names
         # commit should NOT be present (pipeline stopped)
         assert "commit" not in step_names
 

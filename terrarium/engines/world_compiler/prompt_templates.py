@@ -68,12 +68,30 @@ class PromptTemplate:
 
     def parse_json_response(self, response: LLMResponse) -> dict[str, Any]:
         """Extract JSON from LLM response (structured output or content parsing)."""
+        # Check for LLM provider errors first
+        if response.error:
+            from terrarium.core.errors import LLMError
+            raise LLMError(
+                f"LLM provider returned error: {response.error[:200]}",
+                context={
+                    "provider": response.provider,
+                    "model": response.model,
+                },
+            )
+
         if response.structured_output:
             return response.structured_output
 
         content = response.content.strip()
         if not content:
-            raise ValueError("LLM returned empty response")
+            from terrarium.core.errors import LLMError
+            raise LLMError(
+                "LLM returned empty response (no content, no error)",
+                context={
+                    "provider": response.provider,
+                    "model": response.model,
+                },
+            )
 
         # Strip markdown code block wrappers (greedy — handle truncated responses)
         # Remove opening ```json or ```
@@ -353,5 +371,45 @@ Output ONLY valid JSON.""",
 
     user="Expand this seed scenario: {seed_description}",
     engine_name="world_compiler",
+    use_case="default",
+)
+
+
+# ── Animator Event Template ──────────────────────────────────────
+
+ANIMATOR_EVENT = PromptTemplate(
+    system="""You are the World Animator for a Terrarium simulation.
+Generate organic world events that happen between agent turns.
+
+## World Reality (ongoing creative direction)
+{reality_summary}
+
+## Reality Dimensions (per-attribute intensity)
+{reality_dimensions}
+
+## Behavior Mode
+{behavior_mode}: {behavior_description}
+
+## Domain
+{domain_description}
+
+## Recent Agent Actions
+{recent_actions}
+
+## Animator Settings
+Creativity: {creativity}, Frequency: {event_frequency}
+Escalation on inaction: {escalation_on_inaction}
+
+## Rules
+- Generate up to {budget} events as a JSON array
+- Each event: {{"actor_id": "npc_id", "service_id": "service", "action": "tool_name", "input_data": {{}}, "sub_type": "organic"}}
+- Events must use actors and services that exist in the world
+- Reality dimensions shape what happens (messy = things go wrong, hostile = active opposition)
+- Events go through the governance pipeline -- they CAN be blocked by policies
+
+Output ONLY valid JSON array.""",
+
+    user="Generate up to {budget} world events.",
+    engine_name="animator",
     use_case="default",
 )

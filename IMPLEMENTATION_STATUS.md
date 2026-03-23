@@ -26,13 +26,15 @@
 
 **Current state:** Behavior mode is stored in WorldPlan and passed to entity generation as a hint (LLM uses it for entity state flavor — dynamic entities have "in-flight" states, static have "settled" states). But there is NO runtime Animator. The world is effectively always "static" at runtime regardless of mode setting.
 
-**G3 scope (not started):**
-- `terrarium/engines/animator/engine.py` — WorldAnimatorEngine (stub)
-- `terrarium/engines/animator/scheduler.py` — Deterministic scheduled events: SLA timers, queue aging, shift handoffs (stub)
-- `terrarium/engines/animator/generator.py` — LLM-driven organic events: customer reactions, service degradation, complications (stub)
-- Creativity budget system (max organic events per simulated hour)
-- Animator events go through the SAME 7-step pipeline as agent actions
-- Depends on: C3 (pipeline), D1 (reality dimensions), D4b (compiled world)
+**G3 scope: ✅ COMPLETE**
+- `terrarium/engines/animator/engine.py` — WorldAnimatorEngine with tick(), configure(), behavior modes
+- `terrarium/engines/animator/context.py` — AnimatorContext reusing WorldGenerationContext pattern
+- `terrarium/engines/animator/generator.py` — OrganicGenerator with ANIMATOR_EVENT PromptTemplate
+- `terrarium/scheduling/scheduler.py` — Shared WorldScheduler (one-shot, recurring, trigger)
+- Level 2 per-attribute numbers drive probabilistic events (reliability.failures=20 → 20% per tick)
+- Creativity budget enforced (creativity_budget_per_tick)
+- All events through 7-step pipeline via app.handle_action()
+- 56 tests, all passing
 
 ### GAP: G4 Promotion Pipeline NOT in D4b
 
@@ -168,9 +170,10 @@ The service inference chain for unknown services is **fully implemented and test
 | **Adapter — HTTP** | `terrarium/engines/adapter/protocols/http_rest.py` | 📋 stub | E1 | REST endpoints |
 | **Adapter — manifest** | `terrarium/engines/adapter/tool_manifest.py` | 📋 stub | E1 | Tool manifest gen |
 | **Adapter — observation** | `terrarium/engines/adapter/observation.py` | 📋 stub | E1 | Observation delivery |
-| **Animator — engine** | `terrarium/engines/animator/engine.py` | 📋 stub | G3 | WorldAnimatorEngine |
-| **Animator — scheduler** | `terrarium/engines/animator/scheduler.py` | 📋 stub | G3 | Scheduled events |
-| **Animator — generator** | `terrarium/engines/animator/generator.py` | 📋 stub | G3 | Organic events |
+| **Animator — engine** | `terrarium/engines/animator/engine.py` | ✅ done | G3 | WorldAnimatorEngine — tick(), configure(), behavior modes |
+| **Animator — context** | `terrarium/engines/animator/context.py` | ✅ done | G3 | AnimatorContext (reuses WorldGenerationContext) |
+| **Animator — generator** | `terrarium/engines/animator/generator.py` | ✅ done | G3 | OrganicGenerator — LLM events |
+| **Shared scheduler** | `terrarium/scheduling/scheduler.py` | ✅ done | G3 | WorldScheduler — one-shot, recurring, trigger events |
 | **Reporter — engine** | `terrarium/engines/reporter/engine.py` | 📋 stub | F3 | ReportGeneratorEngine |
 | **Reporter — scorecard** | `terrarium/engines/reporter/scorecard.py` | 📋 stub | F3 | Governance scores |
 | **Reporter — gaps** | `terrarium/engines/reporter/capability_gaps.py` | 📋 stub | F3 | Gap classification |
@@ -300,14 +303,14 @@ The service inference chain for unknown services is **fully implemented and test
 
 | Item | Scope | Depends On | Done Criteria |
 |------|-------|-----------|---------------|
-| **E1: gateway + MCP** | Gateway, MCP adapter, tool manifest, observation | C3 (wire) | Real MCP client connects, receives tool list, calls a tool, gets response, receives observations. |
+| **E1: gateway + MCP/HTTP** | Gateway (single entry point), MCP server adapter, HTTP REST adapter (FastAPI), WebSocket event streaming, tool manifest generation, capability check, real-world API paths from packs | C3 (wire) | ✅ **DONE.** Gateway discovers tools from PackRegistry. MCP server exposes tools via `mcp.Server`. HTTP REST exposes `/api/v1/tools`, `/api/v1/actions/{tool}`, real-world paths (e.g. `/email/v1/messages/send`), entity query, health. WebSocket streams live events. Capability gaps return structured response with available_tools. All requests traced via GatewayRequestEntry in Ledger. 40 new tests. 1058 total passed. |
 
 ### Phase F — Governance & Observation
 
 | Item | Scope | Depends On | Done Criteria |
 |------|-------|-----------|---------------|
-| **F1: policy engine** | Condition evaluator, enforcement, templates | C3 | Policy triggers on action, hold/block/escalate work. Condition language evaluates correctly. |
-| **F2: permission + budget** | Visibility scoping, authority, budget tracking | C3 | Permission denies out-of-scope access. Budget exhaustion blocks actions. |
+| **F1: policy engine** | Safe condition evaluator (ast-based), enforcement dispatcher (BLOCK/HOLD/ESCALATE/LOG), policy loader from WorldPlan, governed/ungoverned mode | C3 | ✅ **DONE.** Policy triggers on action, conditions evaluate safely, enforcement precedence (block>hold>escalate>log), ungoverned mode logs without blocking. 16 policy tests + 35 evaluator tests. |
+| **F2: permission + budget** | Permission checks (read/write/action authority), budget tracking (per-actor api_calls/llm_spend), threshold events | C3 | ✅ **DONE.** Permission denies out-of-scope access with PermissionDeniedEvent. Budget tracks per-actor, emits warning/critical/exhausted events. Ungoverned mode allows but logs. 11 permission + 11 budget tests + 5 E2E governance tests. |
 | **F3: reporter** | Scorecard, gaps, causal trace, two-direction, diff | C3, F1 | Governance scorecard computes from events. Two-direction report generates. |
 | **F4: runs/** | Run management, snapshots, artifacts, comparison | C3, F3 | Can create/complete runs, take snapshots, save reports, compare governed vs ungoverned. |
 | **F5: gov vs ungov** | Same world, two modes, diff | F1, F4 | `terrarium diff --runs gov ungov` produces meaningful comparison. |
@@ -318,7 +321,7 @@ The service inference chain for unknown services is **fully implemented and test
 |------|-------|-----------|---------------|
 | **G1: remaining packs** | Chat, tickets, payments, repos, calendar | C2 pattern | All 6 Tier 1 packs work with validated state machines. |
 | **G2: profiles + bootstrap** | Tier 2 curated profiles, Context Hub integration | B3, D3 | Tier 2 curated profiles. Context Hub deep integration. External spec (OpenAPI) transformers. Service bootstrapper uses infer chain from D4. |
-| **G3: animator** | Scheduled + organic events. **THIS IS WHERE BEHAVIOR MODES (static/dynamic/reactive) TAKE EFFECT AT RUNTIME.** Static = animator OFF. Dynamic = animator generates organic events continuously. Reactive = animator generates events only in response to agent actions. Two layers: (1) deterministic schedule (SLA timers, queue aging, shift handoffs — no LLM), (2) generative content (LLM-driven organic events within creativity budget). All animator events go through the same 7-step pipeline as agent actions. | C3, D1, D4b | Scheduled events fire on time. Organic events respect creativity budget and conditions. Behavior mode correctly enables/disables animator. |
+| **G3: animator** | ✅ **DONE.** WorldAnimatorEngine with behavior modes (static=OFF, dynamic=FULL, reactive=RESPONSE_ONLY). AnimatorContext reuses WorldGenerationContext pattern. Level 2 per-attribute numbers (reliability.failures=20 → 20% probability) drive probabilistic events. Shared WorldScheduler module (terrarium/scheduling/) supports one-shot, recurring, trigger events — usable by any engine. OrganicGenerator uses ANIMATOR_EVENT PromptTemplate + LLM. Every event through 7-step pipeline via app.handle_action(). Creativity budget enforced. | C3, D1, D4b | 56 new tests. Static returns []. Dynamic generates scheduled + probabilistic + organic. Reactive only on recent actions. Events in ledger. |
 | **G4: feedback** | Annotations, tier promotion, drift | F3 | Promotion logic: capture → compile-pack → verify → promote --submit-pr. Annotations. Drift detection. |
 
 ### Phase H — Product
@@ -666,6 +669,67 @@ The service inference chain for unknown services is **fully implemented and test
 - **Infer path (G2→D4) verified:** Full chain works: Pack → Profile → Context Hub (chub CLI) → OpenAPI (full 3.x parser) → LLM callback → Kernel classification. 22 real tests. Only promotion gate (capture_surface/compile_to_pack) is Phase G4.
 - **Tests:** 1033 passed, 24 skipped, 0 failures. Live tests under `tests/live/` (require GOOGLE_API_KEY).
 - **Next:** Principal engineer review of D4b, then E1 (Gateway + MCP/HTTP) or G3 (Animator) based on priority.
+
+### Session 2026-03-22 — E1: Gateway + MCP/HTTP
+- **Implemented:**
+  - **Gateway** (`terrarium/gateway/gateway.py`) — single entry/exit point for all agent communication. PURE protocol translation, ZERO business logic. Discovers tools from PackRegistry (same source as WorldResponderEngine). Routes all requests through `app.handle_action()` → 7-step pipeline. Records every request to Ledger (`GatewayRequestEntry`).
+  - **MCP Server Adapter** (`engines/adapter/protocols/mcp_server.py`) — real `mcp.Server` with `list_tools()` and `call_tool()` handlers. Tools auto-discovered from packs via `ServiceSurface.get_mcp_tools()`. Supports stdio transport for local agents.
+  - **HTTP REST Adapter** (`engines/adapter/protocols/http_rest.py`) — FastAPI server with routes: `GET /api/v1/tools`, `POST /api/v1/actions/{tool}`, `GET /api/v1/health`, `GET /api/v1/entities/{type}`. Auto-mounts real-world API paths from pack `http_path` definitions (e.g., `POST /email/v1/messages/send`). WebSocket `/api/v1/events/stream` for live event streaming from EventBus.
+  - **Tool Manifest Generator** (`engines/adapter/tool_manifest.py`) — generates protocol-specific tool manifests from PackRegistry. Supports MCP, HTTP, OpenAI, Anthropic formats.
+  - **Capability Check** (`engines/adapter/engine.py`) — real `has_tool()` check replaces pass-through. Returns `CapabilityGapEvent` with `available_tools` for unknown tools.
+  - **Email Pack HTTP Paths** — all 6 email tools now have real-world `http_path` and `http_method` (e.g., `email_send` → `POST /email/v1/messages/send`).
+- **Key design decisions:**
+  - Gateway discovers tools from the SAME PackRegistry the Responder uses — single source of truth
+  - When a new pack is added, its tools are AUTOMATICALLY available via MCP and HTTP — zero gateway changes
+  - Three access layers: tool discovery (`/api/v1/tools`), MCP (tool names), HTTP (real-world paths) — all resolve to same pipeline
+  - Pack owns its HTTP paths (`APIOperation.http_path`) — gateway just mounts them
+  - EventBus subscriber pattern for WebSocket streaming
+- **Wiring:** Gateway initialized in `app.py` after pipeline. Pack registry injected into adapter engine for capability checks.
+- **Tests:** 40 new tests across 5 files (gateway core, adapter engine, MCP server, HTTP REST, tool manifest). Total: 1058 passed, 24 skipped, 0 failures.
+- **NOT in E1:** OpenAI/Anthropic/ACP adapters (E2), auth/rate-limiting/middleware (E2), observation delivery (E2), remote/hosted (E3).
+
+### Session 2026-03-22 — F1-F2: Real Governance (Policy + Permission + Budget)
+- **Implemented:**
+  - **Permission Engine** (`engines/permission/engine.py`) — real permission checks: write access to service, action-specific constraints (e.g., `max_amount: 5000`), read access. Unknown actors allowed. Ungoverned mode: denials logged but allowed.
+  - **Authority Checker** (`engines/permission/authority.py`) — standalone `check_read()`, `check_write()`, `check_action()` for use outside pipeline.
+  - **Policy Engine** (`engines/policy/engine.py`) — real policy evaluation from user YAML. Matches triggers (string keywords or dict with action+condition). Evaluates conditions via safe expression evaluator. Applies enforcement precedence (BLOCK > HOLD > ESCALATE > LOG). Ungoverned mode: all become LOG.
+  - **Condition Evaluator** (`engines/policy/evaluator.py`) — safe expression evaluation using Python `ast` module. Supports dot access (`input.amount`), comparisons, logical operators, containment. Rejects unsafe nodes (calls, imports, lambdas, comprehensions). Malformed = False.
+  - **Enforcement Handler** (`engines/policy/enforcement.py`) — dispatches to BLOCK (DENY + PolicyBlockEvent), HOLD (HOLD + PolicyHoldEvent), ESCALATE (ESCALATE + PolicyEscalateEvent), LOG (ALLOW + PolicyFlagEvent).
+  - **Budget Engine** (`engines/budget/engine.py`) — real per-actor budget tracking. Tracks api_calls and llm_spend remaining. Emits BudgetDeductionEvent on every action. Warning at 80%, critical at 95%, exhausted at 100%. Ungoverned: logs exhaustion but allows.
+  - **Budget Tracker** (`engines/budget/tracker.py`) — stateful per-actor budget management with threshold deduplication.
+- **Key design decisions:**
+  - Governance is USER-CONFIGURED from YAML — no hardcoded conditions
+  - `type: external` = user's AI agent under test; `type: internal` = simulated NPCs
+  - EVERY governance decision is an EVENT published to EventBus via StepResult.events
+  - Governed mode enforces; ungoverned mode logs same events but doesn't block
+  - Uses EXISTING event types (PolicyBlockEvent, PermissionDeniedEvent, BudgetExhaustedEvent etc.)
+  - Uses EXISTING types (StepVerdict, EnforcementMode, ActionCost, BudgetState)
+- **Wiring:** `app.configure_governance(plan)` injects policies + world_mode into all 3 engines. Actor registry shared across all governance engines.
+- **Tests:** 78 new tests: 35 evaluator + 16 policy + 11 permission + 11 budget + 5 E2E governance. Total: 1140 passed, 24 skipped, 0 failures.
+- **Zero pass-throughs remain** in policy/permission/budget engines.
+
+### Session 2026-03-22 — G3: World Animator + Shared Scheduler
+- **Implemented:**
+  - **WorldScheduler** (`terrarium/scheduling/scheduler.py`) — shared scheduling framework as a separate reusable module. Supports one-shot, recurring, and trigger-based events. Any engine can register events. Uses `ConditionEvaluator` from policy engine for trigger evaluation.
+  - **AnimatorContext** (`engines/animator/context.py`) — runtime context that REUSES `WorldGenerationContext` pattern from D4b. Provides `get_probability(dimension, attribute)` for Level 2 per-attribute numbers (e.g., `reliability.failures=20` → 0.20). No context duplication.
+  - **WorldAnimatorEngine** (`engines/animator/engine.py`) — full implementation with:
+    - `configure(plan, scheduler)` — sets behavior mode, registers YAML scheduled events, creates organic generator
+    - `tick(world_time)` — Layer 1a (scheduler), Layer 1b (probabilistic from Level 2 numbers), Layer 2 (LLM organic)
+    - `_execute_event()` — routes through `app.handle_action()` (7-step pipeline), publishes AnimatorEvent
+    - `_generate_probabilistic_events()` — uses Level 2 per-attribute numbers as probabilities
+    - `_handle_event()` — tracks recent agent actions for reactive mode
+  - **OrganicGenerator** (`engines/animator/generator.py`) — LLM-driven event generation using AnimatorContext + ANIMATOR_EVENT PromptTemplate. Respects creativity budget.
+  - **AnimatorConfig** (`engines/animator/config.py`) — expanded to full YAML: creativity, event_frequency, contextual_targeting, escalation_on_inaction, creativity_budget_per_tick, tick_interval_seconds, scheduled_events.
+  - **ANIMATOR_EVENT template** (`prompt_templates.py`) — added to PromptTemplate framework.
+- **Key design decisions:**
+  - Scheduler is a SEPARATE shared module (`terrarium/scheduling/`) — not inside animator
+  - AnimatorContext REUSES WorldGenerationContext — no context assembly duplication
+  - Level 2 per-attribute numbers (staleness=30, failures=20) are RUNTIME parameters: LLM receives them as narrative context, scheduler uses them as probabilities
+  - Compiler presets (ideal/messy/hostile) → WorldConditions → ongoing creative direction to Animator's LLM
+  - Static = OFF, Dynamic = scheduled + organic, Reactive = response to agent actions only
+  - All events through 7-step pipeline (permission → policy → budget → capability → responder → validation → commit)
+- **Tests:** 56 new tests: 12 scheduler + 18 engine + 6 generator + 12 context + 4 integration + 4 smoke. Total: 1201 passed, 24 skipped, 0 failures.
+- **Zero stubs** in animator or scheduling modules.
 
 ---
 
