@@ -174,13 +174,13 @@ The service inference chain for unknown services is **fully implemented and test
 | **Animator — context** | `terrarium/engines/animator/context.py` | ✅ done | G3 | AnimatorContext (reuses WorldGenerationContext) |
 | **Animator — generator** | `terrarium/engines/animator/generator.py` | ✅ done | G3 | OrganicGenerator — LLM events |
 | **Shared scheduler** | `terrarium/scheduling/scheduler.py` | ✅ done | G3 | WorldScheduler — one-shot, recurring, trigger events |
-| **Reporter — engine** | `terrarium/engines/reporter/engine.py` | 📋 stub | F3 | ReportGeneratorEngine |
-| **Reporter — scorecard** | `terrarium/engines/reporter/scorecard.py` | 📋 stub | F3 | Governance scores |
-| **Reporter — gaps** | `terrarium/engines/reporter/capability_gaps.py` | 📋 stub | F3 | Gap classification |
-| **Reporter — causal** | `terrarium/engines/reporter/causal_trace.py` | 📋 stub | F3 | Causal trace render |
-| **Reporter — diff** | `terrarium/engines/reporter/diff.py` | 📋 stub | F3 | Counterfactual diff |
-| **Reporter — challenges** | `terrarium/engines/reporter/world_challenges.py` | 📋 stub | F3 | World→Agent observation |
-| **Reporter — boundaries** | `terrarium/engines/reporter/agent_boundaries.py` | 📋 stub | F3 | Agent→World observation |
+| **Reporter — engine** | `terrarium/engines/reporter/engine.py` | ✅ done | F3 | ReportGeneratorEngine orchestrator |
+| **Reporter — scorecard** | `terrarium/engines/reporter/scorecard.py` | ✅ done | F3 | 8 metrics per-actor + collective |
+| **Reporter — gaps** | `terrarium/engines/reporter/capability_gaps.py` | ✅ done | F3 | 3-action lookahead classification |
+| **Reporter — causal** | `terrarium/engines/reporter/causal_trace.py` | ✅ done | F3 | Causal chain rendering |
+| **Reporter — diff** | `terrarium/engines/reporter/diff.py` | ✅ done | F3 | Counterfactual comparison |
+| **Reporter — challenges** | `terrarium/engines/reporter/world_challenges.py` | ✅ done | F3 | World→Agent (4 challenge types) |
+| **Reporter — boundaries** | `terrarium/engines/reporter/agent_boundaries.py` | ✅ done | F3 | Agent→World (5 boundary categories) |
 | **Compiler — engine** | `terrarium/engines/world_compiler/engine.py` | 📦 partial | D4a | D4a done (YAML+NL compile, service resolution), D4b stubs |
 | **Compiler — plan** | `terrarium/engines/world_compiler/plan.py` | ✅ done | D4a | WorldPlan + ServiceResolution models |
 | **Compiler — yaml parser** | `terrarium/engines/world_compiler/yaml_parser.py` | ✅ done | D4a | 2-file YAML parsing + reality expansion |
@@ -311,7 +311,7 @@ The service inference chain for unknown services is **fully implemented and test
 |------|-------|-----------|---------------|
 | **F1: policy engine** | Safe condition evaluator (ast-based), enforcement dispatcher (BLOCK/HOLD/ESCALATE/LOG), policy loader from WorldPlan, governed/ungoverned mode | C3 | ✅ **DONE.** Policy triggers on action, conditions evaluate safely, enforcement precedence (block>hold>escalate>log), ungoverned mode logs without blocking. 16 policy tests + 35 evaluator tests. |
 | **F2: permission + budget** | Permission checks (read/write/action authority), budget tracking (per-actor api_calls/llm_spend), threshold events | C3 | ✅ **DONE.** Permission denies out-of-scope access with PermissionDeniedEvent. Budget tracks per-actor, emits warning/critical/exhausted events. Ungoverned mode allows but logs. 11 permission + 11 budget tests + 5 E2E governance tests. |
-| **F3: reporter** | Scorecard, gaps, causal trace, two-direction, diff | C3, F1 | Governance scorecard computes from events. Two-direction report generates. |
+| **F3: reporter** | ✅ **DONE.** Governance scorecard (8 metrics per-actor + collective), capability gap log (3-action lookahead: HALLUCINATED/ADAPTED/ESCALATED/SKIPPED), causal trace rendering, two-direction observation (World→Agent: 4 challenge types + Agent→World: 5 boundary categories), counterfactual diff, fidelity report. HTTP API: /api/v1/report, /scorecard, /gaps, /causal/{id}, /challenges. 58 new tests. Pure computation — zero LLM. | C3, F1 | All formulas implemented, HTTP endpoints active, zero stubs. |
 | **F4: runs/** | Run management, snapshots, artifacts, comparison | C3, F3 | Can create/complete runs, take snapshots, save reports, compare governed vs ungoverned. |
 | **F5: gov vs ungov** | Same world, two modes, diff | F1, F4 | `terrarium diff --runs gov ungov` produces meaningful comparison. |
 

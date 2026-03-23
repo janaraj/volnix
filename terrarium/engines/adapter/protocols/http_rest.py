@@ -114,6 +114,39 @@ class HTTPRestAdapter(ProtocolAdapter):
             except WebSocketDisconnect:
                 logger.debug("WebSocket client disconnected")
 
+        # -- Report endpoints --------------------------------------------------
+
+        @app.get("/api/v1/report")
+        async def get_full_report():
+            """Generate a full evaluation report."""
+            reporter = gateway._app.registry.get("reporter")
+            return await reporter.generate_full_report()
+
+        @app.get("/api/v1/report/scorecard")
+        async def get_scorecard():
+            """Generate the governance scorecard."""
+            reporter = gateway._app.registry.get("reporter")
+            return await reporter.generate_scorecard()
+
+        @app.get("/api/v1/report/gaps")
+        async def get_gaps():
+            """Generate the capability gap log."""
+            reporter = gateway._app.registry.get("reporter")
+            return await reporter.generate_gap_log()
+
+        @app.get("/api/v1/report/causal/{event_id}")
+        async def get_causal(event_id: str):
+            """Generate a causal trace for a specific event."""
+            from terrarium.core.types import EventId as EId
+            reporter = gateway._app.registry.get("reporter")
+            return await reporter.generate_causal_trace(EId(event_id))
+
+        @app.get("/api/v1/report/challenges")
+        async def get_challenges():
+            """Generate two-direction observation report (challenges + boundaries)."""
+            reporter = gateway._app.registry.get("reporter")
+            return await reporter.generate_condition_report()
+
         # Mount real-world API paths from pack http_path definitions
         await self._mount_pack_routes(app, gateway)
 

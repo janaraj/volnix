@@ -5,8 +5,8 @@
 
 ## Current Focus
 
-**Phase:** F1 — Design System + Shared Components
-**Status:** Not started. Scaffolding (F0) complete.
+**Phase:** F3 — Run List Page (next)
+**Status:** F0 scaffolding done, F1 design system done, F2 data layer done. 180 tests pass.
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **Domain types** | `src/types/domain.ts` | ✅ done | F0 | Run, WorldEvent, Entity, AgentSummary, GovernanceScorecard, CapabilityGap, RunComparison, WorldConditions (5 dimensions), 28+ interfaces |
+| **Domain types** | `src/types/domain.ts` | ✅ done | F0 | Run, WorldEvent, Entity, AgentSummary, GovernanceScorecard, CapabilityGap, RunComparison, WorldConditions (5 dimensions), EntityUpdate, 30+ interfaces |
 | **API types** | `src/types/api.ts` | ✅ done | F0 | PaginatedResponse, filter params, ApiError |
 | **WS types** | `src/types/ws.ts` | ✅ done | F0 | WsMessage union (5 message types including entity_update) |
 | **UI types** | `src/types/ui.ts` | ✅ done | F0 | ReportTabId, OutcomeCategory, ConnectionStatus, FilterState |
@@ -35,41 +35,43 @@
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **Formatters** | `src/lib/formatters.ts` | 📋 stub | F1 | formatRelativeTime, formatDuration, formatCurrency, formatScore, formatPercentage, formatTick, truncateId |
-| **Classifiers** | `src/lib/classifiers.ts` | 📋 stub | F1 | eventTypeToColorClass, outcomeToColorClass, enforcementToColorClass, gapResponseToLabel, runStatusToColorClass, scoreToGradeLabel |
-| **Score utils** | `src/lib/score-utils.ts` | 📋 stub | F1 | computeGrade, normalizeScore |
-| **Color utils** | `src/lib/color-utils.ts` | 📋 stub | F1 | scoreToColorClass, interpolateScoreColor |
-| **URL state** | `src/lib/url-state.ts` | 📋 stub | F1 | serializeParams, deserializeParams |
-| **Causal graph** | `src/lib/causal-graph.ts` | 📋 stub | F1 | buildCausalTree |
-| **Comparison** | `src/lib/comparison.ts` | 📋 stub | F1 | findBestValue, computeMetricDelta |
-| **Export** | `src/lib/export.ts` | 📋 stub | F1 | captureElementAsPng |
+| **cn** | `src/lib/cn.ts` | ✅ done | F1 | clsx wrapper for conditional classes |
+| **Formatters** | `src/lib/formatters.ts` | ✅ done | F1 | date-fns relative time, Intl currency, duration math. 22 tests |
+| **Classifiers** | `src/lib/classifiers.ts` | ✅ done | F1 | 6 functions, all data-driven Record lookups. 33 tests |
+| **Score utils** | `src/lib/score-utils.ts` | ✅ done | F1 | computeGrade with theme tokens, normalizeScore. 10 tests |
+| **Color utils** | `src/lib/color-utils.ts` | ✅ done | F1 | Dark-theme score classes, HSL interpolation. 11 tests |
+| **URL state** | `src/lib/url-state.ts` | ✅ done | F0 | serializeParams, deserializeParams. 7 tests |
+| **Causal graph** | `src/lib/causal-graph.ts` | ✅ done | F1 | Recursive tree builder with cycle detection. 6 tests |
+| **Comparison** | `src/lib/comparison.ts` | ✅ done | F0 | findBestValue, computeMetricDelta. 8 tests |
+| **Export** | `src/lib/export.ts` | ✅ done | F0 | captureElementAsPng with dynamic html2canvas import |
 
 ### Layer 2: Services
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **API client** | `src/services/api-client.ts` | 📋 stub | F2 | Fetch-based, 10 endpoint methods, error normalization |
-| **WS manager** | `src/services/ws-manager.ts` | 📋 stub | F2 | WebSocket lifecycle, reconnect, typed dispatch |
+| **API client** | `src/services/api-client.ts` | ✅ done | F0+F2 | 11 fetch methods, error normalization, query param building. 10 tests |
+| **WS manager** | `src/services/ws-manager.ts` | ✅ done | F0+F2 | Connect, disconnect, reconnect (exp backoff), subscribe, subscribeStatus. 12 tests |
 
 ### Layer 3: Hooks & Stores
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **use-runs** | `src/hooks/queries/use-runs.ts` | 📋 stub | F2 | useRuns, useRun |
-| **use-events** | `src/hooks/queries/use-events.ts` | 📋 stub | F2 | useRunEvents, useRunEvent |
-| **use-scorecard** | `src/hooks/queries/use-scorecard.ts` | 📋 stub | F2 | useScorecard |
-| **use-entities** | `src/hooks/queries/use-entities.ts` | 📋 stub | F2 | useEntities, useEntity |
-| **use-gaps** | `src/hooks/queries/use-gaps.ts` | 📋 stub | F2 | useCapabilityGaps |
-| **use-actors** | `src/hooks/queries/use-actors.ts` | 📋 stub | F2 | useActor |
-| **use-compare** | `src/hooks/queries/use-compare.ts` | 📋 stub | F2 | useComparison |
-| **use-websocket** | `src/hooks/use-websocket.ts` | 📋 stub | F2 | useWebSocket |
-| **use-live-events** | `src/hooks/use-live-events.ts` | 📋 stub | F2 | WS→cache bridge + backfill merge |
-| **use-url-state** | `src/hooks/use-url-state.ts` | 📋 stub | F1 | Generic URL-backed state |
-| **use-url-filters** | `src/hooks/use-url-filters.ts` | 📋 stub | F1 | Event/entity filter state |
-| **use-url-tabs** | `src/hooks/use-url-tabs.ts` | 📋 stub | F1 | Tab selection in URL |
+| **use-runs** | `src/hooks/queries/use-runs.ts` | ✅ done | F0 | useRuns, useRun. 5 tests |
+| **use-events** | `src/hooks/queries/use-events.ts` | ✅ done | F0 | useRunEvents, useRunEvent. 4 tests |
+| **use-scorecard** | `src/hooks/queries/use-scorecard.ts` | ✅ done | F0 | useScorecard. 2 tests |
+| **use-entities** | `src/hooks/queries/use-entities.ts` | ✅ done | F0 | useEntities, useEntity |
+| **use-gaps** | `src/hooks/queries/use-gaps.ts` | ✅ done | F0 | useCapabilityGaps |
+| **use-actors** | `src/hooks/queries/use-actors.ts` | ✅ done | F0 | useActor |
+| **use-compare** | `src/hooks/queries/use-compare.ts` | ✅ done | F0 | useComparison |
+| **use-websocket** | `src/hooks/use-websocket.ts` | ✅ done | F2 | Event-driven status via subscribeStatus. 4 tests |
+| **use-live-events** | `src/hooks/use-live-events.ts` | ✅ done | F2 | 5 WS→cache handlers (event dedup, status patch, budget, entity, run_complete). 5 tests |
+| **use-url-state** | `src/hooks/use-url-state.ts` | ✅ done | F0 | Generic URL-backed state. 4 tests |
+| **use-url-filters** | `src/hooks/use-url-filters.ts` | ✅ done | F0 | Event/entity filter state |
+| **use-url-tabs** | `src/hooks/use-url-tabs.ts` | ✅ done | F0 | Tab selection in URL |
 | **use-keyboard** | `src/hooks/use-keyboard.ts` | 📋 stub | F7 | Keyboard shortcuts |
-| **compare-store** | `src/stores/compare-store.ts` | 📋 stub | F2 | Selected run IDs |
-| **layout-store** | `src/stores/layout-store.ts` | 📋 stub | F2 | Sidebar, panel sizes |
+| **use-copy-to-clipboard** | `src/hooks/use-copy-to-clipboard.ts` | ✅ done | F1 | navigator.clipboard + visual feedback |
+| **compare-store** | `src/stores/compare-store.ts` | ✅ done | F0 | Selected run IDs. 5 tests |
+| **layout-store** | `src/stores/layout-store.ts` | ✅ done | F0 | Sidebar, panel sizes. 4 tests |
 
 ### Layer 4: Providers
 
@@ -83,30 +85,30 @@
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **ScoreBar** | `src/components/domain/score-bar.tsx` | 📋 stub | F1 | Horizontal score bar |
-| **ScoreGrade** | `src/components/domain/score-grade.tsx` | 📋 stub | F1 | Letter grade badge |
-| **OutcomeIcon** | `src/components/domain/outcome-icon.tsx` | 📋 stub | F1 | Event outcome icon |
-| **RunStatusBadge** | `src/components/domain/run-status-badge.tsx` | 📋 stub | F1 | Run status indicator |
-| **ActorBadge** | `src/components/domain/actor-badge.tsx` | 📋 stub | F1 | Actor ID display |
-| **ServiceBadge** | `src/components/domain/service-badge.tsx` | 📋 stub | F1 | Service + tier indicator |
-| **FidelityIndicator** | `src/components/domain/fidelity-indicator.tsx` | 📋 stub | F1 | Tier 1/2 display |
-| **TimestampCell** | `src/components/domain/timestamp-cell.tsx` | 📋 stub | F1 | Relative + absolute time |
-| **EventTypeBadge** | `src/components/domain/event-type-badge.tsx` | 📋 stub | F1 | Event type badge |
-| **EntityLink** | `src/components/domain/entity-link.tsx` | 📋 stub | F1 | Clickable entity navigation |
-| **EnforcementBadge** | `src/components/domain/enforcement-badge.tsx` | 📋 stub | F1 | Policy enforcement type |
-| **JsonViewer** | `src/components/domain/json-viewer.tsx` | 📋 stub | F1 | Syntax-highlighted JSON |
-| **CausalChain** | `src/components/domain/causal-chain.tsx` | 📋 stub | F1 | Causal event chain |
-| **QueryGuard** | `src/components/feedback/query-guard.tsx` | 📋 stub | F1 | Loading/error/empty guard |
-| **ErrorBoundary** | `src/components/feedback/error-boundary.tsx` | 📋 stub | F1 | React error boundary |
-| **PageLoading** | `src/components/feedback/page-loading.tsx` | 📋 stub | F1 | Page skeleton |
-| **SectionLoading** | `src/components/feedback/section-loading.tsx` | 📋 stub | F1 | Section skeleton |
-| **ErrorDisplay** | `src/components/feedback/error-display.tsx` | 📋 stub | F1 | Error card + retry |
-| **EmptyState** | `src/components/feedback/empty-state.tsx` | 📋 stub | F1 | No data state |
-| **AppShell** | `src/components/layout/app-shell.tsx` | 📋 stub | F1 | Sidebar + content |
-| **Sidebar** | `src/components/layout/sidebar.tsx` | 📋 stub | F1 | Navigation |
-| **PageHeader** | `src/components/layout/page-header.tsx` | 📋 stub | F1 | Title + breadcrumb |
-| **PanelLayout** | `src/components/layout/panel-layout.tsx` | 📋 stub | F1 | 3-panel resizable |
-| **StatusBar** | `src/components/layout/status-bar.tsx` | 📋 stub | F1 | Connection status |
+| **ScoreBar** | `src/components/domain/score-bar.tsx` | ✅ done | F1 | interpolateScoreColor + formatScore. 4 tests |
+| **ScoreGrade** | `src/components/domain/score-grade.tsx` | ✅ done | F1 | computeGrade with theme tokens |
+| **OutcomeIcon** | `src/components/domain/outcome-icon.tsx` | ✅ done | F1 | Lucide icons via Record, outcomeToColorClass. 4 tests |
+| **RunStatusBadge** | `src/components/domain/run-status-badge.tsx` | ✅ done | F1 | runStatusToColorClass, pulse animation. 5 tests |
+| **ActorBadge** | `src/components/domain/actor-badge.tsx` | ✅ done | F1 | Lucide User/Check, truncateId, copy-on-click |
+| **ServiceBadge** | `src/components/domain/service-badge.tsx` | ✅ done | F1 | Lucide Server, tier tokens |
+| **FidelityIndicator** | `src/components/domain/fidelity-indicator.tsx` | ✅ done | F1 | Lucide ShieldCheck/Shield |
+| **TimestampCell** | `src/components/domain/timestamp-cell.tsx` | ✅ done | F1 | formatRelativeTime + full ISO hover. 2 tests |
+| **EventTypeBadge** | `src/components/domain/event-type-badge.tsx` | ✅ done | F1 | eventTypeToColorClass |
+| **EntityLink** | `src/components/domain/entity-link.tsx` | ✅ done | F1 | truncateId + copy button. 4 tests |
+| **EnforcementBadge** | `src/components/domain/enforcement-badge.tsx` | ✅ done | F1 | Lucide icons via Record, enforcementToColorClass |
+| **JsonViewer** | `src/components/domain/json-viewer.tsx` | ✅ done | F1 | Regex syntax highlighting, copy button |
+| **CausalChain** | `src/components/domain/causal-chain.tsx` | ✅ done | F1 | Visual chain with dots/lines, Lucide GitBranch |
+| **QueryGuard** | `src/components/feedback/query-guard.tsx` | ✅ done | F0 | Loading/error/empty guard. 5 tests |
+| **ErrorBoundary** | `src/components/feedback/error-boundary.tsx` | ✅ done | F0 | React error boundary. 3 tests |
+| **PageLoading** | `src/components/feedback/page-loading.tsx` | ✅ done | F1 | Lucide Loader2 + animate-spin |
+| **SectionLoading** | `src/components/feedback/section-loading.tsx` | ✅ done | F0 | animate-pulse skeletons |
+| **ErrorDisplay** | `src/components/feedback/error-display.tsx` | ✅ done | F1 | Lucide AlertTriangle, styled retry |
+| **EmptyState** | `src/components/feedback/empty-state.tsx` | ✅ done | F1 | Configurable Lucide icon prop |
+| **AppShell** | `src/components/layout/app-shell.tsx` | ✅ done | F1 | Sidebar + Outlet + StatusBar |
+| **Sidebar** | `src/components/layout/sidebar.tsx` | ✅ done | F1 | Lucide icons, accent border active, collapsed state |
+| **PageHeader** | `src/components/layout/page-header.tsx` | ✅ done | F0 | Title + breadcrumb + actions |
+| **PanelLayout** | `src/components/layout/panel-layout.tsx` | ✅ done | F1 | Explicit separators, min-w-0 |
+| **StatusBar** | `src/components/layout/status-bar.tsx` | ✅ done | F1 | ConnectionStatus prop, 4 states via Record |
 
 ### Layer 6: Pages
 
@@ -126,6 +128,7 @@
 | **MSW server** | `tests/mocks/server.ts` | ✅ done | F0 | setupServer instance |
 | **WS mock** | `tests/mocks/ws-mock.ts` | ✅ done | F0 | MockWsServer class |
 | **Mock factories** | `tests/mocks/data/*.ts` | ✅ done | F0 | 6 factory files |
+| **MockWebSocket** | `tests/helpers/mock-websocket.ts` | ✅ done | F2 | Shared WebSocket mock for 3 test files |
 
 ---
 
@@ -134,9 +137,9 @@
 | Phase | Name | Depends On | Status |
 |-------|------|-----------|--------|
 | **F0** | Scaffolding | — | ✅ Done |
-| **F1** | Design System + Shared Components | F0 | 🔲 Next |
-| **F2** | Data Layer (Services + Hooks) | F1, backend APIs | 🔲 |
-| **F3** | Run List Page | F2, `GET /api/runs` | 🔲 |
+| **F1** | Design System + Shared Components | F0 | ✅ Done |
+| **F2** | Data Layer (Services + Hooks) | F1 | ✅ Done |
+| **F3** | Run List Page | F2, `GET /api/runs` | 🔲 Next |
 | **F4** | Run Report Page | F2, 8 REST endpoints | 🔲 |
 | **F5** | Live Console Page | F2, `WS /ws/runs/:id/live` | 🔲 |
 | **F6** | Compare Page | F2, `GET /api/compare` | 🔲 |
@@ -157,3 +160,25 @@
   - WebSocket for live data, REST for historical + backfill
   - entity_update WS message type for real-time entity state changes
   - Dual-source pattern: REST backfill + WS stream for Live Console
+
+### Session 2026-03-23 — F1: Design System + Shared Components
+- **Implemented:** 8 lib utilities (formatters with date-fns, data-driven classifiers, HSL color interpolation, recursive causal graph builder), 14 domain components (all emojis→Lucide icons, all colors→classifiers), 6 feedback components (spinner, icons, QueryGuard), 5 layout components (Lucide sidebar, ConnectionStatus StatusBar, panel separators)
+- **Created:** `src/lib/cn.ts` (clsx wrapper), `src/hooks/use-copy-to-clipboard.ts` (clipboard hook)
+- **Tests:** 124 tests pass (97 lib + 27 component), 0 todos in F1 scope
+- **Verification:** typecheck 0 errors, lint 0 errors, build succeeds
+- **Key decisions:**
+  - No shadcn/ui in F1 — pure Tailwind + custom components
+  - Inter font (not Geist Sans — requires Vercel package)
+  - All classifier mappings are Record<string, string> lookups — zero if/switch heuristics
+  - Copy-on-click via useCopyToClipboard hook + Check icon feedback
+
+### Session 2026-03-23 — F2: Data Layer (Services + Hooks)
+- **Implemented:** WsManager subscribeStatus (event-driven status, replaced 500ms polling), useLiveEvents 5 cache handlers (event dedup via setQueriesData prefix match, status patch, budget patch, entity upsert, run_complete invalidation), useWebSocket event-driven
+- **Created:** `tests/helpers/mock-websocket.ts` (shared mock for 3 test files)
+- **Tests:** 180 tests pass (124 F1 + 56 F2), 8 remaining todos (4 page smoke tests — F3-F6)
+- **Verification:** typecheck 0 errors, lint 0 errors, build succeeds
+- **Key decisions:**
+  - Subscribe to status listeners BEFORE calling connect (avoids React lint warning about setState in effect)
+  - setQueriesData with prefix key match for event dedup across filtered + unfiltered caches
+  - Removed Zustand persist middleware from layout-store (jsdom incompatibility, persistence is runtime concern to add in F7)
+  - ApiClient uses string concatenation for URL building (not new URL) for jsdom compatibility

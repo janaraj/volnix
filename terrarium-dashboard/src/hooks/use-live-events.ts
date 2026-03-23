@@ -23,10 +23,8 @@ export function useLiveEvents(runId: string): ConnectionStatus {
   useEffect(() => {
     if (!runId) return;
 
-    ws.connect(runId);
-    setStatus(ws.getStatus());
-
     const unsubStatus = ws.subscribeStatus(setStatus);
+    ws.connect(runId);
 
     const unsubMessages = ws.subscribe((message: WsMessage) => {
       switch (message.type) {
