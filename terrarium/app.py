@@ -161,13 +161,20 @@ class TerrariumApp:
             # Pack registry -> adapter engine (for capability checks)
             adapter_engine = self._registry.get("adapter")
             adapter_engine._pack_registry = pack_reg
-            # Preserve kernel/resolver from _on_initialize (engine.py:54-64)
+
+            # Create kernel for compiler if not already wired by _on_initialize
+            from terrarium.kernel.registry import SemanticRegistry
+
             existing = getattr(compiler, "_compiler_resolver", None)
+            existing_kernel = getattr(existing, "_kernel", None) if existing else None
+            if existing_kernel is None:
+                existing_kernel = SemanticRegistry()
+                await existing_kernel.initialize()
+                compiler._config["_kernel"] = existing_kernel
+
             compiler._compiler_resolver = CompilerServiceResolver(
                 pack_registry=pack_reg,
-                kernel=(
-                    getattr(existing, "_kernel", None) if existing else None
-                ),
+                kernel=existing_kernel,
                 resolver=(
                     getattr(existing, "_resolver", None) if existing else None
                 ),
@@ -177,6 +184,28 @@ class TerrariumApp:
         actor_registry = ActorRegistry()
         compiler._config["_actor_registry"] = actor_registry
         compiler._ledger = self._ledger  # Same pattern as state_engine
+
+        # Register default gateway actors so HTTP/MCP defaults go through governance
+        from terrarium.actors.definition import ActorDefinition
+        from terrarium.core.types import ActorType
+
+        default_gateway_actors = [
+            ActorDefinition(
+                id=ActorId("http-agent"),
+                type=ActorType.AGENT,
+                role="gateway-default",
+                permissions={"read": "all", "write": "all"},
+            ),
+            ActorDefinition(
+                id=ActorId("mcp-agent"),
+                type=ActorType.AGENT,
+                role="gateway-default",
+                permissions={"read": "all", "write": "all"},
+            ),
+        ]
+        for actor_def in default_gateway_actors:
+            if not actor_registry.has_actor(actor_def.id):
+                actor_registry.register(actor_def)
 
         # Governance engines need actor_registry for permission/budget lookups
         policy_engine = self._registry.get("policy")

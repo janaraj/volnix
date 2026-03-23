@@ -127,12 +127,6 @@ class StrictStateEngine:
         return []
 
 
-@staged_guardrail(
-    reason=(
-        "ConsistencyValidator still calls "
-        "StateEngineProtocol.get_entity with the wrong signature"
-    )
-)
 @pytest.mark.asyncio
 async def test_consistency_validator_works_with_real_state_protocol_shape():
     validator = ConsistencyValidator()

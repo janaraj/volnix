@@ -107,9 +107,22 @@ class TestUnknownActor:
     """Test behavior when actor is not in the registry."""
 
     @pytest.mark.asyncio
-    async def test_unknown_actor_allowed(self, engine):
+    async def test_unknown_actor_denied_governed(self, engine):
+        """In governed mode, unknown actors are DENIED."""
         reg = _make_registry()  # empty registry
         engine._actor_registry = reg
+        engine._world_mode = "governed"
+        ctx = _make_ctx(actor_id="unknown-agent")
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+        assert "not registered" in result.message
+
+    @pytest.mark.asyncio
+    async def test_unknown_actor_allowed_ungoverned(self, engine):
+        """In ungoverned mode, unknown actors are ALLOWED."""
+        reg = _make_registry()  # empty registry
+        engine._actor_registry = reg
+        engine._world_mode = "ungoverned"
         ctx = _make_ctx(actor_id="unknown-agent")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW

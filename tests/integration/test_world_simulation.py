@@ -18,7 +18,22 @@ import os
 
 import pytest
 
+from terrarium.actors.definition import ActorDefinition
+from terrarium.core.types import ActorId, ActorType
 from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+
+def _ensure_agent(app, agent_id: str):
+    """Register a test agent if not already present in the actor registry."""
+    compiler = app.registry.get("world_compiler")
+    actor_registry = compiler._config.get("_actor_registry")
+    if actor_registry and not actor_registry.has_actor(ActorId(agent_id)):
+        actor_registry.register(ActorDefinition(
+            id=ActorId(agent_id),
+            type=ActorType.AGENT,
+            role="test-agent",
+            permissions={"write": "all", "read": "all"},
+        ))
 
 
 # ── Compilation flow ──────────────────────────────────────────────
@@ -162,6 +177,9 @@ class TestAgentActionsAfterGeneration:
             "tests/fixtures/worlds/acme_compiler.yaml",
         )
         await compiler.generate_world(plan)
+
+        # Register test agent so governance allows the action
+        _ensure_agent(app, "agent-1")
 
         # Agent performs action through pipeline
         result = await app.handle_action(
@@ -435,6 +453,7 @@ class TestNLToWorldFlow:
         print("STEP 4: AGENT ACTIONS")
         print("=" * 70)
 
+        _ensure_agent(app, "agent-1")
         action = await app.handle_action("agent-1", "email", "email_send", {
             "from_addr": "agent@acme.com",
             "to_addr": "customer@test.com",

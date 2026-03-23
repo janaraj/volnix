@@ -120,7 +120,9 @@ class WorldDataGenerator:
                 for field, value in list(entity.items()):
                     if field.endswith("_id") and field != "id":
                         ref_type = field.replace("_id", "")
-                        if ref_type in all_entities and all_entities[ref_type]:
+                        # Only cross-link if ref_type is a DIFFERENT entity type
+                        # (prevents overwriting primary keys like email_id in email entities)
+                        if ref_type != entity_type and ref_type in all_entities and all_entities[ref_type]:
                             ref_entity = self._rng.choice(
                                 all_entities[ref_type]
                             )

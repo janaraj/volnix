@@ -15,6 +15,9 @@ from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 def _make_mock_gateway(tools=None, handle_result=None, entity_result=None):
     """Create a mock Gateway for testing HTTP adapter."""
+    from terrarium.core.context import StepResult
+    from terrarium.core.types import StepVerdict
+
     gateway = MagicMock()
 
     http_tools = tools or [
@@ -29,11 +32,23 @@ def _make_mock_gateway(tools=None, handle_result=None, entity_result=None):
     # Mock app for entity queries
     state = AsyncMock()
     state.query_entities = AsyncMock(return_value=entity_result or [])
+
+    # Mock permission engine that always allows
+    permission_engine = AsyncMock()
+    permission_engine.execute = AsyncMock(return_value=StepResult(
+        step_name="permission", verdict=StepVerdict.ALLOW,
+    ))
+
     registry = MagicMock()
-    registry.get = MagicMock(return_value=state)
+    def _registry_get(name):
+        if name == "permission":
+            return permission_engine
+        return state
+    registry.get = MagicMock(side_effect=_registry_get)
 
     bus = MagicMock()
-    bus.subscribe = MagicMock()
+    bus.subscribe = AsyncMock()
+    bus.unsubscribe = AsyncMock()
 
     mock_app = MagicMock()
     mock_app.registry = registry
@@ -236,13 +251,11 @@ async def test_websocket_subscribes_to_bus_and_receives_event():
 
     # Track the subscriber callback registered by the WebSocket endpoint
     captured_callbacks = []
-    original_subscribe = gateway._app.bus.subscribe
 
-    def tracking_subscribe(event_type, callback):
+    async def tracking_subscribe(event_type, callback, **kwargs):
         captured_callbacks.append((event_type, callback))
-        return original_subscribe(event_type, callback)
 
-    gateway._app.bus.subscribe = tracking_subscribe
+    gateway._app.bus.subscribe = AsyncMock(side_effect=tracking_subscribe)
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -254,7 +267,7 @@ async def test_websocket_subscribes_to_bus_and_receives_event():
     with client.websocket_connect("/api/v1/events/stream") as ws:
         # The subscribe call should have happened during connect
         assert len(captured_callbacks) == 1
-        assert captured_callbacks[0][0] == "world"
+        assert captured_callbacks[0][0] == "*"
 
         # Simulate an event arriving on the bus by calling the registered callback
         on_event = captured_callbacks[0][1]
@@ -290,10 +303,10 @@ async def test_websocket_event_serialization():
     gateway = _make_mock_gateway()
     captured_callbacks = []
 
-    def tracking_subscribe(event_type, callback):
+    async def tracking_subscribe(event_type, callback, **kwargs):
         captured_callbacks.append((event_type, callback))
 
-    gateway._app.bus.subscribe = tracking_subscribe
+    gateway._app.bus.subscribe = AsyncMock(side_effect=tracking_subscribe)
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()

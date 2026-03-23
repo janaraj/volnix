@@ -51,7 +51,7 @@ class ConsistencyValidator:
             ref_entity_type = field_type.split(":", 1)[1]
 
             try:
-                await state.get_entity(EntityId(str(ref_id)))
+                await state.get_entity(ref_entity_type, EntityId(str(ref_id)))
             except (EntityNotFoundError, KeyError):
                 errors.append(
                     f"Referenced {ref_entity_type} entity '{ref_id}' "
@@ -81,7 +81,7 @@ class ConsistencyValidator:
             A :class:`ValidationResult` indicating existence.
         """
         try:
-            await state.get_entity(entity_id)
+            await state.get_entity(entity_type, entity_id)
             return ValidationResult(
                 valid=True,
                 validation_type=ValidationType.CONSISTENCY,

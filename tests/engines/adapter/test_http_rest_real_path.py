@@ -69,12 +69,6 @@ async def test_http_action_route_uses_real_gateway_and_records_ledger(app, monke
     assert any(entry.protocol == "http" and entry.action == "email_send" for entry in entries)
 
 
-@staged_guardrail(
-    reason=(
-        "Mounted GET routes still drop query parameters "
-        "before reaching Gateway.handle_request"
-    )
-)
 @pytest.mark.asyncio
 async def test_http_mounted_get_route_forwards_query_params(app, monkeypatch):
     adapter = await start_http_adapter(app)
@@ -94,12 +88,6 @@ async def test_http_mounted_get_route_forwards_query_params(app, monkeypatch):
     assert call["arguments"]["mailbox_owner"] == "alice@test.com"
 
 
-@staged_guardrail(
-    reason=(
-        "Mounted path-param routes still drop extracted path "
-        "variables before reaching Gateway.handle_request"
-    )
-)
 @pytest.mark.asyncio
 async def test_http_mounted_path_route_forwards_path_params(app, monkeypatch):
     adapter = await start_http_adapter(app)
