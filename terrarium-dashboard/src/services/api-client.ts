@@ -17,16 +17,19 @@ export class ApiClient {
 
   // Generic request helper
   private async request<T>(method: string, path: string, params?: Record<string, unknown>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`);
+    let url = `${this.baseUrl}${path}`;
     if (method === 'GET' && params) {
+      const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          url.searchParams.set(key, String(value));
+          searchParams.set(key, String(value));
         }
       });
+      const qs = searchParams.toString();
+      if (qs) url += `?${qs}`;
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       ...(method !== 'GET' && params ? { body: JSON.stringify(params) } : {}),
