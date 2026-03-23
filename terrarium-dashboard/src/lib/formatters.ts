@@ -3,17 +3,18 @@
 // ---------------------------------------------------------------------------
 
 import { formatDistanceToNowStrict, isValid, parseISO, format } from 'date-fns';
+import { RELATIVE_TIME_THRESHOLD_MS } from '@/constants/defaults';
 
 /**
  * Format an ISO date string as a human-friendly relative time (e.g. "2 minutes ago").
- * Falls back to absolute format ("Mar 1, 09:00") for dates older than 24h.
+ * Falls back to absolute format ("Mar 1, 09:00") for dates older than the threshold.
  * Returns the raw input for invalid date strings.
  */
 export function formatRelativeTime(isoDate: string): string {
   const date = parseISO(isoDate);
   if (!isValid(date)) return isoDate;
   const diffMs = Date.now() - date.getTime();
-  if (diffMs > 86_400_000) {
+  if (diffMs > RELATIVE_TIME_THRESHOLD_MS) {
     return format(date, 'MMM d, HH:mm');
   }
   return formatDistanceToNowStrict(date, { addSuffix: true });

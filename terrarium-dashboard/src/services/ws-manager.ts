@@ -19,7 +19,7 @@ export class WsManager {
   private baseUrl: string;
 
   constructor(baseUrl: string = '') {
-    this.baseUrl = baseUrl || `ws://${window.location.host}`;
+    this.baseUrl = baseUrl || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
   }
 
   getStatus(): ConnectionStatus {

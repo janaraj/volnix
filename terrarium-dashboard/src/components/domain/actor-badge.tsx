@@ -11,6 +11,7 @@ export function ActorBadge({ actorId, role }: ActorBadgeProps) {
   const { copy, copied } = useCopyToClipboard();
   return (
     <button
+      type="button"
       onClick={() => copy(actorId)}
       title={actorId}
       className="inline-flex items-center gap-1 font-mono text-xs hover:text-text-primary transition-colors"

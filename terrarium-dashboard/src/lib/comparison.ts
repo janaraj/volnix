@@ -29,12 +29,14 @@ export function findBestValue(
  *
  * @param baseline - The reference metric value
  * @param current - The metric value to compare
+ * @param higherIsBetter - If true, positive delta = improved; if false, negative delta = improved (default true)
  * @returns Object with `delta` (signed difference) and `improved` (whether current is better)
  */
 export function computeMetricDelta(
   baseline: number,
   current: number,
+  higherIsBetter = true,
 ): { delta: number; improved: boolean } {
   const delta = current - baseline;
-  return { delta, improved: delta > 0 };
+  return { delta, improved: higherIsBetter ? delta > 0 : delta < 0 };
 }

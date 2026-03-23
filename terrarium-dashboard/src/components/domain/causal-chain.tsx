@@ -11,6 +11,7 @@ function CausalEventId({ id }: { id: string }) {
   const { copy, copied } = useCopyToClipboard();
   return (
     <button
+      type="button"
       onClick={() => copy(id)}
       title={id}
       className="inline-flex items-center gap-1 font-mono text-xs text-info hover:underline underline-offset-2 transition-colors"
