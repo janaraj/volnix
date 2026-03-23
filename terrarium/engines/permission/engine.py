@@ -68,11 +68,26 @@ class PermissionEngine(BaseEngine):
         """
         actor = self._get_actor(ctx.actor_id)
         if actor is None:
-            # Unknown actor — allow (external agents may not be registered yet)
+            if self._is_ungoverned() or self._actor_registry is None:
+                # Ungoverned mode or no registry injected: allow unknown actors
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.ALLOW,
+                    message="actor not in registry — allowed",
+                )
+            # Governed mode: unknown actors are denied
+            event = PermissionDeniedEvent(
+                event_type="permission.denied",
+                timestamp=_now_timestamp(),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                reason=f"Unknown actor '{ctx.actor_id}' not registered",
+            )
             return StepResult(
                 step_name=self.step_name,
-                verdict=StepVerdict.ALLOW,
-                message="actor not in registry — allowed",
+                verdict=StepVerdict.DENY,
+                events=[event],
+                message=f"Unknown actor '{ctx.actor_id}' not registered",
             )
 
         perms = actor.permissions

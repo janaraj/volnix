@@ -19,11 +19,38 @@ import asyncio
 
 import pytest
 
-from terrarium.core.types import ActorId, FidelityTier, StepVerdict
+from terrarium.core.types import ActorId, ActorType, FidelityTier, StepVerdict
+from terrarium.actors.definition import ActorDefinition
 from terrarium.ledger.query import LedgerQuery
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+
+def _register_test_agents(app):
+    """Register common test actors so governance doesn't block wire tests."""
+    compiler = app.registry.get("world_compiler")
+    actor_registry = compiler._config.get("_actor_registry")
+    if actor_registry is None:
+        return
+    test_agent_ids = [
+        "agent-1", "agent-2", "a1", "actor-A", "actor-B",
+    ]
+    for aid in test_agent_ids:
+        if not actor_registry.has_actor(ActorId(aid)):
+            actor_registry.register(ActorDefinition(
+                id=ActorId(aid),
+                type=ActorType.AGENT,
+                role="test-agent",
+                permissions={"write": "all", "read": "all"},
+            ))
+
+
+@pytest.fixture(autouse=True)
+def register_agents(app):
+    """Auto-register test agents before each test in this module."""
+    _register_test_agents(app)
+
 
 def _send_payload(
     from_addr: str = "alice@test.com",

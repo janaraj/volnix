@@ -10,8 +10,23 @@ from __future__ import annotations
 
 import pytest
 
+from terrarium.actors.definition import ActorDefinition
+from terrarium.core.types import ActorId, ActorType
 from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
 from terrarium.reality.presets import load_preset
+
+
+def _ensure_agent(app, agent_id: str):
+    """Register a test agent if not already present in the actor registry."""
+    compiler = app.registry.get("world_compiler")
+    actor_registry = compiler._config.get("_actor_registry")
+    if actor_registry and not actor_registry.has_actor(ActorId(agent_id)):
+        actor_registry.register(ActorDefinition(
+            id=ActorId(agent_id),
+            type=ActorType.AGENT,
+            role="test-agent",
+            permissions={"write": "all", "read": "all"},
+        ))
 
 
 @pytest.mark.asyncio
@@ -61,6 +76,9 @@ async def test_run_governance_scores(app_with_mock_llm):
     )
     await compiler.generate_world(plan)
 
+    # Register test agent so governance allows the action
+    _ensure_agent(app, "agent-1")
+
     # Agent action goes through full pipeline
     result = await app.handle_action("agent-1", "email", "email_send", {
         "from_addr": "agent@acme.com",
@@ -105,6 +123,9 @@ async def test_governed_vs_ungoverned_comparison(app_with_mock_llm):
     # Governed mode should still generate all entities
     assert result["entities"]
     assert result["actors"]
+    # Register test agent so governance allows the action
+    _ensure_agent(app, "agent-1")
+
     # Actions should work in governed mode (pass through governance steps)
     action_result = await app.handle_action("agent-1", "email", "email_send", {
         "from_addr": "agent@acme.com",

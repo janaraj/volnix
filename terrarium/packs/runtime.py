@@ -109,13 +109,33 @@ class PackRuntime:
                 _TYPE_MAP = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict}
                 for field_name, value in delta.fields.items():
                     field_schema = props.get(field_name)
-                    if field_schema and "type" in field_schema:
+                    if not field_schema:
+                        continue
+                    if "type" in field_schema:
                         expected = _TYPE_MAP.get(field_schema["type"])
                         if expected and not isinstance(value, expected):
                             raise ValidationError(
                                 message=f"Update field '{field_name}' expected {field_schema['type']}, got {type(value).__name__} for {delta.entity_type}",
                                 validation_type="schema",
                             )
+                    # Enum constraint validation
+                    if "enum" in field_schema and value not in field_schema["enum"]:
+                        raise ValidationError(
+                            message=f"Update field '{field_name}' value '{value}' not in allowed values {field_schema['enum']} for {delta.entity_type}",
+                            validation_type="schema",
+                        )
+                    # Minimum constraint validation
+                    if "minimum" in field_schema and isinstance(value, (int, float)) and value < field_schema["minimum"]:
+                        raise ValidationError(
+                            message=f"Update field '{field_name}' value {value} below minimum {field_schema['minimum']} for {delta.entity_type}",
+                            validation_type="schema",
+                        )
+                    # Maximum constraint validation
+                    if "maximum" in field_schema and isinstance(value, (int, float)) and value > field_schema["maximum"]:
+                        raise ValidationError(
+                            message=f"Update field '{field_name}' value {value} above maximum {field_schema['maximum']} for {delta.entity_type}",
+                            validation_type="schema",
+                        )
 
         # 5. Validate output: state transitions
         for delta in (proposal.proposed_state_deltas or []):

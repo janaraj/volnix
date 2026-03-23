@@ -25,7 +25,7 @@ class MockStateEngine:
     def __init__(self, entities: dict[str, dict[str, Any]] | None = None) -> None:
         self._entities = entities or {}
 
-    async def get_entity(self, entity_id: EntityId) -> dict[str, Any]:
+    async def get_entity(self, entity_type: str, entity_id: EntityId) -> dict[str, Any]:
         if entity_id in self._entities:
             return self._entities[entity_id]
         raise EntityNotFoundError(f"Entity {entity_id} not found")

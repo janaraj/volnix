@@ -80,8 +80,30 @@ class HTTPRestAdapter(ProtocolAdapter):
             return {"status": "ok"}
 
         @app.get("/api/v1/entities/{entity_type}")
-        async def query_entities(entity_type: str):
-            """Query entities from state (read-only view)."""
+        async def query_entities(
+            entity_type: str,
+            actor_id: str = fastapi.Query(default="http-agent"),
+        ):
+            """Query entities — read-only view with permission check."""
+            from terrarium.core.context import ActionContext as _AC
+            from terrarium.core.types import ActorId as _AId, ServiceId as _SId, StepVerdict as _SV
+
+            permission_engine = gateway._app.registry.get("permission")
+            ctx = _AC(
+                request_id="entity-query",
+                actor_id=_AId(actor_id),
+                service_id=_SId(entity_type),
+                action=f"query_{entity_type}",
+                input_data={},
+            )
+            result = await permission_engine.execute(ctx)
+            if result.verdict != _SV.ALLOW:
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "Permission denied", "message": result.message},
+                )
+
             state = gateway._app.registry.get("state")
             entities = await state.query_entities(entity_type)
             return {
@@ -102,7 +124,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 async def _on_event(event: Any) -> None:
                     await queue.put(event)
 
-                bus.subscribe("world", _on_event)
+                await bus.subscribe("*", _on_event)
 
                 while True:
                     event = await queue.get()
@@ -113,6 +135,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     })
             except WebSocketDisconnect:
                 logger.debug("WebSocket client disconnected")
+                await bus.unsubscribe("*", _on_event)
 
         # -- Report endpoints --------------------------------------------------
 
@@ -165,22 +188,34 @@ class HTTPRestAdapter(ProtocolAdapter):
             if not path or not tool_name:
                 continue
 
-            # Create a closure with the correct tool_name
-            def make_handler(tn: str):
+            # Create a closure capturing tool_name AND http_method properly
+            def make_handler(tn: str, http_method: str):
                 async def handler(request: Request):
-                    body = await request.json() if method == "POST" else {}
+                    path_params = dict(request.path_params)
+                    if http_method == "GET":
+                        # Merge path params + query params as arguments
+                        arguments = dict(path_params)
+                        arguments.update(dict(request.query_params))
+                    else:
+                        try:
+                            body = await request.json()
+                            arguments = body.get("arguments", body)
+                        except Exception:
+                            arguments = {}
+                        # Path params override body values
+                        arguments.update(path_params)
                     return await gateway.handle_request(
                         protocol="http",
-                        actor_id="http-agent",
+                        actor_id=arguments.pop("actor_id", "http-agent"),
                         tool_name=tn,
-                        arguments=body,
+                        arguments=arguments,
                     )
                 return handler
 
             if method == "POST":
-                app.post(path)(make_handler(tool_name))
+                app.post(path)(make_handler(tool_name, "POST"))
             elif method == "GET":
-                app.get(path)(make_handler(tool_name))
+                app.get(path)(make_handler(tool_name, "GET"))
 
     async def run_server(self, host: str = "0.0.0.0", port: int = 8080) -> None:
         """Run the FastAPI server (blocking)."""

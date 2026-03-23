@@ -38,7 +38,6 @@ def test_step_result_events_accept_event_objects():
     assert result.events == [event]
 
 
-@staged_guardrail(reason="ResponseProposal.proposed_events still rejects concrete Event objects")
 def test_response_proposal_accepts_concrete_events():
     event = WorldEvent(
         event_type="world.synthetic",
@@ -150,7 +149,6 @@ class ConstraintUpdatePack(ServicePack):
         )
 
 
-@staged_guardrail(reason="PackRuntime update validation still skips enum/min/max constraints")
 @pytest.mark.asyncio
 async def test_pack_runtime_enforces_update_schema_constraints():
     registry = PackRegistry()

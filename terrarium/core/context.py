@@ -87,7 +87,7 @@ class ResponseProposal(BaseModel, frozen=True):
     """
 
     response_body: dict[str, Any] = Field(default_factory=dict)
-    proposed_events: list[EventId] = Field(default_factory=list)
+    proposed_events: list[Any] = Field(default_factory=list)
     proposed_state_deltas: list[StateDelta] = Field(default_factory=list)
     proposed_side_effects: list[SideEffect] = Field(default_factory=list)
     fidelity: FidelityMetadata | None = None

@@ -111,8 +111,54 @@ class BudgetEngine(BaseEngine):
                     message="Budget exhausted: api_calls",
                 )
 
-        # Deduct 1 api_call
-        cost = ActionCost(api_calls=1)
+        # Check if llm_spend budget is exhausted BEFORE deducting
+        if "llm_spend" in budget_def and budget_def["llm_spend"] > 0:
+            if state["llm_spend_remaining"] <= 0:
+                event = BudgetExhaustedEvent(
+                    event_type="budget.exhausted",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    budget_type="llm_spend",
+                )
+                if self._is_ungoverned():
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        events=[event],
+                        message="ungoverned: budget exhausted but allowed",
+                    )
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.DENY,
+                    events=[event],
+                    message="Budget exhausted: llm_spend",
+                )
+
+        # Check if world_actions budget is exhausted BEFORE deducting
+        if "world_actions" in budget_def and budget_def["world_actions"] > 0:
+            if state["world_actions_remaining"] <= 0:
+                event = BudgetExhaustedEvent(
+                    event_type="budget.exhausted",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    budget_type="world_actions",
+                )
+                if self._is_ungoverned():
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        events=[event],
+                        message="ungoverned: budget exhausted but allowed",
+                    )
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.DENY,
+                    events=[event],
+                    message="Budget exhausted: world_actions",
+                )
+
+        # Deduct 1 api_call (and 1 world_action for state-mutating actions)
+        cost = ActionCost(api_calls=1, world_actions=1)
         self._tracker.deduct(ctx.actor_id, cost)
 
         # Build events list
