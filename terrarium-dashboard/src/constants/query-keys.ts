@@ -19,6 +19,6 @@ export const queryKeys = {
     actor: (runId: string, actorId: string) => ['runs', runId, 'actors', actorId] as const,
   },
   compare: {
-    detail: (runIds: string[]) => ['compare', ...runIds.sort()] as const,
+    detail: (runIds: string[]) => ['compare', ...runIds.slice().sort()] as const,
   },
 } as const;

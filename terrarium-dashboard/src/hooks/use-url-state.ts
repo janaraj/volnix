@@ -1,18 +1,21 @@
 import { useSearchParams } from 'react-router';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 export function useUrlState<T extends Record<string, string>>(
   defaults: T,
 ): [T, (updates: Partial<T>) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const state = { ...defaults } as T;
-  for (const key of Object.keys(defaults)) {
-    const value = searchParams.get(key);
-    if (value !== null) {
-      (state as Record<string, string>)[key] = value;
+  const state = useMemo(() => {
+    const result = { ...defaults } as T;
+    for (const key of Object.keys(defaults)) {
+      const value = searchParams.get(key);
+      if (value !== null) {
+        (result as Record<string, string>)[key] = value;
+      }
     }
-  }
+    return result;
+  }, [searchParams, defaults]);
 
   const setState = useCallback(
     (updates: Partial<T>) => {

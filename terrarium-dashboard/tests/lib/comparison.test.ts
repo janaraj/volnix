@@ -35,4 +35,13 @@ describe('computeMetricDelta', () => {
     expect(result.delta).toBe(0);
     expect(result.improved).toBe(false);
   });
+  it('respects higherIsBetter=false (lower is better)', () => {
+    const result = computeMetricDelta(100, 80, false);
+    expect(result.delta).toBe(-20);
+    expect(result.improved).toBe(true);
+  });
+  it('defaults to higherIsBetter=true', () => {
+    const result = computeMetricDelta(80, 90);
+    expect(result.improved).toBe(true);
+  });
 });
