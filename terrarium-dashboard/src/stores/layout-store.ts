@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface LayoutStore {
   sidebarCollapsed: boolean;
@@ -22,6 +22,7 @@ export const useLayoutStore = create<LayoutStore>()(
     }),
     {
       name: 'terrarium-layout',
+      storage: createJSONStorage(() => localStorage),
     },
   ),
 );

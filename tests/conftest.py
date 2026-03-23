@@ -1,16 +1,58 @@
 """Shared test fixtures for Terrarium test suite."""
 
-import pytest
-from datetime import datetime, timezone
+import os
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from terrarium.core.context import ActionContext
+from terrarium.core.events import WorldEvent
 
 # Import core types
 from terrarium.core.types import (
-    EntityId, ActorId, ServiceId, EventId, ToolName, RunId,
-    FidelityTier, StepVerdict, ActionCost, StateDelta, Timestamp,
+    ActorId,
+    ServiceId,
+    Timestamp,
 )
-from terrarium.core.events import Event, WorldEvent
-from terrarium.core.context import ActionContext, StepResult, ResponseProposal
+
+
+def pytest_addoption(parser):
+    """Add a switch for fail-closed architecture guardrails."""
+    parser.addoption(
+        "--guardrails-strict",
+        action="store_true",
+        default=False,
+        help="Run staged architecture/contract guardrails as ordinary tests.",
+    )
+
+
+def _guardrails_strict(config: pytest.Config) -> bool:
+    """Return True when staged guardrails should fail closed."""
+    if config.getoption("--guardrails-strict"):
+        return True
+
+    value = os.environ.get("TERRARIUM_GUARDRAILS_STRICT", "")
+    return value.lower() not in {"", "0", "false", "no"}
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Stage known guardrails behind a single strictness switch."""
+    if _guardrails_strict(config):
+        return
+
+    for item in items:
+        marker = item.get_closest_marker("staged_guardrail")
+        if marker is None:
+            continue
+        reason = marker.kwargs.get("reason", "Known staged guardrail")
+        item.add_marker(pytest.mark.xfail(reason=reason, strict=True))
+
+
+@pytest.fixture
+def guardrails_strict(pytestconfig: pytest.Config) -> bool:
+    """Expose the staged-guardrail mode to tests when needed."""
+    return _guardrails_strict(pytestconfig)
 
 
 @pytest.fixture
@@ -96,7 +138,7 @@ def test_config():
 def make_action_context():
     """Factory fixture for creating ActionContext with sensible defaults."""
     def _make(**kwargs):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         defaults = {
             "request_id": "req-test-001",
             "actor_id": ActorId("actor-test"),
@@ -117,7 +159,7 @@ def make_action_context():
 def make_world_event():
     """Factory fixture for creating WorldEvent with sensible defaults."""
     def _make(**kwargs):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         defaults = {
             "event_type": "world.email_send",
             "timestamp": Timestamp(world_time=now, wall_time=now, tick=1),

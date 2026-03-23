@@ -40,6 +40,13 @@ terrarium = "terrarium.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+xfail_strict = true
+markers = [
+    "architecture: source-level and dependency-boundary guardrails",
+    "contract: protocol and data-contract conformance checks",
+    "real_adapter: runtime-backed adapter tests using real app components",
+    "staged_guardrail: staged fail-closed guardrail; becomes xfail unless guardrails strict mode is enabled",
+]
 
 [tool.ruff]
 target-version = "py312"
