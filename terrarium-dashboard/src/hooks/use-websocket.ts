@@ -10,10 +10,8 @@ export function useWebSocket(runId: string | null) {
   useEffect(() => {
     if (!runId) return;
 
-    ws.connect(runId);
-    setStatus(ws.getStatus()); // sync initial status
-
     const unsubStatus = ws.subscribeStatus(setStatus);
+    ws.connect(runId);
 
     return () => {
       unsubStatus();

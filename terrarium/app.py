@@ -194,6 +194,11 @@ class TerrariumApp:
 
             compiler._nl_parser = NLParser(self._llm_router)
 
+        # Reporter engine wiring
+        reporter = self._registry.get("reporter")
+        reporter._ledger = self._ledger
+        reporter._config["_actor_registry"] = actor_registry
+
         # Shared scheduler + animator wiring
         from terrarium.scheduling.scheduler import WorldScheduler
 

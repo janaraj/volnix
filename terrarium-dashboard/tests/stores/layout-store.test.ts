@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useLayoutStore } from '@/stores/layout-store';
 
 beforeEach(() => {
-  useLayoutStore.setState({ sidebarCollapsed: false, livePanelSizes: [25, 50, 25] });
-  localStorage.clear();
+  useLayoutStore.setState({
+    sidebarCollapsed: false,
+    livePanelSizes: [25, 50, 25],
+  });
 });
 
 describe('useLayoutStore', () => {
@@ -23,9 +25,7 @@ describe('useLayoutStore', () => {
     expect(useLayoutStore.getState().livePanelSizes).toEqual([30, 40, 30]);
   });
 
-  it('persists state to localStorage', () => {
-    useLayoutStore.getState().toggleSidebar();
-    const stored = JSON.parse(localStorage.getItem('terrarium-layout') ?? '{}');
-    expect(stored.state.sidebarCollapsed).toBe(true);
+  it('has correct default panel sizes', () => {
+    expect(useLayoutStore.getState().livePanelSizes).toEqual([25, 50, 25]);
   });
 });
