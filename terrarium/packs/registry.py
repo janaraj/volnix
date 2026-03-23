@@ -136,7 +136,10 @@ class PackRegistry:
         """Return all tools across all packs."""
         tools: list[dict[str, Any]] = []
         for pack in self._packs.values():
-            for tool_def in pack.get_tools():
+            pack_tools = pack.get_tools()
+            if not isinstance(pack_tools, list):
+                continue
+            for tool_def in pack_tools:
                 tools.append({**tool_def, "pack_name": pack.pack_name, "category": pack.category})
         return tools
 

@@ -1,7 +1,7 @@
-"""ACP server adapter.
+"""Phase E2: ACP server for agent-to-agent communication. Not implemented in E1.
 
-Handles agent-to-agent communication via ACP. Routes messages through
-world channels. Visibility rules enforced.
+This adapter will handle agent-to-agent communication via ACP, routing
+messages through world channels with visibility rules enforced.
 """
 
 from __future__ import annotations

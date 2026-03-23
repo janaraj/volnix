@@ -38,6 +38,8 @@ class TerrariumApp:
         self._health: HealthAggregator | None = None
         self._provider_registry: Any = None
         self._llm_router: Any = None
+        self._gateway: Any = None
+        self._scheduler: Any = None
         self._started = False
 
     async def start(self) -> None:
@@ -79,6 +81,11 @@ class TerrariumApp:
 
             # 9. Health
             self._health = HealthAggregator(self._registry)
+
+            # 10. Gateway
+            from terrarium.gateway.gateway import Gateway
+            self._gateway = Gateway(app=self, config=self._config.gateway)
+            await self._gateway.initialize()
 
             self._started = True
             logger.info(
@@ -150,6 +157,10 @@ class TerrariumApp:
         if hasattr(responder, "_pack_registry"):
             pack_reg = responder._pack_registry
             compiler._config["_pack_registry"] = pack_reg
+
+            # Pack registry -> adapter engine (for capability checks)
+            adapter_engine = self._registry.get("adapter")
+            adapter_engine._pack_registry = pack_reg
             # Preserve kernel/resolver from _on_initialize (engine.py:54-64)
             existing = getattr(compiler, "_compiler_resolver", None)
             compiler._compiler_resolver = CompilerServiceResolver(
@@ -163,8 +174,18 @@ class TerrariumApp:
             )
 
         compiler._config["_state_engine"] = state_engine
-        compiler._config["_actor_registry"] = ActorRegistry()
+        actor_registry = ActorRegistry()
+        compiler._config["_actor_registry"] = actor_registry
         compiler._ledger = self._ledger  # Same pattern as state_engine
+
+        # Governance engines need actor_registry for permission/budget lookups
+        policy_engine = self._registry.get("policy")
+        permission_engine = self._registry.get("permission")
+        budget_engine = self._registry.get("budget")
+
+        policy_engine._actor_registry = actor_registry
+        permission_engine._actor_registry = actor_registry
+        budget_engine._actor_registry = actor_registry
 
         # Re-initialize compiler's LLM-dependent components with wired router
         if self._llm_router:
@@ -173,8 +194,18 @@ class TerrariumApp:
 
             compiler._nl_parser = NLParser(self._llm_router)
 
+        # Shared scheduler + animator wiring
+        from terrarium.scheduling.scheduler import WorldScheduler
+
+        self._scheduler = WorldScheduler()
+        animator = self._registry.get("animator")
+        animator._config["_app"] = self
+        animator._config["_actor_registry"] = actor_registry
+
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
+        if self._gateway:
+            await self._gateway.shutdown()
         if self._provider_registry:
             await self._provider_registry.shutdown_all()
         if self._registry:
@@ -230,6 +261,49 @@ class TerrariumApp:
             return ctx.response_proposal.response_body
         return {"error": "No response produced"}
 
+    def configure_governance(self, plan: Any) -> None:
+        """Inject governance state from a WorldPlan after world compilation.
+
+        Sets policies, world_mode, and actor_registry on governance engines.
+        Call this after generate_world() completes.
+
+        Args:
+            plan: A WorldPlan object with policies, mode, and actor_specs.
+        """
+        policy_engine = self._registry.get("policy")
+        permission_engine = self._registry.get("permission")
+        budget_engine = self._registry.get("budget")
+
+        mode = getattr(plan, "mode", "governed")
+
+        if hasattr(policy_engine, "_policies"):
+            policy_engine._policies = getattr(plan, "policies", [])
+        if hasattr(policy_engine, "_world_mode"):
+            policy_engine._world_mode = mode
+        if hasattr(permission_engine, "_world_mode"):
+            permission_engine._world_mode = mode
+        if hasattr(budget_engine, "_world_mode"):
+            budget_engine._world_mode = mode
+
+    async def configure_animator(self, plan: Any) -> None:
+        """Configure the animator engine from a compiled WorldPlan.
+
+        Creates the AnimatorContext, registers scheduled events from YAML,
+        and creates the organic generator if LLM is available.
+
+        Call this after generate_world() and configure_governance().
+
+        Args:
+            plan: A WorldPlan object with conditions, behavior, and animator_settings.
+        """
+        animator = self._registry.get("animator")
+        await animator.configure(plan, self._scheduler)
+
+    @property
+    def scheduler(self) -> Any:
+        """The shared WorldScheduler instance."""
+        return self._scheduler
+
     @property
     def registry(self) -> EngineRegistry:
         return self._registry
@@ -241,6 +315,10 @@ class TerrariumApp:
     @property
     def ledger(self) -> Ledger:
         return self._ledger
+
+    @property
+    def gateway(self) -> Any:
+        return self._gateway
 
     @property
     def pipeline(self) -> PipelineDAG:

@@ -126,24 +126,32 @@ class ACPClientProvider(LLMProvider):
         # Concurrent generate() calls would corrupt results without this.
         self._generate_lock = asyncio.Lock()
 
+        # Persistent session — created lazily on first generate() call,
+        # reused across all subsequent calls. Cleared on error so next
+        # call creates a fresh session. Avoids cold-start overhead per call.
+        self._persistent_session: str | None = None
+
     # ------------------------------------------------------------------
     # Public: single-turn
     # ------------------------------------------------------------------
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        """Full ACP flow: spawn -> init -> auth -> session -> prompt -> collect.
+        """ACP flow with session reuse: spawn once, create session once, prompt.
 
-        Warning: _collected_text is shared instance state cleared at the start
-        of each generate() call.  A lock serializes concurrent calls to prevent
-        data corruption.
+        The persistent session is created lazily on the first call and
+        reused for all subsequent calls.  This avoids the cold-start overhead
+        of creating a new Codex agent session per LLM call.
+
+        On error the session is cleared so the next call creates a fresh one.
         """
         async with self._generate_lock:
             start = time.monotonic()
             try:
                 await self._ensure_running()
 
-                # Create a session for this turn
-                session_id = await self._session_new()
+                # Lazy session: create once, reuse across all calls
+                if self._persistent_session is None:
+                    self._persistent_session = await self._session_new()
 
                 # Build prompt content blocks
                 prompt = self._build_prompt(request)
@@ -151,7 +159,7 @@ class ACPClientProvider(LLMProvider):
                 # Send prompt and collect response
                 self._collected_text.clear()
                 self._last_usage = LLMUsage()
-                await self._session_prompt(session_id, prompt)
+                await self._session_prompt(self._persistent_session, prompt)
 
                 content = "".join(self._collected_text).strip()
                 latency = (time.monotonic() - start) * 1000
@@ -164,7 +172,8 @@ class ACPClientProvider(LLMProvider):
                     latency_ms=latency,
                 )
             except Exception as e:
-                await self.close()  # Kill subprocess on failure
+                self._persistent_session = None  # Clear so next call creates fresh
+                await self.close()
                 latency = (time.monotonic() - start) * 1000
                 logger.exception("ACP generate failed")
                 return LLMResponse(
@@ -304,12 +313,15 @@ class ACPClientProvider(LLMProvider):
         """Launch the ACP binary as a subprocess."""
         cmd_parts = [self._command] + self._args
 
+        # Increase stream buffer limit to 4MB to handle large LLM responses
+        # (default 64KB is too small for entity generation JSON)
         self._process = await asyncio.create_subprocess_exec(
             *cmd_parts,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=self._cwd,
+            limit=4 * 1024 * 1024,  # 4MB buffer for large JSON responses
         )
 
         self._stdin = self._process.stdin  # type: ignore[assignment]

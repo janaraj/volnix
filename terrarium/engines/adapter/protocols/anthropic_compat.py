@@ -1,4 +1,9 @@
-"""Anthropic tool use compatible endpoint."""
+"""Phase E2: Anthropic tool use compatibility. Not implemented in E1.
+
+This adapter will translate Anthropic tool-use requests/responses
+into Terrarium ActionContexts, allowing agents using the Anthropic SDK to
+interact with a Terrarium world directly.
+"""
 
 from __future__ import annotations
 

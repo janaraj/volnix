@@ -1,67 +1,177 @@
-"""Main gateway class for the Terrarium framework.
+"""Gateway -- single entry/exit point for all agent communication.
 
-The :class:`Gateway` is the single entry and exit point for all external
-requests flowing into the Terrarium simulation.  It coordinates the
-adapter, pipeline, ledger, and monitoring subsystems.
+PURE protocol translation. ZERO business logic.
+Discovers tools from PackRegistry (same source as WorldResponderEngine).
+Routes all requests through TerrariumApp.handle_action() -> 7-step pipeline.
+Records every request to Ledger (GatewayRequestEntry).
 """
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
-from terrarium.core.events import Event
-from terrarium.core.protocols import AdapterProtocol, LedgerProtocol
 from terrarium.core.types import ActorId
 from terrarium.gateway.config import GatewayConfig
-from terrarium.pipeline.dag import PipelineDAG
+
+logger = logging.getLogger(__name__)
 
 
 class Gateway:
-    """Single entry/exit point for external requests into Terrarium."""
+    """Single entry/exit point for all agent protocol communication."""
 
-    def __init__(
-        self,
-        config: GatewayConfig,
-        pipeline: PipelineDAG,
-        adapter: AdapterProtocol,
-        ledger: LedgerProtocol | None = None,
-    ) -> None:
-        ...
+    def __init__(self, app: Any, config: GatewayConfig) -> None:
+        self._app = app
+        self._config = config
+        self._adapters: dict[str, Any] = {}
+        self._tool_map: dict[str, tuple[str, str]] = {}  # tool_name -> (service_id, action)
+        self._started = False
 
     async def initialize(self) -> None:
-        """Initialize the gateway and its subsystems."""
-        ...
+        """Discover tools from packs and create protocol adapters."""
+        # Build tool map from the SAME PackRegistry the Responder uses
+        responder = self._app.registry.get("responder")
+        if hasattr(responder, "_pack_registry"):
+            pack_registry = responder._pack_registry
+            for tool_info in pack_registry.list_tools():
+                tool_name = tool_info.get("name")
+                if not tool_name:
+                    continue
+                service = tool_info.get("pack_name", tool_info.get("service", ""))
+                self._tool_map[tool_name] = (service, tool_name)
 
-    async def shutdown(self) -> None:
-        """Gracefully shut down the gateway."""
-        ...
+        logger.info(
+            "Gateway: discovered %d tools from %d packs",
+            len(self._tool_map),
+            len(set(s for s, _ in self._tool_map.values())),
+        )
+
+        # Create protocol adapters
+        from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
+        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+
+        mcp_adapter = MCPServerAdapter(self)
+        http_adapter = HTTPRestAdapter(self, self._config)
+        self._adapters["mcp"] = mcp_adapter
+        self._adapters["http"] = http_adapter
+
+        self._started = True
 
     async def handle_request(
         self,
-        raw_request: Any,
         protocol: str,
-        actor_id: ActorId,
-    ) -> Any:
-        """Handle an inbound request from an external actor.
+        actor_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Handle an incoming request from any protocol.
 
-        Translates the raw request via the adapter, runs the governance
-        pipeline, and returns the translated response.
+        1. Resolve tool -> (service_id, action)
+        2. Delegate to app.handle_action() -> 7-step pipeline
+        3. Record to ledger (GatewayRequestEntry)
+        4. Return response
 
-        Args:
-            raw_request: The raw request payload from the external system.
-            protocol: The protocol the request arrived on (e.g. ``"mcp"``, ``"http"``).
-            actor_id: The authenticated actor making the request.
-
-        Returns:
-            The translated response payload.
+        This method contains ZERO business logic.
         """
-        ...
+        start = time.monotonic()
 
-    async def deliver_observation(self, event: Event, actor_id: ActorId) -> None:
+        # Resolve tool
+        resolution = self._tool_map.get(tool_name)
+        if resolution is None:
+            # Capability gap -- return structured response, not error
+            await self._record_request(
+                protocol, actor_id, tool_name, "capability_gap", 0,
+            )
+            return {
+                "status": "capability_not_available",
+                "message": f"Tool '{tool_name}' is not available in this world.",
+                "available_tools": list(self._tool_map.keys()),
+            }
+
+        service_id, action = resolution
+
+        # Delegate to pipeline (THE pipeline -- no shortcuts)
+        result = await self._app.handle_action(
+            actor_id=actor_id,
+            service_id=service_id,
+            action=action,
+            input_data=arguments,
+        )
+
+        latency_ms = (time.monotonic() - start) * 1000
+        status = "error" if "error" in result else "success"
+        await self._record_request(
+            protocol, actor_id, tool_name, status, latency_ms,
+        )
+
+        return result
+
+    async def get_tool_manifest(
+        self, actor_id: str | None = None, protocol: str = "mcp",
+    ) -> list[dict[str, Any]]:
+        """Return tools available in the requested protocol format.
+
+        Tools come from PackRegistry -- the same source as WorldResponderEngine.
+        When a new pack is added, its tools appear here automatically.
+        """
+        responder = self._app.registry.get("responder")
+        if not hasattr(responder, "_pack_registry"):
+            return []
+
+        pack_registry = responder._pack_registry
+        tools: list[dict[str, Any]] = []
+
+        for pack_meta in pack_registry.list_packs():
+            pack_name = pack_meta["pack_name"]
+            pack = pack_registry.get_pack(pack_name)
+            from terrarium.kernel.surface import ServiceSurface
+            surface = ServiceSurface.from_pack(pack)
+
+            if protocol == "mcp":
+                tools.extend(surface.get_mcp_tools())
+            elif protocol == "http":
+                tools.extend(surface.get_http_routes())
+            elif protocol == "openai":
+                tools.extend(op.to_openai_function() for op in surface.operations)
+            elif protocol == "anthropic":
+                tools.extend(op.to_anthropic_tool() for op in surface.operations)
+
+        return tools
+
+    async def _record_request(
+        self, protocol: str, actor_id: str, tool_name: str,
+        status: str, latency_ms: float,
+    ) -> None:
+        """Record gateway request to ledger."""
+        ledger = self._app.ledger
+        if ledger is None:
+            return
+        from terrarium.ledger.entries import GatewayRequestEntry
+        entry = GatewayRequestEntry(
+            protocol=protocol,
+            actor_id=ActorId(actor_id),
+            action=tool_name,
+            response_status=status,
+            latency_ms=latency_ms,
+        )
+        await ledger.append(entry)
+
+    async def start_adapters(self) -> None:
+        """Start all protocol adapter servers."""
+        for name, adapter in self._adapters.items():
+            await adapter.start_server()
+            logger.info("Gateway: %s adapter started", name)
+
+    async def shutdown(self) -> None:
+        """Stop all protocol adapter servers."""
+        for name, adapter in self._adapters.items():
+            await adapter.stop_server()
+        self._started = False
+
+    async def deliver_observation(self, event: Any, actor_id: Any) -> None:
         """Deliver an observation event to an external actor.
 
-        Args:
-            event: The event to deliver.
-            actor_id: The actor to deliver the observation to.
+        Placeholder for Phase E2 when observation routing is implemented.
         """
-        ...
+        pass

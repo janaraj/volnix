@@ -1,41 +1,93 @@
-"""MCP server adapter.
+"""MCP Server Adapter -- exposes Terrarium world tools as MCP tools.
 
-Exposes world services as MCP tools. Uses mcp Python SDK in server mode.
-Agents connect as MCP clients.
+When an agent connects as an MCP client, it sees all service pack tools
+(email_send, email_read, etc.) as MCP tools. Tool calls go through the
+Gateway -> Pipeline -> Pack handler -> Response.
+
+Uses: mcp SDK (Server, stdio_server)
+Uses: Gateway.handle_request() for all tool calls
+Uses: Gateway.get_tool_manifest(protocol="mcp") for tool discovery
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any, ClassVar
 
 from terrarium.core import ActionContext, ActorId
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
 
+logger = logging.getLogger(__name__)
+
 
 class MCPServerAdapter(ProtocolAdapter):
-    """Exposes world services as MCP tools.
-
-    Uses mcp Python SDK in server mode. Agents connect as MCP clients.
-    """
+    """Exposes Terrarium world as an MCP server."""
 
     protocol_name: ClassVar[str] = "mcp"
 
-    async def translate_inbound(self, raw_request: Any) -> ActionContext:
-        """Translate an MCP tool call into an ActionContext."""
-        ...
-
-    async def translate_outbound(self, ctx: ActionContext) -> Any:
-        """Translate an ActionContext result into an MCP response."""
-        ...
-
-    async def get_tool_manifest(self, actor_id: ActorId) -> list[dict[str, Any]]:
-        """Return the MCP tool manifest for an actor."""
-        ...
+    def __init__(self, gateway: Any) -> None:
+        self._gateway = gateway
+        self._server: Any = None
+        self._actor_id: str = "mcp-agent"  # Default, overridden by connection
 
     async def start_server(self) -> None:
-        """Start the MCP server."""
-        ...
+        """Create MCP server with tool handlers."""
+        from mcp.server import Server
+        from mcp.types import TextContent, Tool
+
+        server = Server("terrarium-world")
+
+        gateway = self._gateway
+        adapter_self = self
+
+        @server.list_tools()
+        async def list_tools() -> list[Tool]:
+            """Return all tools available in this world."""
+            raw_tools = await gateway.get_tool_manifest(
+                actor_id=adapter_self._actor_id, protocol="mcp"
+            )
+            return [Tool(**t) for t in raw_tools]
+
+        @server.call_tool()
+        async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+            """Handle tool call -> Gateway -> Pipeline -> Response."""
+            result = await gateway.handle_request(
+                protocol="mcp",
+                actor_id=adapter_self._actor_id,
+                tool_name=name,
+                arguments=arguments or {},
+            )
+            return [TextContent(
+                type="text",
+                text=json.dumps(result, default=str),
+            )]
+
+        self._server = server
+        logger.info("MCP server created with tool handlers")
+
+    async def run_stdio(self) -> None:
+        """Run MCP server on stdio transport (for local agents)."""
+        if not self._server:
+            await self.start_server()
+        from mcp.server.stdio import stdio_server
+        async with stdio_server() as (read, write):
+            await self._server.run(
+                read, write, self._server.create_initialization_options()
+            )
 
     async def stop_server(self) -> None:
         """Stop the MCP server."""
-        ...
+        self._server = None
+
+    def translate_inbound(self, raw_request: Any) -> Any:
+        """Not used -- MCP SDK handles protocol translation."""
+        pass
+
+    def translate_outbound(self, result: Any) -> Any:
+        """Not used -- MCP SDK handles protocol translation."""
+        pass
+
+    async def get_tool_manifest(self, actor_id: ActorId | None = None) -> list[dict]:
+        """Delegate to gateway."""
+        return await self._gateway.get_tool_manifest(protocol="mcp")
