@@ -13,6 +13,7 @@ its variable dict. No partial context — the LLM always sees:
   - Actor summary
 """
 from __future__ import annotations
+
 import json
 import logging
 import re
@@ -251,6 +252,13 @@ Detailed dimensions:
 ## Governance Policies
 {policies_summary}
 
+## Seed Scenarios (MUST appear in generated entities)
+{seed_scenarios}
+These specific situations MUST exist in the generated world.
+Weave them naturally into the entities — they should feel organic,
+not bolted on. Characters, amounts, and timelines from seeds should
+appear as real entities with proper cross-references.
+
 ## Entity Schema
 {entity_schema}
 
@@ -266,6 +274,7 @@ Detailed dimensions:
   - static: entities in settled/final states
   - dynamic: entities with in-flight activities and pending events
   - reactive: entities with trigger conditions waiting for agent action
+- Seed scenarios MUST be woven into the generated entities naturally
 
 Output ONLY a valid JSON array. No markdown, no explanation.""",
 
@@ -364,6 +373,16 @@ Output JSON:
   ],
   "entities_to_modify": [
     {{"entity_type": "...", "entity_id": "existing_id", "field_updates": {{...}}}}
+  ],
+  "invariants": [
+    {{
+      "kind": "<exists|count|field_equals|references>",
+      "selector": {{"entity_type": "...", "match": {{"field": "value"}}}},
+      "operator": "<eq|gte|lte>",
+      "field": "optional_field_name",
+      "value": "optional comparison value",
+      "target_selector": {{"entity_type": "...", "match": {{"field": "value"}}}}
+    }}
   ]
 }}
 
@@ -372,6 +391,51 @@ Output ONLY valid JSON.""",
     user="Expand this seed scenario: {seed_description}",
     engine_name="world_compiler",
     use_case="default",
+)
+
+
+SECTION_REPAIR = PromptTemplate(
+    system="""You are Terrarium's compiler repair assistant.
+
+Repair ONLY the failing section described below. Do not change the section type,
+shape, or count unless the validation errors require it.
+
+## World Context
+{domain_description}
+
+## Reality Personality
+{reality_summary}
+
+## Behavior Mode
+{behavior_mode}: {behavior_description}
+
+## Actors
+{actor_summary}
+
+## Governance
+{policies_summary}
+
+## Section
+Kind: {section_kind}
+Name: {section_name}
+
+## Validation Errors
+{validation_errors}
+
+## Relevant Contracts
+{relevant_schema}
+
+## Output Contract
+{output_contract}
+
+## Failing Payload
+{failing_payload}
+
+Output ONLY the repaired payload as valid JSON. No markdown, no explanation.""",
+
+    user="Repair this failing {section_kind} section: {section_name}",
+    engine_name="world_compiler",
+    use_case="section_repair",
 )
 
 
@@ -402,7 +466,9 @@ Escalation on inaction: {escalation_on_inaction}
 
 ## Rules
 - Generate up to {budget} events as a JSON array
-- Each event: {{"actor_id": "npc_id", "service_id": "service", "action": "tool_name", "input_data": {{}}, "sub_type": "organic"}}
+- Each event:
+  {{"actor_id": "npc_id", "service_id": "service", "action": "tool_name",
+    "input_data": {{}}, "sub_type": "organic"}}
 - Events must use actors and services that exist in the world
 - Reality dimensions shape what happens (messy = things go wrong, hostile = active opposition)
 - Events go through the governance pipeline -- they CAN be blocked by policies

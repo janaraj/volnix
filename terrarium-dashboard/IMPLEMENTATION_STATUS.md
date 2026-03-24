@@ -5,8 +5,8 @@
 
 ## Current Focus
 
-**Phase:** F3 — Run List Page (next)
-**Status:** F0 scaffolding done, F1 design system done, F2 data layer done. 180 tests pass.
+**Phase:** F5b — Live Console Context + Inspector (next)
+**Status:** F0-F4 done, F5a done. 246 tests pass.
 
 ---
 
@@ -114,9 +114,9 @@
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **Run List** | `src/pages/run-list/` | 📋 stub | F3 | 5 files |
-| **Live Console** | `src/pages/live-console/` | 📋 stub | F5 | 7 files |
-| **Run Report** | `src/pages/run-report/` | 📋 stub | F4 | 8 files (6 tabs) |
+| **Run List** | `src/pages/run-list/` | ✅ done | F3 | RunCard, RunFilters, RunTable, CompareToolbar, page orchestrator. 16 tests |
+| **Live Console** | `src/pages/live-console/` | 📦 partial | F5a/F5b | Shell + header + feed + banner done (F5a). ContextView + Inspector pending (F5b). |
+| **Run Report** | `src/pages/run-report/` | ✅ done | F4 | All 8 files: shell, header, 6 tabs. TanStack Table in Events. 34 tests. |
 | **Compare** | `src/pages/compare/` | 📋 stub | F6 | 6 files |
 
 ### Test Infrastructure
@@ -139,9 +139,11 @@
 | **F0** | Scaffolding | — | ✅ Done |
 | **F1** | Design System + Shared Components | F0 | ✅ Done |
 | **F2** | Data Layer (Services + Hooks) | F1 | ✅ Done |
-| **F3** | Run List Page | F2, `GET /api/runs` | 🔲 Next |
-| **F4** | Run Report Page | F2, 8 REST endpoints | 🔲 |
-| **F5** | Live Console Page | F2, `WS /ws/runs/:id/live` | 🔲 |
+| **F3** | Run List Page | F2, `GET /api/v1/runs` | ✅ Done |
+| **F4a** | Run Report Shell + Summary Tabs | F3 | ✅ Done |
+| **F4b** | Run Report Data Tabs (Events, Entities, Gaps) | F4a | ✅ Done |
+| **F5a** | Live Console Feed + Header + Banner | F4 | ✅ Done |
+| **F5b** | Live Console Context + Inspector | F5a | 🔲 Next |
 | **F6** | Compare Page | F2, `GET /api/compare` | 🔲 |
 | **F7** | Polish + Integration | F3-F6, full backend | 🔲 |
 
@@ -182,3 +184,111 @@
   - setQueriesData with prefix key match for event dedup across filtered + unfiltered caches
   - Removed Zustand persist middleware from layout-store (jsdom incompatibility, persistence is runtime concern to add in F7)
   - ApiClient uses string concatenation for URL building (not new URL) for jsdom compatibility
+
+### Session 2026-03-23 — F3: Run List Page
+- **Implemented:** RunCard (multi-line card with status badge, badges, score bar, stats, actions), RunFilters (status/preset dropdowns + debounced tag search), RunTable (card list wired to compare store), CompareToolbar (floating bottom bar with selection count, clear, compare navigation), Page index (orchestrator with URL filters, conditional 10s polling for running runs, QueryGuard, empty states)
+- **Created:** `src/hooks/use-debounce.ts` (generic debounce hook for filter input)
+- **Updated:** All ApiClient paths → `/api/v1/` prefix (aligned with backend convention), all MSW handlers updated, added `governance_score?: number | null` to Run type, enriched mock data with varied runs
+- **Tests:** 198 tests pass (182 F1+F2 + 16 F3), 6 remaining todos (F4-F6 page stubs)
+- **Verification:** typecheck 0 errors, lint 0 errors, build succeeds
+- **Key decisions:**
+  - Card layout (not data table) — matches spec's multi-line card design, TanStack Table reserved for F4 Events tab
+  - Conditional polling: refetchInterval function checks for running runs → 10s when active, false when all done
+  - Module-level FILTER_DEFAULTS constant prevents useUrlState re-render loops
+  - RunCard exported from run-row.tsx (keeps filename, better export name)
+  - Empty state distinguishes between "no runs at all" and "no runs match filters"
+
+### Session 2026-03-23 — F4a: Run Report Shell + Summary Tabs
+- **Implemented:** ReportHeader (tag name, world name, badges, governance score display), page shell (tab router with 6 tabs, URL-backed active tab via useUrlTabs, QueryGuard wrapping), OverviewTab (4 metric cards + key events filtered by type + agent summary from scorecard), ScorecardTab (HTML matrix grid with per-dimension rows/per-actor columns, scoreToColorClass cells, fidelity basis card with service list + confidence), ConditionsTab (5 dimension cards from DIMENSION_CONFIG Record, numeric bars + text badges)
+- **Tests:** 17 tests (shell loading/header/tabs + tab switching + overview metrics + scorecard dimensions/confidence/hint/collective + conditions cards/header + error handling)
+- **Audit fixes applied:**
+  - Conditions tab: added Reality/Behavior header, full dimension titles ("Information Quality" not "Information")
+  - Scorecard tab: added "Click any score" hint text
+  - Mock data: scorecard returns 3 entries (agent-alpha, agent-beta, collective)
+- **Deferred:** MissionResult component (backend dependency), scorecard cell click→modal (deferred to F7)
+- **Verification:** 215 tests pass, typecheck 0 errors, lint 0 errors
+
+### Session 2026-03-23 — F4b: Run Report Data Tabs
+- **Implemented:** EventsTab (TanStack Table v8 with 5 columns, URL-driven filters, pagination controls, event detail panel with JsonViewer x2 + policy section + budget impact + clickable causal links + EntityLink + FidelityIndicator), EntitiesTab (card list with type filter, entity detail panel with JsonViewer + state history timeline with dot+connector format), GapsTab (distribution summary with per-response-type icons/colors, HTML table with Event/Agent/Gap/Response columns, empty state)
+- **Key spec items covered:**
+  - Causal chain items are CLICKABLE (update ?event= param, not just copy)
+  - Entity IDs in event detail are CLICKABLE (EntityLink navigates to entities tab)
+  - Budget impact displayed (budget_delta + budget_remaining)
+  - "[View causal chain →]" label text
+  - FidelityIndicator on event detail
+  - All filter dropdowns have aria-labels for testing
+- **Fixed:** index.tsx ActiveTab now passes runId to all 3 data tabs
+- **Enriched mock data:** entity now includes state_history (3 StateChange entries)
+- **Tests:** 17 new tests (events: 7, entities: 5, gaps: 5). Total: 232 tests pass.
+- **Verification:** typecheck 0 errors, lint 0 errors, build succeeds
+
+### Session 2026-03-24 — F5a: Live Console Feed + Header + Banner
+- **Implemented:** EventFeedItem (multi-line card with timestamp/outcome/actor/action/description, actor click with stopPropagation), EventFeed (auto-scroll via useRef + useEffect with 32px threshold, outcome + event_type filters with data-driven Records, empty state), RunHeaderBar (breadcrumb "Terrarium > tag > Live", connection status dot via STATUS_CONFIG Record, tick/agents/events stats, disabled Pause/Stop buttons), TransitionBanner (green banner "Run completed" + "View report" link), Page Index (full orchestrator with useLiveEvents for WS bridge, useRun + useRunEvents for cache reads, local useState for selection, PanelLayout wiring)
+- **Typed stubs for F5b:** ContextView and Inspector accept full prop interfaces but render placeholder text
+- **Tests:** 14 new tests (header: 7, feed: 4, banner: 2, error: 1). Total: 246 tests pass.
+- **Verification:** typecheck 0 errors, lint 0 errors, build succeeds
+- **Key decisions:**
+  - Multi-line event cards per spec mockup (4-5 lines each)
+  - 3 context view modes (overview + event + agent) — entity mode deferred
+  - Activity Timeline sparkline deferred to F7
+  - Selection state is local useState (not URL — Live Console is ephemeral)
+  - Auto-scroll detection: onScroll handler checks 32px from bottom threshold
+
+---
+
+## Deferred Features
+
+### Backend-Dependent (blocked on new API fields/endpoints)
+
+| Feature | Spec Reference | What Backend Needs to Provide | Current Workaround |
+|---------|---------------|-------------------------------|-------------------|
+| **Events: Free-text search** | Spec line 658 ("Free-text search across action names and output content") | `search` query param on `GET /api/v1/runs/:id/events` | Search input rendered (readOnly) with tooltip "Server-side search available in a future release" |
+| **Overview: Tickets Resolved metric** | Spec line 514 ("13/15 resolved") | `tickets_resolved: { count: number; total: number }` field on Run type | Shows Events/Actors/Services count instead |
+| **Overview: Budget Used metric** | Spec line 515 ("$6.58 of $20 used, 67%") | `budget_summary: { used_usd: number; total_usd: number }` field on Run type | Shows generic metric cards |
+| **Overview: Agent action count + budget bar** | Spec line 543-544 ("Actions: 47", "Budget: 28% remaining") | `action_count: number` + `budget_remaining_pct: number` on GovernanceScorecard or AgentSummary per-actor | Shows score + policy hits only |
+| **MissionResult checklist** | Spec lines 520-525 (✓/✗ per success criterion) | `mission_criteria: Array<{ name: string; target: string; actual: string; met: boolean }>` on Run type | Not rendered (clean omission) |
+| **Overview: Agent denials count** | Spec line 546 ("Denials: 1 (adapted ✓)") | `denial_count: number` + `denial_responses: string[]` on GovernanceScorecard | Not rendered |
+
+### Frontend-Only Deferrals (no backend dependency)
+
+| Feature | Reason | Target Phase |
+|---------|--------|-------------|
+| Scorecard cell → event modal | Needs Dialog/Modal component + event fetching by score dimension. Scorecard data already has `violations: string[]` event IDs. | F7 (Polish) |
+| Layout persistence (localStorage) | Zustand persist middleware incompatible with jsdom in tests. Works in browser. | F7 (Polish) |
+| Header breadcrumb ("Terrarium › tag › Report") | UX polish, currently shows tag + subtitle | F7 (Polish) |
+| Hover states on report cards | Cards are read-only display; hover states needed if cards become clickable | F7 (Polish) |
+
+---
+
+## Backend API Endpoints
+
+### Core APIs (agent-facing, available now)
+| Method | Path | What it does |
+|--------|------|-------------|
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/tools` | List available tools (from PackRegistry) |
+| POST | `/api/v1/actions/{tool_name}` | Execute tool call through 7-step pipeline |
+| GET | `/api/v1/entities/{entity_type}` | Query entities (with permission check) |
+| WS | `/api/v1/events/stream` | WebSocket — live event streaming |
+
+### Report APIs (dashboard-facing, available now)
+| Method | Path | What it does |
+|--------|------|-------------|
+| GET | `/api/v1/report` | Full simulation report |
+| GET | `/api/v1/report/scorecard` | Governance scorecard (per-actor + collective) |
+| GET | `/api/v1/report/gaps` | Capability gap log |
+| GET | `/api/v1/report/causal/{event_id}` | Causal trace for a specific event |
+| GET | `/api/v1/report/challenges` | Two-direction observation |
+
+### Dashboard APIs (to be built by backend team)
+| Method | Path | What it does |
+|--------|------|-------------|
+| GET | `/api/v1/runs` | List all runs (paginated, filterable) |
+| GET | `/api/v1/runs/:id` | Single run detail |
+| GET | `/api/v1/runs/:id/events` | Run events (paginated, filterable) |
+| GET | `/api/v1/runs/:id/events/:eid` | Single event with causal chain |
+| GET | `/api/v1/runs/:id/entities` | Run entities (paginated) |
+| GET | `/api/v1/runs/:id/entities/:eid` | Single entity with history |
+| GET | `/api/v1/runs/:id/actors/:aid` | Actor detail with history |
+| GET | `/api/v1/compare?runs=id1,id2` | Run comparison |
+| WS | `/ws/runs/:id/live` | Run-scoped live event stream |

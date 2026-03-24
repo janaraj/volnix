@@ -26,7 +26,7 @@ describe('useScorecard', () => {
   it('fetches scorecard for a run', async () => {
     const { result } = renderHook(() => useScorecard('run-1'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toHaveLength(1);
+    expect(result.current.data).toHaveLength(3);
     expect(result.current.data?.[0].overall_score).toBe(0.9);
   });
 

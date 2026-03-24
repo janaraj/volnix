@@ -114,6 +114,14 @@ class WorldGenerationContext:
 
     def for_entity_generation(self) -> dict[str, str]:
         """Context variables for ENTITY_GENERATION template."""
+        # Seeds go INTO the generation prompt so the LLM creates a world
+        # WITH the seed scenarios already woven in naturally.
+        seeds = self.plan.seeds if hasattr(self.plan, "seeds") else []
+        if seeds:
+            seed_text = "\n".join(f"- {s}" for s in seeds)
+        else:
+            seed_text = "None"
+
         return {
             "reality_summary": self.reality_summary,
             "reality_dimensions": json.dumps(self.dimensions, indent=2),
@@ -123,6 +131,7 @@ class WorldGenerationContext:
             "mission": self.mission,
             "policies_summary": self.policies_summary,
             "actor_summary": self.actor_summary,
+            "seed_scenarios": seed_text,
         }
 
     def for_personality_batch(self) -> dict[str, str]:

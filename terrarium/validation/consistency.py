@@ -10,6 +10,7 @@ from terrarium.core.errors import EntityNotFoundError
 from terrarium.core.protocols import StateEngineProtocol
 from terrarium.core.types import EntityId, StateDelta, ValidationType
 from terrarium.validation.schema import ValidationResult
+from terrarium.validation.schema_contracts import NormalizedEntitySchema
 
 
 class ConsistencyValidator:
@@ -56,6 +57,41 @@ class ConsistencyValidator:
                 errors.append(
                     f"Referenced {ref_entity_type} entity '{ref_id}' "
                     f"not found (field '{field_name}')"
+                )
+
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            validation_type=ValidationType.CONSISTENCY,
+        )
+
+    async def validate_entity_references(
+        self,
+        entity_type: str,
+        entity: dict,
+        entity_schema: NormalizedEntitySchema,
+        state: StateEngineProtocol,
+    ) -> ValidationResult:
+        """Validate explicit reference metadata on a concrete entity instance."""
+        errors: list[str] = []
+
+        for rule in entity_schema.references:
+            if rule.field not in entity:
+                continue
+
+            ref_value = entity.get(rule.field)
+            if ref_value in (None, ""):
+                continue
+
+            try:
+                await state.get_entity(
+                    rule.target_entity_type,
+                    EntityId(str(ref_value)),
+                )
+            except (EntityNotFoundError, KeyError):
+                errors.append(
+                    f"{entity_type}.{rule.field} references missing "
+                    f"{rule.target_entity_type} entity '{ref_value}'"
                 )
 
         return ValidationResult(

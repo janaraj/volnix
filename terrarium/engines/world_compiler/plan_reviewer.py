@@ -155,6 +155,22 @@ class PlanReviewer:
         if len(warnings) > 10:
             lines.append(f"  ... and {len(warnings) - 10} more")
 
+        validation_report = generation_result.get("validation_report", {})
+        final_world = validation_report.get("final_world", {})
+        if final_world:
+            lines.append(
+                f"\nFINAL VALIDATION: {'PASS' if final_world.get('valid') else 'FAIL'}"
+            )
+            if final_world.get("errors"):
+                for err in final_world["errors"][:5]:
+                    lines.append(f"  - {err}")
+
+        retry_counts = generation_result.get("retry_counts", {})
+        if retry_counts:
+            lines.append("\nRETRY COUNTS:")
+            for section, count in sorted(retry_counts.items()):
+                lines.append(f"  {section}: {count}")
+
         # Seeds
         seeds_processed = generation_result.get("seeds_processed", 0)
         lines.append(f"\nSEEDS PROCESSED: {seeds_processed}")

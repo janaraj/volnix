@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from terrarium.bus.bus import EventBus
 from terrarium.config.schema import TerrariumConfig
 from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ServiceId
+from terrarium.core.types import ActorId, RunId, ServiceId
 from terrarium.ledger.ledger import Ledger
 from terrarium.persistence.manager import ConnectionManager
 from terrarium.pipeline.builder import build_pipeline_from_config
@@ -18,8 +18,14 @@ from terrarium.pipeline.side_effects import SideEffectProcessor
 from terrarium.registry.composition import create_default_registry
 from terrarium.registry.health import HealthAggregator
 from terrarium.registry.registry import EngineRegistry
-from terrarium.registry.wiring import wire_engines, shutdown_engines
+from terrarium.registry.wiring import shutdown_engines, wire_engines
 from terrarium.validation.step import ValidationStep
+
+if TYPE_CHECKING:
+    from terrarium.gateway.gateway import Gateway
+    from terrarium.runs.artifacts import ArtifactStore
+    from terrarium.runs.manager import RunManager
+    from terrarium.scheduling.scheduler import WorldScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,8 @@ class TerrariumApp:
         self._llm_router: Any = None
         self._gateway: Any = None
         self._scheduler: Any = None
+        self._run_manager: Any = None
+        self._artifact_store: Any = None
         self._started = False
 
     async def start(self) -> None:
@@ -81,6 +89,15 @@ class TerrariumApp:
 
             # 9. Health
             self._health = HealthAggregator(self._registry)
+
+            # 9.5. Run management
+            from terrarium.runs.artifacts import ArtifactStore as RunArtifactStore
+            from terrarium.runs.manager import RunManager
+
+            self._run_manager = RunManager(
+                config=self._config.runs, persistence=self._conn_mgr,
+            )
+            self._artifact_store = RunArtifactStore(config=self._config.runs)
 
             # 10. Gateway
             from terrarium.gateway.gateway import Gateway
@@ -250,6 +267,9 @@ class TerrariumApp:
             await self._bus.shutdown()
         if self._conn_mgr:
             await self._conn_mgr.shutdown()
+        self._run_manager = None
+        self._artifact_store = None
+        self._scheduler = None
         self._started = False
 
     async def handle_action(
@@ -264,7 +284,7 @@ class TerrariumApp:
         if not self._started:
             raise RuntimeError("TerrariumApp is not started. Call start() first.")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         ctx = ActionContext(
             request_id=f"req-{uuid.uuid4().hex[:12]}",
             actor_id=ActorId(actor_id),
@@ -333,8 +353,103 @@ class TerrariumApp:
         animator = self._registry.get("animator")
         await animator.configure(plan, self._scheduler)
 
+    async def compile_and_run(self, plan: Any) -> dict:
+        """Compile world + configure all runtime engines in one call.
+
+        Convenience wrapper that does:
+        1. generate_world(plan) — LLM generation + validation + snapshot
+        2. configure_governance(plan) — policies + permissions + budgets
+        3. configure_animator(plan) — behavior mode + dimensions + scheduler
+
+        This is the recommended single entry point for users.
+        """
+        compiler = self._registry.get("world_compiler")
+        result = await compiler.generate_world(plan)
+        self.configure_governance(plan)
+        await self.configure_animator(plan)
+        return result
+
+    # ── Run management ─────────────────────────────────────────
+
+    async def create_run(
+        self, plan: Any, mode: str = "governed", tag: str | None = None,
+    ) -> RunId:
+        """Create a run record, compile the world, and start the run."""
+        run_id = await self._run_manager.create_run(
+            world_def=(
+                plan.model_dump(mode="json") if hasattr(plan, "model_dump") else {}
+            ),
+            config_snapshot={
+                "seed": plan.seed,
+                "behavior": plan.behavior,
+                "mode": getattr(plan, "mode", mode),
+            },
+            mode=mode,
+            reality_preset=getattr(plan, "reality_preset", ""),
+            fidelity_mode=getattr(plan, "fidelity", "auto"),
+            tag=tag,
+        )
+
+        result = await self.compile_and_run(plan)
+        await self._run_manager.start_run(run_id)
+        await self._artifact_store.save_config(run_id, result)
+        return run_id
+
+    async def end_run(self, run_id: RunId) -> dict:
+        """Complete a run: generate report, save artifacts, optional snapshot."""
+        run = await self._run_manager.get_run(run_id)
+        if run is None or run.get("status") != "running":
+            raise ValueError(
+                f"Cannot end run {run_id}: run is not in 'running' state"
+            )
+        reporter = self._registry.get("reporter")
+        report = await reporter.generate_full_report()
+        scorecard = await reporter.generate_scorecard()
+
+        await self._artifact_store.save_report(run_id, report)
+        await self._artifact_store.save_scorecard(run_id, scorecard)
+
+        state = self._registry.get("state")
+        events = await state.get_timeline()
+        await self._artifact_store.save_event_log(run_id, events)
+
+        if self._config.runs.snapshot_on_complete:
+            try:
+                await state.snapshot(f"run_complete_{run_id}")
+            except Exception as exc:
+                logger.warning("Auto-snapshot failed for run %s: %s", run_id, exc)
+
+        await self._run_manager.complete_run(run_id)
+        return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
+
+    async def diff_runs(self, run_ids: list[str]) -> dict:
+        """Compare multiple runs using saved artifacts."""
+        from terrarium.runs.comparison import RunComparator
+
+        comparator = RunComparator(self._artifact_store)
+        return await comparator.compare([RunId(rid) for rid in run_ids])
+
+    async def diff_governed_ungoverned(
+        self, gov_tag: str, ungov_tag: str,
+    ) -> dict:
+        """Specialized governed vs ungoverned comparison."""
+        from terrarium.runs.comparison import RunComparator
+
+        comparator = RunComparator(self._artifact_store)
+        gov_run = await self._run_manager.get_run(RunId(gov_tag))
+        ungov_run = await self._run_manager.get_run(RunId(ungov_tag))
+        if not gov_run or not ungov_run:
+            raise ValueError(
+                f"Could not resolve run tags: {gov_tag}, {ungov_tag}"
+            )
+        return await comparator.compare_governed_ungoverned(
+            RunId(gov_run["run_id"]), RunId(ungov_run["run_id"]),
+        )
+
+    # ── Properties ──────────────────────────────────────────────
+
     @property
-    def scheduler(self) -> Any:
+    def scheduler(self) -> WorldScheduler:
         """The shared WorldScheduler instance."""
         return self._scheduler
 
@@ -351,9 +466,17 @@ class TerrariumApp:
         return self._ledger
 
     @property
-    def gateway(self) -> Any:
+    def gateway(self) -> Gateway:
         return self._gateway
 
     @property
     def pipeline(self) -> PipelineDAG:
         return self._pipeline
+
+    @property
+    def run_manager(self) -> RunManager:
+        return self._run_manager
+
+    @property
+    def artifact_store(self) -> ArtifactStore:
+        return self._artifact_store

@@ -391,3 +391,9 @@ class WorldPlanValidationError(CompilerError):
     """The assembled WorldPlan failed validation."""
 
     pass
+
+
+class WorldGenerationValidationError(CompilerError):
+    """Generated world data failed post-generation validation."""
+
+    pass

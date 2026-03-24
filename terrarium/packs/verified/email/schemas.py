@@ -11,6 +11,7 @@ from __future__ import annotations
 
 EMAIL_ENTITY_SCHEMA: dict = {
     "type": "object",
+    "x-terrarium-identity": "email_id",
     "required": ["email_id", "from_addr", "to_addr", "subject", "body", "status"],
     "properties": {
         "email_id": {"type": "string"},
@@ -22,8 +23,8 @@ EMAIL_ENTITY_SCHEMA: dict = {
             "type": "string",
             "enum": ["draft", "sent", "delivered", "read", "archived", "trashed"],
         },
-        "thread_id": {"type": "string"},
-        "in_reply_to": {"type": "string"},
+        "thread_id": {"type": "string", "x-terrarium-ref": "thread"},
+        "in_reply_to": {"type": "string", "x-terrarium-ref": "email"},
         "timestamp": {"type": "string"},
         "headers": {"type": "object"},
     },
@@ -31,6 +32,7 @@ EMAIL_ENTITY_SCHEMA: dict = {
 
 MAILBOX_ENTITY_SCHEMA: dict = {
     "type": "object",
+    "x-terrarium-identity": "mailbox_id",
     "required": ["mailbox_id", "owner"],
     "properties": {
         "mailbox_id": {"type": "string"},
@@ -42,6 +44,7 @@ MAILBOX_ENTITY_SCHEMA: dict = {
 
 THREAD_ENTITY_SCHEMA: dict = {
     "type": "object",
+    "x-terrarium-identity": "thread_id",
     "required": ["thread_id", "subject"],
     "properties": {
         "thread_id": {"type": "string"},
@@ -83,7 +86,11 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
             "properties": {
                 "mailbox_owner": {"type": "string", "description": "Owner of the mailbox to list."},
                 "status_filter": {"type": "string", "description": "Optional status to filter by."},
-                "limit": {"type": "integer", "description": "Max number of emails to return.", "minimum": 1},
+                "limit": {
+                    "type": "integer",
+                    "description": "Max number of emails to return.",
+                    "minimum": 1,
+                },
             },
         },
     },
@@ -125,7 +132,10 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
             "required": ["email_id", "from_addr", "body"],
             "properties": {
                 "email_id": {"type": "string", "description": "ID of the email to reply to."},
-                "from_addr": {"type": "string", "description": "Sender email address for the reply."},
+                "from_addr": {
+                    "type": "string",
+                    "description": "Sender email address for the reply.",
+                },
                 "body": {"type": "string", "description": "Reply body text."},
             },
         },

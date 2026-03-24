@@ -12,6 +12,26 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class EntitySelector(BaseModel, frozen=True):
+    """Generic selector for locating entities in generated world data."""
+
+    entity_type: str
+    match: dict[str, Any] = Field(default_factory=dict)
+
+
+class SeedInvariant(BaseModel, frozen=True):
+    """Deterministic contract that a seeded scenario must satisfy."""
+
+    kind: str
+    selector: EntitySelector
+    field: str | None = None
+    operator: str | None = None
+    value: Any = None
+    target_selector: EntitySelector | None = None
+    before_field: str | None = None
+    after_field: str | None = None
+
+
 class Seed(BaseModel, frozen=True):
     """A specific scenario guaranteed to exist in the world.
 
@@ -24,6 +44,7 @@ class Seed(BaseModel, frozen=True):
     description: str
     entity_hints: dict[str, Any] = Field(default_factory=dict)
     actor_hints: dict[str, Any] = Field(default_factory=dict)
+    invariants: list[SeedInvariant] = Field(default_factory=list)
 
 
 class SeedProcessor:

@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
-
-from unittest.mock import AsyncMock
 
 from terrarium.core.errors import CompilerError
 from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
 from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
-from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
+from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
 from terrarium.kernel.surface import ServiceSurface
 from terrarium.llm.types import LLMResponse
 from terrarium.reality.dimensions import WorldConditions
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -142,33 +140,36 @@ class TestDetermineCount:
         assert gen._determine_count("email", plan) == 10
 
 
-# ── Cross-linking ────────────────────────────────────────────────
+# ── Section specs and response parsing ───────────────────────────
 
 
-class TestCrossLink:
-    """Cross-linking assigns valid IDs for _id fields."""
+class TestSectionSpecs:
+    """Generation specs are deterministic per entity type."""
 
-    @pytest.mark.asyncio
-    async def test_cross_link_assigns_valid_ids(self) -> None:
+    def test_iter_generation_specs(self) -> None:
         gen = WorldDataGenerator(seed=42)
-        entities = {
-            "customer": [{"id": "c1", "name": "Alice"}, {"id": "c2", "name": "Bob"}],
-            "ticket": [{"id": "t1", "customer_id": "", "subject": "Help"}],
-        }
-        result = gen._cross_link(entities)
-        assert result["ticket"][0]["customer_id"] in ["c1", "c2"]
+        plan = _make_plan(
+            actor_specs=[{"role": "email", "type": "external", "count": 25}]
+        )
+        specs = gen.iter_generation_specs(plan)
+        assert len(specs) == 1
+        assert specs[0].entity_type == "email"
+        assert specs[0].count == 25
 
 
-# ── Validation ───────────────────────────────────────────────────
+class TestParseGeneratedEntities:
+    """Payload normalization supports all expected response shapes."""
 
-
-class TestValidate:
-    """Validation catches schema violations and bad status values."""
-
-    def test_validate_invalid_status(self) -> None:
+    def test_parse_list_payload(self) -> None:
         gen = WorldDataGenerator(seed=42)
-        sm = {"transitions": {"unread": ["read"], "read": ["archived"]}}
-        plan = _make_plan(state_machines={"email": sm})
-        entities = {"email": [{"id": "e1", "status": "INVALID_STATUS"}]}
-        warnings = gen.validate(entities, plan)
-        assert any("invalid status" in w for w in warnings)
+        result = gen.parse_generated_entities("email", [{"id": "e1"}], 2)
+        assert result == [{"id": "e1"}]
+
+    def test_parse_dict_payload_by_entity_type(self) -> None:
+        gen = WorldDataGenerator(seed=42)
+        result = gen.parse_generated_entities(
+            "email",
+            {"email": [{"id": "e1"}, {"id": "e2"}]},
+            1,
+        )
+        assert result == [{"id": "e1"}]

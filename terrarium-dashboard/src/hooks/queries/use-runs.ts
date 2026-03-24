@@ -4,12 +4,17 @@ import { STALE_TIME_RUNS_LIST, STALE_TIME_RUN_DETAIL } from '@/constants/default
 import { useApiClient } from '@/providers/services-provider';
 import type { RunListParams } from '@/types/api';
 
-export function useRuns(params?: RunListParams) {
+interface UseRunsOptions {
+  refetchInterval?: number | false | ((query: { state: { data: unknown } }) => number | false | undefined);
+}
+
+export function useRuns(params?: RunListParams, options?: UseRunsOptions) {
   const api = useApiClient();
   return useQuery({
     queryKey: queryKeys.runs.list(params),
     queryFn: () => api.getRuns(params),
     staleTime: STALE_TIME_RUNS_LIST,
+    ...(options?.refetchInterval !== undefined && { refetchInterval: options.refetchInterval }),
   });
 }
 

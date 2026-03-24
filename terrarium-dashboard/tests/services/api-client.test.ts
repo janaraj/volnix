@@ -21,7 +21,7 @@ describe('ApiClient', () => {
     it('passes filter params as query string', async () => {
       let capturedUrl = '';
       server.use(
-        http.get('/api/runs', ({ request }) => {
+        http.get('/api/v1/runs', ({ request }) => {
           capturedUrl = request.url;
           return HttpResponse.json({ items: [], total: 0, limit: 20, offset: 0, has_more: false });
         }),
@@ -33,7 +33,7 @@ describe('ApiClient', () => {
 
     it('throws ApiError on non-OK response', async () => {
       server.use(
-        http.get('/api/runs', () =>
+        http.get('/api/v1/runs', () =>
           HttpResponse.json({ code: 'BAD_REQUEST', message: 'Invalid' }, { status: 400 }),
         ),
       );
@@ -58,7 +58,7 @@ describe('ApiClient', () => {
     it('passes filter params', async () => {
       let capturedUrl = '';
       server.use(
-        http.get('/api/runs/:id/events', ({ request }) => {
+        http.get('/api/v1/runs/:id/events', ({ request }) => {
           capturedUrl = request.url;
           return HttpResponse.json({ items: [], total: 0, limit: 50, offset: 0, has_more: false });
         }),
@@ -79,7 +79,7 @@ describe('ApiClient', () => {
   describe('error handling', () => {
     it('normalizes 404 to ApiError', async () => {
       server.use(
-        http.get('/api/runs/:id', () =>
+        http.get('/api/v1/runs/:id', () =>
           HttpResponse.json({ code: 'NOT_FOUND', message: 'Not found' }, { status: 404 }),
         ),
       );
@@ -94,7 +94,7 @@ describe('ApiClient', () => {
 
     it('normalizes 500 to ApiError', async () => {
       server.use(
-        http.get('/api/runs/:id', () =>
+        http.get('/api/v1/runs/:id', () =>
           HttpResponse.json({ code: 'INTERNAL', message: 'Server error' }, { status: 500 }),
         ),
       );
@@ -103,7 +103,7 @@ describe('ApiClient', () => {
 
     it('normalizes network errors', async () => {
       server.use(
-        http.get('/api/runs/:id', () => HttpResponse.error()),
+        http.get('/api/v1/runs/:id', () => HttpResponse.error()),
       );
       await expect(api.getRun('any')).rejects.toThrow();
     });

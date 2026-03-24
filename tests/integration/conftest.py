@@ -35,6 +35,21 @@ def _mock_llm_route_side_effect():
     # Counters for unique IDs across calls
     _entity_counter = {"email": 0, "mailbox": 0, "thread": 0}
 
+    # Reusable seed expansion payload (includes invariants required by
+    # the validate-repair-retry pipeline).
+    _seed_expansion_payload = {
+        "entities_to_create": [],
+        "entities_to_modify": [],
+        "invariants": [
+            {
+                "kind": "count",
+                "selector": {"entity_type": "email", "match": {}},
+                "operator": "gte",
+                "value": 1,
+            }
+        ],
+    }
+
     async def _route(request, engine_name="", use_case="default"):
         # --- Entity generation ---
         if engine_name == "data_generator":
@@ -119,12 +134,31 @@ def _mock_llm_route_side_effect():
             )
 
         # --- Seed expansion ---
-        if use_case == "seed_expansion":
+        # The SEED_EXPANSION template routes with engine_name="world_compiler"
+        # and use_case="default", so detect by prompt content as well.
+        if use_case == "seed_expansion" or (
+            engine_name == "world_compiler"
+            and "seed scenario" in (request.user_content or "").lower()
+        ):
             return LLMResponse(
-                content=json.dumps({
-                    "entities_to_create": [],
-                    "entities_to_modify": [],
-                }),
+                content=json.dumps(_seed_expansion_payload),
+                provider="mock", model="mock", latency_ms=0,
+            )
+
+        # --- Section repair ---
+        # The SECTION_REPAIR template routes with use_case="section_repair".
+        # Return the seed expansion payload for seed repairs; for other
+        # section kinds just echo back a minimal valid array.
+        if use_case == "section_repair":
+            user = (request.user_content or "").lower()
+            if "seed" in user:
+                return LLMResponse(
+                    content=json.dumps(_seed_expansion_payload),
+                    provider="mock", model="mock", latency_ms=0,
+                )
+            # Entity/actor repair — return empty array (parsed by caller)
+            return LLMResponse(
+                content=json.dumps([]),
                 provider="mock", model="mock", latency_ms=0,
             )
 

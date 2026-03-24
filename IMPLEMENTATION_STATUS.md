@@ -251,11 +251,11 @@ The service inference chain for unknown services is **fully implemented and test
 
 | Module | Path | Status | Phase | Notes |
 |--------|------|--------|-------|-------|
-| **Runs — manager** | `terrarium/runs/manager.py` | 📋 stub | F4 | Run lifecycle |
-| **Runs — snapshot** | `terrarium/runs/snapshot.py` | 📋 stub | F4 | Snapshot management |
-| **Runs — artifacts** | `terrarium/runs/artifacts.py` | 📋 stub | F4 | Run outputs |
-| **Runs — comparison** | `terrarium/runs/comparison.py` | 📋 stub | F4 | Run diffing |
-| **Runs — replay** | `terrarium/runs/replay.py` | 📋 stub | F4 | Run replay |
+| **Runs — manager** | `terrarium/runs/manager.py` | ✅ done | F4 | Run lifecycle: create/start/complete/fail, tag resolution, disk persistence |
+| **Runs — snapshot** | `terrarium/runs/snapshot.py` | ✅ done | F4 | Wraps SnapshotStore, auto-snapshot by interval |
+| **Runs — artifacts** | `terrarium/runs/artifacts.py` | ✅ done | F4 | Report/scorecard/event_log/config persistence as JSON files |
+| **Runs — comparison** | `terrarium/runs/comparison.py` | ✅ done | F5 | Scores/events/entity state comparison + governed vs ungoverned governance metrics |
+| **Runs — replay** | `terrarium/runs/replay.py` | ✅ done | F4 | Event log replay with pause/resume/seek |
 | **CLI** | `terrarium/cli.py` | 📋 stub | H1 | 12 commands |
 | **Dashboard** | `terrarium/dashboard/` | 📋 stub | H2 | Web UI |
 | **Templates** | `terrarium/templates/` | 📋 stub | H3 | World templates |
@@ -312,8 +312,8 @@ The service inference chain for unknown services is **fully implemented and test
 | **F1: policy engine** | Safe condition evaluator (ast-based), enforcement dispatcher (BLOCK/HOLD/ESCALATE/LOG), policy loader from WorldPlan, governed/ungoverned mode | C3 | ✅ **DONE.** Policy triggers on action, conditions evaluate safely, enforcement precedence (block>hold>escalate>log), ungoverned mode logs without blocking. 16 policy tests + 35 evaluator tests. |
 | **F2: permission + budget** | Permission checks (read/write/action authority), budget tracking (per-actor api_calls/llm_spend), threshold events | C3 | ✅ **DONE.** Permission denies out-of-scope access with PermissionDeniedEvent. Budget tracks per-actor, emits warning/critical/exhausted events. Ungoverned mode allows but logs. 11 permission + 11 budget tests + 5 E2E governance tests. |
 | **F3: reporter** | ✅ **DONE.** Governance scorecard (8 metrics per-actor + collective), capability gap log (3-action lookahead: HALLUCINATED/ADAPTED/ESCALATED/SKIPPED), causal trace rendering, two-direction observation (World→Agent: 4 challenge types + Agent→World: 5 boundary categories), counterfactual diff, fidelity report. HTTP API: /api/v1/report, /scorecard, /gaps, /causal/{id}, /challenges. 58 new tests. Pure computation — zero LLM. | C3, F1 | All formulas implemented, HTTP endpoints active, zero stubs. |
-| **F4: runs/** | Run management, snapshots, artifacts, comparison | C3, F3 | Can create/complete runs, take snapshots, save reports, compare governed vs ungoverned. |
-| **F5: gov vs ungov** | Same world, two modes, diff | F1, F4 | `terrarium diff --runs gov ungov` produces meaningful comparison. |
+| **F4: runs/** | Run management, snapshots, artifacts, comparison | C3, F3 | ✅ **DONE** — RunManager, ArtifactStore, SnapshotManager, RunReplayer implemented. App wired. HTTP endpoints added. 29 unit tests + 3 integration tests. |
+| **F5: gov vs ungov** | Same world, two modes, diff | F1, F4 | ✅ **DONE** — RunComparator with compare_governed_ungoverned(). Extracts governance metrics from event logs. format_comparison() produces spec table. |
 
 ### Phase G — Richness
 
@@ -730,6 +730,24 @@ The service inference chain for unknown services is **fully implemented and test
   - All events through 7-step pipeline (permission → policy → budget → capability → responder → validation → commit)
 - **Tests:** 56 new tests: 12 scheduler + 18 engine + 6 generator + 12 context + 4 integration + 4 smoke. Total: 1201 passed, 24 skipped, 0 failures.
 - **Zero stubs** in animator or scheduling modules.
+
+### Session 2026-03-23 — F4-F5: Run Management + Governed vs Ungoverned Diff
+- **Implemented:**
+  - **RunManager** (`runs/manager.py`) — full lifecycle: create → start → complete/fail. Tag resolution ("gov" → run_id), "last" keyword. Disk persistence with `_load_existing_runs()` for restart resilience.
+  - **ArtifactStore** (`runs/artifacts.py`) — JSON file persistence for report, scorecard, event_log, config. Save returns file path. List returns metadata dicts with type/path/size_bytes.
+  - **SnapshotManager** (`runs/snapshot.py`) — wraps existing SnapshotStore from persistence layer. Auto-snapshot by tick interval. Delegates to `SnapshotStore.save_snapshot()`.
+  - **RunComparator** (`runs/comparison.py`) — ALL 6 API methods implemented: compare(), compare_scores(), compare_events(), compare_entity_states(), format_comparison(), compare_governed_ungoverned(). Governance-specific metrics extracted from event logs (blocked, approvals, budget_exceeded, unauthorized, policy_hits).
+  - **RunReplayer** (`runs/replay.py`) — event log replay with start/pause/resume/seek/stop. Lazy ArtifactStore loading.
+  - **App wiring** (`app.py`) — create_run(), end_run(), diff_runs(), diff_governed_ungoverned(). Run management initialized in start(). Properties for run_manager and artifact_store.
+  - **HTTP endpoints** (`http_rest.py`) — POST /api/v1/runs, GET /api/v1/runs, GET /api/v1/runs/{id}, POST /api/v1/runs/{id}/complete, GET /api/v1/runs/{id}/artifacts, GET /api/v1/runs/{id}/artifacts/{type}, GET /api/v1/diff, GET /api/v1/diff/governed.
+- **Key design decisions:**
+  - All stubs preserved existing constructor signatures (DI pattern: `config: RunConfig, persistence: ConnectionManager`)
+  - RunComparator reads from ArtifactStore (post-hoc comparison) — does NOT recompute metrics
+  - Governed vs ungoverned comparison extracts governance metrics from serialized event logs using event_type patterns
+  - Artifacts are JSON files in `data/runs/{run_id}/` — portable and inspectable
+  - Auto-snapshot on run completion (configurable via RunConfig.snapshot_on_complete)
+- **Tests:** 29 unit tests (9 manager + 6 artifacts + 4 snapshot + 6 comparison + 4 replay) + 3 integration tests. Total: 1330 passed, 25 skipped, 10 xfailed, 0 failures.
+- **Zero stubs** in runs/ module.
 
 ---
 
