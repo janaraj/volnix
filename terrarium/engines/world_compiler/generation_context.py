@@ -9,12 +9,10 @@ Uses: WorldPlan fields (terrarium/engines/world_compiler/plan.py)
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from terrarium.engines.world_compiler.plan import WorldPlan
 from terrarium.reality.expander import ConditionExpander
-
 
 # ── Behavior mode descriptions (from spec lines 65-74, 216-256) ──
 
@@ -124,7 +122,7 @@ class WorldGenerationContext:
 
         return {
             "reality_summary": self.reality_summary,
-            "reality_dimensions": json.dumps(self.dimensions, indent=2),
+            "reality_dimensions": "",  # Removed: narrative summary is sufficient
             "behavior_mode": self.behavior,
             "behavior_description": self.behavior_description,
             "domain_description": self.domain,

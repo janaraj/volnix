@@ -256,9 +256,11 @@ def _extract_entity_type(text: str) -> str:
     # Try simpler pattern (check longer names first to avoid partial matches)
     for etype in (
         "gmail_message", "gmail_thread", "gmail_label", "gmail_draft",
+        "issue_comment", "pull_request", "pr_file",
+        "payment_intent",
         "channel", "message", "user", "ticket", "comment", "group",
-        "payment_intent", "charge", "customer", "refund", "invoice", "dispute",
-        "repository", "issue", "pull_request", "commit",
+        "organization", "charge", "customer", "refund", "invoice", "dispute",
+        "repository", "issue", "review", "commit",
         "event", "calendar", "attendee", "label", "draft",
     ):
         if etype in text:
@@ -430,6 +432,34 @@ def _generate_generic_entities(
             "id": f"dp_{idx:03d}", "charge": f"ch_{idx:03d}",
             "amount": 1000, "currency": "usd",
             "status": "needs_response", "created": 1700000000 + idx,
+        },
+        "organization": lambda idx: {
+            "id": f"org_{idx:03d}", "name": f"Organization {idx}",
+            "domain_names": [f"org{idx}.com"],
+            "created_at": f"2026-01-01T00:00:00Z",
+            "updated_at": f"2026-01-01T00:00:00Z",
+        },
+        "review": lambda idx: {
+            "id": f"review_{idx:03d}", "pull_number": 100 + idx,
+            "user": {"login": f"reviewer{idx}"},
+            "state": "COMMENTED", "body": f"Review comment {idx}",
+            "submitted_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+            "commit_id": f"sha{idx:08d}",
+        },
+        "issue_comment": lambda idx: {
+            "id": f"ic_{idx:03d}", "issue_number": idx,
+            "user": {"login": "dev1"},
+            "body": f"Comment {idx}",
+            "created_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+            "updated_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+        },
+        "pr_file": lambda idx: {
+            "sha": f"filesha{idx:08d}",
+            "filename": f"src/file{idx}.py",
+            "status": "modified",
+            "additions": idx * 5,
+            "deletions": idx * 2,
+            "changes": idx * 7,
         },
     }
     factory = templates.get(entity_type, lambda idx: {"id": f"{entity_type}_{idx:03d}"})

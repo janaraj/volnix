@@ -196,6 +196,7 @@ timeout_seconds = 300
 [llm.providers.codex_acp]
 type = "acp"
 command = "codex-acp"
+args = ["-c", "model_reasoning_effort=\"low\""]
 auth_method = ""                    # codex uses its own stored credentials (codex login)
 timeout_seconds = 300
 
@@ -211,7 +212,7 @@ timeout_seconds = 300
 [llm.routing.world_compiler]
 provider = "codex_acp"
 model = ""
-max_tokens = 8192
+max_tokens = 16384
 temperature = 0.4
 
 [llm.routing.responder_tier2]
@@ -235,5 +236,5 @@ temperature = 0.9
 [llm.routing.data_generator]
 provider = "codex_acp"
 model = "gemini-2.5-flash"
-max_tokens = 4096
+max_tokens = 16384
 temperature = 0.5

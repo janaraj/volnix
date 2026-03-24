@@ -53,11 +53,13 @@ describe('ComparePage', () => {
     });
   });
 
-  it('renders world name', async () => {
+  it('renders world info with reality and behavior', async () => {
     renderPage();
     await waitFor(() => {
-      // Mock run has world_name "Acme Support Organization"
-      expect(screen.getAllByText(/Acme Support Organization/).length).toBeGreaterThanOrEqual(1);
+      // Spec requires "World: {name} · {reality} · {behavior} · {mode}"
+      expect(screen.getByText(/World:/)).toBeInTheDocument();
+      // "messy" appears in both header and export area
+      expect(screen.getAllByText(/messy/).length).toBeGreaterThanOrEqual(1);
     });
   });
 

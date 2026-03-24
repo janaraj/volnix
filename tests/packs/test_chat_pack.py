@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.chat — backward-compatible smoke tests.
+"""Tests for terrarium.packs.verified.chat -- backward-compatible smoke tests.
 
 Full test suite lives in tests/packs/verified/test_chat.py.
 """
@@ -11,7 +11,7 @@ from terrarium.packs.verified.chat.pack import ChatPack
 def test_chat_pack_tools():
     pack = ChatPack()
     tools = pack.get_tools()
-    assert len(tools) == 8
+    assert len(tools) == 16
 
 
 def test_chat_pack_name():

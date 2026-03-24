@@ -10,5 +10,5 @@ class WorldCompilerConfig(BaseModel):
 
     default_seed: int = 42
     max_entities_per_type: int = 1000
-    max_section_retries: int = 1
+    max_section_retries: int = 2
     collect_all_validation_errors: bool = True

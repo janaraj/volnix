@@ -1,10 +1,11 @@
-"""Tests for terrarium.packs.verified.tickets — TicketsPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.tickets -- TicketsPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.verified.tickets.pack import TicketsPack
+from terrarium.packs.verified.tickets.schemas import ORGANIZATION_ENTITY_SCHEMA
 from terrarium.packs.verified.tickets.state_machines import TICKET_STATES, TICKET_TRANSITIONS
 from terrarium.validation.schema import SchemaValidator
 from terrarium.validation.state_machine import StateMachineValidator
@@ -17,7 +18,7 @@ def tickets_pack():
 
 @pytest.fixture
 def sample_state():
-    """State with pre-existing tickets, comments, and users for read/list/filter tests."""
+    """State with pre-existing tickets, comments, users, and groups."""
     return {
         "tickets": [
             {
@@ -30,6 +31,12 @@ def sample_state():
                 "requester_id": "user-100",
                 "assignee_id": "user-200",
                 "tags": ["login", "auth"],
+                "custom_fields": [{"id": 1, "value": "browser"}],
+                "collaborator_ids": ["user-201"],
+                "follower_ids": [],
+                "organization_id": "org-001",
+                "external_id": "ext-001",
+                "brand_id": "brand-001",
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "updated_at": "2026-01-01T00:00:00+00:00",
             },
@@ -66,7 +73,9 @@ def sample_state():
                 "ticket_id": "ticket-001",
                 "author_id": "user-100",
                 "body": "I get an error when logging in.",
+                "html_body": "<p>I get an error when logging in.</p>",
                 "public": True,
+                "attachments": [],
                 "created_at": "2026-01-01T00:00:00+00:00",
             },
             {
@@ -74,7 +83,9 @@ def sample_state():
                 "ticket_id": "ticket-001",
                 "author_id": "user-200",
                 "body": "Can you try clearing your cache?",
+                "html_body": "<p>Can you try clearing your cache?</p>",
                 "public": True,
+                "attachments": [],
                 "created_at": "2026-01-01T01:00:00+00:00",
             },
             {
@@ -82,7 +93,9 @@ def sample_state():
                 "ticket_id": "ticket-002",
                 "author_id": "user-101",
                 "body": "Please add dark mode.",
+                "html_body": "<p>Please add dark mode.</p>",
                 "public": True,
+                "attachments": [],
                 "created_at": "2026-01-02T00:00:00+00:00",
             },
         ],
@@ -93,6 +106,8 @@ def sample_state():
                 "email": "alice@example.com",
                 "role": "end-user",
                 "active": True,
+                "verified": True,
+                "locale": "en-US",
                 "created_at": "2025-06-01T00:00:00+00:00",
             },
             {
@@ -101,6 +116,7 @@ def sample_state():
                 "email": "bob@example.com",
                 "role": "end-user",
                 "active": True,
+                "verified": False,
                 "created_at": "2025-06-02T00:00:00+00:00",
             },
             {
@@ -109,6 +125,8 @@ def sample_state():
                 "email": "charlie@support.com",
                 "role": "agent",
                 "active": True,
+                "verified": True,
+                "default_group_id": "group-001",
                 "created_at": "2025-01-01T00:00:00+00:00",
             },
             {
@@ -117,7 +135,38 @@ def sample_state():
                 "email": "dana@support.com",
                 "role": "agent",
                 "active": True,
+                "verified": True,
+                "default_group_id": "group-001",
                 "created_at": "2025-01-02T00:00:00+00:00",
+            },
+        ],
+        "groups": [
+            {
+                "id": "group-001",
+                "name": "Support Team",
+                "description": "First line support",
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "updated_at": "2025-01-01T00:00:00+00:00",
+            },
+            {
+                "id": "group-002",
+                "name": "Engineering",
+                "description": "Engineering escalation",
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "updated_at": "2025-01-01T00:00:00+00:00",
+            },
+        ],
+        "organizations": [
+            {
+                "id": "org-001",
+                "name": "Acme Corp",
+                "external_id": "ext-org-001",
+                "domain_names": ["acme.com"],
+                "details": "Enterprise customer",
+                "notes": "",
+                "group_id": "group-001",
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "updated_at": "2025-01-01T00:00:00+00:00",
             },
         ],
     }
@@ -131,28 +180,33 @@ class TestTicketsPackMetadata:
         assert tickets_pack.fidelity_tier == 1
 
     def test_tools_count_and_names(self, tickets_pack):
-        """TicketsPack exposes 8 tools with expected names."""
+        """TicketsPack exposes 12 tools with expected names."""
         tools = tickets_pack.get_tools()
-        assert len(tools) == 8
+        assert len(tools) == 12
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
             "zendesk_tickets_list",
             "zendesk_tickets_show",
             "zendesk_tickets_create",
             "zendesk_tickets_update",
+            "zendesk_tickets_delete",
+            "zendesk_tickets_search",
             "zendesk_ticket_comments_list",
             "zendesk_ticket_comments_create",
             "zendesk_users_list",
             "zendesk_users_show",
+            "zendesk_groups_list",
+            "zendesk_groups_show",
         }
 
     def test_entity_schemas(self, tickets_pack):
-        """ticket, comment, user, and group entity schemas are present."""
+        """ticket, comment, user, group, and organization entity schemas are present."""
         schemas = tickets_pack.get_entity_schemas()
         assert "ticket" in schemas
         assert "comment" in schemas
         assert "user" in schemas
         assert "group" in schemas
+        assert "organization" in schemas
 
     def test_state_machines(self, tickets_pack):
         """Ticket state machine transitions are present."""
@@ -166,8 +220,53 @@ class TestTicketsPackMetadata:
     def test_get_tool_names(self, tickets_pack):
         """get_tool_names() returns list of name strings."""
         names = tickets_pack.get_tool_names()
-        assert len(names) == 8
+        assert len(names) == 12
         assert "zendesk_tickets_create" in names
+        assert "zendesk_tickets_delete" in names
+        assert "zendesk_tickets_search" in names
+        assert "zendesk_groups_list" in names
+        assert "zendesk_groups_show" in names
+
+    def test_ticket_schema_has_new_fields(self, tickets_pack):
+        """Ticket schema includes P1 audit fields."""
+        props = tickets_pack.get_entity_schemas()["ticket"]["properties"]
+        assert "custom_fields" in props
+        assert "collaborator_ids" in props
+        assert "follower_ids" in props
+        assert "organization_id" in props
+        assert "satisfaction_rating" in props
+        assert "problem_id" in props
+        assert "external_id" in props
+        assert "brand_id" in props
+
+    def test_comment_schema_has_new_fields(self, tickets_pack):
+        """Comment schema includes P1 audit fields."""
+        props = tickets_pack.get_entity_schemas()["comment"]["properties"]
+        assert "html_body" in props
+        assert "attachments" in props
+        assert "audit_id" in props
+
+    def test_user_schema_has_new_fields(self, tickets_pack):
+        """User schema includes P1 audit fields."""
+        props = tickets_pack.get_entity_schemas()["user"]["properties"]
+        assert "verified" in props
+        assert "external_id" in props
+        assert "locale" in props
+        assert "phone" in props
+        assert "photo" in props
+        assert "default_group_id" in props
+
+    def test_organization_schema(self):
+        """Organization schema has expected fields."""
+        props = ORGANIZATION_ENTITY_SCHEMA["properties"]
+        assert "id" in props
+        assert "name" in props
+        assert "external_id" in props
+        assert "domain_names" in props
+        assert "details" in props
+        assert "notes" in props
+        assert "group_id" in props
+        assert ORGANIZATION_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
 
 
 class TestTicketsPackActions:
@@ -208,6 +307,9 @@ class TestTicketsPackActions:
         assert comment_delta.operation == "create"
         assert comment_delta.fields["body"] == "Literally flames coming out."
         assert comment_delta.fields["ticket_id"] == ticket_delta.fields["id"]
+        # P1: comment has html_body
+        assert "html_body" in comment_delta.fields
+        assert comment_delta.fields["attachments"] == []
 
     async def test_tickets_create_minimal(self, tickets_pack):
         """zendesk_tickets_create works with only required fields."""
@@ -246,13 +348,82 @@ class TestTicketsPackActions:
         assert "updated_at" in delta.fields
 
     async def test_tickets_update_not_found(self, tickets_pack, sample_state):
-        """zendesk_tickets_update returns error for nonexistent ticket."""
+        """zendesk_tickets_update returns Zendesk-format error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
             ToolName("zendesk_tickets_update"),
             {"id": "ticket-nonexistent", "status": "open"},
             sample_state,
         )
-        assert "error" in proposal.response_body
+        assert proposal.response_body["error"] == "RecordNotFound"
+        assert "description" in proposal.response_body
+
+    async def test_tickets_delete(self, tickets_pack, sample_state):
+        """zendesk_tickets_delete soft-deletes a ticket."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_delete"),
+            {"id": "ticket-001"},
+            sample_state,
+        )
+        assert isinstance(proposal, ResponseProposal)
+        assert proposal.response_body == {}
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "delete"
+        assert delta.fields["status"] == "deleted"
+        assert delta.previous_fields["status"] == "new"
+
+    async def test_tickets_delete_not_found(self, tickets_pack, sample_state):
+        """zendesk_tickets_delete returns Zendesk error for nonexistent ticket."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_delete"),
+            {"id": "ticket-nonexistent"},
+            sample_state,
+        )
+        assert proposal.response_body["error"] == "RecordNotFound"
+
+    async def test_tickets_search_free_text(self, tickets_pack, sample_state):
+        """zendesk_tickets_search finds tickets by free text."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_search"),
+            {"query": "login"},
+            sample_state,
+        )
+        results = proposal.response_body["results"]
+        assert len(results) == 1
+        assert results[0]["id"] == "ticket-001"
+        assert proposal.proposed_state_deltas == []
+
+    async def test_tickets_search_structured_filter(self, tickets_pack, sample_state):
+        """zendesk_tickets_search supports structured filters like status:open."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_search"),
+            {"query": "status:open"},
+            sample_state,
+        )
+        results = proposal.response_body["results"]
+        assert len(results) == 1
+        assert results[0]["id"] == "ticket-002"
+
+    async def test_tickets_search_mixed(self, tickets_pack, sample_state):
+        """zendesk_tickets_search supports mixed structured + free text."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_search"),
+            {"query": "type:problem billing"},
+            sample_state,
+        )
+        results = proposal.response_body["results"]
+        assert len(results) == 1
+        assert results[0]["id"] == "ticket-003"
+
+    async def test_tickets_search_no_results(self, tickets_pack, sample_state):
+        """zendesk_tickets_search returns empty for non-matching query."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_tickets_search"),
+            {"query": "nonexistent_xyz"},
+            sample_state,
+        )
+        assert proposal.response_body["results"] == []
+        assert proposal.response_body["count"] == 0
 
     async def test_tickets_list_all(self, tickets_pack, sample_state):
         """zendesk_tickets_list returns all tickets when no filters given."""
@@ -333,13 +504,14 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_tickets_show_not_found(self, tickets_pack, sample_state):
-        """zendesk_tickets_show returns error for nonexistent ticket."""
+        """zendesk_tickets_show returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
             ToolName("zendesk_tickets_show"),
             {"id": "ticket-nonexistent"},
             sample_state,
         )
-        assert "error" in proposal.response_body
+        assert proposal.response_body["error"] == "RecordNotFound"
+        assert "description" in proposal.response_body
 
     async def test_ticket_comments_create(self, tickets_pack, sample_state):
         """zendesk_ticket_comments_create creates comment and updates ticket."""
@@ -361,6 +533,9 @@ class TestTicketsPackActions:
         assert comment["public"] is True
         assert "id" in comment
         assert "created_at" in comment
+        # P1 new fields
+        assert "html_body" in comment
+        assert comment["attachments"] == []
 
         # Two deltas: one for comment create, one for ticket updated_at
         assert len(proposal.proposed_state_deltas) == 2
@@ -388,7 +563,7 @@ class TestTicketsPackActions:
         assert comment["public"] is False
 
     async def test_ticket_comments_create_not_found(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_create returns error for nonexistent ticket."""
+        """zendesk_ticket_comments_create returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
             ToolName("zendesk_ticket_comments_create"),
             {
@@ -398,7 +573,7 @@ class TestTicketsPackActions:
             },
             sample_state,
         )
-        assert "error" in proposal.response_body
+        assert proposal.response_body["error"] == "RecordNotFound"
 
     async def test_ticket_comments_list(self, tickets_pack, sample_state):
         """zendesk_ticket_comments_list returns comments for a specific ticket."""
@@ -459,13 +634,56 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_users_show_not_found(self, tickets_pack, sample_state):
-        """zendesk_users_show returns error for nonexistent user."""
+        """zendesk_users_show returns Zendesk error for nonexistent user."""
         proposal = await tickets_pack.handle_action(
             ToolName("zendesk_users_show"),
             {"id": "user-nonexistent"},
             sample_state,
         )
-        assert "error" in proposal.response_body
+        assert proposal.response_body["error"] == "RecordNotFound"
+
+    async def test_groups_list(self, tickets_pack, sample_state):
+        """zendesk_groups_list returns all groups."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_groups_list"),
+            {},
+            sample_state,
+        )
+        body = proposal.response_body
+        assert body["count"] == 2
+        assert len(body["groups"]) == 2
+        assert proposal.proposed_state_deltas == []
+
+    async def test_groups_list_empty(self, tickets_pack):
+        """zendesk_groups_list returns empty from empty state."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_groups_list"),
+            {},
+            {},
+        )
+        assert proposal.response_body["groups"] == []
+        assert proposal.response_body["count"] == 0
+
+    async def test_groups_show(self, tickets_pack, sample_state):
+        """zendesk_groups_show returns group by ID."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_groups_show"),
+            {"id": "group-001"},
+            sample_state,
+        )
+        group = proposal.response_body["group"]
+        assert group["id"] == "group-001"
+        assert group["name"] == "Support Team"
+        assert proposal.proposed_state_deltas == []
+
+    async def test_groups_show_not_found(self, tickets_pack, sample_state):
+        """zendesk_groups_show returns Zendesk error for nonexistent group."""
+        proposal = await tickets_pack.handle_action(
+            ToolName("zendesk_groups_show"),
+            {"id": "group-nonexistent"},
+            sample_state,
+        )
+        assert proposal.response_body["error"] == "RecordNotFound"
 
 
 class TestTicketsPackValidation:
@@ -526,6 +744,18 @@ class TestTicketsPackValidation:
         }
         result = validator.validate_entity(valid_group, schemas["group"])
         assert result.valid, f"Group validation errors: {result.errors}"
+
+    def test_organization_schema_validates(self, tickets_pack):
+        """Valid organization entity passes SchemaValidator."""
+        validator = SchemaValidator()
+        schemas = tickets_pack.get_entity_schemas()
+
+        valid_org = {
+            "id": "org-xyz",
+            "name": "Test Org",
+        }
+        result = validator.validate_entity(valid_org, schemas["organization"])
+        assert result.valid, f"Organization validation errors: {result.errors}"
 
     def test_state_machine_valid_transitions(self, tickets_pack):
         """Valid ticket transitions pass StateMachineValidator."""

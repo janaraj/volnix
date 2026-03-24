@@ -1,8 +1,8 @@
 """Tickets service pack (Tier 1 -- verified).
 
 Provides the canonical tool surface for Zendesk-style ticket services:
-create, update, list, show tickets; create and list comments; list and
-show users.
+create, update, list, show, delete, search tickets; create and list comments;
+list and show users; list and show groups.
 """
 
 from __future__ import annotations
@@ -13,10 +13,14 @@ from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
 from terrarium.packs.verified.tickets.handlers import (
+    handle_zendesk_groups_list,
+    handle_zendesk_groups_show,
     handle_zendesk_ticket_comments_create,
     handle_zendesk_ticket_comments_list,
     handle_zendesk_tickets_create,
+    handle_zendesk_tickets_delete,
     handle_zendesk_tickets_list,
+    handle_zendesk_tickets_search,
     handle_zendesk_tickets_show,
     handle_zendesk_tickets_update,
     handle_zendesk_users_list,
@@ -25,6 +29,7 @@ from terrarium.packs.verified.tickets.handlers import (
 from terrarium.packs.verified.tickets.schemas import (
     COMMENT_ENTITY_SCHEMA,
     GROUP_ENTITY_SCHEMA,
+    ORGANIZATION_ENTITY_SCHEMA,
     TICKET_ENTITY_SCHEMA,
     TICKET_TOOL_DEFINITIONS,
     USER_ENTITY_SCHEMA,
@@ -36,8 +41,10 @@ class TicketsPack(ServicePack):
     """Verified pack for Zendesk-style ticket / work-management services.
 
     Tools: zendesk_tickets_list, zendesk_tickets_show, zendesk_tickets_create,
-    zendesk_tickets_update, zendesk_ticket_comments_list,
-    zendesk_ticket_comments_create, zendesk_users_list, zendesk_users_show.
+    zendesk_tickets_update, zendesk_tickets_delete, zendesk_tickets_search,
+    zendesk_ticket_comments_list, zendesk_ticket_comments_create,
+    zendesk_users_list, zendesk_users_show, zendesk_groups_list,
+    zendesk_groups_show.
     """
 
     pack_name: ClassVar[str] = "tickets"
@@ -49,10 +56,14 @@ class TicketsPack(ServicePack):
         "zendesk_tickets_show": handle_zendesk_tickets_show,
         "zendesk_tickets_create": handle_zendesk_tickets_create,
         "zendesk_tickets_update": handle_zendesk_tickets_update,
+        "zendesk_tickets_delete": handle_zendesk_tickets_delete,
+        "zendesk_tickets_search": handle_zendesk_tickets_search,
         "zendesk_ticket_comments_list": handle_zendesk_ticket_comments_list,
         "zendesk_ticket_comments_create": handle_zendesk_ticket_comments_create,
         "zendesk_users_list": handle_zendesk_users_list,
         "zendesk_users_show": handle_zendesk_users_show,
+        "zendesk_groups_list": handle_zendesk_groups_list,
+        "zendesk_groups_show": handle_zendesk_groups_show,
     }
 
     def get_tools(self) -> list[dict]:
@@ -60,12 +71,13 @@ class TicketsPack(ServicePack):
         return list(TICKET_TOOL_DEFINITIONS)
 
     def get_entity_schemas(self) -> dict:
-        """Return entity schemas (ticket, comment, user, group)."""
+        """Return entity schemas (ticket, comment, user, group, organization)."""
         return {
             "ticket": TICKET_ENTITY_SCHEMA,
             "comment": COMMENT_ENTITY_SCHEMA,
             "user": USER_ENTITY_SCHEMA,
             "group": GROUP_ENTITY_SCHEMA,
+            "organization": ORGANIZATION_ENTITY_SCHEMA,
         }
 
     def get_state_machines(self) -> dict:

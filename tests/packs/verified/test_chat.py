@@ -28,10 +28,26 @@ def sample_state():
                 "is_channel": True,
                 "is_private": False,
                 "is_archived": False,
-                "topic": {"value": "Company-wide announcements"},
-                "purpose": {"value": "General discussion"},
+                "creator": "U001",
+                "is_member": True,
+                "members": ["U001", "U002", "U003"],
+                "topic": {
+                    "value": "Company-wide announcements",
+                    "creator": "U001",
+                    "last_set": 1700000000,
+                },
+                "purpose": {
+                    "value": "General discussion",
+                    "creator": "U001",
+                    "last_set": 1700000000,
+                },
                 "num_members": 50,
                 "created": 1700000000,
+                "unlinked": 0,
+                "name_normalized": "general",
+                "is_shared": False,
+                "is_org_shared": False,
+                "is_general": True,
             },
             {
                 "id": "C002",
@@ -39,10 +55,26 @@ def sample_state():
                 "is_channel": True,
                 "is_private": False,
                 "is_archived": False,
-                "topic": {"value": "Engineering team"},
-                "purpose": {"value": "Engineering discussions"},
+                "creator": "U001",
+                "is_member": True,
+                "members": ["U001", "U002"],
+                "topic": {
+                    "value": "Engineering team",
+                    "creator": "U001",
+                    "last_set": 1700100000,
+                },
+                "purpose": {
+                    "value": "Engineering discussions",
+                    "creator": "U001",
+                    "last_set": 1700100000,
+                },
                 "num_members": 20,
                 "created": 1700100000,
+                "unlinked": 0,
+                "name_normalized": "engineering",
+                "is_shared": False,
+                "is_org_shared": False,
+                "is_general": False,
             },
             {
                 "id": "C003",
@@ -50,10 +82,22 @@ def sample_state():
                 "is_channel": True,
                 "is_private": False,
                 "is_archived": True,
-                "topic": {"value": ""},
-                "purpose": {"value": "Old project"},
+                "creator": "U002",
+                "is_member": False,
+                "members": ["U002"],
+                "topic": {"value": "", "creator": "", "last_set": 0},
+                "purpose": {
+                    "value": "Old project",
+                    "creator": "U002",
+                    "last_set": 1690000000,
+                },
                 "num_members": 5,
                 "created": 1690000000,
+                "unlinked": 0,
+                "name_normalized": "archived-project",
+                "is_shared": False,
+                "is_org_shared": False,
+                "is_general": False,
             },
         ],
         "messages": [
@@ -63,9 +107,14 @@ def sample_state():
                 "user": "U001",
                 "text": "Hello everyone!",
                 "type": "message",
+                "subtype": None,
                 "thread_ts": None,
                 "reply_count": 2,
                 "reactions": [{"name": "wave", "users": ["U002"], "count": 1}],
+                "edited": None,
+                "bot_id": None,
+                "app_id": None,
+                "blocks": None,
             },
             {
                 "ts": "1700000002.000002",
@@ -73,9 +122,14 @@ def sample_state():
                 "user": "U002",
                 "text": "Hey there!",
                 "type": "message",
+                "subtype": None,
                 "thread_ts": "1700000001.000001",
                 "reply_count": 0,
                 "reactions": [],
+                "edited": None,
+                "bot_id": None,
+                "app_id": None,
+                "blocks": None,
             },
             {
                 "ts": "1700000003.000003",
@@ -83,9 +137,14 @@ def sample_state():
                 "user": "U003",
                 "text": "Welcome!",
                 "type": "message",
+                "subtype": None,
                 "thread_ts": "1700000001.000001",
                 "reply_count": 0,
                 "reactions": [],
+                "edited": None,
+                "bot_id": None,
+                "app_id": None,
+                "blocks": None,
             },
             {
                 "ts": "1700000004.000004",
@@ -93,9 +152,14 @@ def sample_state():
                 "user": "U001",
                 "text": "Deploy is done.",
                 "type": "message",
+                "subtype": None,
                 "thread_ts": None,
                 "reply_count": 0,
                 "reactions": [],
+                "edited": None,
+                "bot_id": None,
+                "app_id": None,
+                "blocks": None,
             },
         ],
         "users": [
@@ -107,9 +171,19 @@ def sample_state():
                 "email": "alice@test.com",
                 "is_bot": False,
                 "is_admin": True,
+                "is_owner": True,
+                "is_primary_owner": True,
+                "is_restricted": False,
+                "is_ultra_restricted": False,
+                "updated": 1700000000,
                 "status_text": "Working",
                 "status_emoji": ":laptop:",
                 "tz": "America/New_York",
+                "profile": {
+                    "image_24": "https://example.com/alice_24.png",
+                    "image_48": "https://example.com/alice_48.png",
+                    "image_72": "https://example.com/alice_72.png",
+                },
             },
             {
                 "id": "U002",
@@ -119,9 +193,19 @@ def sample_state():
                 "email": "bob@test.com",
                 "is_bot": False,
                 "is_admin": False,
+                "is_owner": False,
+                "is_primary_owner": False,
+                "is_restricted": False,
+                "is_ultra_restricted": False,
+                "updated": 1700000000,
                 "status_text": "",
                 "status_emoji": "",
                 "tz": "Europe/London",
+                "profile": {
+                    "image_24": "https://example.com/bob_24.png",
+                    "image_48": "https://example.com/bob_48.png",
+                    "image_72": "https://example.com/bob_72.png",
+                },
             },
             {
                 "id": "U003",
@@ -131,9 +215,19 @@ def sample_state():
                 "email": "",
                 "is_bot": True,
                 "is_admin": False,
+                "is_owner": False,
+                "is_primary_owner": False,
+                "is_restricted": False,
+                "is_ultra_restricted": False,
+                "updated": 1700000000,
                 "status_text": "",
                 "status_emoji": "",
                 "tz": "UTC",
+                "profile": {
+                    "image_24": "",
+                    "image_48": "",
+                    "image_72": "",
+                },
             },
         ],
     }
@@ -150,19 +244,27 @@ class TestChatPackMetadata:
         assert chat_pack.fidelity_tier == 1
 
     def test_tools_count_and_names(self, chat_pack):
-        """ChatPack exposes 8 tools with expected names."""
+        """ChatPack exposes 16 tools with expected names."""
         tools = chat_pack.get_tools()
-        assert len(tools) == 8
+        assert len(tools) == 16
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
             "slack_list_channels",
             "slack_post_message",
+            "slack_update_message",
+            "slack_delete_message",
             "slack_reply_to_thread",
             "slack_add_reaction",
+            "slack_remove_reaction",
             "slack_get_channel_history",
             "slack_get_thread_replies",
             "slack_get_users",
             "slack_get_user_profile",
+            "slack_create_channel",
+            "slack_archive_channel",
+            "slack_join_channel",
+            "slack_set_channel_topic",
+            "slack_get_channel_info",
         }
 
     def test_entity_schemas(self, chat_pack):
@@ -191,6 +293,51 @@ class TestChatPackMetadata:
     def test_user_schema_identity(self):
         """User identity field is 'id'."""
         assert USER_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+
+    def test_channel_schema_has_p1_fields(self):
+        """Channel schema includes all P1 fields."""
+        props = CHANNEL_ENTITY_SCHEMA["properties"]
+        for field in [
+            "creator",
+            "is_member",
+            "members",
+            "unlinked",
+            "name_normalized",
+            "is_shared",
+            "is_org_shared",
+            "is_general",
+        ]:
+            assert field in props, f"Missing channel field: {field}"
+        # topic and purpose sub-fields
+        topic_props = props["topic"]["properties"]
+        assert "creator" in topic_props
+        assert "last_set" in topic_props
+        purpose_props = props["purpose"]["properties"]
+        assert "creator" in purpose_props
+        assert "last_set" in purpose_props
+
+    def test_message_schema_has_p1_fields(self):
+        """Message schema includes all P1 fields."""
+        props = MESSAGE_ENTITY_SCHEMA["properties"]
+        for field in ["edited", "bot_id", "app_id", "subtype", "blocks"]:
+            assert field in props, f"Missing message field: {field}"
+
+    def test_user_schema_has_p1_fields(self):
+        """User schema includes all P1 fields."""
+        props = USER_ENTITY_SCHEMA["properties"]
+        for field in [
+            "is_owner",
+            "is_primary_owner",
+            "is_restricted",
+            "is_ultra_restricted",
+            "updated",
+            "profile",
+        ]:
+            assert field in props, f"Missing user field: {field}"
+        # profile sub-fields
+        profile_props = props["profile"]["properties"]
+        for img in ["image_24", "image_48", "image_72"]:
+            assert img in profile_props
 
 
 # ---- Handler tests ----
@@ -227,6 +374,28 @@ class TestSlackListChannels:
         )
         assert proposal.response_body["channels"] == []
 
+    async def test_cursor_pagination(self, chat_pack, sample_state):
+        """slack_list_channels supports cursor-based pagination."""
+        # First page
+        p1 = await chat_pack.handle_action(
+            ToolName("slack_list_channels"),
+            {"limit": 2},
+            sample_state,
+        )
+        assert len(p1.response_body["channels"]) == 2
+        assert "response_metadata" in p1.response_body
+        next_cursor = p1.response_body["response_metadata"]["next_cursor"]
+        assert next_cursor != ""
+
+        # Second page
+        p2 = await chat_pack.handle_action(
+            ToolName("slack_list_channels"),
+            {"limit": 2, "cursor": next_cursor},
+            sample_state,
+        )
+        assert len(p2.response_body["channels"]) == 1
+        assert p2.response_body["response_metadata"]["next_cursor"] == ""
+
 
 class TestSlackPostMessage:
     async def test_creates_message(self, chat_pack, sample_state):
@@ -248,6 +417,8 @@ class TestSlackPostMessage:
         assert delta.fields["channel"] == "C001"
         assert delta.fields["reply_count"] == 0
         assert delta.fields["reactions"] == []
+        assert delta.fields["edited"] is None
+        assert delta.fields["subtype"] is None
 
     async def test_message_ts_is_entity_id(self, chat_pack, sample_state):
         """The generated ts serves as the entity_id in the delta."""
@@ -259,6 +430,87 @@ class TestSlackPostMessage:
         ts = proposal.response_body["ts"]
         delta = proposal.proposed_state_deltas[0]
         assert str(delta.entity_id) == ts
+
+
+class TestSlackUpdateMessage:
+    async def test_updates_message_text(self, chat_pack, sample_state):
+        """slack_update_message updates the text and sets edited metadata."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_update_message"),
+            {
+                "channel_id": "C001",
+                "ts": "1700000001.000001",
+                "text": "Hello everyone! (edited)",
+                "user_id": "U001",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert proposal.response_body["channel"] == "C001"
+        assert proposal.response_body["ts"] == "1700000001.000001"
+        assert proposal.response_body["text"] == "Hello everyone! (edited)"
+
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "update"
+        assert delta.entity_id == "1700000001.000001"
+        assert delta.fields["text"] == "Hello everyone! (edited)"
+        assert delta.fields["edited"]["user"] == "U001"
+        assert "ts" in delta.fields["edited"]
+        assert delta.previous_fields["text"] == "Hello everyone!"
+        assert delta.previous_fields["edited"] is None
+
+    async def test_update_nonexistent_message(self, chat_pack, sample_state):
+        """Updating a nonexistent message returns an error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_update_message"),
+            {
+                "channel_id": "C001",
+                "ts": "9999999999.000000",
+                "text": "does not exist",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "message_not_found"
+        assert proposal.proposed_state_deltas == []
+
+
+class TestSlackDeleteMessage:
+    async def test_deletes_message(self, chat_pack, sample_state):
+        """slack_delete_message deletes the target message."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_delete_message"),
+            {
+                "channel_id": "C002",
+                "ts": "1700000004.000004",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert proposal.response_body["channel"] == "C002"
+        assert proposal.response_body["ts"] == "1700000004.000004"
+
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "delete"
+        assert delta.entity_id == "1700000004.000004"
+        assert delta.previous_fields is not None
+        assert delta.previous_fields["text"] == "Deploy is done."
+
+    async def test_delete_nonexistent_message(self, chat_pack, sample_state):
+        """Deleting a nonexistent message returns an error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_delete_message"),
+            {
+                "channel_id": "C001",
+                "ts": "9999999999.000000",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "message_not_found"
+        assert proposal.proposed_state_deltas == []
 
 
 class TestSlackReplyToThread:
@@ -282,6 +534,7 @@ class TestSlackReplyToThread:
         create_delta = proposal.proposed_state_deltas[0]
         assert create_delta.operation == "create"
         assert create_delta.fields["thread_ts"] == "1700000001.000001"
+        assert create_delta.fields["edited"] is None
 
         update_delta = proposal.proposed_state_deltas[1]
         assert update_delta.operation == "update"
@@ -379,6 +632,103 @@ class TestSlackAddReaction:
         assert proposal.response_body["error"] == "message_not_found"
 
 
+class TestSlackRemoveReaction:
+    async def test_removes_reaction(self, chat_pack, sample_state):
+        """slack_remove_reaction removes a user's reaction from a message."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_remove_reaction"),
+            {
+                "channel_id": "C001",
+                "timestamp": "1700000001.000001",
+                "reaction": "wave",
+                "user_id": "U002",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "update"
+        # wave reaction should be completely removed (was the only user)
+        reaction_names = [r["name"] for r in delta.fields["reactions"]]
+        assert "wave" not in reaction_names
+
+    async def test_removes_user_from_multi_user_reaction(self, chat_pack):
+        """Removing one user from a multi-user reaction keeps the reaction."""
+        state = {
+            "messages": [
+                {
+                    "ts": "100.001",
+                    "channel": "C001",
+                    "user": "U001",
+                    "text": "hi",
+                    "type": "message",
+                    "reactions": [{"name": "thumbsup", "users": ["U001", "U002"], "count": 2}],
+                },
+            ],
+        }
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_remove_reaction"),
+            {
+                "channel_id": "C001",
+                "timestamp": "100.001",
+                "reaction": "thumbsup",
+                "user_id": "U001",
+            },
+            state,
+        )
+        assert proposal.response_body["ok"] is True
+        delta = proposal.proposed_state_deltas[0]
+        thumbsup = next(r for r in delta.fields["reactions"] if r["name"] == "thumbsup")
+        assert thumbsup["count"] == 1
+        assert thumbsup["users"] == ["U002"]
+
+    async def test_remove_nonexistent_reaction(self, chat_pack, sample_state):
+        """Removing a reaction that doesn't exist returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_remove_reaction"),
+            {
+                "channel_id": "C001",
+                "timestamp": "1700000001.000001",
+                "reaction": "nonexistent",
+                "user_id": "U001",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "no_reaction"
+
+    async def test_remove_reaction_user_not_in_list(self, chat_pack, sample_state):
+        """Removing a reaction the user didn't add returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_remove_reaction"),
+            {
+                "channel_id": "C001",
+                "timestamp": "1700000001.000001",
+                "reaction": "wave",
+                "user_id": "U999",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "no_reaction"
+
+    async def test_remove_reaction_message_not_found(self, chat_pack, sample_state):
+        """Removing a reaction from a nonexistent message returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_remove_reaction"),
+            {
+                "channel_id": "C001",
+                "timestamp": "9999999999.000000",
+                "reaction": "wave",
+                "user_id": "U002",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "message_not_found"
+
+
 class TestSlackGetChannelHistory:
     async def test_returns_channel_messages(self, chat_pack, sample_state):
         """slack_get_channel_history returns messages for the given channel."""
@@ -412,6 +762,34 @@ class TestSlackGetChannelHistory:
             sample_state,
         )
         assert len(proposal.response_body["messages"]) == 1
+
+    async def test_has_more_flag(self, chat_pack, sample_state):
+        """has_more is true when there are more messages beyond the limit."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_get_channel_history"),
+            {"channel_id": "C001", "limit": 2},
+            sample_state,
+        )
+        assert proposal.response_body["has_more"] is True
+        assert proposal.response_body["response_metadata"]["next_cursor"] != ""
+
+    async def test_cursor_pagination(self, chat_pack, sample_state):
+        """Channel history supports cursor-based pagination."""
+        p1 = await chat_pack.handle_action(
+            ToolName("slack_get_channel_history"),
+            {"channel_id": "C001", "limit": 2},
+            sample_state,
+        )
+        assert len(p1.response_body["messages"]) == 2
+        next_cursor = p1.response_body["response_metadata"]["next_cursor"]
+
+        p2 = await chat_pack.handle_action(
+            ToolName("slack_get_channel_history"),
+            {"channel_id": "C001", "limit": 2, "cursor": next_cursor},
+            sample_state,
+        )
+        assert len(p2.response_body["messages"]) == 1
+        assert p2.response_body["has_more"] is False
 
 
 class TestSlackGetThreadReplies:
@@ -461,6 +839,25 @@ class TestSlackGetUsers:
         )
         assert len(proposal.response_body["members"]) == 2
 
+    async def test_cursor_pagination(self, chat_pack, sample_state):
+        """slack_get_users supports cursor-based pagination."""
+        p1 = await chat_pack.handle_action(
+            ToolName("slack_get_users"),
+            {"limit": 2},
+            sample_state,
+        )
+        assert len(p1.response_body["members"]) == 2
+        next_cursor = p1.response_body["response_metadata"]["next_cursor"]
+        assert next_cursor != ""
+
+        p2 = await chat_pack.handle_action(
+            ToolName("slack_get_users"),
+            {"limit": 2, "cursor": next_cursor},
+            sample_state,
+        )
+        assert len(p2.response_body["members"]) == 1
+        assert p2.response_body["response_metadata"]["next_cursor"] == ""
+
 
 class TestSlackGetUserProfile:
     async def test_returns_user(self, chat_pack, sample_state):
@@ -483,3 +880,265 @@ class TestSlackGetUserProfile:
         )
         assert proposal.response_body["ok"] is False
         assert proposal.response_body["error"] == "user_not_found"
+
+
+class TestSlackCreateChannel:
+    async def test_creates_channel(self, chat_pack, sample_state):
+        """slack_create_channel creates a new channel entity."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_create_channel"),
+            {"name": "new-channel", "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        channel = proposal.response_body["channel"]
+        assert channel["name"] == "new-channel"
+        assert channel["is_channel"] is True
+        assert channel["is_private"] is False
+        assert channel["is_archived"] is False
+        assert channel["creator"] == "U001"
+        assert channel["members"] == ["U001"]
+        assert channel["num_members"] == 1
+        assert channel["is_member"] is True
+        assert channel["name_normalized"] == "new-channel"
+
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.entity_type == "channel"
+        assert delta.operation == "create"
+        assert delta.fields["name"] == "new-channel"
+
+    async def test_creates_private_channel(self, chat_pack, sample_state):
+        """slack_create_channel can create a private channel."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_create_channel"),
+            {"name": "secret", "is_private": True, "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert proposal.response_body["channel"]["is_private"] is True
+
+    async def test_duplicate_name_error(self, chat_pack, sample_state):
+        """Creating a channel with an existing name returns an error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_create_channel"),
+            {"name": "general", "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "name_taken"
+        assert proposal.proposed_state_deltas == []
+
+
+class TestSlackArchiveChannel:
+    async def test_archives_channel(self, chat_pack, sample_state):
+        """slack_archive_channel sets is_archived to True."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_archive_channel"),
+            {"channel_id": "C001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "update"
+        assert delta.entity_id == "C001"
+        assert delta.fields["is_archived"] is True
+        assert delta.previous_fields["is_archived"] is False
+
+    async def test_archive_nonexistent_channel(self, chat_pack, sample_state):
+        """Archiving a nonexistent channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_archive_channel"),
+            {"channel_id": "C999"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "channel_not_found"
+
+    async def test_archive_already_archived(self, chat_pack, sample_state):
+        """Archiving an already-archived channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_archive_channel"),
+            {"channel_id": "C003"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "already_archived"
+
+
+class TestSlackJoinChannel:
+    async def test_joins_channel(self, chat_pack, sample_state):
+        """slack_join_channel adds user to members and increments num_members."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_join_channel"),
+            {"channel_id": "C002", "user_id": "U003"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        channel = proposal.response_body["channel"]
+        assert "U003" in channel["members"]
+        assert channel["num_members"] == 21
+        assert channel["is_member"] is True
+
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "update"
+        assert "U003" in delta.fields["members"]
+        assert delta.fields["num_members"] == 21
+
+    async def test_join_already_member(self, chat_pack, sample_state):
+        """Joining a channel the user is already in returns success with no deltas."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_join_channel"),
+            {"channel_id": "C001", "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert proposal.proposed_state_deltas == []
+
+    async def test_join_nonexistent_channel(self, chat_pack, sample_state):
+        """Joining a nonexistent channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_join_channel"),
+            {"channel_id": "C999", "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "channel_not_found"
+
+    async def test_join_archived_channel(self, chat_pack, sample_state):
+        """Joining an archived channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_join_channel"),
+            {"channel_id": "C003", "user_id": "U001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "is_archived"
+
+
+class TestSlackSetChannelTopic:
+    async def test_sets_topic(self, chat_pack, sample_state):
+        """slack_set_channel_topic updates the topic on a channel."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_set_channel_topic"),
+            {
+                "channel_id": "C001",
+                "topic": "New topic value",
+                "user_id": "U002",
+            },
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        topic = proposal.response_body["topic"]
+        assert topic["value"] == "New topic value"
+        assert topic["creator"] == "U002"
+        assert isinstance(topic["last_set"], int)
+        assert topic["last_set"] > 0
+
+        assert len(proposal.proposed_state_deltas) == 1
+        delta = proposal.proposed_state_deltas[0]
+        assert delta.operation == "update"
+        assert delta.entity_id == "C001"
+        assert delta.fields["topic"]["value"] == "New topic value"
+        assert delta.previous_fields["topic"]["value"] == "Company-wide announcements"
+
+    async def test_set_topic_nonexistent_channel(self, chat_pack, sample_state):
+        """Setting topic on a nonexistent channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_set_channel_topic"),
+            {"channel_id": "C999", "topic": "whatever"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "channel_not_found"
+
+    async def test_set_topic_archived_channel(self, chat_pack, sample_state):
+        """Setting topic on an archived channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_set_channel_topic"),
+            {"channel_id": "C003", "topic": "whatever"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "is_archived"
+
+
+class TestSlackGetChannelInfo:
+    async def test_returns_channel(self, chat_pack, sample_state):
+        """slack_get_channel_info returns the matching channel."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_get_channel_info"),
+            {"channel_id": "C001"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is True
+        assert proposal.response_body["channel"]["id"] == "C001"
+        assert proposal.response_body["channel"]["name"] == "general"
+        assert proposal.proposed_state_deltas == []
+
+    async def test_channel_not_found(self, chat_pack, sample_state):
+        """Getting info for nonexistent channel returns error."""
+        proposal = await chat_pack.handle_action(
+            ToolName("slack_get_channel_info"),
+            {"channel_id": "C999"},
+            sample_state,
+        )
+        assert proposal.response_body["ok"] is False
+        assert proposal.response_body["error"] == "channel_not_found"
+
+
+class TestResponseFormatConsistency:
+    """P2: Verify all responses follow Slack's ok/error format."""
+
+    async def test_all_success_responses_have_ok_true(self, chat_pack, sample_state):
+        """All successful tool calls return ok: true."""
+        success_calls = [
+            ("slack_list_channels", {}),
+            ("slack_get_channel_history", {"channel_id": "C001"}),
+            ("slack_get_thread_replies", {"channel_id": "C001", "thread_ts": "1700000001.000001"}),
+            ("slack_get_users", {}),
+            ("slack_get_user_profile", {"user_id": "U001"}),
+            ("slack_post_message", {"channel_id": "C001", "text": "hi"}),
+            ("slack_get_channel_info", {"channel_id": "C001"}),
+        ]
+        for tool_name, params in success_calls:
+            proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)
+            assert proposal.response_body["ok"] is True, f"{tool_name} did not return ok: true"
+
+    async def test_all_error_responses_have_ok_false_and_error(self, chat_pack, sample_state):
+        """All error responses return ok: false and an error string."""
+        error_calls = [
+            ("slack_add_reaction", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
+            ("slack_remove_reaction", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
+            ("slack_get_user_profile", {"user_id": "NOTEXIST"}),
+            ("slack_update_message", {"channel_id": "C001", "ts": "xxx", "text": "t"}),
+            ("slack_delete_message", {"channel_id": "C001", "ts": "xxx"}),
+            ("slack_archive_channel", {"channel_id": "C999"}),
+            ("slack_join_channel", {"channel_id": "C999"}),
+            ("slack_set_channel_topic", {"channel_id": "C999", "topic": "t"}),
+            ("slack_get_channel_info", {"channel_id": "C999"}),
+        ]
+        for tool_name, params in error_calls:
+            proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)
+            assert proposal.response_body["ok"] is False, f"{tool_name} did not return ok: false"
+            assert "error" in proposal.response_body, f"{tool_name} missing 'error' key in response"
+            assert isinstance(proposal.response_body["error"], str), (
+                f"{tool_name} error is not a string"
+            )
+
+    async def test_pagination_responses_have_response_metadata(self, chat_pack, sample_state):
+        """Paginated endpoints include response_metadata with next_cursor."""
+        paginated_calls = [
+            ("slack_list_channels", {"limit": 1}),
+            ("slack_get_channel_history", {"channel_id": "C001", "limit": 1}),
+            ("slack_get_users", {"limit": 1}),
+        ]
+        for tool_name, params in paginated_calls:
+            proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)
+            body = proposal.response_body
+            assert "response_metadata" in body, f"{tool_name} missing response_metadata"
+            assert "next_cursor" in body["response_metadata"], (
+                f"{tool_name} missing next_cursor in response_metadata"
+            )

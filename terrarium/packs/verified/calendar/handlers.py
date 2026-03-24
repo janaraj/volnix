@@ -16,6 +16,27 @@ from typing import Any
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import EntityId, StateDelta
 
+# ---------------------------------------------------------------------------
+# Google Calendar-style error response helper
+# ---------------------------------------------------------------------------
+
+
+def _gcal_error(code: int, message: str) -> dict[str, Any]:
+    """Return a Google Calendar-format error response body."""
+    return {
+        "error": {
+            "code": code,
+            "message": message,
+            "errors": [
+                {
+                    "domain": "calendar",
+                    "reason": "notFound" if code == 404 else "invalid",
+                    "message": message,
+                }
+            ],
+        }
+    }
+
 
 def _new_id(prefix: str) -> str:
     """Generate a unique ID with the given prefix."""
@@ -25,6 +46,11 @@ def _new_id(prefix: str) -> str:
 def _now_iso() -> str:
     """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(UTC).isoformat()
+
+
+def _new_etag() -> str:
+    """Generate a new ETag value."""
+    return f'"{uuid.uuid4().hex[:16]}"'
 
 
 def _get_event_datetime(event: dict[str, Any]) -> str:
@@ -45,17 +71,26 @@ async def handle_create_calendar_event(
     """
     event_id = _new_id("evt")
     now = _now_iso()
+    etag = _new_etag()
 
     event_fields: dict[str, Any] = {
         "id": event_id,
+        "etag": etag,
+        "kind": "calendar#event",
+        "iCalUID": f"{event_id}@google.com",
         "summary": input_data["summary"],
         "description": input_data.get("description", ""),
         "location": input_data.get("location", ""),
         "start": input_data["start"],
         "end": input_data["end"],
         "status": "confirmed",
+        "transparency": "opaque",
+        "visibility": "default",
         "organizer": input_data.get("organizer", {}),
         "attendees": [],
+        "guestsCanModify": False,
+        "guestsCanInviteOthers": True,
+        "guestsCanSeeOtherGuests": True,
         "recurrence": [],
         "reminders": {"useDefault": True, "overrides": []},
         "created": now,
@@ -85,6 +120,8 @@ async def handle_create_calendar_event(
             "responseStatus": "needsAction",
             "optional": att.get("optional", False),
             "organizer": att.get("organizer", False),
+            "comment": "",
+            "additionalGuests": 0,
         }
         deltas.append(
             StateDelta(
@@ -161,7 +198,7 @@ async def handle_get_calendar_event(
 
     if event is None:
         return ResponseProposal(
-            response_body={"error": f"Event '{event_id}' not found"},
+            response_body=_gcal_error(404, f"Event '{event_id}' not found"),
         )
 
     # Attach attendees from state
@@ -182,8 +219,10 @@ async def handle_update_calendar_event(
     """Handle the ``update_calendar_event`` action.
 
     Finds event by id and updates provided fields.  For status changes,
-    includes previous_fields.  If attendees are provided, creates new
-    attendee entities.  Produces 1 event update delta + N attendee create deltas.
+    includes previous_fields.  If attendees are provided, checks for
+    existing attendees by event_id+email to UPDATE instead of CREATE
+    (fixes attendee duplication bug).  Produces 1 event update delta +
+    N attendee create/update deltas.
     """
     event_id = input_data["eventId"]
     events = state.get("events", [])
@@ -196,13 +235,13 @@ async def handle_update_calendar_event(
 
     if event is None:
         return ResponseProposal(
-            response_body={"error": f"Event '{event_id}' not found"},
+            response_body=_gcal_error(404, f"Event '{event_id}' not found"),
         )
 
     now = _now_iso()
 
     # Build the update fields
-    update_fields: dict[str, Any] = {"updated": now}
+    update_fields: dict[str, Any] = {"updated": now, "etag": _new_etag()}
     previous_fields: dict[str, Any] = {}
 
     updatable_keys = ["summary", "description", "location", "start", "end", "status"]
@@ -222,29 +261,69 @@ async def handle_update_calendar_event(
         ),
     ]
 
-    # If attendees are provided, create new attendee entities
+    # If attendees are provided, check for duplicates before creating
     input_attendees = input_data.get("attendees", [])
+    existing_attendees = state.get("attendees", [])
     attendee_records: list[dict[str, Any]] = []
+
+    # Build lookup of existing attendees by (event_id, email)
+    existing_by_email: dict[str, dict[str, Any]] = {}
+    for att in existing_attendees:
+        if att.get("event_id") == event_id:
+            existing_by_email[att.get("email", "")] = att
+
     for att in input_attendees:
-        att_id = _new_id("att")
-        att_fields: dict[str, Any] = {
-            "id": att_id,
-            "event_id": event_id,
-            "email": att["email"],
-            "displayName": att.get("displayName", ""),
-            "responseStatus": "needsAction",
-            "optional": att.get("optional", False),
-            "organizer": att.get("organizer", False),
-        }
-        deltas.append(
-            StateDelta(
-                entity_type="attendee",
-                entity_id=EntityId(att_id),
-                operation="create",
-                fields=att_fields,
-            ),
-        )
-        attendee_records.append(att_fields)
+        email = att["email"]
+        existing_att = existing_by_email.get(email)
+
+        if existing_att is not None:
+            # UPDATE existing attendee instead of creating a duplicate
+            att_id = existing_att["id"]
+            att_update_fields: dict[str, Any] = {}
+            att_prev_fields: dict[str, Any] = {}
+
+            if att.get("displayName") and att["displayName"] != existing_att.get("displayName"):
+                att_prev_fields["displayName"] = existing_att.get("displayName", "")
+                att_update_fields["displayName"] = att["displayName"]
+
+            # Reset responseStatus to needsAction on re-invite
+            att_update_fields["responseStatus"] = "needsAction"
+            att_prev_fields["responseStatus"] = existing_att.get("responseStatus", "needsAction")
+
+            if att_update_fields:
+                deltas.append(
+                    StateDelta(
+                        entity_type="attendee",
+                        entity_id=EntityId(att_id),
+                        operation="update",
+                        fields=att_update_fields,
+                        previous_fields=att_prev_fields if att_prev_fields else None,
+                    ),
+                )
+            attendee_records.append({**existing_att, **att_update_fields})
+        else:
+            # CREATE new attendee
+            att_id = _new_id("att")
+            att_fields: dict[str, Any] = {
+                "id": att_id,
+                "event_id": event_id,
+                "email": email,
+                "displayName": att.get("displayName", ""),
+                "responseStatus": "needsAction",
+                "optional": att.get("optional", False),
+                "organizer": att.get("organizer", False),
+                "comment": "",
+                "additionalGuests": 0,
+            }
+            deltas.append(
+                StateDelta(
+                    entity_type="attendee",
+                    entity_id=EntityId(att_id),
+                    operation="create",
+                    fields=att_fields,
+                ),
+            )
+            attendee_records.append(att_fields)
 
     # Build response with updated fields
     response_event = {**event, **update_fields}
@@ -277,7 +356,7 @@ async def handle_delete_calendar_event(
 
     if event is None:
         return ResponseProposal(
-            response_body={"error": f"Event '{event_id}' not found"},
+            response_body=_gcal_error(404, f"Event '{event_id}' not found"),
         )
 
     now = _now_iso()
@@ -316,10 +395,12 @@ async def handle_search_calendar_events(
     filtered = [e for e in events if e.get("calendarId") == calendar_id]
     results = []
     for e in filtered:
-        searchable = " ".join([
-            e.get("summary", ""),
-            e.get("description", ""),
-        ]).lower()
+        searchable = " ".join(
+            [
+                e.get("summary", ""),
+                e.get("description", ""),
+            ]
+        ).lower()
         if query in searchable:
             results.append(e)
 
@@ -350,4 +431,81 @@ async def handle_list_calendars(
             "kind": "calendar#calendarList",
             "items": calendars,
         },
+    )
+
+
+async def handle_get_calendar(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``get_calendar`` action.
+
+    Finds a single calendar by ID. No state mutations.
+    """
+    calendar_id = input_data["calendarId"]
+    calendars = state.get("calendars", [])
+
+    for cal in calendars:
+        if cal.get("id") == calendar_id:
+            return ResponseProposal(response_body=cal)
+
+    return ResponseProposal(
+        response_body=_gcal_error(404, f"Calendar '{calendar_id}' not found"),
+    )
+
+
+async def handle_rsvp_calendar_event(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``rsvp_calendar_event`` action.
+
+    Finds the attendee by event_id + email and updates their responseStatus.
+    Valid statuses: accepted, declined, tentative.
+    """
+    event_id = input_data["eventId"]
+    email = input_data["email"]
+    new_status = input_data["responseStatus"]
+
+    # Verify event exists
+    events = state.get("events", [])
+    event: dict[str, Any] | None = None
+    for e in events:
+        if e.get("id") == event_id:
+            event = e
+            break
+
+    if event is None:
+        return ResponseProposal(
+            response_body=_gcal_error(404, f"Event '{event_id}' not found"),
+        )
+
+    # Find the attendee
+    attendees = state.get("attendees", [])
+    target_att: dict[str, Any] | None = None
+    for att in attendees:
+        if att.get("event_id") == event_id and att.get("email") == email:
+            target_att = att
+            break
+
+    if target_att is None:
+        return ResponseProposal(
+            response_body=_gcal_error(404, f"Attendee '{email}' not found for event '{event_id}'"),
+        )
+
+    old_status = target_att.get("responseStatus", "needsAction")
+
+    delta = StateDelta(
+        entity_type="attendee",
+        entity_id=EntityId(target_att["id"]),
+        operation="update",
+        fields={"responseStatus": new_status},
+        previous_fields={"responseStatus": old_status},
+    )
+
+    response_att = {**target_att, "responseStatus": new_status}
+
+    return ResponseProposal(
+        response_body=response_att,
+        proposed_state_deltas=[delta],
     )

@@ -2,7 +2,7 @@
 
 Provides the canonical tool surface for scheduling services:
 list events, get event, create event, update event, delete event,
-search events, and list calendars.
+search events, list calendars, get calendar, RSVP event.
 """
 
 from __future__ import annotations
@@ -15,9 +15,11 @@ from terrarium.packs.base import ActionHandler, ServicePack
 from terrarium.packs.verified.calendar.handlers import (
     handle_create_calendar_event,
     handle_delete_calendar_event,
+    handle_get_calendar,
     handle_get_calendar_event,
     handle_list_calendar_events,
     handle_list_calendars,
+    handle_rsvp_calendar_event,
     handle_search_calendar_events,
     handle_update_calendar_event,
 )
@@ -38,7 +40,7 @@ class CalendarPack(ServicePack):
 
     Tools: list_calendar_events, get_calendar_event, create_calendar_event,
     update_calendar_event, delete_calendar_event, search_calendar_events,
-    list_calendars.
+    list_calendars, get_calendar, rsvp_calendar_event.
     """
 
     pack_name: ClassVar[str] = "calendar"
@@ -53,6 +55,8 @@ class CalendarPack(ServicePack):
         "delete_calendar_event": handle_delete_calendar_event,
         "search_calendar_events": handle_search_calendar_events,
         "list_calendars": handle_list_calendars,
+        "get_calendar": handle_get_calendar,
+        "rsvp_calendar_event": handle_rsvp_calendar_event,
     }
 
     def get_tools(self) -> list[dict]:

@@ -32,25 +32,92 @@ def _now_ts() -> str:
     return f"{_now_unix()}.{uuid.uuid4().hex[:6]}"
 
 
+def _error_response(error: str) -> ResponseProposal:
+    """Return a standardized Slack error response."""
+    return ResponseProposal(
+        response_body={
+            "ok": False,
+            "error": error,
+        },
+    )
+
+
+def _paginate(
+    items: list[Any],
+    limit: int,
+    cursor: str | None,
+) -> tuple[list[Any], dict[str, str]]:
+    """Apply cursor-based pagination to a list of items.
+
+    Returns:
+        A tuple of (page_items, response_metadata) where response_metadata
+        contains ``next_cursor`` (empty string if no more pages).
+    """
+    start = 0
+    if cursor:
+        # Cursor format: "idx:<integer>"
+        try:
+            start = int(cursor.split(":", 1)[1])
+        except (IndexError, ValueError):
+            start = 0
+
+    page = items[start : start + limit]
+    next_start = start + limit
+    next_cursor = f"idx:{next_start}" if next_start < len(items) else ""
+
+    return page, {"next_cursor": next_cursor}
+
+
+def _find_channel(state: dict[str, Any], channel_id: str) -> dict[str, Any] | None:
+    """Find a channel by ID in state."""
+    channels: list[dict[str, Any]] = state.get("channels", [])
+    for ch in channels:
+        if ch.get("id") == channel_id:
+            return ch
+    return None
+
+
+def _find_message(state: dict[str, Any], channel_id: str, ts: str) -> dict[str, Any] | None:
+    """Find a message by channel_id and ts in state."""
+    messages: list[dict[str, Any]] = state.get("messages", [])
+    for msg in messages:
+        if msg.get("ts") == ts and msg.get("channel") == channel_id:
+            return msg
+    return None
+
+
+# ---------------------------------------------------------------------------
+# List channels
+# ---------------------------------------------------------------------------
+
+
 async def handle_slack_list_channels(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     """Handle the ``slack_list_channels`` action.
 
-    Returns channels from state, limited by the ``limit`` parameter.
+    Returns channels from state with cursor-based pagination.
     No state mutations.
     """
     channels = state.get("channels", [])
     limit = input_data.get("limit", 100)
-    limited = channels[:limit]
+    cursor = input_data.get("cursor")
+
+    page, response_metadata = _paginate(channels, limit, cursor)
 
     return ResponseProposal(
         response_body={
             "ok": True,
-            "channels": limited,
+            "channels": page,
+            "response_metadata": response_metadata,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Post message
+# ---------------------------------------------------------------------------
 
 
 async def handle_slack_post_message(
@@ -71,9 +138,14 @@ async def handle_slack_post_message(
         "user": input_data.get("user_id", "unknown"),
         "text": text,
         "type": "message",
+        "subtype": None,
         "thread_ts": None,
         "reply_count": 0,
         "reactions": [],
+        "edited": None,
+        "bot_id": None,
+        "app_id": None,
+        "blocks": None,
     }
 
     delta = StateDelta(
@@ -92,6 +164,97 @@ async def handle_slack_post_message(
         },
         proposed_state_deltas=[delta],
     )
+
+
+# ---------------------------------------------------------------------------
+# Update message
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_update_message(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_update_message`` action.
+
+    Finds a message by channel_id + ts, updates the text field,
+    and sets the ``edited`` metadata.
+    """
+    channel_id = input_data["channel_id"]
+    ts = input_data["ts"]
+    new_text = input_data["text"]
+    user_id = input_data.get("user_id", "unknown")
+
+    target_msg = _find_message(state, channel_id, ts)
+    if target_msg is None:
+        return _error_response("message_not_found")
+
+    edit_ts = _now_ts()
+    edited = {"user": user_id, "ts": edit_ts}
+
+    delta = StateDelta(
+        entity_type="message",
+        entity_id=EntityId(ts),
+        operation="update",
+        fields={"text": new_text, "edited": edited},
+        previous_fields={
+            "text": target_msg.get("text", ""),
+            "edited": target_msg.get("edited"),
+        },
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "channel": channel_id,
+            "ts": ts,
+            "text": new_text,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Delete message
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_delete_message(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_delete_message`` action.
+
+    Finds a message by channel_id + ts and deletes it.
+    """
+    channel_id = input_data["channel_id"]
+    ts = input_data["ts"]
+
+    target_msg = _find_message(state, channel_id, ts)
+    if target_msg is None:
+        return _error_response("message_not_found")
+
+    delta = StateDelta(
+        entity_type="message",
+        entity_id=EntityId(ts),
+        operation="delete",
+        fields={},
+        previous_fields=dict(target_msg),
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "channel": channel_id,
+            "ts": ts,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reply to thread
+# ---------------------------------------------------------------------------
 
 
 async def handle_slack_reply_to_thread(
@@ -114,9 +277,14 @@ async def handle_slack_reply_to_thread(
         "user": input_data.get("user_id", "unknown"),
         "text": text,
         "type": "message",
+        "subtype": None,
         "thread_ts": thread_ts,
         "reply_count": 0,
         "reactions": [],
+        "edited": None,
+        "bot_id": None,
+        "app_id": None,
+        "blocks": None,
     }
 
     deltas: list[StateDelta] = [
@@ -155,6 +323,11 @@ async def handle_slack_reply_to_thread(
     )
 
 
+# ---------------------------------------------------------------------------
+# Add reaction
+# ---------------------------------------------------------------------------
+
+
 async def handle_slack_add_reaction(
     input_data: dict[str, Any],
     state: dict[str, Any],
@@ -169,20 +342,9 @@ async def handle_slack_add_reaction(
     reaction = input_data["reaction"]
     user_id = input_data.get("user_id", "unknown")
 
-    messages = state.get("messages", [])
-    target_msg: dict[str, Any] | None = None
-    for msg in messages:
-        if msg.get("ts") == timestamp and msg.get("channel") == channel_id:
-            target_msg = msg
-            break
-
+    target_msg = _find_message(state, channel_id, timestamp)
     if target_msg is None:
-        return ResponseProposal(
-            response_body={
-                "ok": False,
-                "error": "message_not_found",
-            },
-        )
+        return _error_response("message_not_found")
 
     # Deep-copy reactions so we don't mutate the original state.
     reactions: list[dict[str, Any]] = [dict(r) for r in target_msg.get("reactions", [])]
@@ -196,12 +358,7 @@ async def handle_slack_add_reaction(
 
     if existing is not None:
         if user_id in existing.get("users", []):
-            return ResponseProposal(
-                response_body={
-                    "ok": False,
-                    "error": "already_reacted",
-                },
-            )
+            return _error_response("already_reacted")
         existing["users"] = [*existing.get("users", []), user_id]
         existing["count"] = existing.get("count", 0) + 1
     else:
@@ -229,29 +386,109 @@ async def handle_slack_add_reaction(
     )
 
 
+# ---------------------------------------------------------------------------
+# Remove reaction
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_remove_reaction(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_remove_reaction`` action.
+
+    Removes an emoji reaction from the target message. Returns an error
+    if the reaction or user is not found.
+    """
+    channel_id = input_data["channel_id"]
+    timestamp = input_data["timestamp"]
+    reaction = input_data["reaction"]
+    user_id = input_data.get("user_id", "unknown")
+
+    target_msg = _find_message(state, channel_id, timestamp)
+    if target_msg is None:
+        return _error_response("message_not_found")
+
+    # Deep-copy reactions so we don't mutate the original state.
+    reactions: list[dict[str, Any]] = [dict(r) for r in target_msg.get("reactions", [])]
+
+    # Find the reaction entry.
+    existing: dict[str, Any] | None = None
+    existing_idx: int = -1
+    for idx, r in enumerate(reactions):
+        if r.get("name") == reaction:
+            existing = r
+            existing_idx = idx
+            break
+
+    if existing is None:
+        return _error_response("no_reaction")
+
+    users = list(existing.get("users", []))
+    if user_id not in users:
+        return _error_response("no_reaction")
+
+    users.remove(user_id)
+    if len(users) == 0:
+        # Remove the reaction entry entirely.
+        reactions.pop(existing_idx)
+    else:
+        existing["users"] = users
+        existing["count"] = len(users)
+
+    delta = StateDelta(
+        entity_type="message",
+        entity_id=EntityId(timestamp),
+        operation="update",
+        fields={"reactions": reactions},
+        previous_fields={"reactions": target_msg.get("reactions", [])},
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Get channel history
+# ---------------------------------------------------------------------------
+
+
 async def handle_slack_get_channel_history(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     """Handle the ``slack_get_channel_history`` action.
 
-    Filters messages by channel, sorts by ts descending, applies limit.
-    No state mutations.
+    Filters messages by channel, sorts by ts descending, applies
+    cursor-based pagination. No state mutations.
     """
     channel_id = input_data["channel_id"]
     limit = input_data.get("limit", 10)
+    cursor = input_data.get("cursor")
     messages = state.get("messages", [])
 
     filtered = [m for m in messages if m.get("channel") == channel_id]
     filtered.sort(key=lambda m: m.get("ts", ""), reverse=True)
-    limited = filtered[:limit]
+
+    page, response_metadata = _paginate(filtered, limit, cursor)
 
     return ResponseProposal(
         response_body={
             "ok": True,
-            "messages": limited,
+            "messages": page,
+            "has_more": response_metadata["next_cursor"] != "",
+            "response_metadata": response_metadata,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Get thread replies
+# ---------------------------------------------------------------------------
 
 
 async def handle_slack_get_thread_replies(
@@ -261,7 +498,7 @@ async def handle_slack_get_thread_replies(
     """Handle the ``slack_get_thread_replies`` action.
 
     Returns all messages belonging to a thread (matching thread_ts),
-    sorted by ts ascending.  No state mutations.
+    sorted by ts ascending. No state mutations.
     """
     thread_ts = input_data["thread_ts"]
     messages = state.get("messages", [])
@@ -278,25 +515,38 @@ async def handle_slack_get_thread_replies(
     )
 
 
+# ---------------------------------------------------------------------------
+# Get users
+# ---------------------------------------------------------------------------
+
+
 async def handle_slack_get_users(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     """Handle the ``slack_get_users`` action.
 
-    Returns users from state, limited by the ``limit`` parameter.
+    Returns users from state with cursor-based pagination.
     No state mutations.
     """
     users = state.get("users", [])
     limit = input_data.get("limit", 100)
-    limited = users[:limit]
+    cursor = input_data.get("cursor")
+
+    page, response_metadata = _paginate(users, limit, cursor)
 
     return ResponseProposal(
         response_body={
             "ok": True,
-            "members": limited,
+            "members": page,
+            "response_metadata": response_metadata,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Get user profile
+# ---------------------------------------------------------------------------
 
 
 async def handle_slack_get_user_profile(
@@ -317,16 +567,253 @@ async def handle_slack_get_user_profile(
             break
 
     if target_user is None:
-        return ResponseProposal(
-            response_body={
-                "ok": False,
-                "error": "user_not_found",
-            },
-        )
+        return _error_response("user_not_found")
 
     return ResponseProposal(
         response_body={
             "ok": True,
             "user": target_user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Create channel
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_create_channel(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_create_channel`` action.
+
+    Creates a new channel entity with the caller as creator and initial member.
+    """
+    name = input_data["name"]
+    is_private = input_data.get("is_private", False)
+    user_id = input_data.get("user_id", "unknown")
+    now = _now_unix()
+
+    # Check for duplicate channel name.
+    for ch in state.get("channels", []):
+        if ch.get("name") == name:
+            return _error_response("name_taken")
+
+    channel_id = _new_id("C")
+    channel_fields: dict[str, Any] = {
+        "id": channel_id,
+        "name": name,
+        "is_channel": True,
+        "is_private": is_private,
+        "is_archived": False,
+        "creator": user_id,
+        "is_member": True,
+        "members": [user_id],
+        "topic": {"value": "", "creator": "", "last_set": 0},
+        "purpose": {"value": "", "creator": "", "last_set": 0},
+        "num_members": 1,
+        "created": now,
+        "unlinked": 0,
+        "name_normalized": name.lower(),
+        "is_shared": False,
+        "is_org_shared": False,
+        "is_general": False,
+    }
+
+    delta = StateDelta(
+        entity_type="channel",
+        entity_id=EntityId(channel_id),
+        operation="create",
+        fields=channel_fields,
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "channel": channel_fields,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Archive channel
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_archive_channel(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_archive_channel`` action.
+
+    Sets is_archived=True on the target channel.
+    """
+    channel_id = input_data["channel_id"]
+    target_channel = _find_channel(state, channel_id)
+
+    if target_channel is None:
+        return _error_response("channel_not_found")
+
+    if target_channel.get("is_archived"):
+        return _error_response("already_archived")
+
+    delta = StateDelta(
+        entity_type="channel",
+        entity_id=EntityId(channel_id),
+        operation="update",
+        fields={"is_archived": True},
+        previous_fields={"is_archived": False},
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Join channel
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_join_channel(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_join_channel`` action.
+
+    Adds the user to the channel's members array and increments num_members.
+    """
+    channel_id = input_data["channel_id"]
+    user_id = input_data.get("user_id", "unknown")
+    target_channel = _find_channel(state, channel_id)
+
+    if target_channel is None:
+        return _error_response("channel_not_found")
+
+    if target_channel.get("is_archived"):
+        return _error_response("is_archived")
+
+    members = list(target_channel.get("members", []))
+    old_num = target_channel.get("num_members", len(members))
+
+    if user_id in members:
+        # Already a member -- Slack returns success with the channel.
+        return ResponseProposal(
+            response_body={
+                "ok": True,
+                "channel": target_channel,
+            },
+        )
+
+    new_members = [*members, user_id]
+    new_num = old_num + 1
+
+    delta = StateDelta(
+        entity_type="channel",
+        entity_id=EntityId(channel_id),
+        operation="update",
+        fields={
+            "members": new_members,
+            "num_members": new_num,
+            "is_member": True,
+        },
+        previous_fields={
+            "members": members,
+            "num_members": old_num,
+            "is_member": target_channel.get("is_member", False),
+        },
+    )
+
+    updated_channel = dict(target_channel)
+    updated_channel["members"] = new_members
+    updated_channel["num_members"] = new_num
+    updated_channel["is_member"] = True
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "channel": updated_channel,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Set channel topic
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_set_channel_topic(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_set_channel_topic`` action.
+
+    Updates the topic value, creator, and last_set timestamp on a channel.
+    """
+    channel_id = input_data["channel_id"]
+    new_topic = input_data["topic"]
+    user_id = input_data.get("user_id", "unknown")
+    now = _now_unix()
+
+    target_channel = _find_channel(state, channel_id)
+    if target_channel is None:
+        return _error_response("channel_not_found")
+
+    if target_channel.get("is_archived"):
+        return _error_response("is_archived")
+
+    old_topic = target_channel.get("topic", {"value": "", "creator": "", "last_set": 0})
+    new_topic_obj = {
+        "value": new_topic,
+        "creator": user_id,
+        "last_set": now,
+    }
+
+    delta = StateDelta(
+        entity_type="channel",
+        entity_id=EntityId(channel_id),
+        operation="update",
+        fields={"topic": new_topic_obj},
+        previous_fields={"topic": old_topic},
+    )
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "topic": new_topic_obj,
+        },
+        proposed_state_deltas=[delta],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Get channel info
+# ---------------------------------------------------------------------------
+
+
+async def handle_slack_get_channel_info(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``slack_get_channel_info`` action.
+
+    Returns detailed information about a single channel.
+    """
+    channel_id = input_data["channel_id"]
+    target_channel = _find_channel(state, channel_id)
+
+    if target_channel is None:
+        return _error_response("channel_not_found")
+
+    return ResponseProposal(
+        response_body={
+            "ok": True,
+            "channel": target_channel,
         },
     )
