@@ -33,7 +33,10 @@ def _mock_llm_route_side_effect():
     - world_compiler / seed_expansion  -> seed modification JSON
     """
     # Counters for unique IDs across calls
-    _entity_counter = {"email": 0, "mailbox": 0, "thread": 0}
+    _entity_counter = {
+        "email": 0, "mailbox": 0, "thread": 0,
+        "gmail_message": 0, "gmail_thread": 0, "gmail_label": 0, "gmail_draft": 0,
+    }
 
     # Reusable seed expansion payload (includes invariants required by
     # the validate-repair-retry pipeline).
@@ -54,8 +57,66 @@ def _mock_llm_route_side_effect():
         # --- Entity generation ---
         if engine_name == "data_generator":
             user = request.user_content.lower()
+            system = (request.system_prompt or "").lower()
 
-            if "email" in user and "mailbox" not in user and "thread" not in user:
+            # Detect entity type from the system prompt ("Generate realistic X entities")
+            import re as _re
+            _et_match = _re.search(r"generate realistic (\w+) entities", system)
+            detected_type = _et_match.group(1) if _et_match else None
+
+            # Gmail-aligned message entities (email pack — namespaced as gmail_message)
+            if detected_type == "gmail_message":
+                count = _parse_count(user, 10)
+                entities = []
+                for i in range(count):
+                    _entity_counter.setdefault("gmail_message", 0)
+                    _entity_counter["gmail_message"] += 1
+                    idx = _entity_counter["gmail_message"]
+                    body_text = f"Body of message {idx}. Please review your request."
+                    entities.append({
+                        "id": f"msg_{idx:03d}",
+                        "threadId": f"thread_{(idx % 3) + 1:03d}",
+                        "labelIds": [["INBOX", "UNREAD"], ["INBOX"], ["SENT"], ["INBOX"]][idx % 4],
+                        "snippet": body_text[:50],
+                        "subject": f"Support ticket #{idx}",
+                        "body": body_text,
+                        "from_addr": f"sender{idx}@acme.com",
+                        "to_addr": f"recipient{idx}@test.com",
+                        "internalDate": f"2026-03-{10 + idx:02d}T09:00:00Z",
+                        "sizeEstimate": len(body_text),
+                    })
+                return LLMResponse(
+                    content=json.dumps(entities),
+                    provider="mock", model="mock", latency_ms=0,
+                )
+
+            # Gmail-aligned thread entities (email pack — namespaced as gmail_thread)
+            if detected_type == "gmail_thread":
+                count = _parse_count(user, 3)
+                entities = []
+                for i in range(count):
+                    _entity_counter.setdefault("gmail_thread", 0)
+                    _entity_counter["gmail_thread"] += 1
+                    idx = _entity_counter["gmail_thread"]
+                    entities.append({
+                        "id": f"thread_{idx:03d}",
+                        "snippet": f"Thread snippet {idx}",
+                        "messages": [f"msg_{idx:03d}"],
+                        "historyId": f"hist_{idx:03d}",
+                    })
+                return LLMResponse(
+                    content=json.dumps(entities),
+                    provider="mock", model="mock", latency_ms=0,
+                )
+
+            # Legacy email entities
+            if detected_type == "email" or (
+                "email" in user and "mailbox" not in user
+                and detected_type not in (
+                    "gmail_message", "gmail_thread", "gmail_label", "gmail_draft",
+                    "message", "thread", "label", "draft",
+                )
+            ):
                 count = _parse_count(user, 10)
                 entities = []
                 for i in range(count):
@@ -77,7 +138,7 @@ def _mock_llm_route_side_effect():
                     provider="mock", model="mock", latency_ms=0,
                 )
 
-            if "mailbox" in user:
+            if detected_type == "mailbox" or ("mailbox" in user and detected_type is None):
                 count = _parse_count(user, 5)
                 entities = []
                 for i in range(count):
@@ -95,10 +156,12 @@ def _mock_llm_route_side_effect():
                     provider="mock", model="mock", latency_ms=0,
                 )
 
-            if "thread" in user:
+            # Legacy thread entities (chat pack or old email pack — thread_id/subject schema)
+            if detected_type == "thread" or ("thread" in user and detected_type is None):
                 count = _parse_count(user, 3)
                 entities = []
                 for i in range(count):
+                    _entity_counter.setdefault("thread", 0)
                     _entity_counter["thread"] += 1
                     idx = _entity_counter["thread"]
                     entities.append({
@@ -113,9 +176,13 @@ def _mock_llm_route_side_effect():
                     provider="mock", model="mock", latency_ms=0,
                 )
 
-            # Fallback for unknown entity types -- return minimal valid list
+            # Fallback for unknown entity types — generate schema-compatible entities
+            # Parse entity type from prompt and generate matching fields
+            count = _parse_count(user, 5)
+            entity_type = detected_type or _extract_entity_type(user)
+            entities = _generate_generic_entities(entity_type, count, _entity_counter)
             return LLMResponse(
-                content=json.dumps([{"id": "unknown_001", "status": "draft"}]),
+                content=json.dumps(entities),
                 provider="mock", model="mock", latency_ms=0,
             )
 
@@ -178,6 +245,198 @@ def _parse_count(text: str, default: int) -> int:
     if m:
         return int(m.group(1))
     return default
+
+
+def _extract_entity_type(text: str) -> str:
+    """Extract entity type from LLM generation prompt."""
+    import re
+    m = re.search(r"generate\s+\d+\s+(\w+)\s+entities", text)
+    if m:
+        return m.group(1)
+    # Try simpler pattern (check longer names first to avoid partial matches)
+    for etype in (
+        "gmail_message", "gmail_thread", "gmail_label", "gmail_draft",
+        "channel", "message", "user", "ticket", "comment", "group",
+        "payment_intent", "charge", "customer", "refund", "invoice", "dispute",
+        "repository", "issue", "pull_request", "commit",
+        "event", "calendar", "attendee", "label", "draft",
+    ):
+        if etype in text:
+            return etype
+    return "unknown"
+
+
+def _generate_generic_entities(
+    entity_type: str, count: int, counters: dict,
+) -> list[dict]:
+    """Generate schema-compatible entities for any entity type."""
+    counters.setdefault(entity_type, 0)
+    entities: list[dict] = []
+    # Entity templates with required fields matching real pack schemas
+    templates: dict[str, callable] = {
+        # Gmail-aligned entity types (email pack)
+        "gmail_message": lambda idx: {
+            "id": f"msg_{idx:03d}",
+            "threadId": f"thread_{(idx % 3) + 1:03d}",
+            "labelIds": [["INBOX", "UNREAD"], ["INBOX"], ["SENT"], ["INBOX"]][idx % 4],
+            "snippet": f"Message snippet {idx}",
+            "subject": f"Support ticket #{idx}",
+            "body": f"Body of message {idx}.",
+            "from_addr": f"sender{idx}@acme.com",
+            "to_addr": f"recipient{idx}@test.com",
+            "internalDate": f"2026-03-{10 + idx:02d}T09:00:00Z",
+            "sizeEstimate": 50,
+        },
+        "gmail_thread": lambda idx: {
+            "id": f"thread_{idx:03d}",
+            "snippet": f"Thread snippet {idx}",
+            "messages": [f"msg_{idx:03d}"],
+            "historyId": f"hist_{idx:03d}",
+        },
+        "gmail_label": lambda idx: {
+            "id": (
+                f"label_{idx:03d}" if idx > 5
+                else ["INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED"][idx - 1]
+            ),
+            "name": (
+                f"Label {idx}" if idx > 5
+                else ["INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED"][idx - 1]
+            ),
+            "type": "user" if idx > 5 else "system",
+        },
+        "gmail_draft": lambda idx: {
+            "id": f"draft_{idx:03d}",
+            "to": f"user{idx}@test.com",
+            "subject": f"Draft {idx}",
+            "body": f"Body {idx}",
+        },
+        # Chat pack entity types
+        "channel": lambda idx: {
+            "id": f"C{idx:03d}", "name": f"channel-{idx}",
+            "is_channel": True, "is_private": False, "is_archived": False,
+            "topic": {"value": ""}, "purpose": {"value": ""},
+            "num_members": idx + 2, "created": 1700000000 + idx,
+        },
+        "message": lambda idx: {
+            "id": f"170000{idx:04d}.{idx:06d}",
+            "ts": f"170000{idx:04d}.{idx:06d}",
+            "channel": "C001", "user": "U001",
+            "text": f"Message {idx}", "type": "message",
+            "reply_count": 0, "reactions": [],
+        },
+        "user": lambda idx: {
+            "id": f"U{idx:03d}", "name": f"user{idx}",
+            "real_name": f"User {idx}", "display_name": f"user{idx}",
+            "email": f"user{idx}@acme.com", "is_bot": False, "is_admin": False,
+            "status_text": "", "status_emoji": "",
+            "role": ["end-user", "agent", "admin"][idx % 3],
+            "active": True,
+            "created_at": f"2026-01-{idx:02d}T00:00:00Z",
+        },
+        "ticket": lambda idx: {
+            "id": f"ticket_{idx:03d}", "subject": f"Ticket {idx}",
+            "description": f"Issue {idx}", "status": "open",
+            "priority": "normal", "requester_id": "U001",
+            "created_at": f"2026-03-{10+idx:02d}T09:00:00Z",
+            "updated_at": f"2026-03-{10+idx:02d}T09:00:00Z",
+        },
+        "comment": lambda idx: {
+            "id": f"comment_{idx:03d}", "ticket_id": f"ticket_001",
+            "author_id": "U001", "body": f"Comment {idx}",
+            "public": True, "created_at": f"2026-03-{10+idx:02d}T09:00:00Z",
+        },
+        "group": lambda idx: {
+            "id": f"group_{idx:03d}", "name": f"Group {idx}",
+            "created_at": f"2026-01-01T00:00:00Z",
+        },
+        "label": lambda idx: {
+            "id": f"label_{idx:03d}" if idx > 5 else ["INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED"][idx - 1],
+            "name": f"Label {idx}" if idx > 5 else ["INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED"][idx - 1],
+            "type": "user" if idx > 5 else "system",
+        },
+        "draft": lambda idx: {
+            "id": f"draft_{idx:03d}",
+            "message": {"to": f"user{idx}@test.com", "subject": f"Draft {idx}", "body": f"Body {idx}"},
+        },
+        "payment_intent": lambda idx: {
+            "id": f"pi_{idx:03d}", "amount": (idx + 1) * 1000,
+            "currency": "usd", "status": "succeeded",
+            "created": 1700000000 + idx,
+        },
+        "customer": lambda idx: {
+            "id": f"cus_{idx:03d}", "name": f"Customer {idx}",
+            "email": f"customer{idx}@test.com", "created": 1700000000 + idx,
+        },
+        "charge": lambda idx: {
+            "id": f"ch_{idx:03d}", "amount": (idx + 1) * 1000,
+            "currency": "usd", "paid": True, "captured": True,
+            "refunded": False, "disputed": False, "created": 1700000000 + idx,
+        },
+        "refund": lambda idx: {
+            "id": f"re_{idx:03d}", "amount": 500,
+            "charge": f"ch_{idx:03d}", "currency": "usd",
+            "status": "succeeded", "created": 1700000000 + idx,
+        },
+        "repository": lambda idx: {
+            "id": f"repo_{idx:03d}", "name": f"repo-{idx}",
+            "full_name": f"org/repo-{idx}", "owner": {"login": "org", "type": "Organization"},
+            "private": False, "default_branch": "main",
+            "created_at": f"2026-01-{idx+1:02d}T00:00:00Z",
+            "updated_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+        },
+        "issue": lambda idx: {
+            "number": idx, "title": f"Issue {idx}", "body": f"Body {idx}",
+            "state": "open", "labels": [], "assignees": [],
+            "user": {"login": "dev1"}, "comments": 0,
+            "created_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+            "updated_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+            "locked": False,
+        },
+        "pull_request": lambda idx: {
+            "number": 100 + idx, "title": f"PR {idx}", "body": f"PR body {idx}",
+            "state": "open", "head": {"ref": f"feature-{idx}", "sha": f"abc{idx}"},
+            "base": {"ref": "main", "sha": "def0"},
+            "user": {"login": "dev1"}, "mergeable": True, "merged": False,
+            "created_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+            "updated_at": f"2026-03-{idx+1:02d}T00:00:00Z",
+        },
+        "commit": lambda idx: {
+            "sha": f"sha{idx:08d}", "message": f"Commit {idx}",
+            "author": {"name": "Dev", "email": "dev@test.com", "date": f"2026-03-{idx+1:02d}T00:00:00Z"},
+            "committer": {"name": "Dev", "email": "dev@test.com", "date": f"2026-03-{idx+1:02d}T00:00:00Z"},
+        },
+        "event": lambda idx: {
+            "id": f"evt_{idx:03d}", "summary": f"Event {idx}",
+            "status": "confirmed",
+            "start": {"dateTime": f"2026-03-{10+idx:02d}T09:00:00Z"},
+            "end": {"dateTime": f"2026-03-{10+idx:02d}T10:00:00Z"},
+            "created": f"2026-01-01T00:00:00Z",
+            "updated": f"2026-01-01T00:00:00Z",
+        },
+        "calendar": lambda idx: {
+            "id": f"cal_{idx:03d}", "summary": f"Calendar {idx}",
+            "timeZone": "America/New_York",
+        },
+        "attendee": lambda idx: {
+            "id": f"att_{idx:03d}", "event_id": f"evt_001",
+            "email": f"attendee{idx}@test.com", "responseStatus": "needsAction",
+        },
+        "invoice": lambda idx: {
+            "id": f"in_{idx:03d}", "customer": "cus_001",
+            "amount_due": (idx + 1) * 500, "currency": "usd",
+            "status": "draft", "created": 1700000000 + idx,
+        },
+        "dispute": lambda idx: {
+            "id": f"dp_{idx:03d}", "charge": f"ch_{idx:03d}",
+            "amount": 1000, "currency": "usd",
+            "status": "needs_response", "created": 1700000000 + idx,
+        },
+    }
+    factory = templates.get(entity_type, lambda idx: {"id": f"{entity_type}_{idx:03d}"})
+    for _ in range(count):
+        counters[entity_type] += 1
+        entities.append(factory(counters[entity_type]))
+    return entities
 
 
 def inject_mock_llm(app) -> AsyncMock:

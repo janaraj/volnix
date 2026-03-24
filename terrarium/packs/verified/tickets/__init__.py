@@ -1,5 +1,5 @@
 """Verified tickets service pack."""
 
-from terrarium.packs.verified.tickets.pack import TicketPack
+from terrarium.packs.verified.tickets.pack import TicketsPack
 
-__all__ = ["TicketPack"]
+__all__ = ["TicketsPack"]

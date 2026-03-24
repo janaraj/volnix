@@ -5,13 +5,6 @@ import pytest
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.verified.email.pack import EmailPack
-from terrarium.packs.verified.email.schemas import (
-    EMAIL_ENTITY_SCHEMA,
-    EMAIL_TOOL_DEFINITIONS,
-    MAILBOX_ENTITY_SCHEMA,
-    THREAD_ENTITY_SCHEMA,
-)
-from terrarium.packs.verified.email.state_machines import EMAIL_TRANSITIONS
 from terrarium.validation.schema import SchemaValidator
 from terrarium.validation.state_machine import StateMachineValidator
 
@@ -68,11 +61,23 @@ class TestEmailPackMetadata:
         assert email_pack.fidelity_tier == 1
 
     def test_tools_count_and_names(self, email_pack):
-        """EmailPack exposes 6 tools with expected names."""
+        """EmailPack exposes 14 tools (8 Gmail + 6 legacy)."""
         tools = email_pack.get_tools()
-        assert len(tools) == 6
+        assert len(tools) == 14
         tool_names = {t["name"] for t in tools}
-        assert tool_names == {
+        # Gmail-aligned
+        assert tool_names >= {
+            "search_gmail_messages",
+            "get_gmail_message",
+            "send_gmail_message",
+            "create_gmail_draft",
+            "modify_gmail_message",
+            "trash_gmail_message",
+            "delete_gmail_message",
+            "list_gmail_labels",
+        }
+        # Legacy (backward compat)
+        assert tool_names >= {
             "email_send",
             "email_list",
             "email_read",
@@ -82,11 +87,16 @@ class TestEmailPackMetadata:
         }
 
     def test_entity_schemas(self, email_pack):
-        """email, mailbox, and thread entity schemas are present."""
+        """Gmail-aligned and legacy entity schemas are present."""
         schemas = email_pack.get_entity_schemas()
+        # Gmail-aligned (namespaced to avoid collision with chat pack)
+        assert "gmail_message" in schemas
+        assert "gmail_thread" in schemas
+        assert "gmail_label" in schemas
+        assert "gmail_draft" in schemas
+        # Legacy (backward compat)
         assert "email" in schemas
         assert "mailbox" in schemas
-        assert "thread" in schemas
 
     def test_state_machines(self, email_pack):
         """Email state machine transitions are present."""
@@ -221,7 +231,7 @@ class TestEmailPackValidation:
         validator = SchemaValidator()
         schemas = email_pack.get_entity_schemas()
 
-        # Valid email entity
+        # Valid legacy email entity
         valid_email = {
             "email_id": "email-xyz",
             "from_addr": "a@b.com",
@@ -238,10 +248,32 @@ class TestEmailPackValidation:
         result2 = validator.validate_entity(valid_mailbox, schemas["mailbox"])
         assert result2.valid, f"Mailbox validation errors: {result2.errors}"
 
-        # Valid thread entity
-        valid_thread = {"thread_id": "t-1", "subject": "Thread subject"}
-        result3 = validator.validate_entity(valid_thread, schemas["thread"])
+        # Valid Gmail-aligned thread entity
+        valid_thread = {"id": "t-1", "snippet": "Thread snippet"}
+        result3 = validator.validate_entity(valid_thread, schemas["gmail_thread"])
         assert result3.valid, f"Thread validation errors: {result3.errors}"
+
+        # Valid Gmail-aligned message entity
+        valid_message = {
+            "id": "msg-1",
+            "threadId": "t-1",
+            "labelIds": ["INBOX"],
+            "snippet": "Hello...",
+            "subject": "Hi",
+            "body": "Hello",
+        }
+        result4 = validator.validate_entity(valid_message, schemas["gmail_message"])
+        assert result4.valid, f"Message validation errors: {result4.errors}"
+
+        # Valid label entity
+        valid_label = {"id": "INBOX", "name": "INBOX"}
+        result5 = validator.validate_entity(valid_label, schemas["gmail_label"])
+        assert result5.valid, f"Label validation errors: {result5.errors}"
+
+        # Valid draft entity
+        valid_draft = {"id": "draft-1"}
+        result6 = validator.validate_entity(valid_draft, schemas["gmail_draft"])
+        assert result6.valid, f"Draft validation errors: {result6.errors}"
 
     def test_state_machines_validate(self, email_pack):
         """Valid transitions pass StateMachineValidator."""

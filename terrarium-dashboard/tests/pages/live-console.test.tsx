@@ -64,10 +64,11 @@ describe('LiveConsolePage', () => {
     });
   });
 
-  it('renders run world_name in header', async () => {
+  it('renders run world_name', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Acme Support Organization')).toBeInTheDocument();
+      // World name appears in header and possibly overview
+      expect(screen.getAllByText('Acme Support Organization').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -95,7 +96,7 @@ describe('LiveConsolePage', () => {
   it('renders disabled control buttons', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Acme Support Organization')).toBeInTheDocument();
+      expect(screen.getByText('Live')).toBeInTheDocument();
     });
     // Both Pause and Stop buttons have the same title
     const buttons = screen.getAllByTitle('Not available in v1');
@@ -152,7 +153,7 @@ describe('LiveConsolePage', () => {
   it('transition banner hidden when run is running', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Acme Support Organization')).toBeInTheDocument();
+      expect(screen.getByText('Live')).toBeInTheDocument();
     });
     expect(screen.queryByText('Run completed')).not.toBeInTheDocument();
   });
@@ -169,6 +170,112 @@ describe('LiveConsolePage', () => {
       expect(screen.getByText('Run completed')).toBeInTheDocument();
     });
     expect(screen.getByText('View report')).toBeInTheDocument();
+  });
+
+  // ── Context View ──────────────────────────────────────────────
+
+  it('default center view shows run overview', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Run Overview')).toBeInTheDocument();
+    });
+  });
+
+  it('run overview shows metric cards', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Tick')).toBeInTheDocument();
+      expect(screen.getByText('Agents')).toBeInTheDocument();
+    });
+  });
+
+  it('click event in feed shows event detail in center', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    // Click the first event row (it's a button)
+    const eventButtons = screen.getAllByText('email_read_inbox');
+    await user.click(eventButtons[0].closest('button')!);
+    await waitFor(() => {
+      expect(screen.getByText(/Event:/)).toBeInTheDocument();
+    });
+  });
+
+  it('event detail shows input/output labels', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
+    await waitFor(() => {
+      expect(screen.getByText('Input')).toBeInTheDocument();
+      expect(screen.getByText('Output')).toBeInTheDocument();
+    });
+  });
+
+  it('close button in context view clears selection', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
+    await waitFor(() => {
+      expect(screen.getByText(/Event:/)).toBeInTheDocument();
+    });
+    await user.click(screen.getByLabelText('Close detail'));
+    await waitFor(() => {
+      expect(screen.getByText('Run Overview')).toBeInTheDocument();
+    });
+  });
+
+  // ── Inspector ────────────────────────────────────────────────
+
+  it('inspector shows run metadata when no actor selected', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Inspector')).toBeInTheDocument();
+    });
+  });
+
+  it('inspector shows services list', async () => {
+    renderPage();
+    await waitFor(() => {
+      // Mock run has 3 services
+      expect(screen.getAllByText(/email|chat|payments/).length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── Agent Selection ─────────────────────────────────────────
+
+  it('selecting event updates inspector to agent mode', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    // Click an event (which also sets selectedActorId via handleSelectEvent)
+    await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
+    // Inspector should switch to agent mode
+    await waitFor(() => {
+      expect(screen.getByText('Agent Inspector')).toBeInTheDocument();
+    });
+  });
+
+  it('inspector updates to agent mode when actor selected', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    // Click an event (which also sets selectedActorId)
+    await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
+    await waitFor(() => {
+      expect(screen.getByText('Agent Inspector')).toBeInTheDocument();
+    });
   });
 
   // ── Error Handling ───────────────────────────────────────────

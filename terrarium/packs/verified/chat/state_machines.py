@@ -1,11 +1,14 @@
-"""State machine definitions for chat entities."""
+"""State machine definitions for chat entities.
+
+Channels use a boolean ``is_archived`` flag rather than status-based
+transitions.  Messages are immutable after creation.  Consequently
+there are no status-driven state machines for this pack.
+"""
 
 from __future__ import annotations
 
-CHANNEL_STATES: list[str] = ["active", "archived", "deleted"]
+CHANNEL_TRANSITIONS: dict[str, list[str]] = {}
+"""No status-based transitions -- channels use is_archived boolean."""
 
-CHANNEL_TRANSITIONS: dict[str, list[str]] = {
-    "active": ["archived", "deleted"],
-    "archived": ["active", "deleted"],
-    "deleted": [],
-}
+MESSAGE_TRANSITIONS: dict[str, list[str]] = {}
+"""Messages are immutable after creation -- no transitions."""

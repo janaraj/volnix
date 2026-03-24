@@ -1,24 +1,34 @@
-"""Tests for terrarium.packs.verified.chat — chat tools, visibility, and state machines."""
+"""Tests for terrarium.packs.verified.chat — backward-compatible smoke tests.
+
+Full test suite lives in tests/packs/verified/test_chat.py.
+"""
+
 import pytest
-import pytest_asyncio
+
 from terrarium.packs.verified.chat.pack import ChatPack
-from terrarium.packs.verified.chat.handlers import handle_chat_send_message
-from terrarium.packs.verified.chat.state_machines import CHANNEL_STATES
 
 
 def test_chat_pack_tools():
-    ...
+    pack = ChatPack()
+    tools = pack.get_tools()
+    assert len(tools) == 8
+
+
+def test_chat_pack_name():
+    pack = ChatPack()
+    assert pack.pack_name == "chat"
+    assert pack.category == "communication"
 
 
 @pytest.mark.asyncio
-async def test_chat_send_message():
-    ...
+async def test_chat_post_message():
+    """Smoke test: posting a message returns a valid proposal."""
+    from terrarium.core.types import ToolName
 
-
-@pytest.mark.asyncio
-async def test_chat_channel_visibility():
-    ...
-
-
-def test_chat_message_state_machine():
-    ...
+    pack = ChatPack()
+    proposal = await pack.handle_action(
+        ToolName("slack_post_message"),
+        {"channel_id": "C001", "text": "Hello world"},
+        {"channels": [{"id": "C001", "name": "general"}], "messages": []},
+    )
+    assert proposal.response_body["ok"] is True

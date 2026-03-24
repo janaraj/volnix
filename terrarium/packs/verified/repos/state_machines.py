@@ -1,14 +1,21 @@
-"""State machine definitions for repository entities."""
+"""State machine definitions for repository entities.
+
+Defines valid state transitions for issues and pull requests.
+"""
 
 from __future__ import annotations
 
-PR_STATES: list[str] = ["draft", "open", "approved", "changes_requested", "merged", "closed"]
+ISSUE_STATES: list[str] = ["open", "closed"]
 
-PR_TRANSITIONS: dict[str, list[str]] = {
-    "draft": ["open", "closed"],
-    "open": ["approved", "changes_requested", "merged", "closed"],
-    "approved": ["merged", "closed"],
-    "changes_requested": ["open", "closed"],
-    "merged": [],
+ISSUE_TRANSITIONS: dict[str, list[str]] = {
+    "open": ["closed"],
     "closed": ["open"],
+}
+
+PULL_REQUEST_STATES: list[str] = ["open", "closed", "merged"]
+
+PULL_REQUEST_TRANSITIONS: dict[str, list[str]] = {
+    "open": ["closed", "merged"],
+    "closed": ["open"],
+    "merged": [],
 }

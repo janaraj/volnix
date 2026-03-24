@@ -1,12 +1,75 @@
 """Entity schemas and tool definitions for the email service pack.
 
+Gmail-aligned schemas and tool definitions following google_workspace_mcp
+naming conventions.  Legacy email_* schemas are kept for backward
+compatibility.
+
 Pure data -- no logic, no imports beyond stdlib.
 """
 
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Entity schemas
+# Gmail-aligned entity schemas
+# ---------------------------------------------------------------------------
+
+MESSAGE_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-terrarium-identity": "id",
+    "required": ["id", "threadId", "labelIds", "snippet", "subject", "body"],
+    "properties": {
+        "id": {"type": "string"},
+        "threadId": {"type": "string", "x-terrarium-ref": "gmail_thread"},
+        "labelIds": {"type": "array", "items": {"type": "string"}},
+        "snippet": {"type": "string"},
+        "subject": {"type": "string"},
+        "body": {"type": "string"},
+        "from_addr": {"type": "string"},
+        "to_addr": {"type": "string"},
+        "internalDate": {"type": "string"},
+        "sizeEstimate": {"type": "integer"},
+    },
+}
+
+THREAD_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-terrarium-identity": "id",
+    "required": ["id", "snippet"],
+    "properties": {
+        "id": {"type": "string"},
+        "snippet": {"type": "string"},
+        "messages": {"type": "array", "items": {"type": "string"}},
+        "historyId": {"type": "string"},
+    },
+}
+
+LABEL_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-terrarium-identity": "id",
+    "required": ["id", "name"],
+    "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "type": {"type": "string", "enum": ["system", "user"]},
+        "messagesTotal": {"type": "integer"},
+        "messagesUnread": {"type": "integer"},
+    },
+}
+
+DRAFT_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-terrarium-identity": "id",
+    "required": ["id"],
+    "properties": {
+        "id": {"type": "string"},
+        "to": {"type": "string"},
+        "subject": {"type": "string"},
+        "body": {"type": "string"},
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Legacy entity schemas (backward compatibility)
 # ---------------------------------------------------------------------------
 
 EMAIL_ENTITY_SCHEMA: dict = {
@@ -23,8 +86,8 @@ EMAIL_ENTITY_SCHEMA: dict = {
             "type": "string",
             "enum": ["draft", "sent", "delivered", "read", "archived", "trashed"],
         },
-        "thread_id": {"type": "string", "x-terrarium-ref": "thread"},
-        "in_reply_to": {"type": "string", "x-terrarium-ref": "email"},
+        "thread_id": {"type": "string"},
+        "in_reply_to": {"type": "string"},
         "timestamp": {"type": "string"},
         "headers": {"type": "object"},
     },
@@ -42,23 +105,144 @@ MAILBOX_ENTITY_SCHEMA: dict = {
     },
 }
 
-THREAD_ENTITY_SCHEMA: dict = {
-    "type": "object",
-    "x-terrarium-identity": "thread_id",
-    "required": ["thread_id", "subject"],
-    "properties": {
-        "thread_id": {"type": "string"},
-        "subject": {"type": "string"},
-        "participants": {"type": "array", "items": {"type": "string"}},
-        "message_count": {"type": "integer", "minimum": 0},
-    },
-}
-
 # ---------------------------------------------------------------------------
-# Tool definitions
+# Gmail-aligned tool definitions (google_workspace_mcp names)
 # ---------------------------------------------------------------------------
 
 EMAIL_TOOL_DEFINITIONS: list[dict] = [
+    {
+        "name": "search_gmail_messages",
+        "description": "Search Gmail messages by query",
+        "http_path": "/gmail/v1/messages",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "q": {
+                    "type": "string",
+                    "description": "Gmail search query",
+                },
+                "labelIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by label IDs",
+                },
+                "maxResults": {
+                    "type": "integer",
+                    "description": "Max messages to return",
+                    "minimum": 1,
+                },
+            },
+        },
+    },
+    {
+        "name": "get_gmail_message",
+        "description": "Get a Gmail message by ID",
+        "http_path": "/gmail/v1/messages/{id}",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "Message ID"},
+            },
+        },
+    },
+    {
+        "name": "send_gmail_message",
+        "description": "Send a Gmail message",
+        "http_path": "/gmail/v1/messages/send",
+        "http_method": "POST",
+        "parameters": {
+            "type": "object",
+            "required": ["to", "subject", "body"],
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email"},
+                "from": {"type": "string", "description": "Sender email"},
+                "subject": {"type": "string", "description": "Subject line"},
+                "body": {"type": "string", "description": "Message body"},
+            },
+        },
+    },
+    {
+        "name": "create_gmail_draft",
+        "description": "Create a Gmail draft",
+        "http_path": "/gmail/v1/drafts",
+        "http_method": "POST",
+        "parameters": {
+            "type": "object",
+            "required": ["to", "subject", "body"],
+            "properties": {
+                "to": {"type": "string"},
+                "subject": {"type": "string"},
+                "body": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "modify_gmail_message",
+        "description": "Modify Gmail message labels",
+        "http_path": "/gmail/v1/messages/{id}/modify",
+        "http_method": "POST",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string"},
+                "addLabelIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "removeLabelIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "name": "trash_gmail_message",
+        "description": "Move a Gmail message to trash",
+        "http_path": "/gmail/v1/messages/{id}/trash",
+        "http_method": "POST",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "Message ID"},
+            },
+        },
+    },
+    {
+        "name": "delete_gmail_message",
+        "description": "Permanently delete a Gmail message",
+        "http_path": "/gmail/v1/messages/{id}",
+        "http_method": "DELETE",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "Message ID"},
+            },
+        },
+    },
+    {
+        "name": "list_gmail_labels",
+        "description": "List all Gmail labels",
+        "http_path": "/gmail/v1/labels",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Legacy tool definitions (backward compatibility)
+# ---------------------------------------------------------------------------
+
+LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "email_send",
         "description": "Send an email message.",
@@ -84,8 +268,14 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
             "type": "object",
             "required": ["mailbox_owner"],
             "properties": {
-                "mailbox_owner": {"type": "string", "description": "Owner of the mailbox to list."},
-                "status_filter": {"type": "string", "description": "Optional status to filter by."},
+                "mailbox_owner": {
+                    "type": "string",
+                    "description": "Owner of the mailbox to list.",
+                },
+                "status_filter": {
+                    "type": "string",
+                    "description": "Optional status to filter by.",
+                },
                 "limit": {
                     "type": "integer",
                     "description": "Max number of emails to return.",
@@ -131,7 +321,10 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
             "type": "object",
             "required": ["email_id", "from_addr", "body"],
             "properties": {
-                "email_id": {"type": "string", "description": "ID of the email to reply to."},
+                "email_id": {
+                    "type": "string",
+                    "description": "ID of the email to reply to.",
+                },
                 "from_addr": {
                     "type": "string",
                     "description": "Sender email address for the reply.",

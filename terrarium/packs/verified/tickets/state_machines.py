@@ -1,14 +1,17 @@
-"""State machine definitions for ticket entities."""
+"""State machine definitions for Zendesk ticket entities.
+
+Defines valid status transitions following the Zendesk ticket lifecycle.
+"""
 
 from __future__ import annotations
 
-TICKET_STATES: list[str] = ["open", "in_progress", "pending", "escalated", "resolved", "closed"]
+TICKET_STATES: list[str] = ["new", "open", "pending", "hold", "solved", "closed"]
 
 TICKET_TRANSITIONS: dict[str, list[str]] = {
-    "open": ["in_progress", "pending", "escalated", "closed"],
-    "in_progress": ["pending", "escalated", "resolved", "closed"],
-    "pending": ["in_progress", "escalated", "closed"],
-    "escalated": ["in_progress", "resolved", "closed"],
-    "resolved": ["open", "closed"],
-    "closed": ["open"],
+    "new": ["open", "pending", "hold", "solved"],
+    "open": ["pending", "hold", "solved"],
+    "pending": ["open", "hold", "solved"],
+    "hold": ["open", "pending", "solved"],
+    "solved": ["open", "closed"],
+    "closed": [],
 }
