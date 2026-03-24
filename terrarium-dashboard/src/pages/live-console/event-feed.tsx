@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownToLine } from 'lucide-react';
 import type { WorldEvent, EventType, Outcome } from '@/types/domain';
 import { EventFeedItem } from '@/pages/live-console/event-feed-item';
@@ -70,11 +71,18 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
     });
   }, [events, outcomeFilter, eventTypeFilter, actorFilter, serviceFilter]);
 
+  const virtualizer = useVirtualizer({
+    count: filteredEvents.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 80,
+    overscan: 10,
+  });
+
   useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (autoScroll && filteredEvents.length > 0) {
+      virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' });
     }
-  }, [filteredEvents.length, autoScroll]);
+  }, [filteredEvents.length, autoScroll, virtualizer]);
 
   function handleScroll() {
     if (!scrollRef.current) return;
@@ -94,8 +102,8 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
           type="button"
           onClick={() => {
             setAutoScroll(true);
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            if (filteredEvents.length > 0) {
+              virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' });
             }
           }}
           className={cn(
@@ -158,21 +166,36 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
         </select>
       </div>
 
-      {/* Scrollable event list */}
+      {/* Virtualized scrollable event list */}
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-auto">
         {filteredEvents.length === 0 ? (
           <EmptyState title="No events" description="Waiting for events..." />
         ) : (
-          <div className="flex flex-col gap-1">
-            {filteredEvents.map((event) => (
-              <EventFeedItem
-                key={event.event_id}
-                event={event}
-                isSelected={selectedEventId === event.event_id}
-                onSelect={onSelectEvent}
-                onSelectActor={onSelectActor}
-              />
-            ))}
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const event = filteredEvents[virtualItem.index];
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  <EventFeedItem
+                    event={event}
+                    isSelected={selectedEventId === event.event_id}
+                    onSelect={onSelectEvent}
+                    onSelectActor={onSelectActor}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

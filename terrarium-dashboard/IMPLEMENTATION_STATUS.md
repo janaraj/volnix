@@ -5,8 +5,8 @@
 
 ## Current Focus
 
-**Phase:** F7 — Polish + Integration (next)
-**Status:** F0-F6 done. ALL 4 pages implemented. 269 tests pass. 0 todos remaining.
+**Phase:** F7 — Complete
+**Status:** F0-F7 done. ALL 4 pages implemented + polished. 292 tests pass. 0 todos remaining.
 
 ---
 
@@ -314,3 +314,44 @@
 | GET | `/api/v1/runs/:id/actors/:aid` | Actor detail with history |
 | GET | `/api/v1/compare?runs=id1,id2` | Run comparison |
 | WS | `/ws/runs/:id/live` | Run-scoped live event stream |
+
+---
+
+## CLI Integration Requirements (for backend team)
+
+The `terrarium dashboard` CLI command should:
+1. Build frontend: `cd terrarium-dashboard && npm run build` → produces `dist/`
+2. Serve `dist/` as static files from the backend server (FastAPI/Uvicorn)
+3. Proxy `/api/v1/*` and `/ws/*` to the Terrarium backend API
+4. Port config from `terrarium.toml` `[dashboard]` section (host: 127.0.0.1, port: 8200)
+5. In development: run `npm run dev` (Vite dev server on port 3000) with proxy to backend
+
+Vite proxy already configured in `vite.config.ts`:
+- `/api` → `http://localhost:8200`
+- `/ws` → `ws://localhost:8200`
+
+---
+
+## Session Log
+
+### F7 — Polish (2026-03-24)
+
+**F7a (quick wins):**
+- Hover states on report agent summary cards (`hover:bg-bg-hover`)
+- Score bar `formula` prop with title hover on scorecard grid cells
+- Layout persistence via Zustand `persist` middleware with safe jsdom fallback
+- Divergence timeline expand/collapse with chevron toggle
+- Keyboard shortcuts: Escape clears selection, ArrowUp/Down navigates events (Live Console + Events tab)
+
+**F7b (substantial):**
+- Responsive PanelLayout: stacks vertically below `md` breakpoint
+- Shape-matched loading skeletons: MetricCards, EventFeed, ScorecardGrid, EntityCard
+- Dialog component with Escape/backdrop close
+- Scorecard cell click → modal showing dimension violations
+- Activity Timeline sparkline (Recharts BarChart with success-rate coloring)
+- Virtualized event feed (`@tanstack/react-virtual`)
+- CLI integration documented (not implemented)
+
+**New files:** `skeletons.tsx`, `dialog.tsx`, `activity-timeline.tsx`
+**New dep:** `@tanstack/react-virtual`
+**Tests:** 292 total (23 new), 33 test files, 0 failures

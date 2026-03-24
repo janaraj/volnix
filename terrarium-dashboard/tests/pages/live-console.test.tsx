@@ -18,6 +18,27 @@ vi.mock('@/providers/services-provider', () => ({
   useWsManager: () => testWs,
 }));
 
+// Recharts ResponsiveContainer requires real DOM dimensions (not available in jsdom)
+vi.mock('@/pages/live-console/activity-timeline', () => ({
+  ActivityTimeline: () => null,
+}));
+
+// Virtualizer requires real DOM dimensions; mock to render all items directly
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, i) => ({
+        key: String(i),
+        index: i,
+        start: i * 80,
+        size: 80,
+      })),
+    getTotalSize: () => count * 80,
+    measureElement: () => {},
+    scrollToIndex: () => {},
+  }),
+}));
+
 beforeAll(() => server.listen());
 beforeEach(() => {
   MockWebSocket.reset();
@@ -275,6 +296,39 @@ describe('LiveConsolePage', () => {
     await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
     await waitFor(() => {
       expect(screen.getByText('Agent Inspector')).toBeInTheDocument();
+    });
+  });
+
+  // ── Keyboard Shortcuts ──────────────────────────────────────
+
+  it('Escape clears selection', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    // Select an event
+    await user.click(screen.getAllByText('email_read_inbox')[0].closest('button')!);
+    await waitFor(() => {
+      expect(screen.getByText(/Event:/)).toBeInTheDocument();
+    });
+    // Press Escape
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.getByText('Run Overview')).toBeInTheDocument();
+    });
+  });
+
+  it('ArrowDown selects first event when nothing selected', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('email_read_inbox').length).toBeGreaterThan(0);
+    });
+    // Press ArrowDown — should select first event
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => {
+      expect(screen.getByText(/Event:/)).toBeInTheDocument();
     });
   });
 

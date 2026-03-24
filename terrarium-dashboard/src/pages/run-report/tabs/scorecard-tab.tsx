@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ServiceSummary, GovernanceScorecard } from '@/types/domain';
 import { useScorecard } from '@/hooks/queries/use-scorecard';
 import { QueryGuard } from '@/components/feedback/query-guard';
-import { SectionLoading } from '@/components/feedback/section-loading';
 import { EmptyState } from '@/components/feedback/empty-state';
+import { ScorecardGridSkeleton } from '@/components/feedback/skeletons';
+import { Dialog } from '@/components/feedback/dialog';
 import { ServiceBadge } from '@/components/domain/service-badge';
 import { FidelityIndicator } from '@/components/domain/fidelity-indicator';
 import { formatScore } from '@/lib/formatters';
@@ -29,9 +30,9 @@ function formatDimensionName(name: string): string {
 function findScore(
   scorecard: GovernanceScorecard,
   dimensionName: string,
-): number | null {
+): { value: number; formula: string; violations: string[] } | null {
   const found = scorecard.scores.find((s) => s.name === dimensionName);
-  return found ? found.value : null;
+  return found ? { value: found.value, formula: found.formula, violations: found.violations } : null;
 }
 
 const TIER_LABELS: Record<string, string> = {
@@ -49,7 +50,13 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 // ScorecardGrid
 // ---------------------------------------------------------------------------
 
-function ScorecardGrid({ scorecards }: { scorecards: GovernanceScorecard[] }) {
+function ScorecardGrid({
+  scorecards,
+  onCellClick,
+}: {
+  scorecards: GovernanceScorecard[];
+  onCellClick: (dimension: string, actorId: string, violations: string[]) => void;
+}) {
   const { dimensions, actorIds } = useMemo(() => {
     const dimSet = new Set<string>();
     for (const sc of scorecards) {
@@ -92,18 +99,21 @@ function ScorecardGrid({ scorecards }: { scorecards: GovernanceScorecard[] }) {
                 {formatDimensionName(dim)}
               </td>
               {scorecards.map((sc) => {
-                const value = findScore(sc, dim);
+                const score = findScore(sc, dim);
                 return (
                   <td key={sc.actor_id} className="px-3 py-2 text-center">
-                    {value != null ? (
-                      <span
+                    {score != null ? (
+                      <button
+                        type="button"
+                        onClick={() => onCellClick(dim, sc.actor_id, score.violations)}
                         className={cn(
-                          'inline-block rounded px-2 py-0.5 font-mono text-xs',
-                          scoreToColorClass(value),
+                          'inline-block rounded px-2 py-0.5 font-mono text-xs cursor-pointer hover:opacity-80 transition-opacity',
+                          scoreToColorClass(score.value),
                         )}
+                        title={score.formula ? `${formatScore(score.value)} — ${score.formula}` : undefined}
                       >
-                        {formatScore(value)}
-                      </span>
+                        {formatScore(score.value)}
+                      </button>
                     ) : (
                       <span className="text-text-muted">--</span>
                     )}
@@ -210,22 +220,59 @@ function FidelityBasisCard({
 // ScorecardTab
 // ---------------------------------------------------------------------------
 
+interface CellSelection {
+  dimension: string;
+  actorId: string;
+  violations: string[];
+}
+
 export function ScorecardTab({ runId, services }: ScorecardTabProps) {
   const scorecardQuery = useScorecard(runId);
+  const [selected, setSelected] = useState<CellSelection | null>(null);
 
   return (
     <div className="space-y-6">
       <section>
         <h2 className="mb-3 text-lg font-semibold">Scorecard Grid</h2>
-        <QueryGuard query={scorecardQuery} loadingFallback={<SectionLoading />}>
+        <QueryGuard query={scorecardQuery} loadingFallback={<ScorecardGridSkeleton />}>
           {(scorecards) => (
             <div className="space-y-6">
-              <ScorecardGrid scorecards={scorecards} />
+              <ScorecardGrid
+                scorecards={scorecards}
+                onCellClick={(dimension, actorId, violations) =>
+                  setSelected({ dimension, actorId, violations })
+                }
+              />
               <FidelityBasisCard scorecards={scorecards} services={services} />
             </div>
           )}
         </QueryGuard>
       </section>
+
+      <Dialog
+        open={selected != null}
+        onClose={() => setSelected(null)}
+        title={selected ? `${formatDimensionName(selected.dimension)} — ${selected.actorId}` : ''}
+      >
+        {selected && (
+          <div className="space-y-3">
+            {selected.violations.length === 0 ? (
+              <p className="text-sm text-text-muted">No violations recorded for this dimension.</p>
+            ) : (
+              <>
+                <p className="text-xs uppercase text-text-muted">
+                  Violation Events ({selected.violations.length})
+                </p>
+                <ul className="space-y-1">
+                  {selected.violations.map((eid) => (
+                    <li key={eid} className="font-mono text-xs text-text-secondary">{eid}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }

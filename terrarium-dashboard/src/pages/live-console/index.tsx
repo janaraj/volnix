@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import { useRun } from '@/hooks/queries/use-runs';
 import { useRunEvents } from '@/hooks/queries/use-events';
 import { useLiveEvents } from '@/hooks/use-live-events';
+import { useKeyboard } from '@/hooks/use-keyboard';
 import { QueryGuard } from '@/components/feedback/query-guard';
 import { PanelLayout } from '@/components/layout/panel-layout';
 import { RunHeaderBar } from '@/pages/live-console/run-header-bar';
@@ -10,6 +11,7 @@ import { TransitionBanner } from '@/pages/live-console/transition-banner';
 import { EventFeed } from '@/pages/live-console/event-feed';
 import { ContextView } from '@/pages/live-console/context-view';
 import { Inspector } from '@/pages/live-console/inspector';
+import { ActivityTimeline } from '@/pages/live-console/activity-timeline';
 
 export function LiveConsolePage() {
   const { id } = useParams<{ id: string }>();
@@ -40,10 +42,29 @@ export function LiveConsolePage() {
     setSelectedActorId(null);
   }
 
+  const events = eventsQuery.data?.items ?? [];
+
+  useKeyboard({
+    Escape: () => handleClearSelection(),
+    ArrowDown: () => {
+      if (!selectedEventId && events.length > 0) {
+        handleSelectEvent(events[0].event_id);
+      } else if (selectedEventId) {
+        const idx = events.findIndex((e) => e.event_id === selectedEventId);
+        if (idx < events.length - 1) handleSelectEvent(events[idx + 1].event_id);
+      }
+    },
+    ArrowUp: () => {
+      if (selectedEventId) {
+        const idx = events.findIndex((e) => e.event_id === selectedEventId);
+        if (idx > 0) handleSelectEvent(events[idx - 1].event_id);
+      }
+    },
+  });
+
   return (
     <QueryGuard query={runQuery}>
       {(run) => {
-        const events = eventsQuery.data?.items ?? [];
         const eventCount = events.length;
 
         return (
@@ -87,6 +108,12 @@ export function LiveConsolePage() {
                 }
               />
             </div>
+            <ActivityTimeline
+              events={events}
+              onJumpToTick={() => {
+                // Jump-to-tick is visual-only; future: scroll event feed to tick
+              }}
+            />
           </div>
         );
       }}
