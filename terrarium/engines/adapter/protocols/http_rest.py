@@ -170,6 +170,112 @@ class HTTPRestAdapter(ProtocolAdapter):
             reporter = gateway._app.registry.get("reporter")
             return await reporter.generate_condition_report()
 
+        # -- Run management endpoints ------------------------------------------
+
+        @app.post("/api/v1/runs")
+        async def create_run_endpoint(request: StarletteRequest):
+            """Create a new run record."""
+            from starlette.responses import JSONResponse
+
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": "Malformed JSON in request body"},
+                )
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": "Request body must be a JSON object"},
+                )
+            allowed_keys = {
+                "world_def", "config_snapshot", "mode",
+                "reality_preset", "fidelity_mode", "tag",
+            }
+            unexpected = set(body.keys()) - allowed_keys
+            if unexpected:
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "error": f"Unexpected fields: {', '.join(sorted(unexpected))}"
+                    },
+                )
+            try:
+                run_mgr = gateway._app.run_manager
+                run_id = await run_mgr.create_run(**body)
+            except TypeError as exc:
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": f"Invalid input: {exc}"},
+                )
+            return {"run_id": str(run_id)}
+
+        @app.get("/api/v1/runs")
+        async def list_runs_endpoint(
+            limit: int = fastapi.Query(default=20),
+        ):
+            """List recent runs, newest first."""
+            return await gateway._app.run_manager.list_runs(limit=limit)
+
+        @app.get("/api/v1/runs/{run_id}")
+        async def get_run_endpoint(run_id: str):
+            """Get metadata for a specific run."""
+            from terrarium.core.types import RunId as _RId
+            result = await gateway._app.run_manager.get_run(_RId(run_id))
+            if result is None:
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": f"Run not found: {run_id}"},
+                )
+            return result
+
+        @app.post("/api/v1/runs/{run_id}/complete")
+        async def complete_run_endpoint(run_id: str):
+            """Complete a run and save artifacts."""
+            from terrarium.core.types import RunId as _RId
+            return await gateway._app.end_run(_RId(run_id))
+
+        @app.get("/api/v1/runs/{run_id}/artifacts")
+        async def list_artifacts_endpoint(run_id: str):
+            """List artifacts saved for a run."""
+            from terrarium.core.types import RunId as _RId
+            return await gateway._app.artifact_store.list_artifacts(_RId(run_id))
+
+        @app.get("/api/v1/runs/{run_id}/artifacts/{artifact_type}")
+        async def get_artifact_endpoint(run_id: str, artifact_type: str):
+            """Load a specific artifact."""
+            from terrarium.core.types import RunId as _RId
+            result = await gateway._app.artifact_store.load_artifact(
+                _RId(run_id), artifact_type,
+            )
+            if result is None:
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": f"Artifact not found: {artifact_type}"},
+                )
+            return result
+
+        @app.get("/api/v1/diff")
+        async def diff_runs_endpoint(
+            runs: str = fastapi.Query(
+                ..., description="Comma-separated run IDs or tags",
+            ),
+        ):
+            """Compare multiple runs."""
+            run_ids = [r.strip() for r in runs.split(",")]
+            return await gateway._app.diff_runs(run_ids)
+
+        @app.get("/api/v1/diff/governed")
+        async def diff_governed_endpoint(
+            gov: str = fastapi.Query(...),
+            ungov: str = fastapi.Query(...),
+        ):
+            """Specialized governed vs ungoverned comparison."""
+            return await gateway._app.diff_governed_ungoverned(gov, ungov)
+
         # Mount real-world API paths from pack http_path definitions
         await self._mount_pack_routes(app, gateway)
 

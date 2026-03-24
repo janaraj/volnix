@@ -7,7 +7,7 @@ import { createMockCapabilityGap } from './data/gaps';
 import { createMockRunComparison } from './data/comparison';
 
 export const handlers = [
-  http.get('/api/runs', () => {
+  http.get('/api/v1/runs', () => {
     return HttpResponse.json({
       items: createMockRunList(),
       total: 3,
@@ -17,11 +17,11 @@ export const handlers = [
     });
   }),
 
-  http.get('/api/runs/:id', ({ params }) => {
+  http.get('/api/v1/runs/:id', ({ params }) => {
     return HttpResponse.json(createMockRun({ id: params.id as string }));
   }),
 
-  http.get('/api/runs/:id/events', () => {
+  http.get('/api/v1/runs/:id/events', () => {
     return HttpResponse.json({
       items: createMockEventList(),
       total: 10,
@@ -31,15 +31,19 @@ export const handlers = [
     });
   }),
 
-  http.get('/api/runs/:id/events/:eventId', () => {
+  http.get('/api/v1/runs/:id/events/:eventId', () => {
     return HttpResponse.json(createMockEventList()[0]);
   }),
 
-  http.get('/api/runs/:id/scorecard', () => {
-    return HttpResponse.json([createMockScorecard()]);
+  http.get('/api/v1/runs/:id/scorecard', () => {
+    return HttpResponse.json([
+      createMockScorecard({ actor_id: 'agent-alpha', overall_score: 0.9 }),
+      createMockScorecard({ actor_id: 'agent-beta', overall_score: 0.81 }),
+      createMockScorecard({ actor_id: 'collective', overall_score: 0.85 }),
+    ]);
   }),
 
-  http.get('/api/runs/:id/entities', () => {
+  http.get('/api/v1/runs/:id/entities', () => {
     return HttpResponse.json({
       items: [createMockEntity()],
       total: 1,
@@ -49,15 +53,15 @@ export const handlers = [
     });
   }),
 
-  http.get('/api/runs/:id/entities/:entityId', () => {
+  http.get('/api/v1/runs/:id/entities/:entityId', () => {
     return HttpResponse.json(createMockEntity());
   }),
 
-  http.get('/api/runs/:id/gaps', () => {
+  http.get('/api/v1/runs/:id/gaps', () => {
     return HttpResponse.json([createMockCapabilityGap()]);
   }),
 
-  http.get('/api/runs/:id/actors/:actorId', () => {
+  http.get('/api/v1/runs/:id/actors/:actorId', () => {
     return HttpResponse.json({
       actor_id: 'agent-alpha',
       role: 'support-agent',
@@ -69,7 +73,7 @@ export const handlers = [
     });
   }),
 
-  http.get('/api/compare', () => {
+  http.get('/api/v1/compare', () => {
     return HttpResponse.json(createMockRunComparison());
   }),
 ];

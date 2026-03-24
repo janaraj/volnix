@@ -19,3 +19,4 @@ export { useUrlTabs } from './use-url-tabs';
 // Utility hooks
 export { useKeyboard } from './use-keyboard';
 export { useCopyToClipboard } from './use-copy-to-clipboard';
+export { useDebounce } from './use-debounce';

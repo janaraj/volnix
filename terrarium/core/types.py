@@ -148,6 +148,8 @@ class ValidationType(enum.StrEnum):
     CONSISTENCY = "consistency"
     TEMPORAL = "temporal"
     AMOUNT = "amount"
+    SEED = "seed"
+    COUNT = "count"
 
 
 # ---------------------------------------------------------------------------

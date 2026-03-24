@@ -9,19 +9,20 @@ D4b: WorldPlan → Generate → Validate → Populate (next phase)
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
-from datetime import datetime, timezone
-
 from terrarium.core import ActorId, BaseEngine, Event, ServiceId, Timestamp, WorldEvent
-from terrarium.core.errors import CompilerError
+from terrarium.core.errors import CompilerError, WorldGenerationValidationError
 from terrarium.engines.world_compiler.config import WorldCompilerConfig
+from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
 from terrarium.engines.world_compiler.nl_parser import NLParser
 from terrarium.engines.world_compiler.plan import WorldPlan
 from terrarium.engines.world_compiler.service_resolution import CompilerServiceResolver
+from terrarium.engines.world_compiler.validator import SectionValidationResult
 from terrarium.engines.world_compiler.yaml_parser import YAMLParser
-from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
 from terrarium.reality.expander import ConditionExpander
 
 logger = logging.getLogger(__name__)
@@ -135,17 +136,7 @@ class WorldCompilerEngine(BaseEngine):
     # -- D4b: Generation (entity creation + population) -----------------------
 
     async def generate_world(self, plan: WorldPlan) -> dict[str, Any]:
-        """Generate entities from WorldPlan, validate, inject seeds, populate state.
-
-        Full orchestration of compiler steps 4-7:
-          4. GENERATE — entities via LLM + actors via personality generator
-          5. VALIDATE — B1 schema + state machine validation
-          6. INJECT SEEDS — expand NL seeds, apply to entities
-          7. POPULATE — store in StateEngine, register actors, snapshot
-
-        Returns dict with keys: entities, actors, warnings, seeds_processed,
-        snapshot_id, report.
-        """
+        """Generate entities from WorldPlan and snapshot only after hard validation."""
         if not self._llm_router:
             raise CompilerError(
                 "Cannot generate world without LLM. "
@@ -158,48 +149,138 @@ class WorldCompilerEngine(BaseEngine):
         from terrarium.engines.world_compiler.personality_generator import (
             CompilerPersonalityGenerator,
         )
-        from terrarium.engines.world_compiler.seed_processor import CompilerSeedProcessor
         from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+        from terrarium.engines.world_compiler.prompt_templates import SECTION_REPAIR
+        from terrarium.engines.world_compiler.seed_processor import CompilerSeedProcessor
+        from terrarium.engines.world_compiler.validator import CompilerWorldValidator
 
         # Assemble generation context ONCE — shared by all generators
         ctx = WorldGenerationContext(plan)
+        validator = CompilerWorldValidator(
+            collect_all_validation_errors=self._typed_config.collect_all_validation_errors
+        )
+        normalized_schemas = validator.normalize_plan_schemas(plan)
+        state_machines = validator.collect_state_machines(plan)
+        retry_counts: dict[str, int] = {}
+        validation_sections: dict[str, dict[str, Any]] = {}
 
         # Step 4: GENERATE entities
         data_gen = WorldDataGenerator(
             llm_router=self._llm_router,
             seed=plan.seed,
         )
-        all_entities = await data_gen.generate(plan, ctx)
+        all_entities: dict[str, list[dict[str, Any]]] = {}
+        section_specs = {
+            spec.entity_type: spec
+            for spec in data_gen.iter_generation_specs(plan)
+        }
+        for entity_type, spec in section_specs.items():
+            section_entities, section_result = await self._generate_validated_entity_section(
+                spec=spec,
+                ctx=ctx,
+                data_gen=data_gen,
+                validator=validator,
+                normalized_schema=normalized_schemas.get(entity_type),
+                state_machine=state_machines.get(entity_type),
+                repair_template=SECTION_REPAIR,
+            )
+            all_entities[entity_type] = section_entities
+            retry_counts[entity_type] = max(
+                retry_counts.get(entity_type, 0),
+                max(section_result.get("retry_count", 0), 0),
+            )
+            validation_sections[entity_type] = section_result["result"].model_dump(mode="json")
 
         # Step 4b: GENERATE actors with personalities
         personality_gen = CompilerPersonalityGenerator(
             llm_router=self._llm_router,
             seed=plan.seed,
         )
-        actors = await personality_gen.generate_batch(
+        actors = await personality_gen.expand_actor_structure(
             plan.actor_specs,
             plan.conditions,
             ctx,
         )
-
-        # Step 5: VALIDATE
-        warnings = data_gen.validate(all_entities, plan)
-        if warnings:
-            logger.warning(
-                "Entity validation produced %d warnings", len(warnings)
+        role_indices: dict[str, list[int]] = {}
+        for index, actor in enumerate(actors):
+            role_indices.setdefault(actor.role, []).append(index)
+        for role, indices in role_indices.items():
+            count = len(indices)
+            hint = actors[indices[0]].personality_hint or role
+            personalities, role_result = await self._generate_validated_role_batch(
+                role=role,
+                count=count,
+                personality_hint=hint,
+                ctx=ctx,
+                personality_gen=personality_gen,
+                validator=validator,
+                repair_template=SECTION_REPAIR,
             )
+            for offset, actor_index in enumerate(indices):
+                actors[actor_index] = actors[actor_index].model_copy(
+                    update={"personality": personalities[offset]}
+                )
+            role_section = f"actor_role:{role}"
+            retry_counts[role_section] = role_result.get("retry_count", 0)
+            validation_sections[role_section] = role_result["result"].model_dump(mode="json")
+
+        # Step 5: full-world validation before seeds
+        all_entities = await self._repair_world_entity_sections(
+            plan=plan,
+            all_entities=all_entities,
+            actors=actors,
+            validator=validator,
+            data_gen=data_gen,
+            ctx=ctx,
+            section_specs=section_specs,
+            normalized_schemas=normalized_schemas,
+            state_machines=state_machines,
+            repair_template=SECTION_REPAIR,
+            retry_counts=retry_counts,
+            validation_sections=validation_sections,
+        )
 
         # Step 6: INJECT SEEDS
-        seed_processor = CompilerSeedProcessor(llm_router=self._llm_router)
+        seed_processor = CompilerSeedProcessor(llm_router=self._llm_router, seed=plan.seed)
+        applied_seed_invariants: dict[str, list[Any]] = {}
         if plan.seeds:
-            all_entities = await seed_processor.process_all(
-                plan.seeds, all_entities, ctx
-            )
-            # Re-validate after seed injection
-            post_seed_warnings = data_gen.validate(all_entities, plan)
-            warnings.extend(post_seed_warnings)
+            seed_vars = ctx.for_seed_expansion()
+            for index, description in enumerate(plan.seeds):
+                seed_section = f"seed:{index}"
+                all_entities, seed_result = await self._apply_validated_seed_section(
+                    section=seed_section,
+                    description=description,
+                    all_entities=all_entities,
+                    actors=actors,
+                    existing_seed_invariants=applied_seed_invariants,
+                    seed_processor=seed_processor,
+                    validator=validator,
+                    ctx=ctx,
+                    base_vars=seed_vars,
+                    repair_template=SECTION_REPAIR,
+                    schemas=normalized_schemas,
+                )
+                applied_seed_invariants[seed_section] = seed_result["expansion"].invariants
+                retry_counts[seed_section] = seed_result.get("retry_count", 0)
+                validation_sections[seed_section] = seed_result["result"].model_dump(mode="json")
 
-        # Step 7: POPULATE state engine + register actors
+        # Step 7: final validation gate before state/actor side effects
+        final_validation = await validator.validate_world(
+            plan,
+            all_entities,
+            actors=actors,
+            seed_invariants=applied_seed_invariants,
+        )
+        if not final_validation.valid:
+            raise WorldGenerationValidationError(
+                "Generated world failed final validation",
+                context={
+                    "errors": final_validation.errors,
+                    "retry_counts": retry_counts,
+                },
+            )
+
+        # Step 8: POPULATE state engine + register actors
         snapshot_id = None
         state_engine = self._config.get("_state_engine")
         actor_registry = self._config.get("_actor_registry")
@@ -218,7 +299,7 @@ class WorldCompilerEngine(BaseEngine):
             logger.info("Registered %d actors", len(actors))
 
             # Publish actor registration events via bus (BaseEngine.publish)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for actor in actors:
                 event = WorldEvent(
                     event_type="world.actor_registered",
@@ -259,12 +340,18 @@ class WorldCompilerEngine(BaseEngine):
             )
 
         # Build result
+        warnings = list(final_validation.warnings)
         result: dict[str, Any] = {
             "entities": all_entities,
             "actors": actors,
             "warnings": warnings,
             "seeds_processed": len(plan.seeds),
             "snapshot_id": str(snapshot_id) if snapshot_id else None,
+            "validation_report": {
+                "sections": validation_sections,
+                "final_world": final_validation.model_dump(mode="json"),
+            },
+            "retry_counts": retry_counts,
         }
 
         # Generate report
@@ -275,8 +362,8 @@ class WorldCompilerEngine(BaseEngine):
         await self.publish(WorldEvent(
             event_type="world.generation_complete",
             timestamp=Timestamp(
-                world_time=datetime.now(timezone.utc),
-                wall_time=datetime.now(timezone.utc),
+                world_time=datetime.now(UTC),
+                wall_time=datetime.now(UTC),
                 tick=0,
             ),
             actor_id=ActorId("world_compiler"),
@@ -293,6 +380,383 @@ class WorldCompilerEngine(BaseEngine):
         ))
 
         return result
+
+    async def _generate_validated_entity_section(
+        self,
+        *,
+        spec: Any,
+        ctx: WorldGenerationContext,
+        data_gen: Any,
+        validator: Any,
+        normalized_schema: Any,
+        state_machine: dict[str, Any] | None,
+        repair_template: Any,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if normalized_schema is None:
+            raise WorldGenerationValidationError(
+                f"No normalized schema available for entity type '{spec.entity_type}'"
+            )
+
+        entities = await data_gen.generate_section(spec, ctx)
+        retries = 0
+        result = validator.validate_entity_section(
+            spec.entity_type,
+            entities,
+            normalized_schema,
+            state_machine=state_machine,
+            expected_count=spec.count,
+        )
+
+        while not result.valid and retries < self._typed_config.max_section_retries:
+            repaired_payload = await self._repair_section_payload(
+                repair_template=repair_template,
+                ctx=ctx,
+                section_kind="entity_section",
+                section_name=spec.entity_type,
+                failing_payload=entities,
+                validation_errors=result.errors,
+                relevant_schema={
+                    "entity_schema": spec.entity_schema,
+                    "state_machine": state_machine,
+                    "expected_count": spec.count,
+                },
+                output_contract=(
+                    f"JSON array of exactly {spec.count} {spec.entity_type} entities "
+                    "that conform to the provided schema."
+                ),
+            )
+            entities = data_gen.parse_generated_entities(
+                spec.entity_type,
+                repaired_payload,
+                spec.count,
+            )
+            retries += 1
+            result = validator.validate_entity_section(
+                spec.entity_type,
+                entities,
+                normalized_schema,
+                state_machine=state_machine,
+                expected_count=spec.count,
+            )
+
+        if not result.valid:
+            raise WorldGenerationValidationError(
+                f"Entity section '{spec.entity_type}' failed validation",
+                context={"errors": result.errors},
+            )
+
+        return entities, {"retry_count": retries, "result": result}
+
+    async def _generate_validated_role_batch(
+        self,
+        *,
+        role: str,
+        count: int,
+        personality_hint: str,
+        ctx: WorldGenerationContext,
+        personality_gen: Any,
+        validator: Any,
+        repair_template: Any,
+    ) -> tuple[list[Any], dict[str, Any]]:
+        personalities = await personality_gen.generate_role_batch(
+            role=role,
+            count=count,
+            personality_hint=personality_hint,
+            ctx=ctx,
+        )
+        retries = 0
+        result = self._validate_role_personalities(
+            role=role,
+            count=count,
+            personalities=personalities,
+            validator=validator,
+        )
+
+        while not result.valid and retries < self._typed_config.max_section_retries:
+            repaired_payload = await self._repair_section_payload(
+                repair_template=repair_template,
+                ctx=ctx,
+                section_kind="actor_role",
+                section_name=role,
+                failing_payload=[item.model_dump(mode="json") for item in personalities],
+                validation_errors=result.errors,
+                relevant_schema={"role": role, "expected_count": count},
+                output_contract=(
+                    f"JSON array of exactly {count} personality objects for role '{role}'."
+                ),
+            )
+            personalities = personality_gen.parse_role_batch(repaired_payload, count)
+            retries += 1
+            result = self._validate_role_personalities(
+                role=role,
+                count=count,
+                personalities=personalities,
+                validator=validator,
+            )
+
+        if not result.valid:
+            raise WorldGenerationValidationError(
+                f"Actor role '{role}' failed validation",
+                context={"errors": result.errors},
+            )
+
+        return personalities, {"retry_count": retries, "result": result}
+
+    def _validate_role_personalities(
+        self,
+        *,
+        role: str,
+        count: int,
+        personalities: list[Any],
+        validator: Any,
+    ) -> Any:
+        from terrarium.actors.definition import ActorDefinition
+        from terrarium.core.types import ActorId, ActorType
+
+        actors = [
+            ActorDefinition(
+                id=ActorId(f"{role}-{index}"),
+                type=ActorType.HUMAN,
+                role=role,
+                personality=personality,
+            )
+            for index, personality in enumerate(personalities)
+        ]
+        return validator.validate_actor_role(role, actors, expected_count=count)
+
+    async def _repair_world_entity_sections(
+        self,
+        *,
+        plan: WorldPlan,
+        all_entities: dict[str, list[dict[str, Any]]],
+        actors: list[Any],
+        validator: Any,
+        data_gen: Any,
+        ctx: WorldGenerationContext,
+        section_specs: dict[str, Any],
+        normalized_schemas: dict[str, Any],
+        state_machines: dict[str, dict[str, Any]],
+        repair_template: Any,
+        retry_counts: dict[str, int],
+        validation_sections: dict[str, dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        validation = await validator.validate_world(plan, all_entities, actors=actors)
+        while not validation.valid:
+            repairable_sections = [
+                section
+                for section in validation.sections
+                if section in section_specs
+                and retry_counts.get(section, 0) < self._typed_config.max_section_retries
+            ]
+            if not repairable_sections:
+                raise WorldGenerationValidationError(
+                    "Generated world failed cross-section validation",
+                    context={"errors": validation.errors},
+                )
+
+            for section in repairable_sections:
+                spec = section_specs[section]
+                repaired_payload = await self._repair_section_payload(
+                    repair_template=repair_template,
+                    ctx=ctx,
+                    section_kind="entity_section",
+                    section_name=section,
+                    failing_payload=all_entities.get(section, []),
+                    validation_errors=validation.sections[section].errors,
+                    relevant_schema={
+                        "entity_schema": spec.entity_schema,
+                        "state_machine": state_machines.get(section),
+                    },
+                    output_contract=(
+                        f"JSON array of exactly {spec.count} {section} entities "
+                        "that satisfy the schema and validation errors."
+                    ),
+                )
+                all_entities[section] = data_gen.parse_generated_entities(
+                    section,
+                    repaired_payload,
+                    spec.count,
+                )
+                retry_counts[section] = retry_counts.get(section, 0) + 1
+                local_result = validator.validate_entity_section(
+                    section,
+                    all_entities[section],
+                    normalized_schemas[section],
+                    state_machine=state_machines.get(section),
+                    expected_count=spec.count,
+                )
+                validation_sections[section] = local_result.model_dump(mode="json")
+                if not local_result.valid:
+                    raise WorldGenerationValidationError(
+                        f"Entity section '{section}' failed local validation after repair",
+                        context={"errors": local_result.errors},
+                    )
+
+            validation = await validator.validate_world(plan, all_entities, actors=actors)
+
+        return all_entities
+
+    async def _apply_validated_seed_section(
+        self,
+        *,
+        section: str,
+        description: str,
+        all_entities: dict[str, list[dict[str, Any]]],
+        actors: list[Any],
+        existing_seed_invariants: dict[str, list[Any]],
+        seed_processor: Any,
+        validator: Any,
+        ctx: WorldGenerationContext,
+        base_vars: dict[str, str],
+        repair_template: Any,
+        schemas: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+        expansion = await seed_processor.expand_seed(
+            description, all_entities, base_vars, schemas=schemas,
+        )
+        retries = 0
+        result, updated_entities = await self._validate_seed_application(
+            plan=ctx.plan,
+            section=section,
+            expansion=expansion,
+            current_entities=all_entities,
+            actors=actors,
+            seed_processor=seed_processor,
+            validator=validator,
+            existing_seed_invariants=existing_seed_invariants,
+            schemas=schemas,
+        )
+
+        while not result.valid and retries < self._typed_config.max_section_retries:
+            repaired_payload = await self._repair_section_payload(
+                repair_template=repair_template,
+                ctx=ctx,
+                section_kind="seed",
+                section_name=section,
+                failing_payload=expansion.model_dump(mode="json"),
+                validation_errors=result.errors,
+                relevant_schema={"description": description},
+                output_contract=(
+                    "JSON object with entities_to_create, entities_to_modify, and "
+                    "explicit invariants that verify the seed scenario."
+                ),
+            )
+            expansion = seed_processor.parse_expansion(repaired_payload, description)
+            retries += 1
+            result, updated_entities = await self._validate_seed_application(
+                plan=ctx.plan,
+                section=section,
+                expansion=expansion,
+                current_entities=all_entities,
+                actors=actors,
+                seed_processor=seed_processor,
+                validator=validator,
+                existing_seed_invariants=existing_seed_invariants,
+                schemas=schemas,
+            )
+
+        if not result.valid:
+            raise WorldGenerationValidationError(
+                f"Seed section '{section}' failed validation",
+                context={"errors": result.errors},
+            )
+
+        return updated_entities, {
+            "retry_count": retries,
+            "result": result,
+            "expansion": expansion,
+        }
+
+    async def _validate_seed_application(
+        self,
+        *,
+        plan: WorldPlan,
+        section: str,
+        expansion: Any,
+        current_entities: dict[str, list[dict[str, Any]]],
+        actors: list[Any],
+        seed_processor: Any,
+        validator: Any,
+        existing_seed_invariants: dict[str, list[Any]],
+        schemas: dict[str, Any] | None = None,
+    ) -> tuple[Any, dict[str, list[dict[str, Any]]]]:
+        updated_entities = seed_processor.apply_modifications(
+            expansion, current_entities, schemas=schemas,
+        )
+
+        if not expansion.invariants:
+            return (
+                SectionValidationResult(
+                    section=section,
+                    valid=False,
+                    errors=["Seed expansion did not declare invariants"],
+                ),
+                updated_entities,
+            )
+
+        validation = await validator.validate_world(
+            plan,
+            updated_entities,
+            actors=actors,
+            seed_invariants={
+                **existing_seed_invariants,
+                section: expansion.invariants,
+            },
+        )
+        seed_result = validator.validate_seed_invariants(
+            section,
+            expansion.invariants,
+            updated_entities,
+            validator.normalize_plan_schemas(plan),
+        )
+        combined_errors = list(seed_result.errors)
+        for error in validation.errors:
+            if error not in combined_errors:
+                combined_errors.append(error)
+        combined_warnings = list(seed_result.warnings)
+        for warning in validation.warnings:
+            if warning not in combined_warnings:
+                combined_warnings.append(warning)
+
+        return (
+            SectionValidationResult(
+                section=section,
+                valid=len(combined_errors) == 0,
+                errors=combined_errors,
+                warnings=combined_warnings,
+            ),
+            updated_entities,
+        )
+
+    async def _repair_section_payload(
+        self,
+        *,
+        repair_template: Any,
+        ctx: WorldGenerationContext,
+        section_kind: str,
+        section_name: str,
+        failing_payload: Any,
+        validation_errors: list[str],
+        relevant_schema: dict[str, Any],
+        output_contract: str,
+    ) -> Any:
+        response = await repair_template.execute(
+            self._llm_router,
+            _seed=ctx.seed,
+            domain_description=ctx.domain,
+            reality_summary=ctx.reality_summary,
+            behavior_mode=ctx.behavior,
+            behavior_description=ctx.behavior_description,
+            actor_summary=ctx.actor_summary,
+            policies_summary=ctx.policies_summary,
+            section_kind=section_kind,
+            section_name=section_name,
+            validation_errors=json.dumps(validation_errors, indent=2),
+            relevant_schema=json.dumps(relevant_schema, indent=2),
+            output_contract=output_contract,
+            failing_payload=json.dumps(failing_payload, indent=2, default=str),
+        )
+        return repair_template.parse_json_response(response)
 
     async def resolve_service_schema(
         self, service_name: str

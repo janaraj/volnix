@@ -15,7 +15,7 @@ import logging
 from typing import Any, Literal
 
 from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import Personality, FrictionProfile
+from terrarium.actors.personality import FrictionProfile, Personality
 from terrarium.actors.simple_generator import SimpleActorGenerator
 from terrarium.core.errors import CompilerError
 from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
@@ -37,6 +37,38 @@ class CompilerPersonalityGenerator:
         self._router = llm_router
         self._seed = seed
         self._fallback = SimpleActorGenerator(seed=seed)  # For STRUCTURE only
+
+    async def expand_actor_structure(
+        self,
+        actor_specs: list[dict[str, Any]],
+        conditions: WorldConditions,
+        ctx: WorldGenerationContext,
+    ) -> list[ActorDefinition]:
+        """Deterministically expand actor specs into concrete actor structures."""
+        return await self._fallback.generate_batch(
+            actor_specs,
+            conditions,
+            ctx.domain,
+        )
+
+    async def generate_role_batch(
+        self,
+        role: str,
+        count: int,
+        personality_hint: str,
+        ctx: WorldGenerationContext,
+    ) -> list[Personality]:
+        """Generate a single role batch without rebuilding actor structure."""
+        if not self._router:
+            raise CompilerError(
+                "LLM router required for actor generation"
+            )
+        return await self._generate_batch_for_role(
+            role=role,
+            count=count,
+            hint=personality_hint or role,
+            base_vars=ctx.for_personality_batch(),
+        )
 
     async def generate_personality(
         self,
@@ -76,8 +108,14 @@ class CompilerPersonalityGenerator:
             personality_hint=hint or role,
         )
         parsed = PERSONALITY_BATCH.parse_json_response(response)
+        return self.parse_role_batch(parsed, count)
 
-        # Normalize: expect a list
+    def parse_role_batch(
+        self,
+        parsed: Any,
+        count: int,
+    ) -> list[Personality]:
+        """Normalize raw LLM output into concrete personality models."""
         if isinstance(parsed, dict) and "personalities" in parsed:
             items = parsed["personalities"]
         elif isinstance(parsed, list):
@@ -97,8 +135,14 @@ class CompilerPersonalityGenerator:
             ))
 
         # If LLM returned fewer than count, duplicate last to fill
-        while len(personalities) < count:
-            personalities.append(personalities[-1])
+        if len(personalities) < count:
+            logger.warning(
+                "LLM returned %d personalities for role, expected %d — "
+                "duplicating last to fill",
+                len(personalities), count,
+            )
+            while len(personalities) < count:
+                personalities.append(personalities[-1])
 
         return personalities[:count]
 
@@ -131,11 +175,7 @@ class CompilerPersonalityGenerator:
 
         # SimpleActorGenerator provides STRUCTURE: count expansion, friction
         # distribution, type mapping. Deterministic math, NOT heuristic.
-        actors = await self._fallback.generate_batch(
-            actor_specs, conditions, ctx.domain
-        )
-
-        base_vars = ctx.for_personality_batch()
+        actors = await self.expand_actor_structure(actor_specs, conditions, ctx)
 
         # Group actors by role for batch LLM calls (1 call per role)
         actors_by_role: dict[str, list[int]] = {}
@@ -148,11 +188,11 @@ class CompilerPersonalityGenerator:
             count = len(indices)
             hint = actors[indices[0]].personality_hint or role
 
-            personalities = await self._generate_batch_for_role(
+            personalities = await self.generate_role_batch(
                 role=role,
                 count=count,
-                hint=hint,
-                base_vars=base_vars,
+                personality_hint=hint,
+                ctx=ctx,
             )
 
             for j, actor_idx in enumerate(indices):

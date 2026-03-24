@@ -9,7 +9,7 @@ import pytest
 from terrarium.core.errors import EntityNotFoundError
 from terrarium.core.types import EntityId, StateDelta, ValidationType
 from terrarium.validation.consistency import ConsistencyValidator
-
+from terrarium.validation.schema_contracts import normalize_entity_schema
 
 # ---------------------------------------------------------------------------
 # Mock state engine
@@ -158,3 +158,25 @@ async def test_consistency_returns_validation_type(validator):
     state = MockStateEngine({"x": {"id": "x"}})
     result = await validator.validate_entity_exists("thing", EntityId("x"), state)
     assert result.validation_type == ValidationType.CONSISTENCY
+
+
+@pytest.mark.asyncio
+async def test_validate_entity_references_with_normalized_schema(validator):
+    schema = normalize_entity_schema(
+        {
+            "type": "object",
+            "x-terrarium-identity": "ticket_id",
+            "properties": {
+                "ticket_id": {"type": "string"},
+                "customer_id": {"type": "string", "x-terrarium-ref": "customer"},
+            },
+        }
+    )
+    state = MockStateEngine({"cust_1": {"customer_id": "cust_1"}})
+    result = await validator.validate_entity_references(
+        "ticket",
+        {"ticket_id": "t1", "customer_id": "cust_1"},
+        schema,
+        state,
+    )
+    assert result.valid is True

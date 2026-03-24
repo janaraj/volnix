@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from terrarium.core.types import ValidationType
+from terrarium.validation.schema_contracts import TemporalOrderingRule
 from terrarium.validation.temporal import TemporalValidator
 
 
@@ -54,4 +55,16 @@ def test_ordering_wrong(validator):
 def test_ordering_equal(validator):
     t = datetime(2024, 3, 15, 9, 0, 0)
     result = validator.validate_ordering(t, t, "same-time events")
+    assert result.valid is True
+
+
+def test_validate_entity_orderings(validator):
+    result = validator.validate_entity_orderings(
+        "ticket",
+        {
+            "created_at": "2024-01-01T10:00:00",
+            "updated_at": "2024-01-01T11:00:00",
+        },
+        [TemporalOrderingRule(before_field="created_at", after_field="updated_at")],
+    )
     assert result.valid is True

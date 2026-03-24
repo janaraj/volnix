@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
-
-from unittest.mock import AsyncMock
 
 from terrarium.core.errors import CompilerError
 from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
 from terrarium.engines.world_compiler.plan import WorldPlan
 from terrarium.engines.world_compiler.seed_processor import CompilerSeedProcessor
 from terrarium.llm.types import LLMResponse
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -80,6 +78,7 @@ class TestApplyModifications:
         result = proc.apply_modifications(mods, entities)
         assert len(result["email"]) == 3
         assert any(e["id"] == "email_vip" for e in result["email"])
+        assert len(entities["email"]) == 2
 
     def test_modify_existing_entity(self) -> None:
         proc = CompilerSeedProcessor()
@@ -167,6 +166,14 @@ class TestExpandWithLLM:
                             },
                         ],
                         "entities_to_modify": [],
+                        "invariants": [
+                            {
+                                "kind": "count",
+                                "selector": {"entity_type": "email", "match": {}},
+                                "operator": "gte",
+                                "value": 1,
+                            }
+                        ],
                     }
                 ),
                 provider="mock",
@@ -179,5 +186,5 @@ class TestExpandWithLLM:
         mods = await proc.expand_seed(
             "Add VIP email", _make_entities(), base_vars
         )
-        assert len(mods["entities_to_create"]) == 1
-
+        assert len(mods.entities_to_create) == 1
+        assert len(mods.invariants) == 1

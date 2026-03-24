@@ -461,69 +461,6 @@ class TestP16MountedRoutePathParams:
 
 
 # ===========================================================================
-# P1-8: Cross-linking overwrites primary keys
-# ===========================================================================
-
-
-class TestP18CrossLinkPrimaryKeys:
-    """Verify that cross-linking doesn't overwrite primary keys."""
-
-    def test_cross_link_preserves_primary_keys(self):
-        """email_id in an email entity should NOT be cross-linked to itself."""
-        from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
-
-        gen = WorldDataGenerator(llm_router=None, seed=42)
-        all_entities = {
-            "email": [
-                {"id": "e_001", "email_id": "e_001", "customer_id": "c_old"},
-            ],
-            "customer": [
-                {"id": "c_001"},
-            ],
-        }
-        result = gen._cross_link(all_entities)
-
-        # email_id should NOT be changed (it's a primary key of the email entity)
-        assert result["email"][0]["email_id"] == "e_001"
-        # customer_id SHOULD be cross-linked (it's a foreign key to customer)
-        assert result["email"][0]["customer_id"] == "c_001"
-
-    def test_cross_link_does_not_overwrite_thread_id(self):
-        """thread_id in a thread entity should not be cross-linked."""
-        from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
-
-        gen = WorldDataGenerator(llm_router=None, seed=42)
-        all_entities = {
-            "thread": [
-                {"id": "t_001", "thread_id": "t_001"},
-            ],
-        }
-        result = gen._cross_link(all_entities)
-
-        assert result["thread"][0]["thread_id"] == "t_001"
-
-    def test_cross_link_works_for_foreign_keys(self):
-        """Foreign keys pointing to different entity types should still be linked."""
-        from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
-
-        gen = WorldDataGenerator(llm_router=None, seed=42)
-        all_entities = {
-            "email": [
-                {"id": "e_001", "email_id": "e_001", "thread_id": "old_thread"},
-            ],
-            "thread": [
-                {"id": "t_001"},
-            ],
-        }
-        result = gen._cross_link(all_entities)
-
-        # thread_id in email entity IS a foreign key to thread
-        assert result["email"][0]["thread_id"] == "t_001"
-        # email_id in email entity is NOT cross-linked (self-referencing)
-        assert result["email"][0]["email_id"] == "e_001"
-
-
-# ===========================================================================
 # P2-9: ResponseProposal.proposed_events wrong type
 # ===========================================================================
 
