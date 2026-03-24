@@ -134,6 +134,13 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "messages": {"type": "array"},
+                "resultSizeEstimate": {"type": "integer"},
+            },
+        },
     },
     {
         "name": "get_gmail_message",
@@ -147,6 +154,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "id": {"type": "string", "description": "Message ID"},
             },
         },
+        "response_schema": {"type": "object"},
     },
     {
         "name": "send_gmail_message",
@@ -163,6 +171,14 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "body": {"type": "string", "description": "Message body"},
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "threadId": {"type": "string"},
+                "labelIds": {"type": "array", "items": {"type": "string"}},
+            },
+        },
     },
     {
         "name": "create_gmail_draft",
@@ -176,6 +192,13 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "to": {"type": "string"},
                 "subject": {"type": "string"},
                 "body": {"type": "string"},
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "message": {"type": "object"},
             },
         },
     },
@@ -199,6 +222,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {"type": "object"},
     },
     {
         "name": "trash_gmail_message",
@@ -212,6 +236,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "id": {"type": "string", "description": "Message ID"},
             },
         },
+        "response_schema": {"type": "object"},
     },
     {
         "name": "delete_gmail_message",
@@ -225,6 +250,12 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "id": {"type": "string", "description": "Message ID"},
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "deleted": {"type": "boolean"},
+            },
+        },
     },
     {
         "name": "list_gmail_labels",
@@ -234,6 +265,12 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         "parameters": {
             "type": "object",
             "properties": {},
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "labels": {"type": "array"},
+            },
         },
     },
 ]
@@ -256,6 +293,15 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "to_addr": {"type": "string", "description": "Recipient email address."},
                 "subject": {"type": "string", "description": "Email subject line."},
                 "body": {"type": "string", "description": "Email body text."},
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "email_id": {"type": "string"},
+                "thread_id": {"type": "string"},
+                "timestamp": {"type": "string"},
             },
         },
     },
@@ -283,6 +329,13 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "emails": {"type": "array"},
+                "count": {"type": "integer"},
+            },
+        },
     },
     {
         "name": "email_read",
@@ -294,6 +347,12 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
             "required": ["email_id"],
             "properties": {
                 "email_id": {"type": "string", "description": "ID of the email to read."},
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "email": {"type": "object"},
             },
         },
     },
@@ -309,6 +368,13 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "query": {"type": "string", "description": "Free-text search query."},
                 "sender": {"type": "string", "description": "Filter by sender address."},
                 "subject": {"type": "string", "description": "Filter by subject line."},
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "results": {"type": "array"},
+                "count": {"type": "integer"},
             },
         },
     },
@@ -332,6 +398,16 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
                 "body": {"type": "string", "description": "Reply body text."},
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "email_id": {"type": "string"},
+                "thread_id": {"type": "string"},
+                "in_reply_to": {"type": "string"},
+                "timestamp": {"type": "string"},
+            },
+        },
     },
     {
         "name": "email_mark_read",
@@ -347,6 +423,13 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
                     "items": {"type": "string"},
                     "description": "List of email IDs to mark as read.",
                 },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "marked": {"type": "array", "items": {"type": "string"}},
+                "not_found": {"type": "array", "items": {"type": "string"}},
             },
         },
     },

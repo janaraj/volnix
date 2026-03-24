@@ -75,3 +75,4 @@ class LLMConfig(BaseModel):
     defaults: LLMProviderEntry = LLMProviderEntry()
     providers: dict[str, LLMProviderEntry] = {}
     routing: dict[str, LLMRoutingEntry] = {}
+    max_concurrent: int = 10

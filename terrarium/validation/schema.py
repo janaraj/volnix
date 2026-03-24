@@ -61,8 +61,18 @@ class ValidationResult(BaseModel, frozen=True):
         )
 
 
-def _check_type(value: Any, expected_type_str: str) -> bool:
-    """Return True if *value* matches the JSON Schema type string."""
+def _check_type(value: Any, expected_type_str: str | list[str]) -> bool:
+    """Return True if *value* matches the JSON Schema type string.
+
+    Handles union types: ``"type": ["string", "null"]`` means the value
+    can be either a string or null.
+    """
+    # Union type — accept if value matches ANY of the listed types
+    if isinstance(expected_type_str, list):
+        return any(_check_type(value, t) for t in expected_type_str)
+    # Null type — only None matches
+    if expected_type_str == "null":
+        return value is None
     expected = _TYPE_MAP.get(expected_type_str)
     if expected is None:
         return True  # unknown type — accept

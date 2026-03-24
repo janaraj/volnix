@@ -32,7 +32,36 @@ TICKET_ENTITY_SCHEMA: dict = {
         "assignee_id": {"type": "string", "x-terrarium-ref": "user"},
         "requester_id": {"type": "string", "x-terrarium-ref": "user"},
         "group_id": {"type": "string", "x-terrarium-ref": "group"},
+        "organization_id": {"type": "string", "x-terrarium-ref": "organization"},
         "tags": {"type": "array", "items": {"type": "string"}},
+        "custom_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": ["integer", "string"]},
+                    "value": {},
+                },
+            },
+        },
+        "collaborator_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "follower_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "satisfaction_rating": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "string"},
+                "comment": {"type": "string"},
+            },
+        },
+        "problem_id": {"type": "string", "x-terrarium-ref": "ticket"},
+        "external_id": {"type": "string"},
+        "brand_id": {"type": "string"},
         "via": {
             "type": "object",
             "properties": {
@@ -41,7 +70,7 @@ TICKET_ENTITY_SCHEMA: dict = {
         },
         "created_at": {"type": "string"},
         "updated_at": {"type": "string"},
-        "due_at": {"type": "string"},
+        "due_at": {"type": ["string", "null"]},
     },
 }
 
@@ -54,7 +83,20 @@ COMMENT_ENTITY_SCHEMA: dict = {
         "ticket_id": {"type": "string", "x-terrarium-ref": "ticket"},
         "author_id": {"type": "string", "x-terrarium-ref": "user"},
         "body": {"type": "string"},
+        "html_body": {"type": "string"},
         "public": {"type": "boolean", "default": True},
+        "attachments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string"},
+                    "content_url": {"type": "string"},
+                    "size": {"type": "integer"},
+                },
+            },
+        },
+        "audit_id": {"type": "string"},
         "created_at": {"type": "string"},
     },
 }
@@ -73,6 +115,17 @@ USER_ENTITY_SCHEMA: dict = {
         },
         "organization_id": {"type": "string"},
         "active": {"type": "boolean"},
+        "verified": {"type": "boolean"},
+        "external_id": {"type": "string"},
+        "locale": {"type": "string"},
+        "phone": {"type": "string"},
+        "photo": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+            },
+        },
+        "default_group_id": {"type": "string"},
         "created_at": {"type": "string"},
     },
 }
@@ -86,6 +139,27 @@ GROUP_ENTITY_SCHEMA: dict = {
         "name": {"type": "string"},
         "description": {"type": "string"},
         "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
+    },
+}
+
+ORGANIZATION_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-terrarium-identity": "id",
+    "required": ["id", "name"],
+    "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "external_id": {"type": "string"},
+        "domain_names": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "details": {"type": "string"},
+        "notes": {"type": "string"},
+        "group_id": {"type": "string", "x-terrarium-ref": "group"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
     },
 }
 
@@ -126,6 +200,14 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "tickets": {"type": "array"},
+                "count": {"type": "integer"},
+                "next_page": {"type": ["integer", "null"]},
+            },
+        },
     },
     {
         "name": "zendesk_tickets_show",
@@ -140,6 +222,12 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                     "type": "string",
                     "description": "The ticket ID to retrieve.",
                 },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "ticket": {"type": "object"},
             },
         },
     },
@@ -185,6 +273,12 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "ticket": {"type": "object"},
+            },
+        },
     },
     {
         "name": "zendesk_tickets_update",
@@ -220,6 +314,62 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "ticket": {"type": "object"},
+            },
+        },
+    },
+    {
+        "name": "zendesk_tickets_delete",
+        "description": "Soft-delete a ticket (marks as deleted, does not destroy).",
+        "http_path": "/api/v2/tickets/{id}",
+        "http_method": "DELETE",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "The ticket ID to delete.",
+                },
+            },
+        },
+        "response_schema": {"type": "object"},
+    },
+    {
+        "name": "zendesk_tickets_search",
+        "description": "Search tickets using Zendesk search query syntax.",
+        "http_path": "/api/v2/search",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Zendesk search query string.",
+                },
+                "page": {
+                    "type": "integer",
+                    "description": "Page number for pagination.",
+                },
+                "per_page": {
+                    "type": "integer",
+                    "description": "Number of results per page.",
+                    "default": 100,
+                },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "results": {"type": "array"},
+                "count": {"type": "integer"},
+                "next_page": {"type": ["integer", "null"]},
+            },
+        },
     },
     {
         "name": "zendesk_ticket_comments_list",
@@ -234,6 +384,13 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                     "type": "string",
                     "description": "The ticket ID whose comments to list.",
                 },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "comments": {"type": "array"},
+                "count": {"type": "integer"},
             },
         },
     },
@@ -265,6 +422,12 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "comment": {"type": "object"},
+            },
+        },
     },
     {
         "name": "zendesk_users_list",
@@ -286,6 +449,14 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                 },
             },
         },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "users": {"type": "array"},
+                "count": {"type": "integer"},
+                "next_page": {"type": ["integer", "null"]},
+            },
+        },
     },
     {
         "name": "zendesk_users_show",
@@ -300,6 +471,63 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
                     "type": "string",
                     "description": "The user ID to retrieve.",
                 },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "user": {"type": "object"},
+            },
+        },
+    },
+    {
+        "name": "zendesk_groups_list",
+        "description": "List all groups.",
+        "http_path": "/api/v2/groups",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "required": [],
+            "properties": {
+                "page": {
+                    "type": "integer",
+                    "description": "Page number for pagination.",
+                },
+                "per_page": {
+                    "type": "integer",
+                    "description": "Number of results per page.",
+                    "default": 100,
+                },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "groups": {"type": "array"},
+                "count": {"type": "integer"},
+                "next_page": {"type": ["integer", "null"]},
+            },
+        },
+    },
+    {
+        "name": "zendesk_groups_show",
+        "description": "Show details of a specific group by ID.",
+        "http_path": "/api/v2/groups/{id}",
+        "http_method": "GET",
+        "parameters": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "The group ID to retrieve.",
+                },
+            },
+        },
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "group": {"type": "object"},
             },
         },
     },

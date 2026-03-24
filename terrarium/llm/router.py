@@ -6,6 +6,8 @@ engine name and use-case, using the routing table from configuration.
 
 from __future__ import annotations
 
+import asyncio
+
 from terrarium.llm.config import LLMConfig, LLMRoutingEntry
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.registry import ProviderRegistry
@@ -25,6 +27,9 @@ class LLMRouter:
         self._config = config
         self._registry = registry
         self._tracker = tracker
+        self._semaphore = asyncio.Semaphore(
+            config.max_concurrent if hasattr(config, "max_concurrent") else 10
+        )
 
     def _resolve_routing(
         self, engine_name: str, use_case: str = "default"
@@ -86,7 +91,8 @@ class LLMRouter:
                 **{**request.model_dump(), "model_override": model}
             )
 
-        response = await provider.generate(request)
+        async with self._semaphore:
+            response = await provider.generate(request)
 
         if self._tracker:
             await self._tracker.record(request, response, engine_name)

@@ -16,6 +16,21 @@ from typing import Any
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import EntityId, StateDelta
 
+# ---------------------------------------------------------------------------
+# GitHub-style error response helper
+# ---------------------------------------------------------------------------
+
+_GITHUB_DOCS_URL = "https://docs.github.com/rest"
+
+
+def _gh_error(message: str, status: int = 404) -> dict[str, Any]:
+    """Return a GitHub-format error response body."""
+    return {
+        "message": message,
+        "documentation_url": _GITHUB_DOCS_URL,
+        "status": status,
+    }
+
 
 def _new_id(prefix: str) -> str:
     """Generate a unique ID with the given prefix."""
@@ -68,13 +83,26 @@ async def handle_create_issue(
 
     issue_fields: dict[str, Any] = {
         "number": number,
+        "node_id": _new_id("MDU6SXNzdWU"),
         "title": input_data["title"],
         "body": input_data.get("body", ""),
         "state": "open",
         "state_reason": None,
         "labels": input_data.get("labels", []),
         "assignees": input_data.get("assignees", []),
+        "milestone": None,
         "user": {"login": input_data.get("user", {}).get("login", "unknown")},
+        "reactions": {
+            "total_count": 0,
+            "+1": 0,
+            "-1": 0,
+            "laugh": 0,
+            "hooray": 0,
+            "confused": 0,
+            "heart": 0,
+            "rocket": 0,
+            "eyes": 0,
+        },
         "comments": 0,
         "created_at": now,
         "updated_at": now,
@@ -142,7 +170,7 @@ async def handle_get_issue(
 ) -> ResponseProposal:
     """Handle the ``get_issue`` action.
 
-    Finds an issue by number. Returns 404-style error if not found.
+    Finds an issue by number. Returns GitHub-format 404 error if not found.
     """
     number = input_data["number"]
     issues = state.get("issues", [])
@@ -151,12 +179,7 @@ async def handle_get_issue(
         if issue.get("number") == number:
             return ResponseProposal(response_body=issue)
 
-    return ResponseProposal(
-        response_body={
-            "message": "Not Found",
-            "status": 404,
-        },
-    )
+    return ResponseProposal(response_body=_gh_error("Not Found", 404))
 
 
 async def handle_update_issue(
@@ -178,12 +201,7 @@ async def handle_update_issue(
             break
 
     if target is None:
-        return ResponseProposal(
-            response_body={
-                "message": "Not Found",
-                "status": 404,
-            },
-        )
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
 
     now = _now_iso()
     updated_fields: dict[str, Any] = {"updated_at": now}
@@ -250,12 +268,7 @@ async def handle_add_issue_comment(
             break
 
     if target is None:
-        return ResponseProposal(
-            response_body={
-                "message": "Not Found",
-                "status": 404,
-            },
-        )
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
 
     now = _now_iso()
     comment_id = _new_id("comment")
@@ -295,6 +308,100 @@ async def handle_add_issue_comment(
     )
 
 
+async def handle_list_issue_comments(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``list_issue_comments`` action.
+
+    Returns all comments for a given issue number from state["comments"].
+    Paginates with per_page/page. No state mutations.
+    """
+    number = input_data["number"]
+    comments = list(state.get("comments", []))
+
+    # Filter comments belonging to this issue
+    filtered = [c for c in comments if c.get("issue_number") == number]
+
+    # Sort by created_at ascending (oldest first, like GitHub)
+    filtered.sort(key=lambda c: c.get("created_at", ""))
+
+    # Paginate
+    page_items = _paginate(filtered, input_data)
+
+    return ResponseProposal(
+        response_body={"items": page_items, "total_count": len(page_items)},
+    )
+
+
+async def handle_search_issues(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``search_issues`` action.
+
+    Searches across issues and pull requests by matching the query string
+    (case-insensitive) against title and body. Supports sort and order.
+    Paginates with per_page/page.
+    """
+    query = input_data["q"].lower()
+    sort_field = input_data.get("sort", "created")
+    order = input_data.get("order", "desc")
+
+    # Combine issues and pull_requests for searching
+    issues = list(state.get("issues", []))
+    prs = list(state.get("pull_requests", []))
+    all_items: list[dict[str, Any]] = []
+
+    for item in issues:
+        searchable = " ".join(
+            [
+                item.get("title", ""),
+                item.get("body", ""),
+                " ".join(item.get("labels", [])),
+            ]
+        ).lower()
+        if query in searchable:
+            all_items.append({**item, "_type": "issue"})
+
+    for item in prs:
+        searchable = " ".join(
+            [
+                item.get("title", ""),
+                item.get("body", ""),
+            ]
+        ).lower()
+        if query in searchable:
+            all_items.append({**item, "_type": "pull_request"})
+
+    # Sort
+    sort_key_map = {
+        "created": "created_at",
+        "updated": "updated_at",
+        "comments": "comments",
+    }
+    sort_key = sort_key_map.get(sort_field, "created_at")
+    reverse = order == "desc"
+    all_items.sort(key=lambda i: i.get(sort_key, ""), reverse=reverse)
+
+    # Remove internal _type field from results
+    for item in all_items:
+        item.pop("_type", None)
+
+    total = len(all_items)
+
+    # Paginate
+    page_items = _paginate(all_items, input_data)
+
+    return ResponseProposal(
+        response_body={
+            "total_count": total,
+            "incomplete_results": False,
+            "items": page_items,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pull request handlers
 # ---------------------------------------------------------------------------
@@ -314,15 +421,23 @@ async def handle_create_pull_request(
 
     pr_fields: dict[str, Any] = {
         "number": number,
+        "node_id": _new_id("MDExOlB1bGxSZXF1ZXN0"),
         "title": input_data["title"],
         "body": input_data.get("body", ""),
         "state": "open",
+        "draft": input_data.get("draft", False),
         "head": {"ref": input_data["head"], "sha": uuid.uuid4().hex[:7]},
         "base": {"ref": input_data["base"], "sha": uuid.uuid4().hex[:7]},
         "user": {"login": input_data.get("user", {}).get("login", "unknown")},
         "mergeable": True,
+        "mergeable_state": "clean",
         "merged": False,
         "merged_at": None,
+        "additions": 0,
+        "deletions": 0,
+        "changed_files": 0,
+        "commits": 1,
+        "review_comments": 0,
         "created_at": now,
         "updated_at": now,
     }
@@ -383,7 +498,7 @@ async def handle_get_pull_request(
 ) -> ResponseProposal:
     """Handle the ``get_pull_request`` action.
 
-    Finds a PR by number. Returns 404-style error if not found.
+    Finds a PR by number. Returns GitHub-format 404 error if not found.
     """
     number = input_data["number"]
     prs = state.get("pull_requests", [])
@@ -392,11 +507,65 @@ async def handle_get_pull_request(
         if pr.get("number") == number:
             return ResponseProposal(response_body=pr)
 
+    return ResponseProposal(response_body=_gh_error("Not Found", 404))
+
+
+async def handle_update_pull_request(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``update_pull_request`` action.
+
+    Updates title, body, state, and/or base on an existing pull request.
+    """
+    number = input_data["number"]
+    prs = state.get("pull_requests", [])
+
+    target: dict[str, Any] | None = None
+    for pr in prs:
+        if pr.get("number") == number:
+            target = pr
+            break
+
+    if target is None:
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
+
+    now = _now_iso()
+    updated_fields: dict[str, Any] = {"updated_at": now}
+    previous_fields: dict[str, Any] = {}
+
+    # Updatable scalar fields
+    for field in ("title", "body"):
+        if field in input_data:
+            previous_fields[field] = target.get(field)
+            updated_fields[field] = input_data[field]
+
+    # State transitions
+    new_state = input_data.get("state")
+    if new_state and new_state != target.get("state"):
+        previous_fields["state"] = target.get("state")
+        updated_fields["state"] = new_state
+
+    # Base branch change
+    new_base = input_data.get("base")
+    if new_base:
+        old_base = target.get("base", {})
+        previous_fields["base"] = old_base
+        updated_fields["base"] = {"ref": new_base, "sha": old_base.get("sha", "")}
+
+    delta = StateDelta(
+        entity_type="pull_request",
+        entity_id=EntityId(str(number)),
+        operation="update",
+        fields=updated_fields,
+        previous_fields=previous_fields,
+    )
+
+    response_body = {**target, **updated_fields}
+
     return ResponseProposal(
-        response_body={
-            "message": "Not Found",
-            "status": 404,
-        },
+        response_body=response_body,
+        proposed_state_deltas=[delta],
     )
 
 
@@ -420,27 +589,16 @@ async def handle_merge_pull_request(
             break
 
     if target is None:
-        return ResponseProposal(
-            response_body={
-                "message": "Not Found",
-                "status": 404,
-            },
-        )
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
 
     if target.get("state") != "open":
         return ResponseProposal(
-            response_body={
-                "message": "Pull request is not open",
-                "status": 405,
-            },
+            response_body=_gh_error("Pull request is not open", 405),
         )
 
     if not target.get("mergeable", False):
         return ResponseProposal(
-            response_body={
-                "message": "Pull request is not mergeable",
-                "status": 405,
-            },
+            response_body=_gh_error("Pull request is not mergeable", 405),
         )
 
     now = _now_iso()
@@ -475,6 +633,108 @@ async def handle_merge_pull_request(
             "commit_title": commit_title,
         },
         proposed_state_deltas=[delta],
+    )
+
+
+async def handle_create_pull_request_review(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``create_pull_request_review`` action.
+
+    Creates a review entity on a pull request. The event parameter maps:
+    APPROVE -> APPROVED, REQUEST_CHANGES -> CHANGES_REQUESTED, COMMENT -> COMMENTED.
+    Also increments the PR's review_comments count.
+    """
+    number = input_data["number"]
+    prs = state.get("pull_requests", [])
+
+    target: dict[str, Any] | None = None
+    for pr in prs:
+        if pr.get("number") == number:
+            target = pr
+            break
+
+    if target is None:
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
+
+    # Map input event to stored state
+    event_to_state = {
+        "APPROVE": "APPROVED",
+        "REQUEST_CHANGES": "CHANGES_REQUESTED",
+        "COMMENT": "COMMENTED",
+    }
+    event = input_data["event"]
+    review_state = event_to_state.get(event, "COMMENTED")
+
+    now = _now_iso()
+    review_id = _new_id("review")
+
+    review_fields: dict[str, Any] = {
+        "id": review_id,
+        "pull_number": number,
+        "user": {"login": input_data.get("user", {}).get("login", "unknown")},
+        "state": review_state,
+        "body": input_data.get("body", ""),
+        "submitted_at": now,
+        "commit_id": target.get("head", {}).get("sha", ""),
+    }
+
+    old_review_count = target.get("review_comments", 0)
+
+    deltas: list[StateDelta] = [
+        StateDelta(
+            entity_type="review",
+            entity_id=EntityId(review_id),
+            operation="create",
+            fields=review_fields,
+        ),
+        StateDelta(
+            entity_type="pull_request",
+            entity_id=EntityId(str(number)),
+            operation="update",
+            fields={"review_comments": old_review_count + 1, "updated_at": now},
+            previous_fields={"review_comments": old_review_count},
+        ),
+    ]
+
+    return ResponseProposal(
+        response_body=review_fields,
+        proposed_state_deltas=deltas,
+    )
+
+
+async def handle_get_pull_request_files(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``get_pull_request_files`` action.
+
+    Returns files changed in a pull request from state["pr_files"].
+    Filters by pull_number, paginates with per_page/page. No state mutations.
+    """
+    number = input_data["number"]
+    prs = state.get("pull_requests", [])
+
+    # Verify PR exists
+    target: dict[str, Any] | None = None
+    for pr in prs:
+        if pr.get("number") == number:
+            target = pr
+            break
+
+    if target is None:
+        return ResponseProposal(response_body=_gh_error("Not Found", 404))
+
+    # Get files for this PR from state
+    pr_files = list(state.get("pr_files", []))
+    filtered = [f for f in pr_files if f.get("pull_number") == number]
+
+    # Paginate
+    page_items = _paginate(filtered, input_data)
+
+    return ResponseProposal(
+        response_body={"items": page_items, "total_count": len(page_items)},
     )
 
 

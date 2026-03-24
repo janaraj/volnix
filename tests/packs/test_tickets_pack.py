@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.tickets — ticket lifecycle and SLA tracking.
+"""Tests for terrarium.packs.verified.tickets -- ticket lifecycle and SLA tracking.
 
 Full test suite lives in tests/packs/verified/test_tickets.py.
 This module verifies backward-compatible import and basic smoke checks.
@@ -13,7 +13,7 @@ from terrarium.packs.verified.tickets.state_machines import TICKET_STATES
 def test_ticket_pack_tools():
     pack = TicketsPack()
     tools = pack.get_tools()
-    assert len(tools) == 8
+    assert len(tools) == 12
 
 
 def test_ticket_lifecycle_states():

@@ -240,11 +240,8 @@ not randomly corrupted fields.
 
 {reality_summary}
 
-Detailed dimensions:
-{reality_dimensions}
-
 ## Behavior Mode
-{behavior_mode}: {behavior_description}
+{behavior_mode}
 
 ## Actors in This World
 {actor_summary}
@@ -263,20 +260,9 @@ appear as real entities with proper cross-references.
 {entity_schema}
 
 ## Rules
-- Generate exactly {count} {entity_type} entities as a JSON array
-- Each entity MUST conform to the schema (required fields, valid types, enum values)
-- Each entity MUST have all required fields from the schema
-- Entity IDs should be realistic (e.g., "email_a1b2c3", not "email_001")
-- Data should reflect the reality personality — if information is "somewhat_neglected",
-  some records should show signs of neglect (outdated dates, missing optional fields)
-  with a REASON (e.g., "not updated since CRM migration")
-- Behavior mode shapes entity states:
-  - static: entities in settled/final states
-  - dynamic: entities with in-flight activities and pending events
-  - reactive: entities with trigger conditions waiting for agent action
-- Seed scenarios MUST be woven into the generated entities naturally
-
-Output ONLY a valid JSON array. No markdown, no explanation.""",
+- Generate exactly {count} {entity_type} entities as a valid JSON array
+- Each entity MUST conform to the schema above (required fields, valid types, enum values)
+- Output ONLY a valid JSON array. No markdown, no explanation.""",
 
     user="Generate {count} {entity_type} entities for this world.",
     engine_name="data_generator",

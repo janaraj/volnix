@@ -16,6 +16,18 @@ from typing import Any
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import EntityId, StateDelta
 
+# ---------------------------------------------------------------------------
+# Zendesk-style error response helper
+# ---------------------------------------------------------------------------
+
+
+def _zd_error(error: str, description: str) -> dict[str, Any]:
+    """Return a Zendesk-format error response body."""
+    return {
+        "error": error,
+        "description": description,
+    }
+
 
 def _new_id(prefix: str) -> str:
     """Generate a unique entity ID with the given prefix."""
@@ -74,7 +86,9 @@ async def handle_zendesk_tickets_create(
         "ticket_id": ticket_id,
         "author_id": input_data["requester_id"],
         "body": input_data["description"],
+        "html_body": f"<p>{input_data['description']}</p>",
         "public": True,
+        "attachments": [],
         "created_at": now,
     }
 
@@ -111,7 +125,7 @@ async def handle_zendesk_tickets_update(
 
     if ticket is None:
         return ResponseProposal(
-            response_body={"error": f"Ticket '{ticket_id}' not found"},
+            response_body=_zd_error("RecordNotFound", f"Ticket '{ticket_id}' not found"),
         )
 
     updated_fields: dict[str, Any] = {}
@@ -142,6 +156,119 @@ async def handle_zendesk_tickets_update(
     return ResponseProposal(
         response_body={"ticket": response_ticket},
         proposed_state_deltas=[delta],
+    )
+
+
+async def handle_zendesk_tickets_delete(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``zendesk_tickets_delete`` action.
+
+    Soft-deletes a ticket by marking it with status="deleted".
+    Zendesk does not truly destroy tickets on DELETE -- they become
+    recoverable soft-deletes. We model this as a status update.
+    """
+    ticket_id = input_data["id"]
+    tickets = state.get("tickets", [])
+
+    ticket = None
+    for t in tickets:
+        if t.get("id") == ticket_id:
+            ticket = t
+            break
+
+    if ticket is None:
+        return ResponseProposal(
+            response_body=_zd_error("RecordNotFound", f"Ticket '{ticket_id}' not found"),
+        )
+
+    now = _now_iso()
+    old_status = ticket.get("status", "new")
+
+    delta = StateDelta(
+        entity_type="ticket",
+        entity_id=EntityId(ticket_id),
+        operation="delete",
+        fields={"status": "deleted", "updated_at": now},
+        previous_fields={"status": old_status},
+    )
+
+    return ResponseProposal(
+        response_body={},
+        proposed_state_deltas=[delta],
+    )
+
+
+async def handle_zendesk_tickets_search(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``zendesk_tickets_search`` action.
+
+    Searches tickets by matching the query string (case-insensitive)
+    against subject, description, and tags. Supports basic Zendesk
+    search syntax: ``status:open``, ``priority:urgent``, ``assignee_id:X``,
+    ``requester_id:X``, ``type:problem``, and free-text fallback.
+    Paginates with per_page/page.
+    """
+    query = input_data["query"]
+    tickets = list(state.get("tickets", []))
+
+    # Parse structured filters from query
+    filters: dict[str, str] = {}
+    free_text_parts: list[str] = []
+    for token in query.split():
+        if ":" in token:
+            key, value = token.split(":", 1)
+            filters[key] = value
+        else:
+            free_text_parts.append(token)
+
+    free_text = " ".join(free_text_parts).lower()
+
+    # Apply structured filters
+    if "status" in filters:
+        tickets = [t for t in tickets if t.get("status") == filters["status"]]
+    if "priority" in filters:
+        tickets = [t for t in tickets if t.get("priority") == filters["priority"]]
+    if "assignee_id" in filters:
+        tickets = [t for t in tickets if t.get("assignee_id") == filters["assignee_id"]]
+    if "requester_id" in filters:
+        tickets = [t for t in tickets if t.get("requester_id") == filters["requester_id"]]
+    if "type" in filters:
+        tickets = [t for t in tickets if t.get("type") == filters["type"]]
+
+    # Apply free-text search if present
+    if free_text:
+        results = []
+        for t in tickets:
+            searchable = " ".join(
+                [
+                    t.get("subject", ""),
+                    t.get("description", ""),
+                    " ".join(t.get("tags", [])),
+                ]
+            ).lower()
+            if free_text in searchable:
+                results.append(t)
+        tickets = results
+
+    # Pagination
+    per_page = input_data.get("per_page", 100)
+    page = input_data.get("page", 1)
+    if page is None:
+        page = 1
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated = tickets[start:end]
+
+    return ResponseProposal(
+        response_body={
+            "results": paginated,
+            "count": len(paginated),
+            "next_page": page + 1 if end < len(tickets) else None,
+        },
     )
 
 
@@ -203,7 +330,7 @@ async def handle_zendesk_tickets_show(
             )
 
     return ResponseProposal(
-        response_body={"error": f"Ticket '{ticket_id}' not found"},
+        response_body=_zd_error("RecordNotFound", f"Ticket '{ticket_id}' not found"),
     )
 
 
@@ -228,18 +355,21 @@ async def handle_zendesk_ticket_comments_create(
 
     if ticket is None:
         return ResponseProposal(
-            response_body={"error": f"Ticket '{ticket_id}' not found"},
+            response_body=_zd_error("RecordNotFound", f"Ticket '{ticket_id}' not found"),
         )
 
     comment_id = _new_id("comment")
     now = _now_iso()
 
+    body = input_data["body"]
     comment_fields: dict[str, Any] = {
         "id": comment_id,
         "ticket_id": ticket_id,
         "author_id": input_data["author_id"],
-        "body": input_data["body"],
+        "body": body,
+        "html_body": f"<p>{body}</p>",
         "public": input_data.get("public", True),
+        "attachments": [],
         "created_at": now,
     }
 
@@ -333,5 +463,55 @@ async def handle_zendesk_users_show(
             )
 
     return ResponseProposal(
-        response_body={"error": f"User '{user_id}' not found"},
+        response_body=_zd_error("RecordNotFound", f"User '{user_id}' not found"),
+    )
+
+
+async def handle_zendesk_groups_list(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``zendesk_groups_list`` action.
+
+    Returns all groups from state["groups"]. Supports pagination. No state mutations.
+    """
+    groups = list(state.get("groups", []))
+
+    # Pagination
+    per_page = input_data.get("per_page", 100)
+    page = input_data.get("page", 1)
+    if page is None:
+        page = 1
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated = groups[start:end]
+
+    return ResponseProposal(
+        response_body={
+            "groups": paginated,
+            "count": len(paginated),
+            "next_page": page + 1 if end < len(groups) else None,
+        },
+    )
+
+
+async def handle_zendesk_groups_show(
+    input_data: dict[str, Any],
+    state: dict[str, Any],
+) -> ResponseProposal:
+    """Handle the ``zendesk_groups_show`` action.
+
+    Finds a single group by ID. No state mutations.
+    """
+    group_id = input_data["id"]
+    groups = state.get("groups", [])
+
+    for g in groups:
+        if g.get("id") == group_id:
+            return ResponseProposal(
+                response_body={"group": g},
+            )
+
+    return ResponseProposal(
+        response_body=_zd_error("RecordNotFound", f"Group '{group_id}' not found"),
     )
