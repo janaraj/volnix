@@ -36,16 +36,16 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
+      const body = await response.json().catch(() => ({} as Record<string, unknown>));
       throw new ApiError(
         response.status,
-        body.code ?? 'UNKNOWN',
-        body.message ?? response.statusText,
+        (body.code as string) ?? 'UNKNOWN',
+        (body.message as string) ?? response.statusText,
         body.details,
       );
     }
 
-    return response.json() as Promise<T>;
+    return (await response.json()) as T;
   }
 
   // ── Run endpoints ────────────────────────────

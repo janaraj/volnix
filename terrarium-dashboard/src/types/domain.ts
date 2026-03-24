@@ -35,7 +35,7 @@ export interface Run {
   tags: string[];
   actor_count: number;
   event_count: number;
-  governance_score?: number | null;
+  governance_score: number | null;
   services: ServiceSummary[];
   conditions: WorldConditions;
 }

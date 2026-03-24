@@ -497,7 +497,7 @@ class ACPClientProvider(LLMProvider):
             },
         }
         req_id = await self._send_request("initialize", params)
-        resp = await self._read_response_by_id(req_id, timeout=30.0)
+        resp = await self._read_response_by_id(req_id, timeout=self._timeout)
         logger.info(
             "ACP initialized: %s",
             json.dumps(resp.get("result", {}), indent=2)[:300],
@@ -508,7 +508,7 @@ class ACPClientProvider(LLMProvider):
         """Send the authenticate request if an auth method is configured."""
         params: dict[str, Any] = {"methodId": self._auth_method}
         req_id = await self._send_request("authenticate", params)
-        resp = await self._read_response_by_id(req_id, timeout=30.0)
+        resp = await self._read_response_by_id(req_id, timeout=self._timeout)
         logger.info("ACP authenticated with method=%s", self._auth_method)
         return resp
 
@@ -519,7 +519,7 @@ class ACPClientProvider(LLMProvider):
             "mcpServers": [],
         }
         req_id = await self._send_request("session/new", params)
-        resp = await self._read_response_by_id(req_id, timeout=60.0)
+        resp = await self._read_response_by_id(req_id, timeout=self._timeout)
 
         result = resp.get("result", {})
         session_id = result.get("sessionId", "")
@@ -539,7 +539,7 @@ class ACPClientProvider(LLMProvider):
                 "sessionId": session_id,
                 "modeId": mode_id,
             })
-            await self._read_response_by_id(req_id, timeout=15.0)
+            await self._read_response_by_id(req_id, timeout=min(self._timeout, 30.0))
             logger.info("ACP mode set: %s for session %s", mode_id, session_id)
         except Exception as e:
             logger.warning("session/set_mode failed (non-fatal): %s", e)

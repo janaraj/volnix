@@ -21,5 +21,5 @@ export function liveConsolePath(id: string): string {
 
 /** Build the compare page path with run IDs encoded as query params. */
 export function comparePath(runIds: string[]): string {
-  return `/compare?runs=${runIds.join(',')}`;
+  return `/compare?runs=${runIds.map(encodeURIComponent).join(',')}`;
 }

@@ -76,7 +76,7 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
           <p className="text-xs uppercase text-text-muted">Services</p>
           <div className="flex flex-wrap gap-2">
             {run.services.map((s) => (
-              <ServiceBadge key={s.service_id} serviceId={s.service_name} tier={s.fidelity_tier} />
+              <ServiceBadge key={s.service_id} serviceId={s.service_id} tier={s.fidelity_tier} />
             ))}
           </div>
         </div>

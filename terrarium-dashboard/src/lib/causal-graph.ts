@@ -24,20 +24,23 @@ export function buildCausalTree(events: WorldEvent[], rootEventId: string): Caus
   if (!rootEvent) return null;
 
   const visited = new Set<string>();
+  const MAX_DEPTH = 100;
 
-  function buildNode(event: WorldEvent): CausalNode {
+  function buildNode(event: WorldEvent, depth: number): CausalNode {
     visited.add(event.event_id);
     const children: CausalNode[] = [];
-    for (const childId of event.causal_child_ids) {
-      if (!visited.has(childId)) {
-        const childEvent = eventMap.get(childId);
-        if (childEvent) {
-          children.push(buildNode(childEvent));
+    if (depth < MAX_DEPTH) {
+      for (const childId of event.causal_child_ids) {
+        if (!visited.has(childId)) {
+          const childEvent = eventMap.get(childId);
+          if (childEvent) {
+            children.push(buildNode(childEvent, depth + 1));
+          }
         }
       }
     }
     return { event, children };
   }
 
-  return buildNode(rootEvent);
+  return buildNode(rootEvent, 0);
 }

@@ -112,9 +112,11 @@ export function useLiveEvents(runId: string): ConnectionStatus {
         }
 
         case 'run_complete':
-          // Invalidate all run queries → REST re-fetch confirms final state.
-          queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(runId) });
-          queryClient.invalidateQueries({ queryKey: queryKeys.runs.events(runId) });
+          // Verify message belongs to current run before invalidating.
+          if (message.data.id === runId) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(runId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.runs.events(runId) });
+          }
           break;
       }
     });

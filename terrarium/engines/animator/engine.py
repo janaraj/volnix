@@ -300,6 +300,86 @@ class WorldAnimatorEngine(BaseEngine):
 
         return events
 
+    # -- SimulationRunner adapter methods ----------------------------------------
+
+    async def check_scheduled_events(self, current_time: float) -> list:
+        """Check for due scheduled/probabilistic events. Returns ActionEnvelopes.
+
+        Adapter method called by SimulationRunner. Delegates to the scheduler's
+        deterministic Layer 1a checking (same logic as tick() Layer 1a).
+
+        Args:
+            current_time: Current logical time in the simulation.
+
+        Returns:
+            List of ActionEnvelopes for due scheduled events.
+        """
+        from terrarium.core.envelope import ActionEnvelope
+        from terrarium.core.types import ActionSource, EnvelopePriority, ServiceId
+
+        envelopes: list[ActionEnvelope] = []
+        if self._behavior == "static":
+            return envelopes
+
+        if self._scheduler:
+            from datetime import UTC, datetime
+
+            # Convert logical time to datetime for scheduler compatibility
+            world_time = datetime.fromtimestamp(current_time, tz=UTC)
+            state_engine = getattr(self, "_dependencies", {}).get("state")
+            due_events = await self._scheduler.get_due_events(world_time, state_engine)
+            for evt in due_events:
+                envelopes.append(
+                    ActionEnvelope(
+                        actor_id=ActorId(evt.get("actor_id", "environment")),
+                        source=ActionSource.ENVIRONMENT,
+                        action_type=evt.get("action", "environment_event"),
+                        target_service=(
+                            ServiceId(evt["service_id"]) if evt.get("service_id") else None
+                        ),
+                        payload=evt.get("input_data", {}),
+                        logical_time=current_time,
+                        priority=EnvelopePriority.ENVIRONMENT,
+                        metadata={"event_type": "scheduled"},
+                    )
+                )
+        return envelopes
+
+    async def notify_event(self, committed_event: Any) -> list:
+        """Called after a committed event. May generate reactive environment events.
+
+        Adapter method called by SimulationRunner. Records the event for
+        reactive mode and returns an empty list (reactive event generation
+        happens during tick()).
+
+        Args:
+            committed_event: The committed WorldEvent.
+
+        Returns:
+            List of ActionEnvelopes (currently empty; reactive events generated in tick()).
+        """
+        # Track for reactive mode
+        if self._behavior == "reactive" and hasattr(committed_event, "action"):
+            self._recent_actions.append({
+                "action": getattr(committed_event, "action", ""),
+                "actor_id": str(getattr(committed_event, "actor_id", "")),
+                "event_type": getattr(committed_event, "event_type", ""),
+            })
+        return []
+
+    def has_scheduled_events(self) -> bool:
+        """Check if there are future scheduled events.
+
+        Used by SimulationRunner to decide if the simulation should continue
+        when the event queue is empty.
+
+        Returns:
+            True if the scheduler has pending events, False otherwise.
+        """
+        if self._scheduler:
+            return self._scheduler.pending_count > 0
+        return False
+
     # -- Event handling --------------------------------------------------------
 
     async def _handle_event(self, event: Event) -> None:

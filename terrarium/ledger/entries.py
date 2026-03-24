@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 from terrarium.core.types import (
     ActorId,
     EntityId,
+    EnvelopeId,
     EventId,
     RunId,
     SnapshotId,
 )
-
 
 # ---------------------------------------------------------------------------
 # Base entry
@@ -188,6 +188,44 @@ class SnapshotEntry(LedgerEntry):
     size_bytes: int = 0
 
 
+class ActorActivationEntry(LedgerEntry):
+    """Records the activation of an internal actor.
+
+    Attributes:
+        actor_id: The actor that was activated.
+        activation_reason: Why the actor was activated.
+        activation_tier: The activation tier (e.g. ``"reactive"``, ``"proactive"``).
+        trigger_event_id: The event that triggered the activation, if any.
+    """
+
+    entry_type: str = "actor_activation"
+    actor_id: ActorId
+    activation_reason: str
+    activation_tier: int = 0
+    trigger_event_id: EventId | None = None
+
+
+class ActionGenerationEntry(LedgerEntry):
+    """Records the generation of an action by an internal actor.
+
+    Attributes:
+        actor_id: The actor that generated the action.
+        envelope_id: The ActionEnvelope ID for the generated action.
+        action_type: The type of action generated.
+        tier: The fidelity tier used for generation.
+        llm_prompt_hash: Hash of the LLM prompt used, for reproducibility.
+        llm_latency_ms: LLM call latency in milliseconds.
+    """
+
+    entry_type: str = "action_generation"
+    actor_id: ActorId
+    envelope_id: EnvelopeId
+    action_type: str
+    tier: int = 0
+    llm_prompt_hash: str = ""
+    llm_latency_ms: float = 0.0
+
+
 # ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
@@ -200,6 +238,8 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "validation": ValidationEntry,
     "engine_lifecycle": EngineLifecycleEntry,
     "snapshot": SnapshotEntry,
+    "actor_activation": ActorActivationEntry,
+    "action_generation": ActionGenerationEntry,
 }
 
 

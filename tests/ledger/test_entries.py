@@ -1,10 +1,13 @@
 """Tests for terrarium.ledger.entries -- typed ledger entry dataclasses."""
-import pytest
 from datetime import datetime
 
-from terrarium.core.types import ActorId, EntityId, EventId, SnapshotId, RunId
+import pytest
+
+from terrarium.core.types import ActorId, EntityId, EnvelopeId, EventId, RunId, SnapshotId
 from terrarium.ledger.entries import (
     ENTRY_REGISTRY,
+    ActionGenerationEntry,
+    ActorActivationEntry,
     EngineLifecycleEntry,
     GatewayRequestEntry,
     LedgerEntry,
@@ -160,7 +163,7 @@ def test_entry_serialization_roundtrip():
 
 
 def test_entry_registry_all_types():
-    """ENTRY_REGISTRY should contain all 7 concrete entry types."""
+    """ENTRY_REGISTRY should contain all 9 concrete entry types."""
     expected = {
         "pipeline_step": PipelineStepEntry,
         "state_mutation": StateMutationEntry,
@@ -169,6 +172,8 @@ def test_entry_registry_all_types():
         "validation": ValidationEntry,
         "engine_lifecycle": EngineLifecycleEntry,
         "snapshot": SnapshotEntry,
+        "actor_activation": ActorActivationEntry,
+        "action_generation": ActionGenerationEntry,
     }
     assert ENTRY_REGISTRY == expected
 
@@ -195,3 +200,59 @@ def test_deserialize_entry_unknown_type():
     restored = deserialize_entry(row)
     assert isinstance(restored, LedgerEntry)
     assert restored.entry_type == "unknown_type"
+
+
+def test_actor_activation_entry():
+    """ActorActivationEntry should have entry_type default 'actor_activation'."""
+    entry = ActorActivationEntry(
+        actor_id=ActorId("actor-internal-1"),
+        activation_reason="incoming_message",
+        activation_tier=2,
+        trigger_event_id=EventId("evt-42"),
+    )
+    assert entry.entry_type == "actor_activation"
+    assert entry.actor_id == ActorId("actor-internal-1")
+    assert entry.activation_reason == "incoming_message"
+    assert entry.activation_tier == 2
+    assert entry.trigger_event_id == EventId("evt-42")
+
+
+def test_actor_activation_entry_no_trigger():
+    """ActorActivationEntry should allow None trigger_event_id."""
+    entry = ActorActivationEntry(
+        actor_id=ActorId("actor-2"),
+        activation_reason="scheduled",
+        activation_tier=3,
+    )
+    assert entry.trigger_event_id is None
+
+
+def test_action_generation_entry():
+    """ActionGenerationEntry should have entry_type default 'action_generation'."""
+    entry = ActionGenerationEntry(
+        actor_id=ActorId("actor-internal-1"),
+        envelope_id=EnvelopeId("env-abc123"),
+        action_type="send_message",
+        tier=2,
+        llm_prompt_hash="sha256:abc123",
+        llm_latency_ms=150.5,
+    )
+    assert entry.entry_type == "action_generation"
+    assert entry.actor_id == ActorId("actor-internal-1")
+    assert entry.envelope_id == EnvelopeId("env-abc123")
+    assert entry.action_type == "send_message"
+    assert entry.tier == 2
+    assert entry.llm_prompt_hash == "sha256:abc123"
+    assert entry.llm_latency_ms == 150.5
+
+
+def test_action_generation_entry_defaults():
+    """ActionGenerationEntry should have sensible defaults."""
+    entry = ActionGenerationEntry(
+        actor_id=ActorId("actor-1"),
+        envelope_id=EnvelopeId("env-def456"),
+        action_type="read_data",
+        tier=1,
+    )
+    assert entry.llm_prompt_hash == ""
+    assert entry.llm_latency_ms == 0.0

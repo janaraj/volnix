@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownToLine } from 'lucide-react';
-import type { WorldEvent, EventType, Outcome } from '@/types/domain';
+import type { WorldEvent } from '@/types/domain';
 import { EventFeedItem } from '@/pages/live-console/event-feed-item';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { cn } from '@/lib/cn';
@@ -111,6 +111,7 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
             autoScroll ? 'text-info' : 'text-text-muted',
           )}
           title={autoScroll ? 'Auto-scroll on' : 'Auto-scroll off'}
+          aria-label={autoScroll ? 'Auto-scroll on' : 'Auto-scroll off'}
         >
           <ArrowDownToLine size={16} />
         </button>
@@ -121,7 +122,7 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
         <select
           aria-label="Filter by outcome"
           value={outcomeFilter}
-          onChange={(e) => setOutcomeFilter(e.target.value as Outcome | '')}
+          onChange={(e) => setOutcomeFilter(e.target.value in OUTCOME_FILTER_OPTIONS ? e.target.value : '')}
           className="rounded border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary"
         >
           {Object.entries(OUTCOME_FILTER_OPTIONS).map(([value, label]) => (
@@ -133,7 +134,7 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
         <select
           aria-label="Filter by event type"
           value={eventTypeFilter}
-          onChange={(e) => setEventTypeFilter(e.target.value as EventType | '')}
+          onChange={(e) => setEventTypeFilter(e.target.value in EVENT_TYPE_FILTER_OPTIONS ? e.target.value : '')}
           className="rounded border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary"
         >
           {Object.entries(EVENT_TYPE_FILTER_OPTIONS).map(([value, label]) => (

@@ -19,6 +19,8 @@ export const queryKeys = {
     actor: (runId: string, actorId: string) => ['runs', runId, 'actors', actorId] as const,
   },
   compare: {
+    // Lexicographic sort ensures same cache key regardless of selection order.
+    // slice() prevents mutation of caller's array.
     detail: (runIds: string[]) => ['compare', ...runIds.slice().sort()] as const,
   },
 } as const;

@@ -10,11 +10,13 @@
  * @param filename - The desired download filename (should end in .png)
  */
 export async function captureElementAsPng(element: HTMLElement, filename: string): Promise<void> {
+  // Sanitize filename: allow only alphanumeric, dash, underscore, dot
+  const safeName = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_') || 'export.png';
   // Dynamic import to keep html2canvas out of the main bundle
   const { default: html2canvas } = await import('html2canvas');
   const canvas = await html2canvas(element);
   const link = document.createElement('a');
-  link.download = filename;
+  link.download = safeName;
   link.href = canvas.toDataURL('image/png');
   link.style.display = 'none';
   document.body.appendChild(link);

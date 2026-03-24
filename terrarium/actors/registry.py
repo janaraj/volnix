@@ -10,9 +10,10 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from terrarium.core.errors import ActorNotFoundError, DuplicateActorError
-from terrarium.core.types import ActorId, ActorType
 from terrarium.actors.definition import ActorDefinition
+from terrarium.actors.state import ActorState
+from terrarium.core.errors import ActorNotFoundError, DuplicateActorError
+from terrarium.core.types import ActorId, ActorType, EntityId
 
 
 class ActorRegistry:
@@ -23,6 +24,7 @@ class ActorRegistry:
         self._role_index: dict[str, list[ActorId]] = defaultdict(list)
         self._type_index: dict[ActorType, list[ActorId]] = defaultdict(list)
         self._team_index: dict[str, list[ActorId]] = defaultdict(list)
+        self._actor_states: dict[str, ActorState] = {}
 
     # -- Registration --------------------------------------------------------
 
@@ -156,3 +158,36 @@ class ActorRegistry:
             "friction_count": friction_count,
             "friction_by_category": dict(friction_by_cat),
         }
+
+    # -- Actor state management -----------------------------------------------
+
+    def set_actor_state(self, actor_id: ActorId, state: ActorState) -> None:
+        """Store or update the runtime state for an actor."""
+        self._actor_states[str(actor_id)] = state
+
+    def get_actor_state(self, actor_id: ActorId) -> ActorState | None:
+        """Retrieve the runtime state for an actor, or None if not set."""
+        return self._actor_states.get(str(actor_id))
+
+    def list_internal_actors(self) -> list[ActorState]:
+        """Return all actor states where actor_type is 'internal'."""
+        return [s for s in self._actor_states.values() if s.actor_type == "internal"]
+
+    def get_actors_watching(self, entity_id: EntityId) -> list[ActorState]:
+        """Return all actor states that are watching the given entity."""
+        return [
+            s
+            for s in self._actor_states.values()
+            if entity_id in s.watched_entities
+        ]
+
+    def dump_states(self) -> list[dict[str, Any]]:
+        """Serialize all actor states for snapshot persistence."""
+        return [s.model_dump() for s in self._actor_states.values()]
+
+    def load_states(self, states: list[dict[str, Any]]) -> None:
+        """Deserialize and load actor states from a snapshot."""
+        self._actor_states.clear()
+        for data in states:
+            state = ActorState.model_validate(data)
+            self._actor_states[str(state.actor_id)] = state

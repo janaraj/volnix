@@ -8,7 +8,7 @@ from terrarium.core.protocols import PipelineStep, StateEngineProtocol
 def test_create_default_registry():
     reg = create_default_registry()
     assert isinstance(reg, EngineRegistry)
-    assert len(reg.list_engines()) == 10
+    assert len(reg.list_engines()) == 11
 
 
 def test_all_engines_registered():
@@ -16,6 +16,7 @@ def test_all_engines_registered():
     expected = {
         "state", "policy", "permission", "budget", "responder",
         "adapter", "animator", "reporter", "feedback", "world_compiler",
+        "agency",
     }
     assert set(reg.list_engines()) == expected
 
@@ -24,12 +25,14 @@ def test_topo_sort_no_cycles():
     reg = create_default_registry()
     order = reg.resolve_initialization_order()
     assert order[0] == "state"
-    assert len(order) == 10
+    assert len(order) == 11
     # adapter depends on permission — must come after
     assert order.index("permission") < order.index("adapter")
+    # agency depends on state — must come after
+    assert order.index("state") < order.index("agency")
     # Exact expected order (deterministic Kahn's with sorted queues)
     expected = [
-        "state", "animator", "budget", "feedback", "permission",
+        "state", "agency", "animator", "budget", "feedback", "permission",
         "adapter", "policy", "reporter", "responder", "world_compiler",
     ]
     assert order == expected
