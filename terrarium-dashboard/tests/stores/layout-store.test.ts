@@ -28,4 +28,10 @@ describe('useLayoutStore', () => {
   it('has correct default panel sizes', () => {
     expect(useLayoutStore.getState().livePanelSizes).toEqual([25, 50, 25]);
   });
+
+  it('has persist config with storage name', () => {
+    // Zustand persist stores config on the store itself
+    const store = useLayoutStore as unknown as { persist: { getOptions: () => { name: string } } };
+    expect(store.persist.getOptions().name).toBe('terrarium-layout');
+  });
 });

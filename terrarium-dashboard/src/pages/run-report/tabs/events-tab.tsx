@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { X, Search, ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
+import { useKeyboard } from '@/hooks/use-keyboard';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   getPaginationRowModel, flexRender,
@@ -509,6 +510,9 @@ export function EventsTab({ runId }: EventsTabProps) {
   }, [filters]);
 
   const eventsQuery = useRunEvents(runId, apiParams);
+
+  useKeyboard({ Escape: () => setDetailState({ event: '' }) });
+
   const selectEvent = useCallback(
     (id: string) => setDetailState({ event: id }),
     [setDetailState],

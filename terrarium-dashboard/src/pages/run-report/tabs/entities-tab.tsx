@@ -5,6 +5,7 @@ import { useUrlState } from '@/hooks/use-url-state';
 import { QueryGuard } from '@/components/feedback/query-guard';
 import { SectionLoading } from '@/components/feedback/section-loading';
 import { EmptyState } from '@/components/feedback/empty-state';
+import { EntityCardSkeleton } from '@/components/feedback/skeletons';
 import { JsonViewer } from '@/components/domain/json-viewer';
 import { TimestampCell } from '@/components/domain/timestamp-cell';
 import { ActorBadge } from '@/components/domain/actor-badge';
@@ -192,7 +193,7 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
 
   return (
     <div>
-      <QueryGuard query={entitiesQuery} loadingFallback={<SectionLoading />}>
+      <QueryGuard query={entitiesQuery} loadingFallback={<EntityCardSkeleton />}>
         {(data) => (
           <>
             <div className="mb-4 flex items-center justify-between">

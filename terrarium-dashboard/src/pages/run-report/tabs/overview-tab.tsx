@@ -129,7 +129,7 @@ function AgentSummary({ runId }: { runId: string }) {
                 return (
                   <div
                     key={card.actor_id}
-                    className="rounded-lg border border-bg-elevated bg-bg-surface p-4 transition-colors hover:border-border"
+                    className="rounded-lg border border-bg-elevated bg-bg-surface p-4 transition-colors hover:border-border hover:bg-bg-hover"
                   >
                     <div className="mb-2">
                       <ActorBadge actorId={card.actor_id} />
