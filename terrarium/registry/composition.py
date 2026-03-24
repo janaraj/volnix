@@ -20,6 +20,7 @@ def create_default_registry() -> EngineRegistry:
         A fully populated :class:`EngineRegistry` with the default engine set.
     """
     from terrarium.engines.adapter.engine import AgentAdapterEngine
+    from terrarium.engines.agency.engine import AgencyEngine
     from terrarium.engines.animator.engine import WorldAnimatorEngine
     from terrarium.engines.budget.engine import BudgetEngine
     from terrarium.engines.feedback.engine import FeedbackEngine
@@ -41,4 +42,5 @@ def create_default_registry() -> EngineRegistry:
     registry.register(ReportGeneratorEngine())
     registry.register(FeedbackEngine())
     registry.register(WorldCompilerEngine())
+    registry.register(AgencyEngine())
     return registry

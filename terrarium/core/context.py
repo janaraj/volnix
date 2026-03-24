@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from terrarium.core.types import (
     ActionCost,
+    ActionSource,
     ActorId,
     EntityId,
     EventId,
@@ -28,7 +29,6 @@ from terrarium.core.types import (
     StepVerdict,
     WorldMode,
 )
-
 
 # ---------------------------------------------------------------------------
 # Step result (immutable)
@@ -141,6 +141,8 @@ class ActionContext(BaseModel):
     wall_time: datetime | None = None
     tick: int = 0
     run_id: RunId | None = None
+    source: ActionSource | None = None
+    envelope_id: str | None = None
 
     # Pipeline step results (populated progressively)
     permission_result: StepResult | None = None

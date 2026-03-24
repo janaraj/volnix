@@ -36,6 +36,7 @@ export function Sidebar() {
               key={item.path}
               to={item.path}
               title={collapsed ? item.label : undefined}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-2 rounded px-3 py-2 text-sm transition-colors',
                 isActive

@@ -102,6 +102,10 @@ export class WsManager {
   }
 
   private scheduleReconnect(runId: string): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.setStatus('reconnecting');
     const delay = Math.min(
       WS_RECONNECT_BASE_MS * Math.pow(WS_RECONNECT_MULTIPLIER, this.reconnectAttempts),

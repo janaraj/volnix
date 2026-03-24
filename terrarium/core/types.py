@@ -50,6 +50,9 @@ RunId = NewType("RunId", str)
 ProfileVersion = NewType("ProfileVersion", str)
 """Version tag for a service fidelity profile."""
 
+EnvelopeId = NewType("EnvelopeId", str)
+"""Unique identifier for an ActionEnvelope."""
+
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -129,6 +132,22 @@ class WorldMode(enum.StrEnum):
 
     GOVERNED = "governed"
     UNGOVERNED = "ungoverned"
+
+
+class ActionSource(enum.StrEnum):
+    """Originator of an action in the simulation."""
+
+    EXTERNAL = "external"  # user's agent via MCP/HTTP
+    INTERNAL = "internal"  # internal actor via AgencyEngine
+    ENVIRONMENT = "environment"  # world event via Animator
+
+
+class EnvelopePriority(enum.IntEnum):
+    """Priority for tie-breaking in EventQueue. Lower = higher priority."""
+
+    ENVIRONMENT = 0  # environment events first (world state changes)
+    EXTERNAL = 1  # external agent actions next
+    INTERNAL = 2  # internal actor actions last
 
 
 class GapResponse(enum.StrEnum):

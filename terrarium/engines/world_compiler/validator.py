@@ -530,7 +530,15 @@ class CompilerWorldValidator:
         }
         if not target_ids:
             return [f"{prefix} target selector did not match any identifiable entities"]
-        if not any(entity.get(invariant.field) in target_ids for entity in matches):
+        def _field_matches_target(value: Any, targets: set) -> bool:
+            """Check if a field value references any target ID. Handles lists."""
+            if isinstance(value, list):
+                return any(v in targets for v in value if not isinstance(v, (list, dict)))
+            if isinstance(value, (dict, set)):
+                return False  # unhashable types can't be in a set
+            return value in targets
+
+        if not any(_field_matches_target(entity.get(invariant.field), target_ids) for entity in matches):
             return [
                 f"{prefix} no selected entity references a target via {invariant.field}"
             ]

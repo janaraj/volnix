@@ -141,6 +141,7 @@ class TestMultiServiceLiveWorld:
                 {
                     "name": "SLA escalation",
                     "description": "Tickets past SLA auto-escalate to supervisor",
+                    "trigger": "ticket sla breached",
                     "enforcement": "escalate",
                 },
             ],

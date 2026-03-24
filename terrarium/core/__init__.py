@@ -8,90 +8,14 @@ downstream code can do::
 """
 
 # --- Identity newtypes ---------------------------------------------------
-from terrarium.core.types import (
-    ActorId,
-    EntityId,
-    EventId,
-    PolicyId,
-    ProfileVersion,
-    RunId,
-    ServiceId,
-    SnapshotId,
-    ToolName,
-    WorldId,
-)
-
-# --- Enumerations ---------------------------------------------------------
-from terrarium.core.types import (
-    ActorType,
-    BehaviorMode,
-    EnforcementMode,
-    FidelityMode,
-    FidelitySource,
-    FidelityTier,
-    GapResponse,
-    RealityPreset,
-    StepVerdict,
-    ValidationType,
-    WorldMode,
-)
-
-# --- Value objects --------------------------------------------------------
-from terrarium.core.types import (
-    ActionCost,
-    BudgetState,
-    FidelityMetadata,
-    SideEffect,
-    StateDelta,
-    Timestamp,
-)
-
-# --- Events ---------------------------------------------------------------
-from terrarium.core.events import (
-    AnimatorEvent,
-    AnnotationEvent,
-    ApprovalEvent,
-    BudgetDeductionEvent,
-    BudgetEvent,
-    BudgetExhaustedEvent,
-    BudgetWarningEvent,
-    CapabilityGapEvent,
-    EngineLifecycleEvent,
-    Event,
-    PermissionDeniedEvent,
-    PolicyBlockEvent,
-    PolicyEscalateEvent,
-    PolicyEvent,
-    PolicyFlagEvent,
-    PolicyHoldEvent,
-    SimulationEvent,
-    TierPromotionEvent,
-    ValidationFailureEvent,
-    WorldEvent,
-)
-
 # --- Context & pipeline ---------------------------------------------------
 from terrarium.core.context import ActionContext, ResponseProposal, StepResult
 
-# --- Protocols ------------------------------------------------------------
-from terrarium.core.protocols import (
-    AdapterProtocol,
-    AnimatorProtocol,
-    BudgetEngineProtocol,
-    FeedbackProtocol,
-    GatewayProtocol,
-    LedgerProtocol,
-    PermissionEngineProtocol,
-    PipelineStep,
-    PolicyEngineProtocol,
-    ReporterProtocol,
-    ResponderProtocol,
-    StateEngineProtocol,
-    WorldCompilerProtocol,
-)
-
 # --- Base engine ----------------------------------------------------------
 from terrarium.core.engine import BaseEngine
+
+# --- Envelope -------------------------------------------------------------
+from terrarium.core.envelope import ActionEnvelope
 
 # --- Errors ---------------------------------------------------------------
 from terrarium.core.errors import (
@@ -139,10 +63,87 @@ from terrarium.core.errors import (
     YAMLParseError,
 )
 
+# --- Events ---------------------------------------------------------------
+from terrarium.core.events import (
+    AnimatorEvent,
+    AnnotationEvent,
+    ApprovalEvent,
+    BudgetDeductionEvent,
+    BudgetEvent,
+    BudgetExhaustedEvent,
+    BudgetWarningEvent,
+    CapabilityGapEvent,
+    EngineLifecycleEvent,
+    Event,
+    PermissionDeniedEvent,
+    PolicyBlockEvent,
+    PolicyEscalateEvent,
+    PolicyEvent,
+    PolicyFlagEvent,
+    PolicyHoldEvent,
+    SimulationEvent,
+    TierPromotionEvent,
+    ValidationFailureEvent,
+    WorldEvent,
+)
+
+# --- Protocols ------------------------------------------------------------
+from terrarium.core.protocols import (
+    AdapterProtocol,
+    AnimatorProtocol,
+    BudgetEngineProtocol,
+    FeedbackProtocol,
+    GatewayProtocol,
+    LedgerProtocol,
+    PermissionEngineProtocol,
+    PipelineStep,
+    PolicyEngineProtocol,
+    ReporterProtocol,
+    ResponderProtocol,
+    StateEngineProtocol,
+    WorldCompilerProtocol,
+)
+
+# --- Enumerations ---------------------------------------------------------
+# --- Value objects --------------------------------------------------------
+from terrarium.core.types import (
+    ActionCost,
+    ActionSource,
+    ActorId,
+    ActorType,
+    BehaviorMode,
+    BudgetState,
+    EnforcementMode,
+    EntityId,
+    EnvelopeId,
+    EnvelopePriority,
+    EventId,
+    FidelityMetadata,
+    FidelityMode,
+    FidelitySource,
+    FidelityTier,
+    GapResponse,
+    PolicyId,
+    ProfileVersion,
+    RealityPreset,
+    RunId,
+    ServiceId,
+    SideEffect,
+    SnapshotId,
+    StateDelta,
+    StepVerdict,
+    Timestamp,
+    ToolName,
+    ValidationType,
+    WorldId,
+    WorldMode,
+)
+
 __all__ = [
     # Identity
     "ActorId",
     "EntityId",
+    "EnvelopeId",
     "EventId",
     "PolicyId",
     "ProfileVersion",
@@ -152,9 +153,11 @@ __all__ = [
     "ToolName",
     "WorldId",
     # Enums
+    "ActionSource",
     "ActorType",
     "BehaviorMode",
     "EnforcementMode",
+    "EnvelopePriority",
     "FidelityMode",
     "FidelitySource",
     "FidelityTier",
@@ -165,6 +168,7 @@ __all__ = [
     "WorldMode",
     # Value objects
     "ActionCost",
+    "ActionEnvelope",
     "BudgetState",
     "FidelityMetadata",
     "SideEffect",

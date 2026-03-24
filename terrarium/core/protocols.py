@@ -290,6 +290,28 @@ class AnimatorProtocol(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Agency
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class AgencyEngineProtocol(Protocol):
+    """Interface for the internal actor management engine."""
+
+    async def notify(self, committed_event: Event) -> list[Any]:
+        """Called after every committed event. Returns ActionEnvelopes."""
+        ...
+
+    async def check_scheduled_actions(self, current_time: float) -> list[Any]:
+        """Check for actors with scheduled actions that are due."""
+        ...
+
+    def has_scheduled_actions(self) -> bool:
+        """Return True if any actor has a scheduled action."""
+        ...
+
+
+# ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
 

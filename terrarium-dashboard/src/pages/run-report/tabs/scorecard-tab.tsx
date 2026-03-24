@@ -106,6 +106,7 @@ function ScorecardGrid({
                       <button
                         type="button"
                         onClick={() => onCellClick(dim, sc.actor_id, score.violations)}
+                        aria-label={`${formatDimensionName(dim)} score for ${sc.actor_id}`}
                         className={cn(
                           'inline-block rounded px-2 py-0.5 font-mono text-xs cursor-pointer hover:opacity-80 transition-opacity',
                           scoreToColorClass(score.value),

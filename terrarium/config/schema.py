@@ -30,7 +30,9 @@ from terrarium.engines.animator.config import AnimatorConfig
 from terrarium.engines.adapter.config import AdapterConfig
 from terrarium.engines.reporter.config import ReporterConfig
 from terrarium.engines.feedback.config import FeedbackConfig
+from terrarium.engines.agency.config import AgencyConfig
 from terrarium.engines.world_compiler.config import WorldCompilerConfig
+from terrarium.simulation.config import SimulationRunnerConfig
 from terrarium.validation.config import ValidationConfig
 
 
@@ -84,4 +86,6 @@ class TerrariumConfig(BaseModel):
     actors: ActorConfig = Field(default_factory=ActorConfig)
     templates: TemplateConfig = Field(default_factory=TemplateConfig)
     world_compiler: WorldCompilerConfig = Field(default_factory=WorldCompilerConfig)
+    agency: AgencyConfig = Field(default_factory=AgencyConfig)
+    simulation_runner: SimulationRunnerConfig = Field(default_factory=SimulationRunnerConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)

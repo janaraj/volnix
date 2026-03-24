@@ -25,7 +25,8 @@ export function formatRelativeTime(isoDate: string): string {
  * Examples: 500 → "500ms", 65000 → "1m 5s", 3661000 → "1h 1m 1s"
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
+  if (ms <= 0) return '0ms';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   const totalSeconds = Math.floor(ms / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);

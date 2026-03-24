@@ -22,6 +22,7 @@ export function EntityLink({ runId, entityId, children }: EntityLinkProps) {
         {children ?? truncateId(entityId, 12)}
       </Link>
       <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); copy(entityId); }}
         className="text-text-muted hover:text-text-secondary transition-colors"
         title="Copy ID"

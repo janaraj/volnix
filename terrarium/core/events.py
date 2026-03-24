@@ -22,6 +22,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from terrarium.core.types import (
+    ActionSource,
     ActorId,
     EntityId,
     EventId,
@@ -33,7 +34,6 @@ from terrarium.core.types import (
     ToolName,
     WorldId,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -104,6 +104,7 @@ class WorldEvent(Event):
     post_state: dict[str, Any] | None = None
     fidelity: FidelityMetadata | None = None
     causes: list[EventId] = Field(default_factory=list)
+    source: ActionSource | None = None
 
 
 # ---------------------------------------------------------------------------

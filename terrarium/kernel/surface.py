@@ -144,6 +144,7 @@ class ServiceSurface(BaseModel, frozen=True):
                 http_method=tool.get("http_method", "POST"),
                 parameters=params,
                 required_params=required,
+                response_schema=tool.get("response_schema", {}),
             ))
         return cls(
             service_name=pack.pack_name,

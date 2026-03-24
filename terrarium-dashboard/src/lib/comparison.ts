@@ -13,7 +13,7 @@ export function findBestValue(
   values: Record<string, number>,
   higherIsBetter = true,
 ): string | null {
-  const entries = Object.entries(values);
+  const entries = Object.entries(values).filter(([, v]) => Number.isFinite(v));
   if (entries.length === 0) return null;
 
   return entries.reduce((best, current) => {

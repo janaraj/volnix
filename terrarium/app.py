@@ -1,6 +1,7 @@
 """TerrariumApp -- bootstrap and orchestration for the full system."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -219,6 +220,18 @@ class TerrariumApp:
                 role="gateway-default",
                 permissions={"read": "all", "write": "all"},
             ),
+            ActorDefinition(
+                id=ActorId("system"),
+                type=ActorType.SYSTEM,
+                role="animator",
+                permissions={"read": "all", "write": "all"},
+            ),
+            ActorDefinition(
+                id=ActorId("environment"),
+                type=ActorType.SYSTEM,
+                role="environment",
+                permissions={"read": "all", "write": "all"},
+            ),
         ]
         for actor_def in default_gateway_actors:
             if not actor_registry.has_actor(actor_def.id):
@@ -252,6 +265,13 @@ class TerrariumApp:
         animator = self._registry.get("animator")
         animator._config["_app"] = self
         animator._config["_actor_registry"] = actor_registry
+
+        # Agency engine wiring
+        agency = self._registry.get("agency")
+        agency._config["_actor_registry"] = actor_registry
+        if self._llm_router:
+            agency._config["_llm_router"] = self._llm_router
+        agency._ledger = self._ledger
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
@@ -297,6 +317,37 @@ class TerrariumApp:
         )
 
         await self._pipeline.execute(ctx)
+
+        # Publish committed event to bus so AgencyEngine + other subscribers hear it
+        if not ctx.short_circuited and self._bus:
+            from terrarium.core.events import WorldEvent
+            from terrarium.core.types import ActionSource, EntityId, Timestamp
+
+            # Determine target_entity: prefer explicit, else from state deltas
+            target = ctx.target_entity
+            if target is None and ctx.response_proposal:
+                deltas = ctx.response_proposal.proposed_state_deltas or []
+                if deltas:
+                    target = EntityId(str(deltas[0].entity_id))
+
+            event = WorldEvent(
+                event_type=f"world.{action}",
+                timestamp=Timestamp(
+                    world_time=ctx.world_time or now,
+                    wall_time=now,
+                    tick=ctx.tick,
+                ),
+                actor_id=ActorId(actor_id),
+                service_id=ServiceId(service_id),
+                action=action,
+                target_entity=target,
+                input_data=input_data,
+                source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
+            )
+            try:
+                await self._bus.publish(event)
+            except Exception:
+                pass  # Bus publish failure is non-fatal
 
         # Process any side effects proposed by packs
         if ctx.response_proposal and ctx.response_proposal.proposed_side_effects:
@@ -353,6 +404,114 @@ class TerrariumApp:
         animator = self._registry.get("animator")
         await animator.configure(plan, self._scheduler)
 
+    async def configure_agency(self, plan: Any, result: dict) -> None:
+        """Configure the AgencyEngine from compilation results.
+
+        Creates ActorState for each internal actor, builds WorldContextBundle,
+        extracts available actions from service packs.
+
+        Handles gracefully if the agency engine is not registered.
+
+        Args:
+            plan: A WorldPlan object with actors, behavior, and mission.
+            result: The compilation result dict from generate_world().
+        """
+        from terrarium.actors.state import ActorState
+        from terrarium.actors.trait_extractor import extract_behavior_traits
+        from terrarium.engines.world_compiler.generation_context import (
+            WorldGenerationContext,
+        )
+        from terrarium.simulation.world_context import WorldContextBundle
+
+        try:
+            agency = self._registry.get("agency")
+        except KeyError:
+            logger.debug("Agency engine not registered — skipping configure_agency")
+            return
+
+        actors = result.get("actors", [])
+
+        # Build WorldContextBundle from plan + generation context
+        gen_ctx = WorldGenerationContext(plan)
+        ctx_vars = gen_ctx.for_entity_generation()
+
+        # Gather available actions from service packs
+        available_actions: list[dict[str, Any]] = []
+        try:
+            responder = self._registry.get("responder")
+            if hasattr(responder, "_pack_registry"):
+                for tool_info in responder._pack_registry.list_tools():
+                    available_actions.append(
+                        {
+                            "name": tool_info.get("name", ""),
+                            "description": tool_info.get("description", ""),
+                            "service": tool_info.get("pack_name", ""),
+                        }
+                    )
+        except KeyError:
+            logger.debug("Responder engine not registered — no available actions")
+
+        world_context = WorldContextBundle(
+            world_description=getattr(plan, "description", ""),
+            reality_summary=ctx_vars.get("reality_summary", ""),
+            behavior_mode=getattr(plan, "behavior", "dynamic"),
+            behavior_description=ctx_vars.get("behavior_description", ""),
+            governance_rules_summary=ctx_vars.get("policies_summary", ""),
+            mission=getattr(plan, "mission", "") or "",
+            available_services=available_actions,
+        )
+
+        # Collect all entity IDs from compilation result for watched_entities
+        all_entity_ids: list[str] = []
+        for entity_type, entities in result.get("entities", {}).items():
+            for entity in entities:
+                eid = (
+                    entity.get("id")
+                    or entity.get(f"{entity_type}_id")
+                    or entity.get("number")
+                )
+                if eid:
+                    all_entity_ids.append(str(eid))
+
+        # Create ActorState for each internal actor
+        actor_states: list[ActorState] = []
+        for actor_def in actors:
+            if str(actor_def.type) in ("human", "system"):
+                traits = extract_behavior_traits(actor_def)
+                state = ActorState(
+                    actor_id=actor_def.id,
+                    role=actor_def.role,
+                    actor_type="internal",
+                    persona=(
+                        actor_def.personality.model_dump()
+                        if actor_def.personality
+                        else {}
+                    ),
+                    behavior_traits=traits,
+                    current_goal=actor_def.metadata.get("goal"),
+                    goal_strategy=actor_def.metadata.get("goal_strategy"),
+                )
+
+                # Populate watched_entities: each actor watches a
+                # deterministic ~30% subset of generated entities so
+                # activation triggers when relevant entities change.
+                if all_entity_ids:
+                    actor_hash = int(
+                        hashlib.md5(  # noqa: S324
+                            str(actor_def.id).encode(),
+                        ).hexdigest(),
+                        16,
+                    )
+                    state.watched_entities = [
+                        e
+                        for i, e in enumerate(all_entity_ids)
+                        if (actor_hash + i) % 3 == 0
+                    ][:15]
+
+                actor_states.append(state)
+
+        await agency.configure(actor_states, world_context, available_actions)
+
     async def compile_and_run(self, plan: Any) -> dict:
         """Compile world + configure all runtime engines in one call.
 
@@ -360,6 +519,7 @@ class TerrariumApp:
         1. generate_world(plan) — LLM generation + validation + snapshot
         2. configure_governance(plan) — policies + permissions + budgets
         3. configure_animator(plan) — behavior mode + dimensions + scheduler
+        4. configure_agency(plan, result) — internal actor lifecycle
 
         This is the recommended single entry point for users.
         """
@@ -367,6 +527,7 @@ class TerrariumApp:
         result = await compiler.generate_world(plan)
         self.configure_governance(plan)
         await self.configure_animator(plan)
+        await self.configure_agency(plan, result)
         return result
 
     # ── Run management ─────────────────────────────────────────

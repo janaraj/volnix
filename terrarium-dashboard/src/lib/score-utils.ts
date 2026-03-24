@@ -10,7 +10,10 @@ export function computeGrade(score: number): { label: string; colorClass: string
   return { label: 'D', colorClass: 'text-score-poor' };
 }
 
-/** Clamp a value into the 0-1 range, optionally normalizing from a custom range. */
+/**
+ * Clamp a value into the 0-1 range, optionally normalizing from a custom range.
+ * Returns 0 when max === min (degenerate range with no spread).
+ */
 export function normalizeScore(value: number, min = 0, max = 1): number {
   if (max === min) return 0;
   return Math.max(0, Math.min(1, (value - min) / (max - min)));

@@ -16,7 +16,10 @@ function safeStorage() {
     localStorage.removeItem(testKey);
     return createJSONStorage(() => localStorage);
   } catch {
-    // In-memory fallback for jsdom/SSR
+    // In-memory fallback for jsdom/SSR — layout preferences will not persist across reloads
+    if (typeof console !== 'undefined') {
+      console.debug('[terrarium] localStorage unavailable — layout preferences will not persist');
+    }
     const memStore = new Map<string, string>();
     return createJSONStorage(() => ({
       getItem: (name: string) => memStore.get(name) ?? null,

@@ -14,6 +14,7 @@ export function ErrorDisplay({ error, onRetry }: ErrorDisplayProps) {
       </div>
       {onRetry && (
         <button
+          type="button"
           onClick={onRetry}
           className="mt-3 rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
         >

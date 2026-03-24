@@ -160,8 +160,8 @@ class PolicyEngine(BaseEngine):
         trigger = policy.get("trigger")
 
         if trigger is None:
-            # No trigger = matches all actions
-            return True
+            # No trigger = no automatic match; policies need an explicit trigger
+            return False
 
         if isinstance(trigger, str):
             # String trigger: keyword-based matching against action name

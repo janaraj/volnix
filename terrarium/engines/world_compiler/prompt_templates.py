@@ -118,18 +118,24 @@ class PromptTemplate:
                     continue
 
         # Handle truncated JSON arrays — if response was cut off by token limit,
-        # the array may be missing its closing bracket. Try to salvage by finding
-        # the last complete object and closing the array.
+        # the array may be missing its closing bracket. Try progressively shorter
+        # truncations until we find valid JSON.
         arr_start = content.find("[")
         if arr_start != -1:
-            # Find last complete object (ending with })
-            last_obj_end = content.rfind("}")
-            if last_obj_end != -1 and last_obj_end > arr_start:
+            # Try each } from the end backwards until we find valid JSON
+            search_from = len(content)
+            for _ in range(20):  # max 20 attempts
+                last_obj_end = content.rfind("}", 0, search_from)
+                if last_obj_end == -1 or last_obj_end <= arr_start:
+                    break
                 truncated = content[arr_start:last_obj_end + 1] + "]"
                 try:
-                    return json.loads(truncated)
+                    result = json.loads(truncated)
+                    if isinstance(result, list) and result:
+                        return result
                 except json.JSONDecodeError:
                     pass
+                search_from = last_obj_end
 
         raise ValueError(f"Could not parse JSON from LLM response: {content[:200]}")
 
