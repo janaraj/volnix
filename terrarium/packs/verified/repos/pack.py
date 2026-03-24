@@ -1,7 +1,7 @@
 """Repos service pack (Tier 1 -- verified).
 
-Provides the canonical tool surface for code-devops services:
-list branches, create PR, list PRs, merge PR, and add review.
+Provides the canonical tool surface for code-category services:
+GitHub-aligned issue, pull request, and commit operations.
 """
 
 from __future__ import annotations
@@ -10,31 +10,76 @@ from typing import ClassVar
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.base import ServicePack
+from terrarium.packs.base import ActionHandler, ServicePack
+from terrarium.packs.verified.repos.handlers import (
+    handle_add_issue_comment,
+    handle_create_issue,
+    handle_create_pull_request,
+    handle_get_issue,
+    handle_get_pull_request,
+    handle_list_commits,
+    handle_list_issues,
+    handle_list_pull_requests,
+    handle_merge_pull_request,
+    handle_update_issue,
+)
+from terrarium.packs.verified.repos.schemas import (
+    COMMIT_ENTITY_SCHEMA,
+    ISSUE_ENTITY_SCHEMA,
+    PULL_REQUEST_ENTITY_SCHEMA,
+    REPOS_TOOL_DEFINITIONS,
+    REPOSITORY_ENTITY_SCHEMA,
+)
+from terrarium.packs.verified.repos.state_machines import (
+    ISSUE_TRANSITIONS,
+    PULL_REQUEST_TRANSITIONS,
+)
 
 
 class ReposPack(ServicePack):
-    """Verified pack for code repository / DevOps services.
+    """Verified pack for code repository services (GitHub-aligned).
 
-    Tools: repo_list_branches, repo_create_pr, repo_list_prs,
-    repo_merge_pr, repo_add_review.
+    Tools: create_issue, list_issues, get_issue, update_issue,
+    add_issue_comment, create_pull_request, list_pull_requests,
+    get_pull_request, merge_pull_request, list_commits.
     """
 
     pack_name: ClassVar[str] = "repos"
-    category: ClassVar[str] = "code_devops"
+    category: ClassVar[str] = "code"
     fidelity_tier: ClassVar[int] = 1
+
+    _handlers: ClassVar[dict[str, ActionHandler]] = {
+        "create_issue": handle_create_issue,
+        "list_issues": handle_list_issues,
+        "get_issue": handle_get_issue,
+        "update_issue": handle_update_issue,
+        "add_issue_comment": handle_add_issue_comment,
+        "create_pull_request": handle_create_pull_request,
+        "list_pull_requests": handle_list_pull_requests,
+        "get_pull_request": handle_get_pull_request,
+        "merge_pull_request": handle_merge_pull_request,
+        "list_commits": handle_list_commits,
+    }
 
     def get_tools(self) -> list[dict]:
         """Return the repos tool manifest."""
-        ...
+        return list(REPOS_TOOL_DEFINITIONS)
 
     def get_entity_schemas(self) -> dict:
-        """Return entity schemas (repo, branch, pull_request, review)."""
-        ...
+        """Return entity schemas (repository, issue, pull_request, commit)."""
+        return {
+            "repository": REPOSITORY_ENTITY_SCHEMA,
+            "issue": ISSUE_ENTITY_SCHEMA,
+            "pull_request": PULL_REQUEST_ENTITY_SCHEMA,
+            "commit": COMMIT_ENTITY_SCHEMA,
+        }
 
     def get_state_machines(self) -> dict:
         """Return state machines for repo entities."""
-        ...
+        return {
+            "issue": {"transitions": ISSUE_TRANSITIONS},
+            "pull_request": {"transitions": PULL_REQUEST_TRANSITIONS},
+        }
 
     async def handle_action(
         self,
@@ -43,4 +88,4 @@ class ReposPack(ServicePack):
         state: dict,
     ) -> ResponseProposal:
         """Dispatch to the appropriate repos action handler."""
-        ...
+        return await self.dispatch_action(action, input_data, state)

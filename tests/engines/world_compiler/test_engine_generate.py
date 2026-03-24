@@ -25,6 +25,30 @@ from terrarium.reality.presets import load_preset
 
 def _entity_payload(entity_type: str, count: int) -> list[dict]:
     payloads: dict[str, callable] = {
+        # Gmail-aligned entity types (namespaced with gmail_ prefix)
+        "gmail_message": lambda idx: {
+            "id": f"msg_{idx:03d}",
+            "threadId": f"thread_{idx:03d}",
+            "labelIds": ["INBOX"],
+            "snippet": f"Snippet {idx}",
+            "subject": f"Test {idx}",
+            "body": "Hello",
+            "from_addr": "a@b.com",
+            "to_addr": "c@d.com",
+        },
+        "gmail_thread": lambda idx: {
+            "id": f"thread_{idx:03d}",
+            "snippet": f"Thread snippet {idx}",
+            "messages": [f"msg_{idx:03d}"],
+        },
+        "gmail_label": lambda idx: {
+            "id": f"label_{idx:03d}",
+            "name": f"Label {idx}",
+        },
+        "gmail_draft": lambda idx: {
+            "id": f"draft_{idx:03d}",
+        },
+        # Legacy entity types (backward compatibility)
         "email": lambda idx: {
             "id": f"email_{idx:03d}",
             "email_id": f"email_{idx:03d}",
@@ -38,11 +62,6 @@ def _entity_payload(entity_type: str, count: int) -> list[dict]:
             "id": f"mailbox_{idx:03d}",
             "mailbox_id": f"mailbox_{idx:03d}",
             "owner": f"user{idx}@example.com",
-        },
-        "thread": lambda idx: {
-            "id": f"thread_{idx:03d}",
-            "thread_id": f"thread_{idx:03d}",
-            "subject": f"Thread {idx}",
         },
     }
     factory = payloads.get(entity_type, lambda idx: {"id": f"{entity_type}_{idx:03d}"})
