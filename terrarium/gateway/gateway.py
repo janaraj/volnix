@@ -28,6 +28,11 @@ class Gateway:
         self._tool_map: dict[str, tuple[str, str]] = {}  # tool_name -> (service_id, action)
         self._started = False
 
+    @property
+    def config(self) -> GatewayConfig:
+        """Public accessor for the gateway configuration."""
+        return self._config
+
     async def initialize(self) -> None:
         """Discover tools from packs and create protocol adapters."""
         # Build tool map from the SAME PackRegistry the Responder uses

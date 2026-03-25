@@ -133,6 +133,17 @@ class WorldCompilerEngine(BaseEngine):
             "warnings": list(partial.warnings) + warnings,
         })
 
+    async def compile_from_dicts(
+        self,
+        world_def: dict[str, Any],
+        settings: dict[str, Any] | None = None,
+    ) -> WorldPlan:
+        """Compile a WorldPlan from in-memory dicts (public API for replay)."""
+        partial, specs = await self._yaml_parser.parse_from_dicts(
+            world_def, settings or {},
+        )
+        return await self._resolve_and_assemble(partial, specs)
+
     # -- D4b: Generation (entity creation + population) -----------------------
 
     async def generate_world(self, plan: WorldPlan) -> dict[str, Any]:

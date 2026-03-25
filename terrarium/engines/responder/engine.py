@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from terrarium.core import (
     ActionContext,
@@ -54,6 +54,11 @@ class WorldResponderEngine(BaseEngine):
 
         self._pack_runtime = PackRuntime(self._pack_registry)
         self._tier1 = Tier1Dispatcher(self._pack_runtime)
+
+    @property
+    def pack_registry(self) -> Any:
+        """Public accessor for the pack registry."""
+        return self._pack_registry
 
     # -- PipelineStep interface ------------------------------------------------
 

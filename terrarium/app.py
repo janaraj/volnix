@@ -49,6 +49,7 @@ class TerrariumApp:
         self._scheduler: Any = None
         self._run_manager: Any = None
         self._artifact_store: Any = None
+        self._actor_registry: Any = None
         self._started = False
 
     async def start(self) -> None:
@@ -200,6 +201,7 @@ class TerrariumApp:
 
         compiler._config["_state_engine"] = state_engine
         actor_registry = ActorRegistry()
+        self._actor_registry = actor_registry
         compiler._config["_actor_registry"] = actor_registry
         compiler._ledger = self._ledger  # Same pattern as state_engine
 
@@ -641,3 +643,15 @@ class TerrariumApp:
     @property
     def artifact_store(self) -> ArtifactStore:
         return self._artifact_store
+
+    @property
+    def config(self) -> TerrariumConfig:
+        return self._config
+
+    @property
+    def health(self) -> HealthAggregator | None:
+        return self._health
+
+    @property
+    def actor_registry(self) -> Any:
+        return self._actor_registry
