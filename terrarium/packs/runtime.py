@@ -112,10 +112,21 @@ class PackRuntime:
                     if not field_schema:
                         continue
                     if "type" in field_schema:
-                        expected = _TYPE_MAP.get(field_schema["type"])
+                        field_type = field_schema["type"]
+                        # Handle nullable types: ["string", "null"] etc.
+                        if isinstance(field_type, list):
+                            if "null" in field_type and value is None:
+                                continue
+                            non_null = [t for t in field_type if t != "null"]
+                            expected = tuple(
+                                _TYPE_MAP[t] for t in non_null
+                                if t in _TYPE_MAP
+                            ) or None
+                        else:
+                            expected = _TYPE_MAP.get(field_type)
                         if expected and not isinstance(value, expected):
                             raise ValidationError(
-                                message=f"Update field '{field_name}' expected {field_schema['type']}, got {type(value).__name__} for {delta.entity_type}",
+                                message=f"Update field '{field_name}' expected {field_type}, got {type(value).__name__} for {delta.entity_type}",
                                 validation_type="schema",
                             )
                     # Enum constraint validation
