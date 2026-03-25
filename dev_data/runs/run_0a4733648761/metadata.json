@@ -1,0 +1,21 @@
+{
+  "run_id": "run_0a4733648761",
+  "status": "completed",
+  "mode": "governed",
+  "reality_preset": "messy",
+  "fidelity_mode": "auto",
+  "tag": "g4a_test",
+  "created_at": "2026-03-25T20:07:07.400747+00:00",
+  "started_at": "2026-03-25T20:07:07.401010+00:00",
+  "completed_at": "2026-03-25T20:07:18.837419+00:00",
+  "world_def": {
+    "name": "G4a Feedback Test",
+    "services": [
+      "email",
+      "twilio"
+    ]
+  },
+  "config_snapshot": {
+    "seed": 42
+  }
+}

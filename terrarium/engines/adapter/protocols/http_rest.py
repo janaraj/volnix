@@ -23,6 +23,7 @@ Routes:
   GET  /api/v1/runs/{run_id}/entities         -- run entities (paginated)
   GET  /api/v1/runs/{run_id}/entities/{eid}   -- entity with state history
   GET  /api/v1/runs/{run_id}/gaps             -- run-scoped capability gaps
+  GET  /api/v1/runs/{run_id}/actors           -- list actors in a run
   GET  /api/v1/runs/{run_id}/actors/{aid}     -- actor detail with budgets
   GET  /api/v1/compare                        -- compare runs
   GET  /api/v1/diff                           -- compare runs (original)
@@ -387,7 +388,39 @@ class HTTPRestAdapter(ProtocolAdapter):
             outcome: str | None = fastapi.Query(default=None),
         ):
             """Paginated events for a run, filterable by actor/service/type/outcome."""
+            from terrarium.core.types import RunId as _RId
+
             events = await _load_run_events(run_id)
+
+            # Enrich: causal_child_ids (backward refs — can't store at source)
+            children: dict[str, list[str]] = {}
+            for e in events:
+                caused_by = e.get("caused_by")
+                eid = e.get("event_id", "")
+                if caused_by:
+                    children.setdefault(caused_by, []).append(eid)
+                for cause in e.get("causes", []):
+                    children.setdefault(cause, []).append(eid)
+
+            # Enrich: actor_role (from world_def — not event data)
+            run_data = await gateway._app.run_manager.get_run(_RId(run_id))
+            world_def = run_data.get("world_def", {}) if run_data else {}
+            actor_roles = {
+                a.get("id", ""): a.get("role", "")
+                for a in world_def.get("actors", [])
+                if isinstance(a, dict)
+            }
+
+            events = [
+                {
+                    **e,
+                    "causal_child_ids": children.get(e.get("event_id", ""), []),
+                    "actor_role": actor_roles.get(e.get("actor_id", ""), ""),
+                }
+                for e in events
+            ]
+
+            # Apply filters
             if actor_id:
                 events = [e for e in events if e.get("actor_id") == actor_id]
             if service_id:
@@ -593,6 +626,22 @@ class HTTPRestAdapter(ProtocolAdapter):
                 "gaps": gaps,
                 "summary": summary,
             }
+
+        @app.get("/api/v1/runs/{run_id}/actors")
+        async def list_run_actors(run_id: str):
+            """List all actors in a run."""
+            from starlette.responses import JSONResponse
+
+            from terrarium.core.types import RunId as _RId
+
+            run = await gateway._app.run_manager.get_run(_RId(run_id))
+            if run is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": f"Run not found: {run_id}"},
+                )
+            actors = run.get("world_def", {}).get("actors", [])
+            return {"run_id": run_id, "actors": actors, "count": len(actors)}
 
         @app.get("/api/v1/runs/{run_id}/actors/{actor_id}")
         async def get_actor_detail(run_id: str, actor_id: str):

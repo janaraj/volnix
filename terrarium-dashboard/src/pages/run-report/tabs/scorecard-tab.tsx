@@ -38,10 +38,10 @@ function ScorecardGrid({ data }: { data: ScorecardResponse }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-border/30 shadow-sm">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-bg-elevated">
+          <tr className="border-b border-border/30 bg-bg-elevated/30">
             <th className="px-3 py-2 text-left text-xs font-medium uppercase text-text-muted">
               Dimension
             </th>
@@ -57,7 +57,7 @@ function ScorecardGrid({ data }: { data: ScorecardResponse }) {
         </thead>
         <tbody>
           {dimensions.map((dim) => (
-            <tr key={dim} className="border-b border-bg-elevated">
+            <tr key={dim} className="border-b border-border/30">
               <td className="px-3 py-2 text-text-secondary">
                 {formatDimensionName(dim)}
               </td>
@@ -68,7 +68,7 @@ function ScorecardGrid({ data }: { data: ScorecardResponse }) {
                     {value != null ? (
                       <span
                         className={cn(
-                          'inline-block rounded px-2 py-0.5 font-mono text-xs',
+                          'inline-block rounded-md px-2.5 py-1 font-mono text-xs',
                           scoreToColorClass(value / 100),
                         )}
                       >
@@ -83,13 +83,13 @@ function ScorecardGrid({ data }: { data: ScorecardResponse }) {
             </tr>
           ))}
           {data.collective.overall_score != null && (
-            <tr className="border-t-2 border-bg-elevated font-semibold">
+            <tr className="border-t-2 border-border/30 font-semibold">
               <td className="px-3 py-2 text-text-primary">Overall</td>
               {actorIds.map((actorId) => (
                 <td key={actorId} className="px-3 py-2 text-center">
                   <span
                     className={cn(
-                      'inline-block rounded px-2 py-0.5 font-mono text-xs',
+                      'inline-block rounded-md px-2.5 py-1 font-mono text-xs',
                       scoreToColorClass(data.collective.overall_score / 100),
                     )}
                   >

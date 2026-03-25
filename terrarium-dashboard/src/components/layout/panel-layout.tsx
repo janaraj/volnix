@@ -9,11 +9,11 @@ interface PanelLayoutProps {
 export function PanelLayout({ left, center, right }: PanelLayoutProps) {
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <div className="min-w-0 md:w-1/4 overflow-auto bg-bg-surface p-4 border-b md:border-b-0 md:border-r border-border">
+      <div className="min-w-0 md:w-1/4 overflow-auto bg-bg-surface p-4 border-b md:border-b-0 md:border-r border-border/30">
         {left}
       </div>
       <div className="min-w-0 flex-1 overflow-auto bg-bg-surface p-4">{center}</div>
-      <div className="min-w-0 md:w-1/4 overflow-auto bg-bg-surface p-4 border-t md:border-t-0 md:border-l border-border">
+      <div className="min-w-0 md:w-1/4 overflow-auto bg-bg-surface p-4 border-t md:border-t-0 md:border-l border-border/30">
         {right}
       </div>
     </div>

@@ -68,3 +68,8 @@ export function formatTick(tick: number): string {
 export function truncateId(id: string, len?: number): string {
   return id.slice(0, len ?? 8);
 }
+
+/** Capitalize first letter of each word. */
+export function capitalize(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}

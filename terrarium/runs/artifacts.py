@@ -14,7 +14,10 @@ from typing import Any
 from terrarium.core.types import RunId
 from terrarium.runs.config import RunConfig
 
-_ALLOWED_ARTIFACT_TYPES = frozenset({"report", "scorecard", "event_log", "config", "metadata"})
+_ALLOWED_ARTIFACT_TYPES = frozenset({
+    "report", "scorecard", "event_log", "config", "metadata",
+    "captured_surface",
+})
 
 
 def _sanitize_name(name: str) -> str:

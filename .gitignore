@@ -54,6 +54,10 @@ dmypy.json
 .project
 .settings/
 
+# Node (npx cache for @aisuite/chub)
+node_modules/
+package-lock.json
+
 # OS
 .DS_Store
 Thumbs.db

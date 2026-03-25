@@ -72,11 +72,20 @@ class TerrariumApp:
             # 4. LLM infrastructure (before engines — engines may need it)
             self._llm_router = await self._initialize_llm()
 
-            # 5. Engine registry + wiring
+            # 5. Run management + artifacts (before engine wiring — engines need these)
+            from terrarium.runs.artifacts import ArtifactStore as RunArtifactStore
+            from terrarium.runs.manager import RunManager
+
+            self._run_manager = RunManager(
+                config=self._config.runs, persistence=self._conn_mgr,
+            )
+            self._artifact_store = RunArtifactStore(config=self._config.runs)
+
+            # 6. Engine registry + wiring
             self._registry = create_default_registry()
             await wire_engines(self._registry, self._bus, self._config)
 
-            # 6. Post-wiring dependency injection
+            # 7. Post-wiring dependency injection
             await self._inject_cross_engine_deps()
 
             # 7. Build pipeline (bus and ledger passed via constructor)
@@ -91,15 +100,6 @@ class TerrariumApp:
 
             # 9. Health
             self._health = HealthAggregator(self._registry)
-
-            # 9.5. Run management
-            from terrarium.runs.artifacts import ArtifactStore as RunArtifactStore
-            from terrarium.runs.manager import RunManager
-
-            self._run_manager = RunManager(
-                config=self._config.runs, persistence=self._conn_mgr,
-            )
-            self._artifact_store = RunArtifactStore(config=self._config.runs)
 
             # 10. Gateway
             from terrarium.gateway.gateway import Gateway
@@ -217,6 +217,11 @@ class TerrariumApp:
                 except Exception as exc:
                     logger.debug("ProfileInferrer not available: %s", exc)
 
+            # Profile registry is shared across responder, adapter, and compiler
+            # so that profiles inferred at compile time are immediately
+            # available for runtime capability checks and response generation.
+            profile_registry = getattr(responder, "_profile_registry", None)
+
             compiler._compiler_resolver = CompilerServiceResolver(
                 pack_registry=pack_reg,
                 kernel=existing_kernel,
@@ -225,6 +230,7 @@ class TerrariumApp:
                 ),
                 profile_loader=profile_loader,
                 profile_inferrer=profile_inferrer,
+                profile_registry=profile_registry,
             )
 
         compiler._config["_state_engine"] = state_engine
@@ -302,6 +308,18 @@ class TerrariumApp:
         if self._llm_router:
             agency._config["_llm_router"] = self._llm_router
         agency._ledger = self._ledger
+
+        # Feedback engine wiring
+        feedback = self._registry.get("feedback")
+        feedback._config["_conn_mgr"] = self._conn_mgr
+        feedback._ledger = self._ledger
+        feedback._config["_artifact_store"] = self._artifact_store
+        feedback._config["_profile_registry"] = getattr(
+            responder, "_profile_registry", None
+        )
+        feedback._config["_profile_loader"] = getattr(
+            responder, "_profile_loader", None
+        )
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
@@ -610,7 +628,48 @@ class TerrariumApp:
             except Exception as exc:
                 logger.warning("Auto-snapshot failed for run %s: %s", run_id, exc)
 
-        await self._run_manager.complete_run(run_id)
+        # Compute run summary from data already in scope
+        world_def = run.get("world_def", {}) if run else {}
+        actors_raw = world_def.get("actors", [])
+        services_raw = world_def.get("services", {})
+
+        services_list: list[dict] = []
+        if isinstance(services_raw, dict):
+            for svc_id, svc_def in services_raw.items():
+                entry: dict = {"id": svc_id}
+                if isinstance(svc_def, dict):
+                    entry["name"] = svc_def.get("name", svc_id)
+                    entry["provider"] = svc_def.get("provider", "")
+                    entry["category"] = svc_def.get("category", "")
+                services_list.append(entry)
+
+        ticks = [
+            e.timestamp.tick
+            for e in events
+            if hasattr(e, "timestamp") and hasattr(e.timestamp, "tick")
+        ]
+
+        def _actor_to_dict(a: Any) -> dict:
+            if isinstance(a, dict):
+                return {"id": a.get("id", ""), "role": a.get("role", ""), "type": a.get("type", "")}
+            return {"id": getattr(a, "id", ""), "role": getattr(a, "role", ""), "type": getattr(a, "type", "")}
+
+        actors_summary = [_actor_to_dict(a) for a in actors_raw]
+
+        summary = {
+            "current_tick": max(ticks) if ticks else 0,
+            "event_count": len(events),
+            "actor_count": len(actors_summary),
+            "governance_score": scorecard.get("collective", {}).get("overall_score")
+            if isinstance(scorecard, dict)
+            else None,
+            "services": services_list,
+            "conditions": world_def.get("reality_dimensions", {}),
+            "description": world_def.get("description", world_def.get("name", "")),
+            "actors": actors_summary,
+        }
+
+        await self._run_manager.complete_run(run_id, summary=summary)
         return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
 
     async def diff_runs(self, run_ids: list[str]) -> dict:

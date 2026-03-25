@@ -61,15 +61,17 @@ export function RunReportPage() {
       {(run) => (
         <div>
           <ReportHeader run={run} />
-          <div className="flex gap-2 border-b border-bg-elevated pb-0 text-sm">
+          <div className="flex gap-2 border-b border-border/30 pb-0 text-sm">
             {TAB_ORDER.map((tabId) => (
               <button
                 key={tabId}
                 type="button"
                 onClick={() => setTab(tabId)}
                 className={cn(
-                  'px-3 py-2 text-text-secondary transition-colors hover:text-text-primary',
-                  tab === tabId && 'border-b-2 border-info text-text-primary',
+                  'rounded-t-lg px-4 py-2.5 font-medium transition-colors',
+                  tab === tabId
+                    ? 'border-b-2 border-accent bg-bg-surface text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover/50',
                 )}
               >
                 {TAB_LABELS[tabId]}

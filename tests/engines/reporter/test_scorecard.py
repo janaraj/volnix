@@ -38,6 +38,8 @@ async def test_zero_events_all_100(computer, actors):
     assert "collective" in result
     for actor_id, scores in result["per_actor"].items():
         for metric, value in scores.items():
+            if metric == "scores":
+                continue  # structured list, not a scalar metric
             assert value == 100.0, f"{actor_id}.{metric} should be 100.0 with no events"
 
 
@@ -57,9 +59,13 @@ async def test_per_actor_has_correct_metrics(computer, actors):
         "sla_adherence",
     }
     for actor_id, scores in result["per_actor"].items():
-        assert set(scores.keys()) == expected_metrics, (
-            f"Actor {actor_id} has wrong metrics: {set(scores.keys())}"
+        flat_keys = {k for k in scores.keys() if k != "scores"}
+        assert flat_keys == expected_metrics, (
+            f"Actor {actor_id} has wrong metrics: {flat_keys}"
         )
+        # Structured scores list should also be present
+        assert "scores" in scores
+        assert len(scores["scores"]) == len(expected_metrics)
 
 
 @pytest.mark.asyncio

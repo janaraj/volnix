@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router';
-import { ExternalLink, Radio } from 'lucide-react';
+import { ExternalLink, Radio, Users, Zap, Layers, Clock } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { formatRelativeTime, truncateId } from '@/lib/formatters';
+import { formatRelativeTime, truncateId, capitalize } from '@/lib/formatters';
 import { runReportPath, liveConsolePath } from '@/constants/routes';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
 import { ScoreBar } from '@/components/domain/score-bar';
@@ -36,8 +36,8 @@ function BadgeRow({ run }: { run: Run }) {
         const v = value(run);
         if (v === null || v === undefined) return null;
         return (
-          <span key={label} className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px] text-text-secondary">
-            {label}: {String(v)}
+          <span key={label} className="rounded-md bg-bg-elevated/80 px-1.5 py-0.5 text-[11px] text-text-secondary">
+            {label}: {capitalize(String(v))}
           </span>
         );
       })}
@@ -58,11 +58,11 @@ function StatsRow({ run }: { run: Run }) {
         : '--';
 
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-      <span>{run.actor_count ?? 0} actors</span>
-      <span>{run.event_count ?? 0} events</span>
-      <span>{(run.services ?? []).length} entities</span>
-      <span>{duration}</span>
+    <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-muted">
+      <span className="inline-flex items-center gap-1"><Users size={11} /> {run.actor_count ?? 0} actors</span>
+      <span className="inline-flex items-center gap-1"><Zap size={11} /> {run.event_count ?? 0} events</span>
+      <span className="inline-flex items-center gap-1"><Layers size={11} /> {(run.services ?? []).length} services</span>
+      <span className="inline-flex items-center gap-1"><Clock size={11} /> {duration}</span>
       <span>{formatRelativeTime(run.created_at)}</span>
     </div>
   );
@@ -88,8 +88,8 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border bg-bg-surface p-4 transition-colors',
-        selected ? 'border-info' : 'border-border-default',
+        'card elevate-on-hover p-5',
+        selected && 'border-accent/50 !bg-accent/5',
       )}
     >
       {/* Top row: checkbox, status, tag, actions */}
@@ -110,7 +110,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
             <button
               type="button"
               onClick={() => navigate(liveConsolePath(run.run_id))}
-              className="inline-flex items-center gap-1.5 rounded bg-info/15 px-2.5 py-1 text-xs font-medium text-info hover:bg-info/25"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-info/15 px-2.5 py-1 text-xs font-medium text-info shadow-sm transition-all duration-200 hover:bg-info/25"
             >
               <Radio size={12} />
               Watch Live
@@ -119,7 +119,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
             <button
               type="button"
               onClick={handlePrimaryAction}
-              className="inline-flex items-center gap-1.5 rounded bg-bg-elevated px-2.5 py-1 text-xs font-medium text-text-secondary hover:text-text-primary"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-bg-elevated px-2.5 py-1 text-xs font-medium text-text-secondary shadow-xs transition-all duration-200 hover:text-text-primary"
             >
               <ExternalLink size={12} />
               View
@@ -129,7 +129,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
       </div>
 
       {/* World name */}
-      <p className="mb-2 text-sm text-text-secondary">{run.world_def.name}</p>
+      <p className="mb-2 text-sm text-text-secondary">{capitalize(run.world_def.name)}</p>
 
       {/* Badge row */}
       <div className="mb-2">

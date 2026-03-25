@@ -163,7 +163,13 @@ def test_entry_serialization_roundtrip():
 
 
 def test_entry_registry_all_types():
-    """ENTRY_REGISTRY should contain all 9 concrete entry types."""
+    """ENTRY_REGISTRY should contain all concrete entry types."""
+    from terrarium.ledger.entries import (
+        FeedbackAnnotationEntry,
+        FeedbackCaptureEntry,
+        FeedbackPromotionEntry,
+    )
+
     expected = {
         "pipeline_step": PipelineStepEntry,
         "state_mutation": StateMutationEntry,
@@ -174,6 +180,9 @@ def test_entry_registry_all_types():
         "snapshot": SnapshotEntry,
         "actor_activation": ActorActivationEntry,
         "action_generation": ActionGenerationEntry,
+        "feedback.annotation": FeedbackAnnotationEntry,
+        "feedback.promotion": FeedbackPromotionEntry,
+        "feedback.capture": FeedbackCaptureEntry,
     }
     assert ENTRY_REGISTRY == expected
 

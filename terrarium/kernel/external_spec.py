@@ -1,7 +1,7 @@
 """External spec provider protocol.
 
 Any source of API specifications implements this protocol:
-- ContextHubProvider (chub CLI)
+- ContextHubProvider (chub CLI via npx @aisuite/chub)
 - OpenAPIProvider (parse spec files/URLs)
 - Future: MCP manifest provider, etc.
 """

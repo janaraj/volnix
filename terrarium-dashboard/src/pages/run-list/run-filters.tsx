@@ -63,7 +63,7 @@ export function RunFilters({ filters, onChange }: RunFiltersProps) {
       <select
         value={filters.status}
         onChange={(e) => onChange({ status: e.target.value })}
-        className="rounded border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary"
+        className="rounded-lg border border-border/40 bg-bg-surface px-3 py-1.5 text-sm text-text-primary shadow-xs transition-all duration-200 focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
       >
         {Object.entries(STATUS_OPTIONS).map(([value, label]) => (
           <option key={value} value={value}>
@@ -76,7 +76,7 @@ export function RunFilters({ filters, onChange }: RunFiltersProps) {
       <select
         value={filters.preset}
         onChange={(e) => onChange({ preset: e.target.value })}
-        className="rounded border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary"
+        className="rounded-lg border border-border/40 bg-bg-surface px-3 py-1.5 text-sm text-text-primary shadow-xs transition-all duration-200 focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
       >
         {Object.entries(PRESET_OPTIONS).map(([value, label]) => (
           <option key={value} value={value}>
@@ -93,7 +93,7 @@ export function RunFilters({ filters, onChange }: RunFiltersProps) {
           placeholder="Search tags..."
           value={tagInput}
           onChange={(e) => setTagInput(e.target.value)}
-          className="rounded border border-border-default bg-bg-surface py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted"
+          className="rounded-lg border border-border/40 bg-bg-surface py-1.5 pl-8 pr-3 text-sm text-text-primary shadow-xs transition-all duration-200 placeholder:text-text-muted focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
         />
       </div>
     </div>

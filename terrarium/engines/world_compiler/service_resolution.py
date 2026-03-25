@@ -30,12 +30,14 @@ class CompilerServiceResolver:
         resolver: ServiceResolver | None = None,
         profile_loader: Any | None = None,
         profile_inferrer: Any | None = None,
+        profile_registry: Any | None = None,
     ) -> None:
         self._packs = pack_registry
         self._kernel = kernel
         self._resolver = resolver
         self._profile_loader = profile_loader  # ProfileLoader instance
         self._profile_inferrer = profile_inferrer  # ProfileInferrer instance
+        self._profile_registry = profile_registry  # ProfileRegistry (shared with responder + adapter)
 
     def get_available_categories(self) -> str:
         """Return comma-separated list of available semantic categories."""
@@ -162,11 +164,17 @@ class CompilerServiceResolver:
                 if profile:
                     from terrarium.packs.profile_surface import profile_to_surface
 
-                    # Validate via conversion BEFORE saving to disk
+                    # Validate via conversion BEFORE saving/registering
                     surface = profile_to_surface(profile)
-                    # Only save if conversion succeeded and surface has operations
-                    if surface.operations and self._profile_loader:
-                        self._profile_loader.save(profile)
+                    if surface.operations:
+                        # Save to disk so the profile persists across restarts
+                        if self._profile_loader:
+                            self._profile_loader.save(profile)
+                        # Register in the shared profile registry so the
+                        # responder and adapter can use it immediately
+                        # (without waiting for a restart)
+                        if self._profile_registry:
+                            self._profile_registry.register(profile)
                     return ServiceResolution(
                         service_name=service_name,
                         spec_reference=str(spec_reference),

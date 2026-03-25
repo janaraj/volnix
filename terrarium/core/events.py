@@ -93,6 +93,16 @@ class WorldEvent(Event):
         post_state: State snapshot after the action (if captured).
         fidelity: Fidelity metadata for this action's simulation.
         causes: List of upstream event IDs that causally led to this event.
+        source: Origin of this action (external agent, internal, environment).
+        response_body: The service response payload returned to the caller.
+        outcome: Pipeline verdict — ``success``, ``blocked``, ``held``,
+            ``escalated``, ``denied``, ``budget_exhausted``, ``error``,
+            or ``policy_hit``.
+        state_deltas: Entity mutations applied by this action. Each dict
+            contains ``entity_type``, ``entity_id``, ``operation``,
+            ``fields``, and ``previous_fields``.
+        cost: Action cost breakdown (api_calls, llm_spend_usd, world_actions).
+        run_id: The evaluation run this event belongs to.
     """
 
     actor_id: ActorId
@@ -105,6 +115,11 @@ class WorldEvent(Event):
     fidelity: FidelityMetadata | None = None
     causes: list[EventId] = Field(default_factory=list)
     source: ActionSource | None = None
+    response_body: dict[str, Any] | None = None
+    outcome: str = "success"
+    state_deltas: list[dict[str, Any]] = Field(default_factory=list)
+    cost: dict[str, Any] | None = None
+    run_id: str | None = None
 
 
 # ---------------------------------------------------------------------------

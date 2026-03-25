@@ -34,9 +34,9 @@ const MAX_KEY_EVENTS = 10;
 
 function MetricCard({ title, value }: { title: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-bg-elevated bg-bg-surface p-4 transition-colors hover:border-border">
-      <p className="text-xs font-medium uppercase text-text-muted">{title}</p>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
+    <div className="card p-4">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{title}</p>
+      <div className="mt-1.5 text-2xl font-bold tabular-nums">{value}</div>
     </div>
   );
 }
@@ -86,7 +86,7 @@ function KeyEvents({ runId }: { runId: string }) {
               {keyEvents.map((event: WorldEvent) => (
                 <div
                   key={event.event_id}
-                  className="flex items-center gap-3 rounded-lg border border-bg-elevated bg-bg-surface px-4 py-2 transition-colors hover:border-border hover:bg-bg-hover"
+                  className="card px-4 py-2.5 flex items-center gap-3"
                 >
                   <OutcomeIcon outcome={event.outcome ?? 'success'} size={16} />
                   <ActorBadge actorId={event.actor_id} role={event.actor_role} />
@@ -129,7 +129,7 @@ function AgentSummary({ runId }: { runId: string }) {
                 return (
                   <div
                     key={actorId}
-                    className="rounded-lg border border-bg-elevated bg-bg-surface p-4 transition-colors hover:border-border hover:bg-bg-hover"
+                    className="card elevate-on-hover p-4"
                   >
                     <div className="mb-2">
                       <ActorBadge actorId={actorId} />

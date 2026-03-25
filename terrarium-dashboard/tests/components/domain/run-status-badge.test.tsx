@@ -9,25 +9,25 @@ describe('RunStatusBadge', () => {
     expect(badge).toHaveClass('text-info');
   });
 
-  it('shows status text', () => {
+  it('shows capitalized status text', () => {
     render(<RunStatusBadge status="running" />);
-    expect(screen.getByText('running')).toBeInTheDocument();
+    expect(screen.getByText('Running')).toBeInTheDocument();
   });
 
   it('renders completed status', () => {
     render(<RunStatusBadge status="completed" />);
-    expect(screen.getByText('completed')).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
   });
 
-  it('applies pulse animation for running status', () => {
+  it('applies spin animation for running status', () => {
     const { container } = render(<RunStatusBadge status="running" />);
-    const dot = container.querySelector('.animate-pulse');
-    expect(dot).toBeInTheDocument();
+    const spinner = container.querySelector('.animate-spin');
+    expect(spinner).toBeInTheDocument();
   });
 
-  it('does not apply pulse animation for non-running status', () => {
+  it('does not apply spin animation for non-running status', () => {
     const { container } = render(<RunStatusBadge status="completed" />);
-    const dot = container.querySelector('.animate-pulse');
-    expect(dot).not.toBeInTheDocument();
+    const spinner = container.querySelector('.animate-spin');
+    expect(spinner).not.toBeInTheDocument();
   });
 });

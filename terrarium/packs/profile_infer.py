@@ -213,9 +213,9 @@ class ProfileInferrer:
 
         if "context_hub" in sources:
             content = sources["context_hub"]
-            # Truncate to avoid token overflow
-            if len(content) > 4000:
-                content = content[:4000] + "\n... (truncated)"
+            # Truncate to avoid token overflow — keep generous for rich docs
+            if len(content) > 8000:
+                content = content[:8000] + "\n... (truncated)"
             parts.append(f"## Context Hub API Documentation\n{content}")
 
         if "openapi" in sources:
@@ -378,10 +378,18 @@ class ProfileInferrer:
                 except Exception as exc:
                     logger.debug("ProfileInferrer: skipping malformed error mode: %s", exc)
 
-        # Parse behavioral notes
-        behavioral_notes = profile_data.get("behavioral_notes", [])
-        if not isinstance(behavioral_notes, list):
-            behavioral_notes = []
+        # Parse behavioral notes (must be list of strings)
+        raw_notes = profile_data.get("behavioral_notes", [])
+        behavioral_notes: list[str] = []
+        if isinstance(raw_notes, list):
+            for note in raw_notes:
+                if isinstance(note, str):
+                    behavioral_notes.append(note)
+                elif isinstance(note, dict):
+                    # LLM sometimes returns {"key": "value"} — flatten to string
+                    behavioral_notes.append(
+                        "; ".join(f"{k}: {v}" for k, v in note.items())
+                    )
 
         # Parse examples
         examples: list[ProfileExample] = []

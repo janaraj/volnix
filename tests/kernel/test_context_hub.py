@@ -1,172 +1,249 @@
-"""Tests for terrarium.kernel.context_hub -- Context Hub CLI integration."""
+"""Tests for terrarium.kernel.context_hub -- Context Hub via npx integration."""
 
 import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from terrarium.kernel.context_hub import ContextHubProvider
 from terrarium.kernel.external_spec import ExternalSpecProvider
 
+# Real output captured from ``npx @aisuite/chub search twilio``
+_TWILIO_SEARCH_OUTPUT = """\
+3 results for "twilio":
 
-async def test_is_available_missing():
-    """When chub CLI is not installed, is_available returns False."""
+  twilio/package  [doc]  py  [maintainer]
+       Twilio Python helper library for REST API access, messagi...
+  twilio/messaging  [doc]  py, ts  [maintainer]
+       Cloud communications platform for SMS, voice, video, and ...
+  sendgrid/package  [doc]  py  [maintainer]
+       Twilio SendGrid Python SDK for sending email and calling ...
+"""
+
+_STRIPE_SEARCH_OUTPUT = """\
+2 results for "stripe":
+
+  stripe/api  [doc]  js  [maintainer]
+       Payment processing platform with comprehensive payment an...
+  stripe/payments  [doc]  js  [maintainer]
+       Payment processing platform with comprehensive payment an...
+"""
+
+_EMPTY_SEARCH_OUTPUT = """\
+0 results for "totally_unknown_xyz":
+"""
+
+_TWILIO_DOC_CONTENT = """\
+---
+name: messaging
+description: "Cloud communications platform"
+---
+# Twilio Python Library
+
+## Send SMS
+client.messages.create(to="+1...", from_="+1...", body="Hello")
+"""
+
+
+def _mock_subprocess(stdout: str, returncode: int = 0):
+    """Create a mock for asyncio.create_subprocess_exec."""
+    proc = AsyncMock()
+    proc.communicate = AsyncMock(
+        return_value=(stdout.encode(), b"")
+    )
+    proc.returncode = returncode
+    return proc
+
+
+# -- is_available() -----------------------------------------------------------
+
+
+async def test_is_available_npx_missing():
     provider = ContextHubProvider()
     with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
-        result = await provider.is_available()
-    assert result is False
+        assert await provider.is_available() is False
 
 
-async def test_is_available_installed():
-    """When chub CLI is installed, is_available returns True."""
+async def test_is_available_npx_found():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        result = await provider.is_available()
-    assert result is True
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        assert await provider.is_available() is True
 
 
-async def test_fetch_unavailable():
-    """fetch returns None when chub is not installed."""
+# -- supports() ---------------------------------------------------------------
+
+
+async def test_supports_found():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
-        result = await provider.fetch("stripe")
-    assert result is None
-
-
-async def test_supports_with_chub_installed():
-    """supports() uses chub search to check availability."""
-    provider = ContextHubProvider()
-
-    proc_mock = AsyncMock()
-    proc_mock.communicate = AsyncMock(return_value=(b"stripe/api\nstripe/webhooks\n", b""))
-    proc_mock.returncode = 0
-
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        with patch(
-            "terrarium.kernel.context_hub.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=proc_mock,
-        ):
-            with patch(
-                "terrarium.kernel.context_hub.asyncio.wait_for",
-                new_callable=AsyncMock,
-                return_value=(b"stripe/api\nstripe/webhooks\n", b""),
-            ):
-                result = await provider.supports("stripe")
-    assert result is True
+    proc = _mock_subprocess(_TWILIO_SEARCH_OUTPUT)
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch("asyncio.create_subprocess_exec", return_value=proc):
+            assert await provider.supports("twilio") is True
 
 
 async def test_supports_not_found():
-    """supports() returns False when chub search finds nothing."""
     provider = ContextHubProvider()
-
-    proc_mock = AsyncMock()
-    proc_mock.communicate = AsyncMock(return_value=(b"", b""))
-    proc_mock.returncode = 1
-
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        with patch(
-            "terrarium.kernel.context_hub.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=proc_mock,
-        ):
-            with patch(
-                "terrarium.kernel.context_hub.asyncio.wait_for",
-                new_callable=AsyncMock,
-                return_value=(b"", b""),
-            ):
-                result = await provider.supports("totally_unknown_xyz")
-    assert result is False
+    proc = _mock_subprocess(_EMPTY_SEARCH_OUTPUT, returncode=0)
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch("asyncio.create_subprocess_exec", return_value=proc):
+            assert await provider.supports("totally_unknown_xyz") is False
 
 
-async def test_supports_chub_not_installed():
-    """supports() returns False when chub is not installed."""
+async def test_supports_npx_missing():
     provider = ContextHubProvider()
     with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
-        result = await provider.supports("stripe")
-    assert result is False
+        assert await provider.supports("twilio") is False
+
+
+# -- fetch() ------------------------------------------------------------------
 
 
 async def test_fetch_success():
-    """fetch() returns structured dict when chub get succeeds."""
+    """Two-step: search finds twilio/messaging, get returns docs."""
     provider = ContextHubProvider()
-    doc_content = "# Stripe API\n\n## Endpoints\n- POST /v1/charges\n"
+    search_proc = _mock_subprocess(_TWILIO_SEARCH_OUTPUT)
+    get_proc = _mock_subprocess(_TWILIO_DOC_CONTENT)
 
-    proc_mock = AsyncMock()
-    proc_mock.communicate = AsyncMock(return_value=(doc_content.encode(), b""))
-    proc_mock.returncode = 0
+    call_count = 0
 
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        with patch(
-            "terrarium.kernel.context_hub.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=proc_mock,
-        ):
-            with patch(
-                "terrarium.kernel.context_hub.asyncio.wait_for",
-                new_callable=AsyncMock,
-                return_value=(doc_content.encode(), b""),
-            ):
-                result = await provider.fetch("stripe")
+    async def mock_exec(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        # First call is search, second is get
+        if call_count == 1:
+            return search_proc
+        return get_proc
+
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
+            result = await provider.fetch("twilio")
 
     assert result is not None
     assert result["source"] == "context_hub"
-    assert result["service"] == "stripe"
-    assert result["raw_content"] == doc_content
+    assert result["service"] == "twilio"
+    assert result["content_id"] == "twilio/package"  # /package preferred over /messaging
+    assert result["lang"] == "py"
+    assert "Twilio Python Library" in result["raw_content"]
     assert result["content_type"] == "markdown"
 
 
 async def test_fetch_not_found():
-    """fetch() returns None when chub get fails (rc != 0)."""
     provider = ContextHubProvider()
-
-    proc_mock = AsyncMock()
-    proc_mock.communicate = AsyncMock(return_value=(b"", b"Not found"))
-    proc_mock.returncode = 1
-
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        with patch(
-            "terrarium.kernel.context_hub.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=proc_mock,
-        ):
-            with patch(
-                "terrarium.kernel.context_hub.asyncio.wait_for",
-                new_callable=AsyncMock,
-                return_value=(b"", b"Not found"),
-            ):
-                result = await provider.fetch("nonexistent_service")
-
+    proc = _mock_subprocess(_EMPTY_SEARCH_OUTPUT)
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch("asyncio.create_subprocess_exec", return_value=proc):
+            result = await provider.fetch("totally_unknown_xyz")
     assert result is None
+
+
+async def test_fetch_npx_missing():
+    provider = ContextHubProvider()
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
+        result = await provider.fetch("twilio")
+    assert result is None
+
+
+async def test_fetch_timeout():
+    provider = ContextHubProvider(timeout=0.001)
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch(
+            "asyncio.create_subprocess_exec",
+            side_effect=asyncio.TimeoutError,
+        ):
+            result = await provider.fetch("twilio")
+    assert result is None
+
+
+# -- _parse_search_results() --------------------------------------------------
+
+
+def test_parse_search_results_twilio():
+    results = ContextHubProvider._parse_search_results(_TWILIO_SEARCH_OUTPUT)
+    assert len(results) == 3
+    assert results[0] == ("twilio/package", ["py"])
+    assert results[1] == ("twilio/messaging", ["py", "ts"])
+    assert results[2] == ("sendgrid/package", ["py"])
+
+
+def test_parse_search_results_stripe():
+    results = ContextHubProvider._parse_search_results(_STRIPE_SEARCH_OUTPUT)
+    assert len(results) == 2
+    assert results[0] == ("stripe/api", ["js"])
+    assert results[1] == ("stripe/payments", ["js"])
+
+
+def test_parse_search_results_empty():
+    results = ContextHubProvider._parse_search_results(_EMPTY_SEARCH_OUTPUT)
+    assert results == []
+
+
+# -- _pick_best_match() -------------------------------------------------------
+
+
+def test_pick_best_match_prefers_api():
+    results = [
+        ("stripe/payments", ["js"]),
+        ("stripe/api", ["js"]),
+    ]
+    match = ContextHubProvider._pick_best_match(results, "stripe")
+    assert match == ("stripe/api", "js")
+
+
+def test_pick_best_match_prefers_package():
+    results = [
+        ("twilio/messaging", ["py", "ts"]),
+        ("twilio/package", ["py"]),
+    ]
+    match = ContextHubProvider._pick_best_match(results, "twilio")
+    assert match == ("twilio/package", "py")
+
+
+def test_pick_best_match_prefers_py():
+    results = [("notion/workspace-api", ["js", "py"])]
+    match = ContextHubProvider._pick_best_match(results, "notion")
+    assert match is not None
+    assert match[1] == "py"
+
+
+def test_pick_best_match_falls_back_to_first_lang():
+    results = [("stripe/api", ["js"])]
+    match = ContextHubProvider._pick_best_match(results, "stripe")
+    assert match == ("stripe/api", "js")
+
+
+def test_pick_best_match_no_match():
+    results = [("sendgrid/package", ["py"])]
+    match = ContextHubProvider._pick_best_match(results, "twilio")
+    assert match is None
+
+
+# -- search cache --------------------------------------------------------------
+
+
+async def test_search_cache():
+    """Second supports() call uses cache, no new subprocess."""
+    provider = ContextHubProvider()
+    proc = _mock_subprocess(_TWILIO_SEARCH_OUTPUT)
+    call_count = 0
+
+    async def mock_exec(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return proc
+
+    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+        with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
+            await provider.supports("twilio")
+            await provider.supports("twilio")
+
+    assert call_count == 1  # Only one subprocess call despite two supports() calls
+
+
+# -- protocol compliance -------------------------------------------------------
 
 
 async def test_protocol_compliance():
     """ContextHubProvider satisfies the ExternalSpecProvider protocol."""
     provider = ContextHubProvider()
     assert isinstance(provider, ExternalSpecProvider)
-    assert hasattr(provider, "provider_name")
     assert provider.provider_name == "context_hub"
-    assert hasattr(provider, "is_available")
-    assert hasattr(provider, "fetch")
-    assert hasattr(provider, "supports")
-
-
-async def test_timeout_handling():
-    """Timeout during fetch returns None gracefully."""
-    provider = ContextHubProvider(timeout=0.001)
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/chub"):
-        with patch(
-            "terrarium.kernel.context_hub.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-        ) as mock_exec:
-            proc_mock = AsyncMock()
-            proc_mock.communicate = AsyncMock(side_effect=asyncio.TimeoutError)
-            mock_exec.return_value = proc_mock
-
-            with patch(
-                "terrarium.kernel.context_hub.asyncio.wait_for",
-                side_effect=asyncio.TimeoutError,
-            ):
-                result = await provider.fetch("stripe")
-
-    assert result is None
