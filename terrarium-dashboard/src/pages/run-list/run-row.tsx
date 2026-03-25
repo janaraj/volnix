@@ -21,26 +21,23 @@ interface RunCardProps {
 // Badge helper
 // ---------------------------------------------------------------------------
 
-const BADGE_KEYS: Array<{ key: keyof Run; label: string }> = [
-  { key: 'reality_preset', label: 'Preset' },
-  { key: 'behavior', label: 'Behavior' },
-  { key: 'fidelity', label: 'Fidelity' },
-  { key: 'mode', label: 'Mode' },
-  { key: 'seed', label: 'Seed' },
+const BADGE_ITEMS: Array<{ label: string; value: (r: Run) => string | number | null | undefined }> = [
+  { label: 'Preset', value: (r) => r.reality_preset },
+  { label: 'Behavior', value: (r) => r.config_snapshot?.behavior },
+  { label: 'Fidelity', value: (r) => r.fidelity_mode },
+  { label: 'Mode', value: (r) => r.mode },
+  { label: 'Seed', value: (r) => r.config_snapshot?.seed },
 ];
 
 function BadgeRow({ run }: { run: Run }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {BADGE_KEYS.map(({ key, label }) => {
-        const value = run[key];
-        if (value === null || value === undefined) return null;
+      {BADGE_ITEMS.map(({ label, value }) => {
+        const v = value(run);
+        if (v === null || v === undefined) return null;
         return (
-          <span
-            key={key}
-            className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px] text-text-secondary"
-          >
-            {label}: {String(value)}
+          <span key={label} className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px] text-text-secondary">
+            {label}: {String(v)}
           </span>
         );
       })}
@@ -62,9 +59,9 @@ function StatsRow({ run }: { run: Run }) {
 
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-      <span>{run.actor_count} actors</span>
-      <span>{run.event_count} events</span>
-      <span>{run.services.length} entities</span>
+      <span>{run.actor_count ?? 0} actors</span>
+      <span>{run.event_count ?? 0} events</span>
+      <span>{(run.services ?? []).length} entities</span>
       <span>{duration}</span>
       <span>{formatRelativeTime(run.created_at)}</span>
     </div>
@@ -78,13 +75,13 @@ function StatsRow({ run }: { run: Run }) {
 export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
   const navigate = useNavigate();
 
-  const tagName = run.tags.length > 0 ? run.tags[0] : truncateId(run.id);
+  const tagName = run.tag || truncateId(run.run_id);
 
   const handlePrimaryAction = () => {
     if (run.status === 'running') {
-      navigate(liveConsolePath(run.id));
+      navigate(liveConsolePath(run.run_id));
     } else {
-      navigate(runReportPath(run.id));
+      navigate(runReportPath(run.run_id));
     }
   };
 
@@ -101,7 +98,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
           <input
             type="checkbox"
             checked={selected}
-            onChange={() => onToggleSelect(run.id)}
+            onChange={() => onToggleSelect(run.run_id)}
             className="h-4 w-4 rounded border-border-default"
           />
           <RunStatusBadge status={run.status} />
@@ -112,7 +109,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
           {run.status === 'running' ? (
             <button
               type="button"
-              onClick={() => navigate(liveConsolePath(run.id))}
+              onClick={() => navigate(liveConsolePath(run.run_id))}
               className="inline-flex items-center gap-1.5 rounded bg-info/15 px-2.5 py-1 text-xs font-medium text-info hover:bg-info/25"
             >
               <Radio size={12} />
@@ -132,7 +129,7 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
       </div>
 
       {/* World name */}
-      <p className="mb-2 text-sm text-text-secondary">{run.world_name}</p>
+      <p className="mb-2 text-sm text-text-secondary">{run.world_def.name}</p>
 
       {/* Badge row */}
       <div className="mb-2">

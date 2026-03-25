@@ -40,8 +40,8 @@ describe('useLiveEvents', () => {
 
   it('appends events to query cache with dedup', () => {
     queryClient.setQueryData(queryKeys.runs.events('run-1'), {
-      items: [createMockWorldEvent({ event_id: 'existing-1' })],
-      total: 1, limit: 50, offset: 0, has_more: false,
+      events: [createMockWorldEvent({ event_id: 'existing-1' })],
+      total: 1,
     });
 
     renderHook(() => useLiveEvents('run-1'), { wrapper });
@@ -54,8 +54,8 @@ describe('useLiveEvents', () => {
       }));
     });
 
-    const cached = queryClient.getQueryData(queryKeys.runs.events('run-1')) as { items: { event_id: string }[] };
-    expect(cached.items).toHaveLength(2);
+    const cached = queryClient.getQueryData(queryKeys.runs.events('run-1')) as { events: { event_id: string }[] };
+    expect(cached.events).toHaveLength(2);
 
     // Dedup: same event again should not add
     act(() => {
@@ -64,14 +64,14 @@ describe('useLiveEvents', () => {
         data: createMockWorldEvent({ event_id: 'new-1' }),
       }));
     });
-    const cached2 = queryClient.getQueryData(queryKeys.runs.events('run-1')) as { items: { event_id: string }[] };
-    expect(cached2.items).toHaveLength(2);
+    const cached2 = queryClient.getQueryData(queryKeys.runs.events('run-1')) as { events: { event_id: string }[] };
+    expect(cached2.events).toHaveLength(2);
   });
 
   it('patches run detail on status message', () => {
     queryClient.setQueryData(
       queryKeys.runs.detail('run-1'),
-      createMockRun({ id: 'run-1', current_tick: 10 }),
+      createMockRun({ run_id: 'run-1', current_tick: 10 }),
     );
 
     renderHook(() => useLiveEvents('run-1'), { wrapper });
@@ -97,7 +97,7 @@ describe('useLiveEvents', () => {
     act(() => {
       MockWebSocket.instances[0].simulateMessage(JSON.stringify({
         type: 'run_complete',
-        data: createMockRun({ id: 'run-1', status: 'completed' }),
+        data: createMockRun({ run_id: 'run-1', status: 'completed' }),
       }));
     });
 

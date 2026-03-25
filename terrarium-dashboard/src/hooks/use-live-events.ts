@@ -4,8 +4,8 @@ import { useWsManager } from '@/providers/services-provider';
 import { queryKeys } from '@/constants/query-keys';
 import type { WsMessage } from '@/types/ws';
 import type { ConnectionStatus } from '@/types/ui';
-import type { PaginatedResponse } from '@/types/api';
-import type { WorldEvent, Run, Entity, AgentSummary } from '@/types/domain';
+import type { EventsListResponse, EntitiesListResponse } from '@/types/api';
+import type { Run, Entity, AgentSummary } from '@/types/domain';
 
 /**
  * Bridge between WebSocket live stream and TanStack Query cache.
@@ -32,12 +32,12 @@ export function useLiveEvents(runId: string): ConnectionStatus {
           // Append to ALL event caches for this run (prefix match covers filtered + unfiltered).
           // Dedup by event_id prevents duplicates from REST backfill + WS overlap.
           const newEvent = message.data;
-          queryClient.setQueriesData<PaginatedResponse<WorldEvent>>(
+          queryClient.setQueriesData<EventsListResponse>(
             { queryKey: ['runs', runId, 'events'] },
             (old) => {
               if (!old) return old;
-              if (old.items.some((e) => e.event_id === newEvent.event_id)) return old;
-              return { ...old, items: [...old.items, newEvent], total: old.total + 1 };
+              if (old.events.some((e) => e.event_id === newEvent.event_id)) return old;
+              return { ...old, events: [...old.events, newEvent], total: old.total + 1 };
             },
           );
           break;
@@ -94,15 +94,15 @@ export function useLiveEvents(runId: string): ConnectionStatus {
             },
           );
           // Also patch entity list caches (prefix match).
-          queryClient.setQueriesData<PaginatedResponse<Entity>>(
+          queryClient.setQueriesData<EntitiesListResponse>(
             { queryKey: ['runs', runId, 'entities'] },
             (old) => {
               if (!old) return old;
               return {
                 ...old,
-                items: old.items.map((e) =>
-                  e.entity_id === update.entity_id
-                    ? { ...e, fields: { ...e.fields, ...update.fields }, updated_at: new Date().toISOString() }
+                entities: old.entities.map((e) =>
+                  e.id === update.entity_id
+                    ? { ...e, fields: { ...(e.fields ?? {}), ...update.fields }, updated_at: new Date().toISOString() }
                     : e,
                 ),
               };
@@ -113,7 +113,7 @@ export function useLiveEvents(runId: string): ConnectionStatus {
 
         case 'run_complete':
           // Verify message belongs to current run before invalidating.
-          if (message.data.id === runId) {
+          if (message.data.run_id === runId) {
             queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(runId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.runs.events(runId) });
           }

@@ -26,7 +26,7 @@ describe('useRunEvents', () => {
   it('fetches events for a run', async () => {
     const { result } = renderHook(() => useRunEvents('run-test-001'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.items.length).toBeGreaterThan(0);
+    expect(result.current.data?.events.length).toBeGreaterThan(0);
   });
 
   it('passes filter params', async () => {

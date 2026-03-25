@@ -1,0 +1,299 @@
+profile_name: jira
+service_name: jira
+category: work_management
+version: "1.0.0"
+fidelity_source: curated_profile
+
+operations:
+  - name: jira_create_issue
+    service: jira
+    description: "Create a new Jira issue in a project"
+    http_method: POST
+    http_path: /rest/api/3/issue
+    parameters:
+      project_key:
+        type: string
+        description: "Project key (e.g., PROJ)"
+      summary:
+        type: string
+        description: "Issue summary/title"
+      description:
+        type: string
+        description: "Issue description (Atlassian Document Format or plain text)"
+      issue_type:
+        type: string
+        enum: ["Bug", "Task", "Story", "Epic", "Sub-task"]
+        description: "Type of issue"
+      priority:
+        type: string
+        enum: ["Highest", "High", "Medium", "Low", "Lowest"]
+      assignee_id:
+        type: string
+        description: "Account ID of the assignee"
+      labels:
+        type: array
+        items: {type: string}
+      sprint_id:
+        type: integer
+        description: "Sprint to add the issue to"
+    required_params: [project_key, summary, issue_type]
+    response_schema:
+      type: object
+      properties:
+        id: {type: string}
+        key: {type: string}
+        self: {type: string}
+      required: [key]
+    creates_entity: issue
+
+  - name: jira_get_issue
+    service: jira
+    description: "Get a single Jira issue by key"
+    http_method: GET
+    http_path: /rest/api/3/issue/{issue_key}
+    parameters:
+      issue_key:
+        type: string
+        description: "Issue key (e.g., PROJ-123)"
+    required_params: [issue_key]
+    response_schema:
+      type: object
+      properties:
+        id: {type: string}
+        key: {type: string}
+        fields:
+          type: object
+          properties:
+            summary: {type: string}
+            description: {type: string}
+            status: {type: object, properties: {name: {type: string}}}
+            priority: {type: object, properties: {name: {type: string}}}
+            assignee: {type: object, properties: {accountId: {type: string}, displayName: {type: string}}}
+            project: {type: object, properties: {key: {type: string}, name: {type: string}}}
+            issuetype: {type: object, properties: {name: {type: string}}}
+            created: {type: string}
+            updated: {type: string}
+            labels: {type: array, items: {type: string}}
+      required: [id, key, fields]
+    is_read_only: true
+
+  - name: jira_update_issue
+    service: jira
+    description: "Update fields on an existing Jira issue"
+    http_method: PUT
+    http_path: /rest/api/3/issue/{issue_key}
+    parameters:
+      issue_key: {type: string}
+      summary: {type: string}
+      description: {type: string}
+      priority: {type: string, enum: ["Highest", "High", "Medium", "Low", "Lowest"]}
+      assignee_id: {type: string}
+      labels: {type: array, items: {type: string}}
+    required_params: [issue_key]
+    response_schema:
+      type: object
+      properties:
+        ok: {type: boolean}
+    mutates_entity: issue
+
+  - name: jira_list_issues
+    service: jira
+    description: "List issues in a project"
+    http_method: GET
+    http_path: /rest/api/3/search
+    parameters:
+      project_key:
+        type: string
+        description: "Project key to filter by"
+      status:
+        type: string
+        description: "Filter by status"
+      max_results:
+        type: integer
+        description: "Maximum results to return"
+      start_at:
+        type: integer
+    required_params: [project_key]
+    response_schema:
+      type: object
+      properties:
+        total: {type: integer}
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              key: {type: string}
+              fields: {type: object}
+    is_read_only: true
+
+  - name: jira_add_comment
+    service: jira
+    description: "Add a comment to an issue"
+    http_method: POST
+    http_path: /rest/api/3/issue/{issue_key}/comment
+    parameters:
+      issue_key: {type: string}
+      body: {type: string, description: "Comment body text"}
+    required_params: [issue_key, body]
+    response_schema:
+      type: object
+      properties:
+        id: {type: string}
+        body: {type: string}
+        author: {type: object, properties: {accountId: {type: string}, displayName: {type: string}}}
+        created: {type: string}
+    creates_entity: comment
+
+  - name: jira_transition_issue
+    service: jira
+    description: "Transition an issue to a new status"
+    http_method: POST
+    http_path: /rest/api/3/issue/{issue_key}/transitions
+    parameters:
+      issue_key: {type: string}
+      transition_id: {type: string}
+      transition_name: {type: string, enum: ["To Do", "In Progress", "In Review", "Done"]}
+    required_params: [issue_key]
+    response_schema:
+      type: object
+      properties:
+        ok: {type: boolean}
+    mutates_entity: issue
+
+  - name: jira_search
+    service: jira
+    description: "Search for issues using JQL"
+    http_method: POST
+    http_path: /rest/api/3/search
+    parameters:
+      jql: {type: string, description: "JQL query string"}
+      max_results: {type: integer, description: "Maximum results to return"}
+      start_at: {type: integer}
+    required_params: [jql]
+    response_schema:
+      type: object
+      properties:
+        total: {type: integer}
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              key: {type: string}
+              fields: {type: object}
+    is_read_only: true
+
+entities:
+  - name: issue
+    identity_field: key
+    fields:
+      id: {type: string}
+      key: {type: string}
+      summary: {type: string}
+      description: {type: string}
+      status: {type: string, enum: ["To Do", "In Progress", "In Review", "Done"]}
+      priority: {type: string, enum: ["Highest", "High", "Medium", "Low", "Lowest"]}
+      issue_type: {type: string, enum: ["Bug", "Task", "Story", "Epic", "Sub-task"]}
+      project_key: {type: string}
+      assignee_id: {type: string}
+      reporter_id: {type: string}
+      labels: {type: array, items: {type: string}}
+      sprint_id: {type: integer}
+      created: {type: string}
+      updated: {type: string}
+    required: [key, summary, status, issue_type, project_key]
+
+  - name: comment
+    identity_field: id
+    fields:
+      id: {type: string}
+      issue_key: {type: string}
+      body: {type: string}
+      author_id: {type: string}
+      created: {type: string}
+    required: [id, issue_key, body]
+
+  - name: project
+    identity_field: id
+    fields:
+      id: {type: string}
+      key: {type: string}
+      name: {type: string}
+    required: [id, key, name]
+
+state_machines:
+  - entity_type: issue
+    field: status
+    transitions:
+      "To Do": ["In Progress"]
+      "In Progress": ["In Review", "To Do"]
+      "In Review": ["Done", "In Progress"]
+      "Done": ["To Do"]
+
+error_modes:
+  - code: ISSUE_NOT_FOUND
+    when: "Issue key does not match any existing issue"
+    http_status: 404
+    response_body: {"errorMessages": ["Issue Does Not Exist"], "errors": {}}
+  - code: PERMISSION_DENIED
+    when: "User does not have permission on the project"
+    http_status: 403
+    response_body: {}
+  - code: INVALID_TRANSITION
+    when: "The requested status transition is not allowed"
+    http_status: 400
+    response_body: {"errorMessages": ["Invalid transition"], "errors": {}}
+
+behavioral_notes:
+  - "Jira issue keys follow the pattern PROJECT_KEY-NUMBER (e.g., PROJ-123)"
+  - "All dates are in ISO 8601 format with timezone"
+  - "User references use accountId (not username) in Jira Cloud"
+  - "JQL queries support standard operators: =, !=, IN, NOT IN, IS, IS NOT, ~, ORDER BY"
+  - "Status transitions must follow the configured workflow"
+  - "Sprint IDs are board-scoped integers"
+  - "Issue descriptions in Jira Cloud use Atlassian Document Format (ADF), but plain text is accepted"
+
+examples:
+  - operation: jira_create_issue
+    request:
+      project_key: "PROJ"
+      summary: "Fix login page timeout"
+      issue_type: "Bug"
+      priority: "High"
+      assignee_id: "5b10a2844c20165700ede21g"
+    response:
+      id: "10042"
+      key: "PROJ-42"
+      self: "https://your-domain.atlassian.net/rest/api/3/issue/10042"
+
+  - operation: jira_search
+    request:
+      jql: "project = PROJ AND status = 'In Progress' ORDER BY priority DESC"
+      max_results: 10
+    response:
+      total: 3
+      issues:
+        - id: "10040"
+          key: "PROJ-40"
+          fields: {summary: "Update API docs", status: {name: "In Progress"}, priority: {name: "Medium"}}
+
+responder_prompt: |
+  You are simulating the Jira Cloud REST API (v3).
+
+  You manage project issues, sprints, and comments. Your responses must:
+  1. Follow the exact response schema for each operation
+  2. Generate realistic Jira issue keys (PROJECT_KEY-NUMBER, incrementing)
+  3. Use accountId format for user references (e.g., "5b10a2844c20165700ede21g")
+  4. Return ISO 8601 dates with timezone for all date fields
+  5. Respect status transitions: To Do -> In Progress -> In Review -> Done (with allowed reversals)
+  6. JQL search results should filter the existing issues based on the query
+  7. For errors, return Jira-style error responses with "errorMessages" array
+
+  When creating entities, generate a new unique key by incrementing the highest existing
+  issue number for that project. When searching, apply JQL filters against existing state.
+
+auth_pattern: bearer
+base_url: "https://your-domain.atlassian.net"

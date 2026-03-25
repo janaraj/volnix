@@ -133,24 +133,25 @@ describe('RunReportPage', () => {
     });
   });
 
-  it('renders fidelity confidence', async () => {
+  it('renders service fidelity section', async () => {
     renderPage('run-test-001', '?tab=scorecard');
     await waitFor(() => {
-      expect(screen.getByText(/HIGH/i)).toBeInTheDocument();
+      expect(screen.getByText('Service Fidelity')).toBeInTheDocument();
     });
   });
 
-  it('shows scorecard click hint text', async () => {
+  it('renders per-actor column headers in scorecard', async () => {
     renderPage('run-test-001', '?tab=scorecard');
     await waitFor(() => {
-      expect(screen.getByText(/Click any score/)).toBeInTheDocument();
+      expect(screen.getByText('agent-alpha')).toBeInTheDocument();
+      expect(screen.getByText('agent-beta')).toBeInTheDocument();
     });
   });
 
-  it('renders collective column in scorecard', async () => {
+  it('renders overall row in scorecard', async () => {
     renderPage('run-test-001', '?tab=scorecard');
     await waitFor(() => {
-      expect(screen.getByText('collective')).toBeInTheDocument();
+      expect(screen.getByText('Overall')).toBeInTheDocument();
     });
   });
 
@@ -340,7 +341,11 @@ describe('RunReportPage', () => {
 
   it('shows empty state when no gaps', async () => {
     server.use(
-      http.get('/api/v1/runs/:id/gaps', () => HttpResponse.json([])),
+      http.get('/api/v1/runs/:id/gaps', () => HttpResponse.json({
+        run_id: 'run-test-001',
+        gaps: [],
+        summary: { hallucinated: 0, adapted: 0, escalated: 0, skipped: 0 },
+      })),
     );
     renderPage('run-test-001', '?tab=gaps');
     await waitFor(() => {

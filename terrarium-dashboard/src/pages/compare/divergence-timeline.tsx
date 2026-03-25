@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { DivergencePoint, Run } from '@/types/domain';
+import type { Run } from '@/types/domain';
 import { formatTick } from '@/lib/formatters';
+
+interface DivergencePoint {
+  tick: number;
+  description: string;
+  decisions: Record<string, string>;
+  consequences: Record<string, string>;
+}
 
 interface DivergenceTimelineProps {
   points: DivergencePoint[];
@@ -42,12 +49,12 @@ export function DivergenceTimeline({ points, runs }: DivergenceTimelineProps) {
               {isExpanded && (
                 <div className="border-t border-bg-elevated px-4 py-3 space-y-2">
                   {runs.map((run) => {
-                    const decision = point.decisions[run.id];
-                    const consequence = point.consequences[run.id];
+                    const decision = point.decisions[run.run_id];
+                    const consequence = point.consequences[run.run_id];
                     if (!decision) return null;
                     return (
-                      <div key={run.id} className="text-sm">
-                        <span className="font-medium text-text-secondary">{run.tags[0] || run.id}:</span>
+                      <div key={run.run_id} className="text-sm">
+                        <span className="font-medium text-text-secondary">{run.tag || run.run_id}:</span>
                         <span className="ml-1 text-text-primary">{decision}</span>
                         {consequence && <span className="ml-1 text-text-muted">— {consequence}</span>}
                       </div>

@@ -80,6 +80,7 @@ critical_threshold_pct = 95
 [responder]
 max_retries = 2
 fallback_enabled = true
+profiles_dir = "terrarium/packs/profiles"
 
 # ── Animator Engine ──────────────────────────────────────────
 
@@ -141,6 +142,11 @@ max_total_events = 10000
 max_envelopes_per_event = 20
 max_actions_per_actor_per_window = 5
 loop_breaker_threshold = 50
+
+# ── Profiles ──────────────────────────────────────────────────
+[profiles]
+data_dir = "terrarium/packs/profiles"
+infer_on_missing = true
 
 # ══════════════════════════════════════════════════════════════
 # LLM Configuration
@@ -241,6 +247,12 @@ provider = "codex_acp"
 model = ""
 max_tokens = 4096
 temperature = 0.5
+
+[llm.routing.profile_infer]
+provider = "codex_acp"
+model = ""
+max_tokens = 8192
+temperature = 0.4
 
 [llm.routing.animator]
 provider = "codex_acp"

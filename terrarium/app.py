@@ -177,9 +177,12 @@ class TerrariumApp:
             pack_reg = responder._pack_registry
             compiler._config["_pack_registry"] = pack_reg
 
-            # Pack registry -> adapter engine (for capability checks)
+            # Pack registry + profile registry -> adapter engine (for capability checks)
             adapter_engine = self._registry.get("adapter")
             adapter_engine._pack_registry = pack_reg
+            profile_reg = getattr(responder, "_profile_registry", None)
+            if profile_reg is not None:
+                adapter_engine._profile_registry = profile_reg
 
             # Create kernel for compiler if not already wired by _on_initialize
             from terrarium.kernel.registry import SemanticRegistry
@@ -191,12 +194,37 @@ class TerrariumApp:
                 await existing_kernel.initialize()
                 compiler._config["_kernel"] = existing_kernel
 
+            # Gather profile loader from responder for Tier 2 resolution
+            profile_loader = getattr(responder, "_profile_loader", None)
+
+            # Build profile inferrer if LLM is available and infer is enabled
+            profile_inferrer = None
+            if self._llm_router and self._config.profiles.infer_on_missing:
+                try:
+                    from terrarium.kernel.context_hub import ContextHubProvider
+                    from terrarium.kernel.openapi_provider import OpenAPIProvider
+                    from terrarium.packs.profile_infer import ProfileInferrer
+
+                    context_hub = ContextHubProvider()
+                    openapi_provider = OpenAPIProvider()
+
+                    profile_inferrer = ProfileInferrer(
+                        llm_router=self._llm_router,
+                        context_hub=context_hub if await context_hub.is_available() else None,
+                        openapi_provider=openapi_provider,
+                        kernel=existing_kernel,
+                    )
+                except Exception as exc:
+                    logger.debug("ProfileInferrer not available: %s", exc)
+
             compiler._compiler_resolver = CompilerServiceResolver(
                 pack_registry=pack_reg,
                 kernel=existing_kernel,
                 resolver=(
                     getattr(existing, "_resolver", None) if existing else None
                 ),
+                profile_loader=profile_loader,
+                profile_inferrer=profile_inferrer,
             )
 
         compiler._config["_state_engine"] = state_engine

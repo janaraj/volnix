@@ -14,17 +14,22 @@ from terrarium.core import (
     ActionContext,
     BaseEngine,
     Event,
-    PipelineStep,
     ResponseProposal,
     StepResult,
     StepVerdict,
 )
+from terrarium.packs.profile_schema import ServiceProfileData
 
 logger = logging.getLogger(__name__)
 
 
 class WorldResponderEngine(BaseEngine):
     """Generates simulated service responses.
+
+    Dispatch order:
+    1. Tier 1 pack (verified, deterministic)
+    2. Tier 2 profile (LLM-constrained by profile)
+    3. Error: no handler
 
     Also acts as the ``responder`` pipeline step.
     """
@@ -36,18 +41,20 @@ class WorldResponderEngine(BaseEngine):
     # -- BaseEngine hooks ------------------------------------------------------
 
     async def _on_initialize(self) -> None:
-        """Set up pack registry, runtime, and Tier1 dispatcher."""
+        """Set up pack registry, runtime, Tier1 dispatcher, and Tier2 generator."""
+        from terrarium.engines.responder.tier1 import Tier1Dispatcher
+        from terrarium.engines.responder.tier2 import Tier2Generator
+        from terrarium.packs.profile_loader import ProfileLoader
+        from terrarium.packs.profile_registry import ProfileRegistry
         from terrarium.packs.registry import PackRegistry
         from terrarium.packs.runtime import PackRuntime
-        from terrarium.engines.responder.tier1 import Tier1Dispatcher
 
+        # Tier 1: Verified packs
         self._pack_registry = PackRegistry()
-        # Discover packs from the verified directory
         verified_dir = self._config.get("verified_packs_dir")
         if verified_dir:
             self._pack_registry.discover(verified_dir)
         else:
-            # Default: discover from package path
             pack_base = Path(__file__).resolve().parents[2] / "packs" / "verified"
             if pack_base.is_dir():
                 self._pack_registry.discover(str(pack_base))
@@ -55,10 +62,39 @@ class WorldResponderEngine(BaseEngine):
         self._pack_runtime = PackRuntime(self._pack_registry)
         self._tier1 = Tier1Dispatcher(self._pack_runtime)
 
+        # Tier 2: Profile-based services
+        # Prefer profiles_dir from config, fall back to default
+        configured_profiles_dir = self._config.get("profiles_dir")
+        if configured_profiles_dir:
+            profile_base = Path(configured_profiles_dir)
+        else:
+            profile_base = Path(__file__).resolve().parents[2] / "packs" / "profiles"
+        self._profile_loader = ProfileLoader(profile_base)
+        self._profile_registry = ProfileRegistry()
+
+        # Discover and register all profiles
+        for profile in self._profile_loader.list_profiles():
+            self._profile_registry.register(profile)
+
+        # Tier 2 generator -- created lazily via _get_tier2() because the
+        # LLM router is injected into _config AFTER _on_initialize runs.
+        # See _get_tier2() for the actual creation.
+        self._tier2: Any = None
+
     @property
     def pack_registry(self) -> Any:
         """Public accessor for the pack registry."""
         return self._pack_registry
+
+    @property
+    def profile_registry(self) -> Any:
+        """Public accessor for the profile registry."""
+        return self._profile_registry
+
+    @property
+    def profile_loader(self) -> Any:
+        """Public accessor for the profile loader."""
+        return self._profile_loader
 
     # -- PipelineStep interface ------------------------------------------------
 
@@ -67,33 +103,76 @@ class WorldResponderEngine(BaseEngine):
         """Return the pipeline step name."""
         return "responder"
 
+    def _get_tier2(self) -> Any:
+        """Lazily create the Tier2Generator on first use.
+
+        The LLM router is injected into ``_config["_llm_router"]`` by
+        ``app._inject_cross_engine_deps()``, which runs AFTER
+        ``_on_initialize()``.  This method creates the generator the
+        first time it is needed, guaranteeing the router is available.
+        """
+        if self._tier2 is not None:
+            return self._tier2
+        llm_router = self._config.get("_llm_router")
+        if llm_router is None:
+            return None
+        from terrarium.engines.responder.tier2 import Tier2Generator
+
+        self._tier2 = Tier2Generator(llm_router=llm_router, seed=42)
+        return self._tier2
+
     async def execute(self, ctx: ActionContext) -> StepResult:
         """Execute the responder pipeline step.
 
-        Checks Tier 1 pack availability, builds world state from StateEngine,
-        dispatches to pack via Tier1Dispatcher, and sets ctx.response_proposal.
+        Dispatch order:
+        1. Tier 1 pack (verified, deterministic)
+        2. Tier 2 profile (LLM-constrained by profile)
+        3. Error: no handler
         """
-        # Check if we have a Tier 1 pack for this action
-        if not self._tier1.has_pack_for_tool(ctx.action):
+        # Tier 1: check pack
+        if self._tier1.has_pack_for_tool(ctx.action):
+            state = await self._build_state_for_pack(ctx)
+            proposal = await self._tier1.dispatch(ctx, state=state)
+            ctx.response_proposal = proposal
+            return StepResult(
+                step_name="responder",
+                verdict=StepVerdict.ALLOW,
+                metadata={
+                    "fidelity_tier": proposal.fidelity.tier if proposal.fidelity else None,
+                },
+            )
+
+        # Tier 2: check profile registry
+        profile = self._find_profile_for_action(ctx.action)
+        if profile is not None:
+            tier2 = self._get_tier2()
+            if tier2 is not None:
+                state = await self._build_state_for_profile(ctx, profile)
+                proposal = await tier2.generate(ctx, profile, state)
+                ctx.response_proposal = proposal
+                return StepResult(
+                    step_name="responder",
+                    verdict=StepVerdict.ALLOW,
+                    metadata={
+                        "fidelity_tier": 2,
+                        "profile": profile.profile_name,
+                    },
+                )
+            # Profile found but no LLM router available
             return StepResult(
                 step_name="responder",
                 verdict=StepVerdict.ERROR,
-                message=f"No pack found for action '{ctx.action}'",
+                message=(
+                    f"Profile found for '{ctx.action}' but Tier 2 generator "
+                    f"unavailable (no LLM router)"
+                ),
             )
 
-        # Build world state for the pack
-        state = await self._build_state_for_pack(ctx)
-
-        # Dispatch to Tier 1 pack
-        proposal = await self._tier1.dispatch(ctx, state=state)
-
-        # Set on context for downstream steps (validation, commit)
-        ctx.response_proposal = proposal
-
+        # No handler
         return StepResult(
             step_name="responder",
-            verdict=StepVerdict.ALLOW,
-            metadata={"fidelity_tier": proposal.fidelity.tier if proposal.fidelity else None},
+            verdict=StepVerdict.ERROR,
+            message=f"No pack or profile found for action '{ctx.action}'",
         )
 
     # -- BaseEngine hook -------------------------------------------------------
@@ -103,6 +182,10 @@ class WorldResponderEngine(BaseEngine):
         logger.debug("Responder received event: %s", event.event_type)
 
     # -- Internal helpers ------------------------------------------------------
+
+    def _find_profile_for_action(self, action: str) -> ServiceProfileData | None:
+        """Find a profile that provides the given action."""
+        return self._profile_registry.get_profile_for_action(action)
 
     @staticmethod
     def _pluralize(name: str) -> str:
@@ -134,6 +217,34 @@ class WorldResponderEngine(BaseEngine):
                 result[key] = entities
             except Exception as exc:
                 logger.warning("Failed to query entities of type '%s': %s", etype, exc)
+                result[key] = []
+        return result
+
+    async def _build_state_for_profile(
+        self, ctx: ActionContext, profile: ServiceProfileData
+    ) -> dict[str, Any]:
+        """Fetch relevant entity state from StateEngine for a profiled service.
+
+        Queries all entity types defined in the profile and returns them
+        keyed by pluralized entity type name.
+        """
+        state_engine = self._dependencies.get("state")
+        if state_engine is None:
+            return {}
+
+        result: dict[str, Any] = {}
+        for entity_def in profile.entities:
+            key = self._pluralize(entity_def.name)
+            try:
+                entities = await state_engine.query_entities(entity_def.name)
+                result[key] = entities
+            except Exception as exc:
+                logger.warning(
+                    "Failed to query entities of type '%s' for profile '%s': %s",
+                    entity_def.name,
+                    profile.profile_name,
+                    exc,
+                )
                 result[key] = []
         return result
 

@@ -26,7 +26,7 @@ describe('useRuns', () => {
   it('fetches runs on mount', async () => {
     const { result } = renderHook(() => useRuns(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.items).toHaveLength(3);
+    expect(result.current.data?.runs).toHaveLength(3);
   });
 
   it('passes params to query', async () => {
@@ -37,9 +37,8 @@ describe('useRuns', () => {
   it('returns paginated response shape', async () => {
     const { result } = renderHook(() => useRuns(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toHaveProperty('items');
+    expect(result.current.data).toHaveProperty('runs');
     expect(result.current.data).toHaveProperty('total');
-    expect(result.current.data).toHaveProperty('has_more');
   });
 });
 
@@ -47,12 +46,12 @@ describe('useRun', () => {
   it('fetches single run by ID', async () => {
     const { result } = renderHook(() => useRun('run-test-001'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.id).toBe('run-test-001');
+    expect(result.current.data?.run_id).toBe('run-test-001');
   });
 
-  it('returns run with world_name', async () => {
+  it('returns run with world_def.name', async () => {
     const { result } = renderHook(() => useRun('run-test-001'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.world_name).toBeDefined();
+    expect(result.current.data?.world_def?.name).toBeDefined();
   });
 });

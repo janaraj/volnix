@@ -1,4 +1,5 @@
 import type { Run, WorldEvent } from '@/types/domain';
+import type { ScorecardResponse } from '@/types/api';
 import { useRunEvents } from '@/hooks/queries/use-events';
 import { useScorecard } from '@/hooks/queries/use-scorecard';
 import { ScoreGrade } from '@/components/domain/score-grade';
@@ -53,9 +54,9 @@ function MetricCards({ run }: { run: Run }) {
         title="Score"
         value={hasScore ? <ScoreGrade score={run.governance_score!} /> : <span className="text-text-muted">--</span>}
       />
-      <MetricCard title="Events" value={run.event_count} />
-      <MetricCard title="Actors" value={run.actor_count} />
-      <MetricCard title="Services" value={run.services.length} />
+      <MetricCard title="Events" value={run.event_count ?? 0} />
+      <MetricCard title="Actors" value={run.actor_count ?? 0} />
+      <MetricCard title="Services" value={(run.services ?? []).length} />
     </div>
   );
 }
@@ -72,7 +73,7 @@ function KeyEvents({ runId }: { runId: string }) {
       <h2 className="mb-3 text-lg font-semibold">Key Events</h2>
       <QueryGuard query={eventsQuery} loadingFallback={<SectionLoading />}>
         {(data) => {
-          const keyEvents = data.items
+          const keyEvents = data.events
             .filter((e: WorldEvent) => KEY_EVENT_TYPES.has(e.event_type))
             .slice(0, MAX_KEY_EVENTS);
 
@@ -87,12 +88,12 @@ function KeyEvents({ runId }: { runId: string }) {
                   key={event.event_id}
                   className="flex items-center gap-3 rounded-lg border border-bg-elevated bg-bg-surface px-4 py-2 transition-colors hover:border-border hover:bg-bg-hover"
                 >
-                  <OutcomeIcon outcome={event.outcome} size={16} />
+                  <OutcomeIcon outcome={event.outcome ?? 'success'} size={16} />
                   <ActorBadge actorId={event.actor_id} role={event.actor_role} />
                   <span className="flex-1 truncate text-sm text-text-secondary">
-                    {event.action}
+                    {event.action ?? event.event_type}
                   </span>
-                  <TimestampCell iso={event.timestamp.wall_time} />
+                  <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
                 </div>
               ))}
             </div>
@@ -114,34 +115,34 @@ function AgentSummary({ runId }: { runId: string }) {
     <section>
       <h2 className="mb-3 text-lg font-semibold">Agent Summary</h2>
       <QueryGuard query={scorecardQuery} loadingFallback={<SectionLoading />}>
-        {(scorecards) => {
-          if (scorecards.length === 0) {
+        {(data: ScorecardResponse) => {
+          const actorIds = Object.keys(data.per_actor);
+          if (actorIds.length === 0) {
             return <EmptyState title="No agent scorecards available" />;
           }
 
           return (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {scorecards.map((card) => {
-                const violationCount = card.scores.reduce(
-                  (sum, s) => sum + s.violations.length,
-                  0,
-                );
+              {actorIds.map((actorId) => {
+                const scores = data.per_actor[actorId];
+                const overall = scores['overall'] ?? 0;
                 return (
                   <div
-                    key={card.actor_id}
+                    key={actorId}
                     className="rounded-lg border border-bg-elevated bg-bg-surface p-4 transition-colors hover:border-border hover:bg-bg-hover"
                   >
                     <div className="mb-2">
-                      <ActorBadge actorId={card.actor_id} />
+                      <ActorBadge actorId={actorId} />
                     </div>
-                    <ScoreBar value={card.overall_score} />
+                    <ScoreBar value={overall / 100} />
                     <div className="mt-2 flex gap-4 text-xs text-text-muted">
-                      <span>
-                        Policy hits: {card.policy_hits.length}
-                      </span>
-                      <span>
-                        Violations: {violationCount}
-                      </span>
+                      {Object.entries(scores)
+                        .filter(([key]) => key !== 'overall')
+                        .map(([key, value]) => (
+                          <span key={key}>
+                            {key}: {value}
+                          </span>
+                        ))}
                     </div>
                   </div>
                 );

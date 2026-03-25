@@ -28,10 +28,14 @@ class CompilerServiceResolver:
         pack_registry: PackRegistry | None = None,
         kernel: SemanticRegistry | None = None,
         resolver: ServiceResolver | None = None,
+        profile_loader: Any | None = None,
+        profile_inferrer: Any | None = None,
     ) -> None:
         self._packs = pack_registry
         self._kernel = kernel
         self._resolver = resolver
+        self._profile_loader = profile_loader  # ProfileLoader instance
+        self._profile_inferrer = profile_inferrer  # ProfileInferrer instance
 
     def get_available_categories(self) -> str:
         """Return comma-separated list of available semantic categories."""
@@ -122,6 +126,20 @@ class CompilerServiceResolver:
             except Exception:
                 pass
 
+        # Step 2b: Tier 2 YAML profile on disk (standalone, not extending a pack)
+        if self._profile_loader:
+            profile = self._profile_loader.load(name)
+            if profile:
+                from terrarium.packs.profile_surface import profile_to_surface
+
+                surface = profile_to_surface(profile)
+                return ServiceResolution(
+                    service_name=service_name,
+                    spec_reference=str(spec_reference),
+                    surface=surface,
+                    resolution_source="tier2_yaml_profile",
+                )
+
         # Steps 3-6: External specs + kernel (via D3 ServiceResolver)
         if self._resolver:
             surface = await self._resolver.resolve(service_name)
@@ -136,6 +154,27 @@ class CompilerServiceResolver:
                     surface=surface,
                     resolution_source=surface.source,
                 )
+
+        # Step 7: Infer pipeline -- generate profile from sources via LLM
+        if self._profile_inferrer:
+            try:
+                profile = await self._profile_inferrer.infer(name)
+                if profile:
+                    from terrarium.packs.profile_surface import profile_to_surface
+
+                    # Validate via conversion BEFORE saving to disk
+                    surface = profile_to_surface(profile)
+                    # Only save if conversion succeeded and surface has operations
+                    if surface.operations and self._profile_loader:
+                        self._profile_loader.save(profile)
+                    return ServiceResolution(
+                        service_name=service_name,
+                        spec_reference=str(spec_reference),
+                        surface=surface,
+                        resolution_source="tier2_inferred",
+                    )
+            except Exception as exc:
+                logger.warning("Infer pipeline failed for '%s': %s", name, exc)
 
         return None
 

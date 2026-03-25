@@ -17,27 +17,37 @@ export interface ServiceSummary {
   entity_count: number;
 }
 
+export interface ConfigSnapshot {
+  seed?: number | null;
+  mode?: string;
+  behavior?: 'static' | 'reactive' | 'dynamic';
+}
+
+export interface WorldDef {
+  name: string;
+}
+
 export interface Run {
-  id: string;
+  run_id: string;
   status: RunStatus;
-  world_name: string;
-  description: string;
+  world_def: WorldDef;
   mode: 'governed' | 'ungoverned';
-  reality_preset: 'ideal' | 'messy' | 'hostile';
-  behavior: 'static' | 'reactive' | 'dynamic';
-  fidelity: 'auto' | 'strict' | 'exploratory';
-  seed: number | null;
-  current_tick: number;
+  reality_preset: string;
+  fidelity_mode: string;
+  tag: string;
+  config_snapshot: ConfigSnapshot;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
-  error: string | null;
-  tags: string[];
-  actor_count: number;
-  event_count: number;
-  governance_score: number | null;
-  services: ServiceSummary[];
-  conditions: WorldConditions;
+  // Backend will add these — optional until then:
+  description?: string;
+  current_tick?: number;
+  actor_count?: number;
+  event_count?: number;
+  governance_score?: number | null;
+  services?: ServiceSummary[];
+  conditions?: WorldConditions;
+  error?: string | null;
 }
 
 // -- World conditions (5 reality dimensions) --------------------------------
@@ -128,27 +138,28 @@ export interface FidelityMetadata {
 }
 
 export interface WorldEvent {
-  event_id: string;
-  event_type: EventType;
-  timestamp: EventTimestamp;
-  caused_by: string | null;
+  event_type: EventType | string;
   actor_id: string;
-  actor_role: string;
-  service_id: string | null;
-  action: string;
-  entity_ids: string[];
-  input_data: Record<string, unknown>;
-  output_data: Record<string, unknown>;
-  outcome: Outcome;
-  policy_hit: PolicyHit | null;
-  budget_delta: number;
-  budget_remaining: number;
-  causal_parent_ids: string[];
-  causal_child_ids: string[];
-  fidelity_tier: 1 | 2;
-  fidelity: FidelityMetadata | null;
-  run_id: string;
-  metadata: Record<string, unknown>;
+  // Backend will add these — optional until then:
+  event_id?: string;
+  timestamp?: EventTimestamp;
+  caused_by?: string | null;
+  actor_role?: string;
+  service_id?: string | null;
+  action?: string;
+  outcome?: Outcome;
+  entity_ids?: string[];
+  input_data?: Record<string, unknown>;
+  output_data?: Record<string, unknown>;
+  policy_hit?: PolicyHit | null;
+  budget_delta?: number;
+  budget_remaining?: number;
+  causal_parent_ids?: string[];
+  causal_child_ids?: string[];
+  fidelity_tier?: 1 | 2;
+  fidelity?: FidelityMetadata | null;
+  run_id?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // -- Entities ---------------------------------------------------------------
@@ -163,12 +174,12 @@ export interface StateChange {
 }
 
 export interface Entity {
-  entity_id: string;
+  id: string;
   entity_type: string;
-  service_id: string;
-  fields: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
+  service_id?: string;
+  fields?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
   state_history?: StateChange[];
 }
 
@@ -217,14 +228,6 @@ export interface PolicyHit {
   resolution: string | null;
 }
 
-export interface GovernanceScorecard {
-  actor_id: string;
-  overall_score: number;
-  scores: Score[];
-  fidelity_basis: FidelityBasis;
-  policy_hits: PolicyHit[];
-}
-
 // -- Capability gaps --------------------------------------------------------
 
 export type GapResponse = 'hallucinated' | 'adapted' | 'escalated' | 'skipped';
@@ -248,27 +251,4 @@ export interface EntityUpdate {
   fields: Record<string, unknown>;
   changed_fields: string[];
   caused_by_event: string;
-}
-
-// -- Comparison -------------------------------------------------------------
-
-export interface ComparisonMetric {
-  name: string;
-  values: Record<string, string | number>;
-  winner: string | null;
-}
-
-export interface DivergencePoint {
-  tick: number;
-  timestamp: string;
-  description: string;
-  decisions: Record<string, string>;
-  consequences: Record<string, string>;
-}
-
-export interface RunComparison {
-  run_ids: string[];
-  runs: Run[];
-  metrics: ComparisonMetric[];
-  divergence_points: DivergencePoint[];
 }

@@ -56,7 +56,7 @@ describe('RunListPage', () => {
   it('shows empty state when no runs', async () => {
     server.use(
       http.get('/api/v1/runs', () =>
-        HttpResponse.json({ items: [], total: 0, limit: 20, offset: 0, has_more: false }),
+        HttpResponse.json({ runs: [], total: 0 }),
       ),
     );
     renderPage();

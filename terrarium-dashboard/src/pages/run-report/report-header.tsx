@@ -9,16 +9,15 @@ interface ReportHeaderProps {
   run: Run;
 }
 
-const BADGE_KEYS = ['reality_preset', 'behavior', 'fidelity', 'mode'] as const;
-
-function getBadgeValue(run: Run, key: string): string {
-  const value = run[key as keyof Run];
-  if (value == null) return 'none';
-  return String(value);
-}
+const BADGE_ITEMS: Array<{ label: string; value: (r: Run) => string | number | null | undefined }> = [
+  { label: 'Preset', value: (r) => r.reality_preset },
+  { label: 'Behavior', value: (r) => r.config_snapshot?.behavior },
+  { label: 'Fidelity', value: (r) => r.fidelity_mode },
+  { label: 'Mode', value: (r) => r.mode },
+];
 
 export function ReportHeader({ run }: ReportHeaderProps) {
-  const tagName = run.tags.length > 0 ? run.tags[0] : run.id;
+  const tagName = run.tag || run.run_id;
   const hasScore = run.governance_score != null;
 
   return (
@@ -35,21 +34,25 @@ export function ReportHeader({ run }: ReportHeaderProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="truncate text-2xl font-semibold">{run.world_name}</h1>
+            <h1 className="truncate text-2xl font-semibold">{run.world_def.name}</h1>
             <RunStatusBadge status={run.status} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {BADGE_KEYS.map((key) => (
-              <span
-                key={key}
-                className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-secondary"
-              >
-                {getBadgeValue(run, key)}
-              </span>
-            ))}
-            {run.seed != null && (
+            {BADGE_ITEMS.map(({ label, value }) => {
+              const v = value(run);
+              if (v === null || v === undefined) return null;
+              return (
+                <span
+                  key={label}
+                  className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-secondary"
+                >
+                  {String(v)}
+                </span>
+              );
+            })}
+            {run.config_snapshot?.seed != null && (
               <span className="rounded-full bg-bg-elevated px-2 py-0.5 font-mono text-xs text-text-muted">
-                seed: {run.seed}
+                seed: {run.config_snapshot?.seed}
               </span>
             )}
           </div>

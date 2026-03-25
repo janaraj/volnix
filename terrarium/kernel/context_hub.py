@@ -1,13 +1,17 @@
-"""Context Hub integration -- fetch real API docs for 70+ services.
+"""Context Hub integration -- fetch real API docs for 600+ services.
 
-Uses the `chub` CLI from @anthropic/context-hub npm package.
-Install: npm install -g @anthropic/context-hub
+Uses the ``chub`` CLI from the ``@aisuite/chub`` npm package.
+Install: ``npm install -g @aisuite/chub``
 
-The chub CLI returns structured API documentation:
+The chub CLI returns curated, versioned API documentation:
   chub get stripe/api -> endpoint descriptions, parameter schemas,
   auth patterns, common gotchas, response formats.
 
-This is the BEST source for unknown services because it has
+Repository: https://github.com/andrewyng/context-hub
+All content is open and maintained as markdown -- agents read
+exactly what the community has curated.
+
+This is the BEST source for unknown services because it provides
 real, curated API documentation -- not LLM inference.
 """
 import asyncio
@@ -17,19 +21,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# FIX-13: Known services as class-level constant (not rebuilt per call)
-_KNOWN_SERVICES: frozenset[str] = frozenset({
-    "stripe", "github", "slack", "gmail", "twilio", "sendgrid",
-    "openai", "anthropic", "firebase", "supabase", "vercel",
-    "aws", "gcp", "azure", "shopify", "salesforce", "hubspot",
-    "notion", "airtable", "linear", "jira", "asana",
-    "datadog", "pagerduty", "sentry", "grafana",
-    # ... 70+ more
-})
-
 
 class ContextHubProvider:
-    """Fetches API docs from Context Hub via chub CLI."""
+    """Fetches API docs from Context Hub via ``chub`` CLI.
+
+    CLI commands used:
+      chub search <query>   -- search available docs and skills
+      chub get <id>         -- fetch docs by ID (e.g. ``stripe/api``)
+    """
 
     provider_name = "context_hub"
 
@@ -42,18 +41,36 @@ class ContextHubProvider:
         return shutil.which(self._command) is not None
 
     async def supports(self, service_name: str) -> bool:
-        """Check if Context Hub likely has this service.
+        """Check if Context Hub has docs for this service.
 
-        Quick heuristic: check if the service name is in the known catalog.
-        For a more accurate check, we'd need to query chub list.
+        Runs ``chub search <service>`` and returns True if results
+        are found.  Falls back to False on any error.
         """
-        return service_name.lower() in _KNOWN_SERVICES
+        if not await self.is_available():
+            return False
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._command, "search", service_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(), timeout=10.0
+            )
+            if proc.returncode != 0:
+                return False
+            # If search returns any results, this service is supported
+            content = stdout.decode().strip()
+            return bool(content)
+        except Exception:
+            return False
 
     async def fetch(self, service_name: str) -> dict[str, Any] | None:
-        """Fetch API documentation via chub get {service}/api.
+        """Fetch API documentation via ``chub get {service}/api``.
 
         Returns structured dict with raw_content, endpoints (if parseable),
-        and metadata. Returns None if chub not installed or service not found.
+        and metadata.  Returns ``None`` if chub is not installed or the
+        service is not found.
         """
         if not await self.is_available():
             logger.debug("chub CLI not installed -- skipping Context Hub")
@@ -70,8 +87,12 @@ class ContextHubProvider:
             )
 
             if proc.returncode != 0:
-                logger.debug("chub get %s/api failed (rc=%d): %s",
-                             service_name, proc.returncode, stderr.decode()[:200])
+                logger.debug(
+                    "chub get %s/api failed (rc=%d): %s",
+                    service_name,
+                    proc.returncode,
+                    stderr.decode()[:200],
+                )
                 return None
 
             content = stdout.decode()
@@ -83,11 +104,14 @@ class ContextHubProvider:
                 "service": service_name,
                 "raw_content": content,
                 "content_type": "markdown",
-                # Future: parse endpoints, schemas from the markdown
             }
 
         except asyncio.TimeoutError:
-            logger.warning("chub get %s/api timed out after %.0fs", service_name, self._timeout)
+            logger.warning(
+                "chub get %s/api timed out after %.0fs",
+                service_name,
+                self._timeout,
+            )
             return None
         except FileNotFoundError:
             logger.debug("chub command not found")
@@ -97,18 +121,22 @@ class ContextHubProvider:
             return None
 
     async def list_available(self) -> list[str]:
-        """List services available in Context Hub (if chub supports it)."""
+        """Search Context Hub for all services (returns IDs)."""
         if not await self.is_available():
             return []
         try:
             proc = await asyncio.create_subprocess_exec(
-                self._command, "list",
+                self._command, "search", "",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
             if proc.returncode == 0:
-                return [line.strip() for line in stdout.decode().splitlines() if line.strip()]
+                return [
+                    line.strip()
+                    for line in stdout.decode().splitlines()
+                    if line.strip()
+                ]
         except Exception:
             pass
         return []

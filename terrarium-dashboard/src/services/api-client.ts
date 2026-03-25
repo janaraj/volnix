@@ -1,10 +1,8 @@
+import type { Run, WorldEvent, Entity, AgentSummary } from '@/types/domain';
 import type {
-  Run, WorldEvent, Entity, AgentSummary,
-  GovernanceScorecard, CapabilityGap, RunComparison,
-} from '@/types/domain';
-import type {
-  PaginatedResponse, RunListParams, EventFilterParams,
-  EntityFilterParams,
+  RunsListResponse, EventsListResponse, EntitiesListResponse,
+  GapsResponse, ScorecardResponse, CompareResponse,
+  RunListParams, EventFilterParams, EntityFilterParams,
 } from '@/types/api';
 import { ApiError } from '@/types/api';
 
@@ -49,7 +47,7 @@ export class ApiClient {
   }
 
   // ── Run endpoints ────────────────────────────
-  async getRuns(params?: RunListParams): Promise<PaginatedResponse<Run>> {
+  async getRuns(params?: RunListParams): Promise<RunsListResponse> {
     return this.request('GET', '/api/v1/runs', params as Record<string, unknown>);
   }
 
@@ -58,7 +56,7 @@ export class ApiClient {
   }
 
   // ── Event endpoints ──────────────────────────
-  async getRunEvents(runId: string, params?: EventFilterParams): Promise<PaginatedResponse<WorldEvent>> {
+  async getRunEvents(runId: string, params?: EventFilterParams): Promise<EventsListResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/events`, params as Record<string, unknown>);
   }
 
@@ -67,12 +65,12 @@ export class ApiClient {
   }
 
   // ── Scorecard ────────────────────────────────
-  async getScorecard(runId: string): Promise<GovernanceScorecard[]> {
+  async getScorecard(runId: string): Promise<ScorecardResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/scorecard`);
   }
 
   // ── Entity endpoints ─────────────────────────
-  async getEntities(runId: string, params?: EntityFilterParams): Promise<PaginatedResponse<Entity>> {
+  async getEntities(runId: string, params?: EntityFilterParams): Promise<EntitiesListResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/entities`, params as Record<string, unknown>);
   }
 
@@ -81,7 +79,7 @@ export class ApiClient {
   }
 
   // ── Gaps ─────────────────────────────────────
-  async getCapabilityGaps(runId: string): Promise<CapabilityGap[]> {
+  async getCapabilityGaps(runId: string): Promise<GapsResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/gaps`);
   }
 
@@ -91,7 +89,7 @@ export class ApiClient {
   }
 
   // ── Comparison ───────────────────────────────
-  async getComparison(runIds: string[]): Promise<RunComparison> {
+  async getComparison(runIds: string[]): Promise<CompareResponse> {
     return this.request('GET', '/api/v1/compare', { runs: runIds.join(',') });
   }
 }

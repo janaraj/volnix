@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { useRun } from '@/hooks/queries/use-runs';
 import { useUrlTabs } from '@/hooks/use-url-tabs';
 import { QueryGuard } from '@/components/feedback/query-guard';
+import { EmptyState } from '@/components/feedback/empty-state';
 import { cn } from '@/lib/cn';
 import type { ReportTabId } from '@/types/ui';
 import type { Run } from '@/types/domain';
@@ -36,7 +37,7 @@ function ActiveTab({ tab, runId, run }: { tab: ReportTabId; runId: string; run: 
     case 'overview':
       return <OverviewTab runId={runId} run={run} />;
     case 'scorecard':
-      return <ScorecardTab runId={runId} services={run.services} />;
+      return <ScorecardTab runId={runId} services={run.services ?? []} />;
     case 'events':
       return <EventsTab runId={runId} />;
     case 'entities':
@@ -44,7 +45,9 @@ function ActiveTab({ tab, runId, run }: { tab: ReportTabId; runId: string; run: 
     case 'gaps':
       return <GapsTab runId={runId} />;
     case 'conditions':
-      return <ConditionsTab conditions={run.conditions} realityPreset={run.reality_preset} behavior={run.behavior} />;
+      return run.conditions
+        ? <ConditionsTab conditions={run.conditions} realityPreset={run.reality_preset} behavior={run.config_snapshot?.behavior ?? 'static'} />
+        : <EmptyState title="No conditions" description="This run has no world conditions data." />;
   }
 }
 

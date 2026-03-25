@@ -61,21 +61,21 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
 
       <div className="flex items-center gap-2">
         <RunStatusBadge status={run.status} />
-        <span className="text-sm text-text-secondary font-mono">{run.world_name}</span>
+        <span className="text-sm text-text-secondary font-mono">{run.world_def.name}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard title="Tick" value={run.current_tick} />
-        <MetricCard title="Agents" value={`${run.actor_count} active`} />
+        <MetricCard title="Tick" value={run.current_tick ?? 0} />
+        <MetricCard title="Agents" value={`${run.actor_count ?? 0} active`} />
         <MetricCard title="Events" value={eventCount} />
-        <MetricCard title="Services" value={run.services.length} />
+        <MetricCard title="Services" value={(run.services ?? []).length} />
       </div>
 
-      {run.services.length > 0 && (
+      {(run.services ?? []).length > 0 && (
         <div className="space-y-2">
           <p className="text-xs uppercase text-text-muted">Services</p>
           <div className="flex flex-wrap gap-2">
-            {run.services.map((s) => (
+            {(run.services ?? []).map((s) => (
               <ServiceBadge key={s.service_id} serviceId={s.service_id} tier={s.fidelity_tier} />
             ))}
           </div>
@@ -87,7 +87,7 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
           {run.reality_preset}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.behavior}
+          {run.config_snapshot?.behavior ?? 'static'}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
           {run.mode}
@@ -133,14 +133,14 @@ function EventDetailView({
             <div className="flex items-center gap-2 text-sm">
               <ActorBadge actorId={event.actor_id} role={event.actor_role} />
               <span className="text-text-muted">&rarr;</span>
-              <span className="font-mono text-text-secondary">{event.action}</span>
+              <span className="font-mono text-text-secondary">{event.action ?? event.event_type}</span>
               <span className="text-text-muted">&rarr;</span>
-              <OutcomeIcon outcome={event.outcome} />
-              <span className="text-xs font-medium uppercase">{event.outcome}</span>
+              <OutcomeIcon outcome={event.outcome ?? 'success'} />
+              <span className="text-xs font-medium uppercase">{event.outcome ?? ''}</span>
             </div>
 
             {/* Timestamp */}
-            <TimestampCell iso={event.timestamp.wall_time} />
+            <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
 
             {/* Input / Output */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -159,10 +159,10 @@ function EventDetailView({
               <p className="text-xs uppercase text-text-muted">Budget Impact</p>
               <div className="flex items-center gap-3 font-mono text-sm">
                 <span className="text-text-secondary">
-                  Delta: <span className="text-warning">{formatCurrency(event.budget_delta)}</span>
+                  Delta: <span className="text-warning">{formatCurrency(event.budget_delta ?? 0)}</span>
                 </span>
                 <span className="text-text-secondary">
-                  Remaining: <span className="font-mono">{formatCurrency(event.budget_remaining)}</span>
+                  Remaining: <span className="font-mono">{formatCurrency(event.budget_remaining ?? 0)}</span>
                 </span>
               </div>
             </div>
@@ -182,38 +182,38 @@ function EventDetailView({
             )}
 
             {/* Entity IDs */}
-            {event.entity_ids.length > 0 && (
+            {(event.entity_ids ?? []).length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs uppercase text-text-muted">Entities</p>
                 <div className="flex flex-wrap gap-2">
-                  {event.entity_ids.map((eid) => (
-                    <EntityLink key={eid} runId={event.run_id} entityId={eid} />
+                  {(event.entity_ids ?? []).map((eid) => (
+                    <EntityLink key={eid} runId={runId} entityId={eid} />
                   ))}
                 </div>
               </div>
             )}
 
             {/* Causal chain */}
-            {(event.causal_parent_ids.length > 0 || event.causal_child_ids.length > 0) && (
+            {((event.causal_parent_ids ?? []).length > 0 || (event.causal_child_ids ?? []).length > 0) && (
               <div className="space-y-2">
                 <p className="flex items-center gap-1 text-xs uppercase text-text-muted">
                   <GitBranch size={12} /> Causal Chain
                 </p>
-                {event.causal_parent_ids.length > 0 && (
+                {(event.causal_parent_ids ?? []).length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-text-muted">Caused by:</p>
                     <div className="flex flex-wrap gap-2">
-                      {event.causal_parent_ids.map((pid) => (
+                      {(event.causal_parent_ids ?? []).map((pid) => (
                         <CausalLink key={pid} eventId={pid} onSelect={onSelectEvent} />
                       ))}
                     </div>
                   </div>
                 )}
-                {event.causal_child_ids.length > 0 && (
+                {(event.causal_child_ids ?? []).length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-text-muted">Caused:</p>
                     <div className="flex flex-wrap gap-2">
-                      {event.causal_child_ids.map((cid) => (
+                      {(event.causal_child_ids ?? []).map((cid) => (
                         <CausalLink key={cid} eventId={cid} onSelect={onSelectEvent} />
                       ))}
                     </div>
@@ -223,7 +223,7 @@ function EventDetailView({
             )}
 
             {/* Fidelity */}
-            <FidelityIndicator tier={event.fidelity_tier} source={event.fidelity?.fidelity_source ?? undefined} />
+            <FidelityIndicator tier={event.fidelity_tier ?? 2} source={event.fidelity?.fidelity_source ?? undefined} />
           </div>
         )}
       </QueryGuard>

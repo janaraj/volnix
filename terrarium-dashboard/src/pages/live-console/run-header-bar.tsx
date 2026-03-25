@@ -20,7 +20,7 @@ const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string }> 
 };
 
 export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBarProps) {
-  const tagName = run.tags.length > 0 ? run.tags[0] : run.id;
+  const tagName = run.tag || run.run_id;
   const statusCfg = STATUS_CONFIG[connectionStatus];
 
   return (
@@ -36,7 +36,7 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
 
       {/* Title row */}
       <div className="flex items-center gap-3">
-        <h1 className="truncate text-xl font-semibold">{run.world_name}</h1>
+        <h1 className="truncate text-xl font-semibold">{run.world_def.name}</h1>
         <RunStatusBadge status={run.status} />
         <div className="flex items-center gap-1.5 text-xs text-text-muted">
           <span className={cn('inline-block h-2 w-2 rounded-full', statusCfg.color)} />
@@ -48,10 +48,10 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-text-secondary">
           <span>
-            Tick: <span className="font-mono">{formatTick(run.current_tick)}</span>
+            Tick: <span className="font-mono">{formatTick(run.current_tick ?? 0)}</span>
           </span>
           <span>
-            Agents: <span className="font-mono">{run.actor_count}</span>
+            Agents: <span className="font-mono">{run.actor_count ?? 0}</span>
           </span>
           <span>
             Events: <span className="font-mono">{eventCount}</span>

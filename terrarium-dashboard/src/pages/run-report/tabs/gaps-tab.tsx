@@ -9,6 +9,7 @@ import { ActorBadge } from '@/components/domain/actor-badge';
 import { gapResponseToLabel } from '@/lib/classifiers';
 import { truncateId } from '@/lib/formatters';
 import type { CapabilityGap } from '@/types/domain';
+import type { GapsResponse } from '@/types/api';
 
 interface GapsTabProps {
   runId: string;
@@ -69,8 +70,8 @@ export function GapsTab({ runId }: GapsTabProps) {
 
   return (
     <QueryGuard query={gapsQuery} loadingFallback={<SectionLoading />}>
-      {(gaps) => {
-        if (gaps.length === 0) {
+      {(data: GapsResponse) => {
+        if (data.gaps.length === 0) {
           return (
             <div>
               <h2 className="mb-3 text-lg font-semibold">
@@ -84,9 +85,9 @@ export function GapsTab({ runId }: GapsTabProps) {
         return (
           <div>
             <h2 className="mb-3 text-lg font-semibold">
-              CAPABILITY GAPS <span className="font-normal text-text-muted">({gaps.length} detected)</span>
+              CAPABILITY GAPS <span className="font-normal text-text-muted">({data.gaps.length} detected)</span>
             </h2>
-            <GapDistribution gaps={gaps} />
+            <GapDistribution gaps={data.gaps} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -98,7 +99,7 @@ export function GapsTab({ runId }: GapsTabProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {gaps.map((gap) => {
+                  {data.gaps.map((gap) => {
                     const Icon = GAP_RESPONSE_ICONS[gap.response] ?? Circle;
                     const color = GAP_RESPONSE_COLORS[gap.response] ?? 'text-text-muted';
                     return (
