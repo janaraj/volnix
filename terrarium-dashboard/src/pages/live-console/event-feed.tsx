@@ -57,16 +57,16 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
   }, [events]);
 
   const serviceOptions = useMemo(() => {
-    const ids = new Set(events.filter((e) => e.service_id).map((e) => e.service_id!));
+    const ids = new Set(events.filter((e) => e.service_id).map((e) => e.service_id ?? ''));
     return Array.from(ids).sort();
   }, [events]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
-      if (outcomeFilter && e.outcome !== outcomeFilter) return false;
+      if (outcomeFilter && (e.outcome ?? '') !== outcomeFilter) return false;
       if (eventTypeFilter && e.event_type !== eventTypeFilter) return false;
       if (actorFilter && e.actor_id !== actorFilter) return false;
-      if (serviceFilter && e.service_id !== serviceFilter) return false;
+      if (serviceFilter && (e.service_id ?? '') !== serviceFilter) return false;
       return true;
     });
   }, [events, outcomeFilter, eventTypeFilter, actorFilter, serviceFilter]);

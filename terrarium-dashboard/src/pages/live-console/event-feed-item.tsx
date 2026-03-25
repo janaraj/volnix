@@ -18,7 +18,7 @@ export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: Ev
   return (
     <button
       type="button"
-      onClick={() => onSelect(event.event_id)}
+      onClick={() => onSelect(event.event_id ?? '')}
       className={cn(
         'w-full rounded px-3 py-2 text-left transition-colors hover:bg-bg-elevated',
         isSelected && 'bg-bg-elevated border border-border',
@@ -26,9 +26,9 @@ export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: Ev
     >
       {/* Line 1: timestamp + outcome + tick */}
       <div className="flex items-center gap-2">
-        <TimestampCell iso={event.timestamp.wall_time} />
-        <OutcomeIcon outcome={event.outcome} size={14} />
-        <span className="font-mono text-xs text-text-muted">{formatTick(event.timestamp.tick)}</span>
+        <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
+        <OutcomeIcon outcome={event.outcome ?? 'success'} size={14} />
+        <span className="font-mono text-xs text-text-muted">{formatTick(event.timestamp?.tick ?? 0)}</span>
       </div>
 
       {/* Line 2: actor name */}
@@ -53,14 +53,14 @@ export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: Ev
       </div>
 
       {/* Line 3: action name */}
-      <div className="mt-0.5 font-mono text-xs text-text-primary">{event.action}</div>
+      <div className="mt-0.5 font-mono text-xs text-text-primary">{event.action ?? event.event_type}</div>
 
       {/* Line 4: brief description (conditional) */}
       {showDescription && (
         <div className="mt-0.5 text-xs text-text-muted">
           {event.policy_hit
-            ? `${event.policy_hit.enforcement}: ${event.policy_hit.policy_name}`
-            : event.outcome.toUpperCase()}
+            ? `${event.policy_hit.enforcement ?? 'unknown'}: ${event.policy_hit.policy_name ?? ''}`
+            : (event.outcome ?? '').toUpperCase()}
         </div>
       )}
     </button>

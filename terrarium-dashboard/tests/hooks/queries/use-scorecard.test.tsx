@@ -26,13 +26,16 @@ describe('useScorecard', () => {
   it('fetches scorecard for a run', async () => {
     const { result } = renderHook(() => useScorecard('run-1'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toHaveLength(3);
-    expect(result.current.data?.[0].overall_score).toBe(0.9);
+    expect(result.current.data?.per_actor).toBeDefined();
+    expect(result.current.data?.collective).toBeDefined();
+    expect(result.current.data?.collective.overall_score).toBe(85);
   });
 
-  it('returns scorecard with scores array', async () => {
+  it('returns scorecard with per_actor scores', async () => {
     const { result } = renderHook(() => useScorecard('run-1'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].scores.length).toBeGreaterThan(0);
+    const perActor = result.current.data?.per_actor ?? {};
+    expect(Object.keys(perActor).length).toBeGreaterThan(0);
+    expect(perActor['agent-alpha']?.policy_compliance).toBe(94);
   });
 });

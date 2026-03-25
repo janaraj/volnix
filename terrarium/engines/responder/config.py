@@ -10,3 +10,4 @@ class ResponderConfig(BaseModel):
 
     max_retries: int = 2
     fallback_enabled: bool = True
+    profiles_dir: str = "terrarium/packs/profiles"

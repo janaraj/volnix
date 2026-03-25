@@ -26,7 +26,7 @@ export function LiveConsolePage() {
 
   function handleSelectEvent(eventId: string) {
     setSelectedEventId(eventId);
-    const events = eventsQuery.data?.items ?? [];
+    const events = eventsQuery.data?.events ?? [];
     const event = events.find((e) => e.event_id === eventId);
     if (event) {
       setSelectedActorId(event.actor_id);
@@ -42,22 +42,22 @@ export function LiveConsolePage() {
     setSelectedActorId(null);
   }
 
-  const events = eventsQuery.data?.items ?? [];
+  const events = eventsQuery.data?.events ?? [];
 
   useKeyboard({
     Escape: () => handleClearSelection(),
     ArrowDown: () => {
       if (!selectedEventId && events.length > 0) {
-        handleSelectEvent(events[0].event_id);
+        handleSelectEvent(events[0].event_id!);
       } else if (selectedEventId) {
         const idx = events.findIndex((e) => e.event_id === selectedEventId);
-        if (idx < events.length - 1) handleSelectEvent(events[idx + 1].event_id);
+        if (idx < events.length - 1) handleSelectEvent(events[idx + 1].event_id!);
       }
     },
     ArrowUp: () => {
       if (selectedEventId) {
         const idx = events.findIndex((e) => e.event_id === selectedEventId);
-        if (idx > 0) handleSelectEvent(events[idx - 1].event_id);
+        if (idx > 0) handleSelectEvent(events[idx - 1].event_id!);
       }
     },
   });

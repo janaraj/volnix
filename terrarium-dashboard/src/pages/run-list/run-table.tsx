@@ -21,9 +21,9 @@ export function RunTable({ runs }: RunTableProps) {
     <div className="grid gap-3">
       {runs.map((run) => (
         <RunCard
-          key={run.id}
+          key={run.run_id}
           run={run}
-          selected={selectedRunIds.includes(run.id)}
+          selected={selectedRunIds.includes(run.run_id)}
           onToggleSelect={toggleRun}
         />
       ))}

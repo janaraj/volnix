@@ -36,6 +36,7 @@ class AgentAdapterEngine(BaseEngine):
 
     # Injected by app._inject_cross_engine_deps()
     _pack_registry: Any = None
+    _profile_registry: Any = None  # ProfileRegistry for Tier 2 tools
 
     # -- PipelineStep interface ------------------------------------------------
 
@@ -52,16 +53,31 @@ class AgentAdapterEngine(BaseEngine):
         (backward compat with tests that don't wire the full app).
         """
         if self._pack_registry is not None:
+            # Check Tier 1 packs
             if self._pack_registry.has_tool(ctx.action):
                 logger.debug(
-                    "%s: tool '%s' found for actor '%s'",
+                    "%s: tool '%s' found (tier1) for actor '%s'",
                     self.step_name, ctx.action, ctx.actor_id,
                 )
                 return StepResult(
                     step_name=self.step_name,
                     verdict=StepVerdict.ALLOW,
-                    message=f"tool '{ctx.action}' available",
+                    message=f"tool '{ctx.action}' available (tier1)",
                 )
+
+            # Check Tier 2 profiles
+            if self._profile_registry is not None:
+                profile = self._profile_registry.get_profile_for_action(ctx.action)
+                if profile is not None:
+                    logger.debug(
+                        "%s: tool '%s' found (tier2, profile=%s) for actor '%s'",
+                        self.step_name, ctx.action, profile.service_name, ctx.actor_id,
+                    )
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        message=f"tool '{ctx.action}' available (tier2, profile={profile.service_name})",
+                    )
 
             # Capability gap
             logger.info(

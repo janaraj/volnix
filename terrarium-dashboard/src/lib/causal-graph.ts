@@ -17,7 +17,7 @@ export interface CausalNode {
 export function buildCausalTree(events: WorldEvent[], rootEventId: string): CausalNode | null {
   const eventMap = new Map<string, WorldEvent>();
   for (const event of events) {
-    eventMap.set(event.event_id, event);
+    if (event.event_id) eventMap.set(event.event_id, event);
   }
 
   const rootEvent = eventMap.get(rootEventId);
@@ -27,10 +27,10 @@ export function buildCausalTree(events: WorldEvent[], rootEventId: string): Caus
   const MAX_DEPTH = 100;
 
   function buildNode(event: WorldEvent, depth: number): CausalNode {
-    visited.add(event.event_id);
+    if (event.event_id) visited.add(event.event_id);
     const children: CausalNode[] = [];
     if (depth < MAX_DEPTH) {
-      for (const childId of event.causal_child_ids) {
+      for (const childId of event.causal_child_ids ?? []) {
         if (!visited.has(childId)) {
           const childEvent = eventMap.get(childId);
           if (childEvent) {

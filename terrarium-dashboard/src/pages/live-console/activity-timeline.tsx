@@ -13,7 +13,7 @@ const BUCKET_COUNT = 50;
 export function ActivityTimeline({ events, onJumpToTick }: ActivityTimelineProps) {
   const chartData = useMemo(() => {
     if (events.length === 0) return [];
-    const maxTick = Math.max(...events.map((e) => e.timestamp.tick));
+    const maxTick = Math.max(...events.map((e) => e.timestamp?.tick ?? 0));
     const bucketSize = Math.max(1, Math.ceil(maxTick / BUCKET_COUNT));
     const buckets: Array<{ tick: number; count: number; successRate: number }> = [];
 
@@ -21,7 +21,7 @@ export function ActivityTimeline({ events, onJumpToTick }: ActivityTimelineProps
       const startTick = i * bucketSize;
       const endTick = (i + 1) * bucketSize;
       const bucketEvents = events.filter(
-        (e) => e.timestamp.tick >= startTick && e.timestamp.tick < endTick,
+        (e) => (e.timestamp?.tick ?? 0) >= startTick && (e.timestamp?.tick ?? 0) < endTick,
       );
       const successCount = bucketEvents.filter((e) => e.outcome === 'success').length;
       buckets.push({

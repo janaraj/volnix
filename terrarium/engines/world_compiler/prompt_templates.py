@@ -12,6 +12,7 @@ its variable dict. No partial context — the LLM always sees:
   - Governance policies
   - Actor summary
 """
+
 from __future__ import annotations
 
 import json
@@ -72,6 +73,7 @@ class PromptTemplate:
         # Check for LLM provider errors first
         if response.error:
             from terrarium.core.errors import LLMError
+
             raise LLMError(
                 f"LLM provider returned error: {response.error[:200]}",
                 context={
@@ -86,6 +88,7 @@ class PromptTemplate:
         content = response.content.strip()
         if not content:
             from terrarium.core.errors import LLMError
+
             raise LLMError(
                 "LLM returned empty response (no content, no error)",
                 context={
@@ -96,9 +99,9 @@ class PromptTemplate:
 
         # Strip markdown code block wrappers (greedy — handle truncated responses)
         # Remove opening ```json or ```
-        content = re.sub(r'^```(?:json)?\s*\n?', '', content)
+        content = re.sub(r"^```(?:json)?\s*\n?", "", content)
         # Remove closing ```
-        content = re.sub(r'\n?\s*```\s*$', '', content)
+        content = re.sub(r"\n?\s*```\s*$", "", content)
         content = content.strip()
 
         # Try direct parse
@@ -113,7 +116,7 @@ class PromptTemplate:
             end = content.rfind(end_char)
             if start != -1 and end != -1 and end > start:
                 try:
-                    return json.loads(content[start:end + 1])
+                    return json.loads(content[start : end + 1])
                 except json.JSONDecodeError:
                     continue
 
@@ -128,7 +131,7 @@ class PromptTemplate:
                 last_obj_end = content.rfind("}", 0, search_from)
                 if last_obj_end == -1 or last_obj_end <= arr_start:
                     break
-                truncated = content[arr_start:last_obj_end + 1] + "]"
+                truncated = content[arr_start : last_obj_end + 1] + "]"
                 try:
                     result = json.loads(truncated)
                     if isinstance(result, list) and result:
@@ -179,11 +182,9 @@ For services with profiles, use "profiled/service_name".
 For unknown services, use the bare service name (the compiler will resolve it).
 
 Output ONLY valid JSON. No markdown, no explanation.""",
-
     user="""Create a world definition for this description:
 
 {description}""",
-
     engine_name="world_compiler",
     use_case="nl_to_world_def",
 )
@@ -214,7 +215,6 @@ The output MUST follow this structure:
 }}
 
 Output ONLY valid JSON.""",
-
     user="""Generate compiler settings for: {description}
 
 Use these values:
@@ -222,7 +222,6 @@ Use these values:
 - Behavior: {behavior}
 - Fidelity: {fidelity}
 - Seed: {seed}""",
-
     engine_name="world_compiler",
     use_case="nl_to_compiler_settings",
 )
@@ -269,7 +268,6 @@ appear as real entities with proper cross-references.
 - Generate exactly {count} {entity_type} entities as a valid JSON array
 - Each entity MUST conform to the schema above (required fields, valid types, enum values)
 - Output ONLY a valid JSON array. No markdown, no explanation.""",
-
     user="Generate {count} {entity_type} entities for this world.",
     engine_name="data_generator",
     use_case="default",
@@ -318,7 +316,6 @@ Each JSON object:
 }}
 
 Output ONLY a valid JSON array of {count} objects. No markdown.""",
-
     user="Generate {count} distinct personalities for: {role}",
     engine_name="world_compiler",
     use_case="default",
@@ -379,9 +376,69 @@ Output JSON:
 }}
 
 Output ONLY valid JSON.""",
-
     user="Expand this seed scenario: {seed_description}",
     engine_name="world_compiler",
+    use_case="default",
+)
+
+
+# ── Profile Inference Template ──────────────────────────────────
+
+PROFILE_INFER = PromptTemplate(
+    system="""You are Terrarium's service profiler. Generate a structured service profile
+for the given service. This profile will be used to simulate the service's API.
+
+Output ONLY valid YAML matching this structure:
+profile_name: <service>
+service_name: <service>
+category: <category>
+operations:
+  - name: <service>_<action>
+    service: <service>
+    http_method: <GET|POST|PUT|DELETE>
+    http_path: <real API path>
+    description: <what it does>
+    parameters:
+      param_name: {{type: string}}
+    required_params: [param1, param2]
+    response_schema:
+      type: object
+      properties:
+        field_name: {{type: string}}
+    is_read_only: false
+    creates_entity: <entity_type or null>
+    mutates_entity: <entity_type or null>
+entities:
+  - name: <entity>
+    identity_field: id
+    fields:
+      field_name: {{type: string}}
+    required: [field1, field2]
+state_machines:
+  - entity_type: <entity>
+    field: status
+    transitions:
+      state1: [state2, state3]
+error_modes:
+  - code: <ERROR_CODE>
+    when: <condition>
+    http_status: <400|403|404|409>
+behavioral_notes:
+  - <note1>
+  - <note2>
+responder_prompt: |
+  You are simulating the <service> API. <instructions>
+
+Output ONLY valid YAML. No markdown, no explanation.""",
+    user="""Generate a service profile for: {service_name}
+
+Category: {category}
+
+{available_docs}
+
+Include realistic operations, entities, state machines, error modes, and a responder prompt.
+Base the operations on the real API if you know it.""",
+    engine_name="profile_infer",
     use_case="default",
 )
 
@@ -424,7 +481,6 @@ Name: {section_name}
 {failing_payload}
 
 Output ONLY the repaired payload as valid JSON. No markdown, no explanation.""",
-
     user="Repair this failing {section_kind} section: {section_name}",
     engine_name="world_compiler",
     use_case="section_repair",
@@ -466,7 +522,6 @@ Escalation on inaction: {escalation_on_inaction}
 - Events go through the governance pipeline -- they CAN be blocked by policies
 
 Output ONLY valid JSON array.""",
-
     user="Generate up to {budget} world events.",
     engine_name="animator",
     use_case="default",

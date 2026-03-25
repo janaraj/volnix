@@ -1,0 +1,524 @@
+profile_name: shopify
+service_name: shopify
+category: commerce
+version: "1.0.0"
+fidelity_source: curated_profile
+
+operations:
+  - name: shopify_create_product
+    service: shopify
+    description: "Create a new product in the Shopify store"
+    http_method: POST
+    http_path: /admin/api/2024-01/products.json
+    parameters:
+      title:
+        type: string
+        description: "Product title"
+      body_html:
+        type: string
+        description: "Product description in HTML"
+      vendor:
+        type: string
+        description: "Product vendor name"
+      product_type:
+        type: string
+        description: "Product type/category"
+      status:
+        type: string
+        enum: ["active", "draft", "archived"]
+        description: "Product status"
+      variants:
+        type: array
+        description: "Product variants (size, color, etc.)"
+        items:
+          type: object
+          properties:
+            title: {type: string}
+            price: {type: string}
+            sku: {type: string}
+            inventory_quantity: {type: integer}
+      tags:
+        type: string
+        description: "Comma-separated tags"
+    required_params: [title]
+    response_schema:
+      type: object
+      properties:
+        product:
+          type: object
+          properties:
+            id: {type: integer}
+            title: {type: string}
+            body_html: {type: string}
+            vendor: {type: string}
+            product_type: {type: string}
+            status: {type: string}
+            created_at: {type: string}
+            updated_at: {type: string}
+            variants:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: {type: integer}
+                  title: {type: string}
+                  price: {type: string}
+                  sku: {type: string}
+                  inventory_quantity: {type: integer}
+          required: [id, title]
+    creates_entity: product
+
+  - name: shopify_get_product
+    service: shopify
+    description: "Retrieve a single product by ID"
+    http_method: GET
+    http_path: /admin/api/2024-01/products/{product_id}.json
+    parameters:
+      product_id:
+        type: integer
+        description: "Product ID"
+    required_params: [product_id]
+    response_schema:
+      type: object
+      properties:
+        product:
+          type: object
+          properties:
+            id: {type: integer}
+            title: {type: string}
+            body_html: {type: string}
+            vendor: {type: string}
+            product_type: {type: string}
+            status: {type: string}
+            created_at: {type: string}
+            updated_at: {type: string}
+            variants:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: {type: integer}
+                  title: {type: string}
+                  price: {type: string}
+                  sku: {type: string}
+                  inventory_quantity: {type: integer}
+    is_read_only: true
+
+  - name: shopify_list_products
+    service: shopify
+    description: "List all products with optional filtering"
+    http_method: GET
+    http_path: /admin/api/2024-01/products.json
+    parameters:
+      limit:
+        type: integer
+        description: "Maximum number of products to return (max 250)"
+      product_type:
+        type: string
+        description: "Filter by product type"
+      vendor:
+        type: string
+        description: "Filter by vendor"
+      status:
+        type: string
+        enum: ["active", "draft", "archived"]
+      since_id:
+        type: integer
+        description: "Restrict results to after the specified ID"
+    required_params: []
+    response_schema:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              title: {type: string}
+              vendor: {type: string}
+              product_type: {type: string}
+              status: {type: string}
+              created_at: {type: string}
+    is_read_only: true
+
+  - name: shopify_create_order
+    service: shopify
+    description: "Create a new order"
+    http_method: POST
+    http_path: /admin/api/2024-01/orders.json
+    parameters:
+      line_items:
+        type: array
+        description: "Order line items"
+        items:
+          type: object
+          properties:
+            variant_id: {type: integer}
+            quantity: {type: integer}
+            title: {type: string}
+            price: {type: string}
+      customer:
+        type: object
+        description: "Customer information"
+        properties:
+          id: {type: integer}
+          email: {type: string}
+      financial_status:
+        type: string
+        enum: ["pending", "paid", "refunded", "voided"]
+      shipping_address:
+        type: object
+        properties:
+          address1: {type: string}
+          city: {type: string}
+          province: {type: string}
+          country: {type: string}
+          zip: {type: string}
+      note:
+        type: string
+        description: "Order note"
+    required_params: [line_items]
+    response_schema:
+      type: object
+      properties:
+        order:
+          type: object
+          properties:
+            id: {type: integer}
+            order_number: {type: integer}
+            financial_status: {type: string}
+            fulfillment_status: {type: string}
+            total_price: {type: string}
+            customer:
+              type: object
+              properties:
+                id: {type: integer}
+                email: {type: string}
+            line_items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: {type: integer}
+                  variant_id: {type: integer}
+                  title: {type: string}
+                  quantity: {type: integer}
+                  price: {type: string}
+            created_at: {type: string}
+          required: [id, order_number]
+    creates_entity: order
+
+  - name: shopify_get_order
+    service: shopify
+    description: "Retrieve a single order by ID"
+    http_method: GET
+    http_path: /admin/api/2024-01/orders/{order_id}.json
+    parameters:
+      order_id:
+        type: integer
+        description: "Order ID"
+    required_params: [order_id]
+    response_schema:
+      type: object
+      properties:
+        order:
+          type: object
+          properties:
+            id: {type: integer}
+            order_number: {type: integer}
+            financial_status: {type: string}
+            fulfillment_status: {type: string}
+            total_price: {type: string}
+            customer:
+              type: object
+              properties:
+                id: {type: integer}
+                email: {type: string}
+                first_name: {type: string}
+                last_name: {type: string}
+            line_items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: {type: integer}
+                  variant_id: {type: integer}
+                  title: {type: string}
+                  quantity: {type: integer}
+                  price: {type: string}
+            created_at: {type: string}
+    is_read_only: true
+
+  - name: shopify_list_orders
+    service: shopify
+    description: "List orders with optional filtering"
+    http_method: GET
+    http_path: /admin/api/2024-01/orders.json
+    parameters:
+      limit:
+        type: integer
+        description: "Maximum number of orders to return (max 250)"
+      status:
+        type: string
+        enum: ["open", "closed", "cancelled", "any"]
+      financial_status:
+        type: string
+        enum: ["pending", "paid", "refunded", "voided", "any"]
+      fulfillment_status:
+        type: string
+        enum: ["shipped", "unshipped", "partial", "any"]
+      since_id:
+        type: integer
+    required_params: []
+    response_schema:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              order_number: {type: integer}
+              financial_status: {type: string}
+              fulfillment_status: {type: string}
+              total_price: {type: string}
+              created_at: {type: string}
+    is_read_only: true
+
+  - name: shopify_create_customer
+    service: shopify
+    description: "Create a new customer"
+    http_method: POST
+    http_path: /admin/api/2024-01/customers.json
+    parameters:
+      email:
+        type: string
+        description: "Customer email address"
+      first_name:
+        type: string
+      last_name:
+        type: string
+      phone:
+        type: string
+      tags:
+        type: string
+        description: "Comma-separated tags"
+      note:
+        type: string
+    required_params: [email]
+    response_schema:
+      type: object
+      properties:
+        customer:
+          type: object
+          properties:
+            id: {type: integer}
+            email: {type: string}
+            first_name: {type: string}
+            last_name: {type: string}
+            orders_count: {type: integer}
+            total_spent: {type: string}
+            created_at: {type: string}
+          required: [id, email]
+    creates_entity: customer
+
+  - name: shopify_get_customer
+    service: shopify
+    description: "Retrieve a single customer by ID"
+    http_method: GET
+    http_path: /admin/api/2024-01/customers/{customer_id}.json
+    parameters:
+      customer_id:
+        type: integer
+        description: "Customer ID"
+    required_params: [customer_id]
+    response_schema:
+      type: object
+      properties:
+        customer:
+          type: object
+          properties:
+            id: {type: integer}
+            email: {type: string}
+            first_name: {type: string}
+            last_name: {type: string}
+            orders_count: {type: integer}
+            total_spent: {type: string}
+            created_at: {type: string}
+    is_read_only: true
+
+entities:
+  - name: product
+    identity_field: id
+    fields:
+      id: {type: integer}
+      title: {type: string}
+      body_html: {type: string}
+      vendor: {type: string}
+      product_type: {type: string}
+      status: {type: string, enum: ["active", "draft", "archived"]}
+      variants:
+        type: array
+        items:
+          type: object
+          properties:
+            id: {type: integer}
+            title: {type: string}
+            price: {type: string}
+            sku: {type: string}
+            inventory_quantity: {type: integer}
+      tags: {type: string}
+      created_at: {type: string}
+      updated_at: {type: string}
+    required: [id, title]
+
+  - name: order
+    identity_field: id
+    fields:
+      id: {type: integer}
+      order_number: {type: integer}
+      financial_status: {type: string, enum: ["pending", "paid", "refunded", "voided"]}
+      fulfillment_status: {type: string, enum: ["fulfilled", "unfulfilled", "partial"]}
+      total_price: {type: string}
+      customer:
+        type: object
+        properties:
+          id: {type: integer}
+          email: {type: string}
+      line_items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: {type: integer}
+            variant_id: {type: integer}
+            title: {type: string}
+            quantity: {type: integer}
+            price: {type: string}
+      created_at: {type: string}
+      updated_at: {type: string}
+    required: [id, order_number, financial_status]
+
+  - name: customer
+    identity_field: id
+    fields:
+      id: {type: integer}
+      email: {type: string}
+      first_name: {type: string}
+      last_name: {type: string}
+      orders_count: {type: integer}
+      total_spent: {type: string}
+      phone: {type: string}
+      tags: {type: string}
+      created_at: {type: string}
+    required: [id, email]
+
+state_machines:
+  - entity_type: order
+    field: financial_status
+    transitions:
+      "pending": ["paid", "voided"]
+      "paid": ["refunded", "voided"]
+      "refunded": []
+      "voided": []
+
+error_modes:
+  - code: NOT_FOUND
+    when: "The requested resource does not exist"
+    http_status: 404
+    response_body: {"errors": "Not Found"}
+  - code: INVALID_PRODUCT
+    when: "Product data is invalid or missing required fields"
+    http_status: 422
+    response_body: {"errors": {"title": ["can't be blank"]}}
+  - code: INSUFFICIENT_INVENTORY
+    when: "Requested quantity exceeds available inventory"
+    http_status: 422
+    response_body: {"errors": {"line_items": ["Insufficient inventory"]}}
+
+behavioral_notes:
+  - "All monetary values are strings with two decimal places (e.g., '29.99')"
+  - "Dates are ISO 8601 with timezone (e.g., '2024-01-15T10:30:00-05:00')"
+  - "Product IDs and order IDs are auto-incrementing integers"
+  - "Order numbers are store-scoped sequential integers (e.g., 1001, 1002)"
+  - "Fulfillment status is null until order is processed"
+  - "Inventory is tracked at the variant level, not the product level"
+  - "Tags are comma-separated strings, not arrays"
+  - "The API version is included in the URL path (e.g., 2024-01)"
+
+examples:
+  - operation: shopify_create_product
+    request:
+      title: "Classic Leather Wallet"
+      body_html: "<p>Genuine leather bifold wallet with RFID blocking.</p>"
+      vendor: "LeatherCraft"
+      product_type: "Accessories"
+      status: "active"
+      variants:
+        - title: "Brown / Regular"
+          price: "49.99"
+          sku: "LW-BRN-001"
+          inventory_quantity: 150
+    response:
+      product:
+        id: 7894561230
+        title: "Classic Leather Wallet"
+        body_html: "<p>Genuine leather bifold wallet with RFID blocking.</p>"
+        vendor: "LeatherCraft"
+        product_type: "Accessories"
+        status: "active"
+        created_at: "2024-01-15T10:30:00-05:00"
+        updated_at: "2024-01-15T10:30:00-05:00"
+        variants:
+          - id: 44567890123
+            title: "Brown / Regular"
+            price: "49.99"
+            sku: "LW-BRN-001"
+            inventory_quantity: 150
+
+  - operation: shopify_create_order
+    request:
+      line_items:
+        - variant_id: 44567890123
+          quantity: 2
+      customer:
+        email: "jane@example.com"
+      financial_status: "paid"
+    response:
+      order:
+        id: 5678901234
+        order_number: 1042
+        financial_status: "paid"
+        fulfillment_status: null
+        total_price: "99.98"
+        customer:
+          id: 1234567890
+          email: "jane@example.com"
+        line_items:
+          - id: 11223344
+            variant_id: 44567890123
+            title: "Classic Leather Wallet - Brown / Regular"
+            quantity: 2
+            price: "49.99"
+        created_at: "2024-01-15T11:00:00-05:00"
+
+responder_prompt: |
+  You are simulating the Shopify Admin REST API (version 2024-01).
+
+  You manage products, orders, and customers for an e-commerce store. Your responses must:
+  1. Follow the exact response schema for each operation, wrapping results in the resource key (e.g., {"product": {...}})
+  2. Generate realistic auto-incrementing integer IDs for new resources
+  3. All monetary values must be strings with exactly two decimal places (e.g., "49.99")
+  4. Return ISO 8601 dates with timezone for all timestamp fields
+  5. Order numbers should be sequential integers starting from 1001
+  6. Track inventory at the variant level
+  7. For errors, return Shopify-style error objects with "errors" key
+  8. Fulfillment status starts as null for new orders
+
+  When creating orders, calculate total_price from line items (price * quantity).
+  When creating customers, initialize orders_count to 0 and total_spent to "0.00".
+
+auth_pattern: api_key
+base_url: "https://your-store.myshopify.com"

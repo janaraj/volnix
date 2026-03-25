@@ -246,8 +246,12 @@ def write_output(content: str, output_path: Path | None) -> None:
 
 
 @asynccontextmanager
-async def app_context() -> AsyncIterator[Any]:
+async def app_context(env: str = "development") -> AsyncIterator[Any]:
     """Yield a fully-started TerrariumApp, stopping it on exit.
+
+    Args:
+        env: Configuration environment name. Maps to
+            ``terrarium.{env}.toml`` overlay file.
 
     Usage::
 
@@ -258,7 +262,7 @@ async def app_context() -> AsyncIterator[Any]:
     from terrarium.app import TerrariumApp
     from terrarium.config.loader import ConfigLoader
 
-    config = ConfigLoader().load()
+    config = ConfigLoader(env=env).load()
     terrarium_app = TerrariumApp(config)
     try:
         await terrarium_app.start()

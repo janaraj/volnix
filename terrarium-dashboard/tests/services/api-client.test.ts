@@ -14,8 +14,8 @@ describe('ApiClient', () => {
   describe('getRuns', () => {
     it('fetches runs list from /api/runs', async () => {
       const result = await api.getRuns();
-      expect(result.items).toHaveLength(3);
-      expect(result.has_more).toBe(false);
+      expect(result.runs).toHaveLength(3);
+      expect(result.total).toBe(3);
     });
 
     it('passes filter params as query string', async () => {
@@ -23,7 +23,7 @@ describe('ApiClient', () => {
       server.use(
         http.get('/api/v1/runs', ({ request }) => {
           capturedUrl = request.url;
-          return HttpResponse.json({ items: [], total: 0, limit: 20, offset: 0, has_more: false });
+          return HttpResponse.json({ runs: [], total: 0 });
         }),
       );
       await api.getRuns({ status: 'running', limit: 10 });
@@ -44,15 +44,15 @@ describe('ApiClient', () => {
   describe('getRun', () => {
     it('fetches single run by id', async () => {
       const result = await api.getRun('run-test-001');
-      expect(result.id).toBe('run-test-001');
-      expect(result.world_name).toBeDefined();
+      expect(result.run_id).toBe('run-test-001');
+      expect(result.world_def).toBeDefined();
     });
   });
 
   describe('getRunEvents', () => {
     it('fetches paginated events for a run', async () => {
       const result = await api.getRunEvents('run-test-001');
-      expect(result.items.length).toBeGreaterThan(0);
+      expect(result.events.length).toBeGreaterThan(0);
     });
 
     it('passes filter params', async () => {
@@ -60,7 +60,7 @@ describe('ApiClient', () => {
       server.use(
         http.get('/api/v1/runs/:id/events', ({ request }) => {
           capturedUrl = request.url;
-          return HttpResponse.json({ items: [], total: 0, limit: 50, offset: 0, has_more: false });
+          return HttpResponse.json({ events: [], total: 0 });
         }),
       );
       await api.getRunEvents('run-1', { actor_id: 'agent-alpha' });
@@ -71,8 +71,9 @@ describe('ApiClient', () => {
   describe('getScorecard', () => {
     it('fetches scorecard for a run', async () => {
       const result = await api.getScorecard('run-1');
-      expect(Array.isArray(result)).toBe(true);
-      expect(result[0].overall_score).toBe(0.9);
+      expect(result.per_actor).toBeDefined();
+      expect(result.collective).toBeDefined();
+      expect(result.collective.overall_score).toBe(85);
     });
   });
 

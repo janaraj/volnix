@@ -1366,3 +1366,55 @@ def annotate(
     """Add a human annotation to a world run for feedback and evaluation."""
     console.print(_DEFERRED_MSG)
     raise typer.Exit(0)
+
+
+# ===================================================================
+# Command: dashboard
+# ===================================================================
+
+
+@app.command()
+def dashboard(
+    host: Annotated[
+        str, typer.Option("--host", help="API server bind host"),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int, typer.Option("--port", "-p", help="API server bind port"),
+    ] = 8200,
+    env: Annotated[
+        str, typer.Option("--env", "-e", help="Config environment (maps to terrarium.{env}.toml)"),
+    ] = "development",
+) -> None:
+    """Start the dashboard API server for browsing historical runs.
+
+    No world compilation needed -- serves run data from disk.
+    """
+    asyncio.run(_dashboard_impl(host, port, env))
+
+
+async def _dashboard_impl(host: str, port: int, env: str) -> None:
+    try:
+        async with app_context(env=env) as terrarium:
+            console.print("[bold]Starting dashboard API server...[/bold]")
+
+            # Create FastAPI app with all routes
+            await terrarium.gateway.start_adapters()
+
+            # Get the HTTP adapter and start uvicorn
+            http_adapter = terrarium.gateway._adapters.get("http")
+            if http_adapter is None:
+                print_error("No HTTP adapter registered in gateway")
+                raise typer.Exit(1)
+
+            run_count = len(await terrarium.run_manager.list_runs())
+            console.print(f"[green]Dashboard API: http://{host}:{port}[/green]")
+            console.print(f"[green]Historical runs available: {run_count}[/green]")
+            console.print("[dim]Press Ctrl+C to stop[/dim]")
+
+            # This blocks until the server is shut down
+            await http_adapter.run_server(host=host, port=port)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Shutting down dashboard...[/yellow]")
+    except Exception as exc:
+        print_error(str(exc))
+        raise typer.Exit(1) from None

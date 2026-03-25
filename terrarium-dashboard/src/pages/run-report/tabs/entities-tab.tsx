@@ -84,7 +84,7 @@ function EntityDetailPanel({
             {/* Current State */}
             <section>
               <h4 className="mb-2 text-sm font-medium uppercase text-text-muted">Current State</h4>
-              <JsonViewer data={entity.fields} />
+              <JsonViewer data={entity.fields ?? {}} />
             </section>
 
             {/* History */}
@@ -123,7 +123,7 @@ function EntityCard({
   onSelect: () => void;
 }) {
   const keyFields = useMemo(
-    () => Object.entries(entity.fields).slice(0, 4),
+    () => Object.entries(entity.fields ?? {}).slice(0, 4),
     [entity.fields],
   );
   const changeCount = entity.state_history?.length ?? 0;
@@ -137,7 +137,7 @@ function EntityCard({
     >
       <div className="mb-2 flex items-start justify-between">
         <div>
-          <p className="font-mono text-sm font-semibold text-text-primary">{entity.entity_id}</p>
+          <p className="font-mono text-sm font-semibold text-text-primary">{entity.id}</p>
           <span className="mt-0.5 inline-block rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-muted">
             {entity.entity_type}
           </span>
@@ -165,7 +165,7 @@ function EntityCard({
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-text-muted">
         <span>{changeCount} change{changeCount !== 1 ? 's' : ''}</span>
-        <TimestampCell iso={entity.updated_at} />
+        <TimestampCell iso={entity.updated_at ?? ''} />
       </div>
     </div>
   );
@@ -188,7 +188,7 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
       <QueryGuard query={entitiesQuery} loadingFallback={<EntityCardSkeleton />}>
         {(data) => {
           const entityTypeOptions = Array.from(
-            new Set(data.items.map((e) => e.entity_type)),
+            new Set(data.entities.map((e) => e.entity_type)),
           ).sort();
 
           return (
@@ -210,16 +210,16 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
               </select>
             </div>
 
-            {data.items.length === 0 ? (
+            {data.entities.length === 0 ? (
               <EmptyState title="No entities match your filter" />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {data.items.map((entity) => (
+                {data.entities.map((entity) => (
                   <EntityCard
-                    key={entity.entity_id}
+                    key={entity.id}
                     entity={entity}
-                    isSelected={entity.entity_id === selectedEntityId}
-                    onSelect={() => setUrlState({ entity: entity.entity_id })}
+                    isSelected={entity.id === selectedEntityId}
+                    onSelect={() => setUrlState({ entity: entity.id })}
                   />
                 ))}
               </div>

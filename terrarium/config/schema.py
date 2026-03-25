@@ -36,6 +36,13 @@ from terrarium.simulation.config import SimulationRunnerConfig
 from terrarium.validation.config import ValidationConfig
 
 
+class ProfileConfig(BaseModel):
+    """Tier 2 service profile configuration."""
+    model_config = ConfigDict(frozen=True)
+    data_dir: str = "terrarium/packs/profiles"
+    infer_on_missing: bool = True
+
+
 class FidelityConfig(BaseModel):
     """Service fidelity resolution mode."""
     model_config = ConfigDict(frozen=True)
@@ -87,5 +94,6 @@ class TerrariumConfig(BaseModel):
     templates: TemplateConfig = Field(default_factory=TemplateConfig)
     world_compiler: WorldCompilerConfig = Field(default_factory=WorldCompilerConfig)
     agency: AgencyConfig = Field(default_factory=AgencyConfig)
+    profiles: ProfileConfig = Field(default_factory=ProfileConfig)
     simulation_runner: SimulationRunnerConfig = Field(default_factory=SimulationRunnerConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)

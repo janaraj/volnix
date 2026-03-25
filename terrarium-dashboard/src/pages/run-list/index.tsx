@@ -9,9 +9,7 @@ import { PAGE_SIZE_RUNS } from '@/constants/defaults';
 import { RunFilters, FILTER_DEFAULTS } from '@/pages/run-list/run-filters';
 import { RunTable } from '@/pages/run-list/run-table';
 import { CompareToolbar } from '@/pages/run-list/compare-toolbar';
-import type { RunListParams } from '@/types/api';
-import type { Run } from '@/types/domain';
-import type { PaginatedResponse } from '@/types/api';
+import type { RunListParams, RunsListResponse } from '@/types/api';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,8 +23,8 @@ function buildParams(filters: typeof FILTER_DEFAULTS): RunListParams {
   return params;
 }
 
-function hasRunningRun(data: PaginatedResponse<Run> | undefined): boolean {
-  return data?.items.some((r) => r.status === 'running') ?? false;
+function hasRunningRun(data: RunsListResponse | undefined): boolean {
+  return data?.runs.some((r) => r.status === 'running') ?? false;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +51,7 @@ export function RunListPage() {
 
   const runsQuery = useRuns(params, {
     refetchInterval: (query) =>
-      hasRunningRun(query.state.data as PaginatedResponse<Run> | undefined) ? 10_000 : false,
+      hasRunningRun(query.state.data as RunsListResponse | undefined) ? 10_000 : false,
   });
 
   const isFiltered = filters.status !== '' || filters.preset !== '' || filters.tag !== '';
@@ -70,7 +68,7 @@ export function RunListPage() {
 
       <QueryGuard query={runsQuery}>
         {(data) => {
-          if (data.items.length === 0) {
+          if (data.runs.length === 0) {
             return isFiltered ? (
               <EmptyState
                 title="No runs match your filters"
@@ -86,7 +84,7 @@ export function RunListPage() {
 
           return (
             <>
-              <RunTable runs={data.items} />
+              <RunTable runs={data.runs} />
               <CompareToolbar />
             </>
           );

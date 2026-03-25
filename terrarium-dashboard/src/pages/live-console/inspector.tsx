@@ -77,27 +77,27 @@ function RunInspector({ run }: { run: Run }) {
           {run.reality_preset}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.behavior}
+          {run.config_snapshot?.behavior ?? 'static'}
         </span>
       </div>
 
       {/* Counts */}
       <div className="flex items-center gap-4 text-sm">
         <span className="text-text-muted">
-          Actors: <span className="font-mono text-text-primary">{run.actor_count}</span>
+          Actors: <span className="font-mono text-text-primary">{run.actor_count ?? 0}</span>
         </span>
         <span className="text-text-muted">
-          Services: <span className="font-mono text-text-primary">{run.services.length}</span>
+          Services: <span className="font-mono text-text-primary">{(run.services ?? []).length}</span>
         </span>
       </div>
 
       {/* Services list */}
-      {run.services.length > 0 && (
+      {(run.services ?? []).length > 0 && (
         <div className="space-y-2">
           <p className="text-xs uppercase text-text-muted">Services</p>
           <div className="flex flex-wrap gap-2">
-            {run.services.map((s) => (
-              <ServiceBadge key={s.service_id} serviceId={s.service_name} tier={s.fidelity_tier} />
+            {(run.services ?? []).map((s) => (
+              <ServiceBadge key={s.service_id} serviceId={s.service_id} tier={s.fidelity_tier} />
             ))}
           </div>
         </div>

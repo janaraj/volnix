@@ -2,18 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DivergenceTimeline } from '@/pages/compare/divergence-timeline';
-import type { DivergencePoint, Run } from '@/types/domain';
+import type { Run } from '@/types/domain';
 import { createMockRun } from '../mocks/data/runs';
 
+interface DivergencePoint {
+  tick: number;
+  description: string;
+  decisions: Record<string, string>;
+  consequences: Record<string, string>;
+}
+
 const mockRuns: Run[] = [
-  createMockRun({ id: 'run-1', tags: ['exp-1-baseline'] }),
-  createMockRun({ id: 'run-2', tags: ['exp-2-variant'] }),
+  createMockRun({ run_id: 'run-1', tag: 'exp-1-baseline' }),
+  createMockRun({ run_id: 'run-2', tag: 'exp-2-variant' }),
 ];
 
 const mockPoints: DivergencePoint[] = [
   {
     tick: 4,
-    timestamp: '2026-03-01T09:03:51Z',
     description: 'Refund attempt on $249 charge',
     decisions: { 'run-1': 'Escalated to supervisor', 'run-2': 'Retried without approval' },
     consequences: { 'run-1': 'Policy compliance maintained', 'run-2': 'Policy violation recorded' },

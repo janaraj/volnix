@@ -2,13 +2,51 @@
 // API request / response types
 // ---------------------------------------------------------------------------
 
-export interface PaginatedResponse<T> {
-  items: T[];
+import type { Run, WorldEvent, Entity, CapabilityGap } from '@/types/domain';
+
+// -- Endpoint-specific response types (match backend shapes) ----------------
+
+export interface RunsListResponse {
+  runs: Run[];
   total: number;
-  limit: number;
-  offset: number;
-  has_more: boolean;
 }
+
+export interface EventsListResponse {
+  events: WorldEvent[];
+  total: number;
+}
+
+export interface EntitiesListResponse {
+  entities: Entity[];
+  total: number;
+}
+
+export interface GapsResponse {
+  run_id: string;
+  gaps: CapabilityGap[];
+  summary: Record<string, unknown>;
+}
+
+export interface ScorecardResponse {
+  run_id: string;
+  per_actor: Record<string, Record<string, number>>;
+  collective: Record<string, number>;
+}
+
+export interface CompareResponse {
+  run_ids: string[];
+  labels: Record<string, string>;
+  scores: {
+    metrics: Record<string, { values: Record<string, number>; deltas: Record<string, number> }>;
+  };
+  events: {
+    totals: Record<string, number>;
+    by_type: Record<string, Record<string, number>>;
+  };
+  entity_states: Record<string, unknown>;
+}
+
+// -- Request params ---------------------------------------------------------
 
 export interface RunListParams {
   status?: string;
@@ -38,6 +76,8 @@ export interface EntityFilterParams {
   limit?: number;
   offset?: number;
 }
+
+// -- Error ------------------------------------------------------------------
 
 export class ApiError extends Error {
   status: number;

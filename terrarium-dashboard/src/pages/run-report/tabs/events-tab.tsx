@@ -148,7 +148,7 @@ function EventFilters({
 
 const columns: ColumnDef<WorldEvent>[] = [
   {
-    accessorFn: (row) => row.timestamp.tick,
+    accessorFn: (row) => row.timestamp?.tick ?? 0,
     id: 'tick',
     header: 'Tick',
     cell: ({ getValue }) => (
@@ -159,7 +159,7 @@ const columns: ColumnDef<WorldEvent>[] = [
     size: 80,
   },
   {
-    accessorFn: (row) => row.timestamp.wall_time,
+    accessorFn: (row) => row.timestamp?.wall_time ?? '',
     id: 'time',
     header: 'Time',
     cell: ({ getValue }) => <TimestampCell iso={getValue<string>()} />,
@@ -252,10 +252,10 @@ function EventTableView({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                onClick={() => onSelectEvent(row.original.event_id)}
+                onClick={() => onSelectEvent(row.original.event_id ?? '')}
                 className={cn(
                   'cursor-pointer border-b border-bg-elevated transition-colors hover:bg-bg-hover',
-                  selectedEventId === row.original.event_id && 'bg-bg-elevated',
+                  selectedEventId === (row.original.event_id ?? '') && 'bg-bg-elevated',
                 )}
               >
                 {row.getVisibleCells().map((cell) => (
@@ -357,8 +357,8 @@ function EventDetail({
             {/* Summary */}
             <p className="text-sm text-text-secondary">
               <span className="text-text-primary">{event.actor_id}</span> &rarr;{' '}
-              {event.action} &rarr;{' '}
-              <span className="uppercase font-medium">{event.outcome}</span>
+              {event.action ?? event.event_type} &rarr;{' '}
+              <span className="uppercase font-medium">{event.outcome ?? ''}</span>
             </p>
 
             {/* Input / Output */}
@@ -378,18 +378,18 @@ function EventDetail({
             </div>
 
             {/* Budget impact */}
-            {(event.budget_delta !== 0 || event.budget_remaining > 0) && (
+            {((event.budget_delta ?? 0) !== 0 || (event.budget_remaining ?? 0) > 0) && (
               <div className="text-sm text-text-secondary">
                 <span className="text-xs font-medium uppercase text-text-muted">
                   Budget impact:{' '}
                 </span>
                 <span className="font-mono">
-                  {event.budget_delta < 0 ? '-' : '+'}
-                  {formatCurrency(Math.abs(event.budget_delta))}
+                  {(event.budget_delta ?? 0) < 0 ? '-' : '+'}
+                  {formatCurrency(Math.abs(event.budget_delta ?? 0))}
                 </span>
                 <span className="text-text-muted"> &rarr; </span>
                 <span className="font-mono">
-                  {formatCurrency(event.budget_remaining)} remaining
+                  {formatCurrency(event.budget_remaining ?? 0)} remaining
                 </span>
               </div>
             )}
@@ -427,13 +427,13 @@ function EventDetail({
             )}
 
             {/* Entity IDs -- clickable links to entities tab */}
-            {event.entity_ids.length > 0 && (
+            {(event.entity_ids ?? []).length > 0 && (
               <div>
                 <p className="mb-1 text-xs font-medium uppercase text-text-muted">
                   Entities
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {event.entity_ids.map((eid) => (
+                  {(event.entity_ids ?? []).map((eid) => (
                     <EntityLink key={eid} runId={runId} entityId={eid} />
                   ))}
                 </div>
@@ -441,7 +441,7 @@ function EventDetail({
             )}
 
             {/* Causal chain -- CLICKABLE links that update ?event= param */}
-            {(event.causal_parent_ids.length > 0 || event.caused_by) && (
+            {((event.causal_parent_ids ?? []).length > 0 || event.caused_by) && (
               <div>
                 <div className="flex items-center gap-1 text-xs text-text-muted mb-1">
                   <GitBranch size={12} />
@@ -451,7 +451,7 @@ function EventDetail({
                   {event.caused_by && (
                     <CausalLink eventId={event.caused_by} onSelect={onSelectEvent} />
                   )}
-                  {event.causal_parent_ids
+                  {(event.causal_parent_ids ?? [])
                     .filter((id) => id !== event.caused_by)
                     .map((id) => (
                       <CausalLink key={id} eventId={id} onSelect={onSelectEvent} />
@@ -459,28 +459,28 @@ function EventDetail({
                 </div>
               </div>
             )}
-            {event.causal_child_ids.length > 0 && (
+            {(event.causal_child_ids ?? []).length > 0 && (
               <div>
                 <div className="flex items-center gap-1 text-xs text-text-muted mb-1">
                   <GitBranch size={12} />
                   <span>Caused:</span>
                 </div>
                 <div className="ml-3 flex flex-wrap gap-2">
-                  {event.causal_child_ids.map((id) => (
+                  {(event.causal_child_ids ?? []).map((id) => (
                     <CausalLink key={id} eventId={id} onSelect={onSelectEvent} />
                   ))}
                 </div>
               </div>
             )}
-            {(event.causal_parent_ids.length > 0 ||
-              event.causal_child_ids.length > 0) && (
+            {((event.causal_parent_ids ?? []).length > 0 ||
+              (event.causal_child_ids ?? []).length > 0) && (
               <p className="text-xs text-text-muted">[View causal chain &rarr;]</p>
             )}
 
             {/* Fidelity */}
             <div>
               <FidelityIndicator
-                tier={event.fidelity_tier}
+                tier={event.fidelity_tier ?? 2}
                 source={event.fidelity?.fidelity_source ?? undefined}
               />
             </div>
@@ -534,11 +534,11 @@ export function EventsTab({ runId }: EventsTabProps) {
               </span>
             </h2>
             <EventFilters filters={filters} onFilterChange={setFilters} />
-            {data.items.length === 0 ? (
+            {data.events.length === 0 ? (
               <EmptyState title="No events match your filters" />
             ) : (
               <EventTableView
-                events={data.items}
+                events={data.events}
                 sorting={sorting}
                 onSortingChange={setSorting}
                 selectedEventId={detailState.event}

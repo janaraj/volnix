@@ -84,7 +84,17 @@ class LLMRouter:
             provider_name = self._config.defaults.type
             model = self._config.defaults.default_model
 
-        provider = self._registry.get(provider_name)
+        try:
+            provider = self._registry.get(provider_name)
+        except KeyError:
+            routing_key = (
+                f"{engine_name}_{use_case}" if use_case != "default" else engine_name
+            )
+            raise KeyError(
+                f"No provider '{provider_name}' registered. "
+                f"Routing: {routing_key} -> {'matched' if routing else 'fell through to defaults'}. "
+                f"Check [llm.routing.{routing_key}] or [llm.defaults] in terrarium.toml."
+            )
 
         if not request.model_override:
             request = LLMRequest(
