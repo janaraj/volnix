@@ -31,6 +31,7 @@ class AgencyConfig(BaseModel):
     max_activations_per_event: int = 100
     max_envelopes_per_event: int = 50
 
-    # LLM routing
-    llm_use_case_individual: str = "agency_individual"
-    llm_use_case_batch: str = "agency_batch"
+    # LLM routing (router builds key as "{engine_name}_{use_case}")
+    # Engine name is "agency", so "individual" → routing key "agency_individual"
+    llm_use_case_individual: str = "individual"
+    llm_use_case_batch: str = "batch"

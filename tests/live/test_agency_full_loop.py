@@ -158,10 +158,12 @@ class TestFullAgencyLoop:
                 tick=int(event_queue.current_time),
             )
 
-            # Build WorldEvent from result
-            target = None
-            if isinstance(ctx_result, dict) and not ctx_result.get("error"):
-                # Try to extract entity ID from response
+            # Build WorldEvent — preserve envelope's target entity for activation
+            # The entity ID from the payload is what actors watch
+            target_id = envelope.payload.get("id")
+            target = EntityId(str(target_id)) if target_id else None
+            # Also check response for created entity IDs
+            if target is None and isinstance(ctx_result, dict) and not ctx_result.get("error"):
                 for key in ("email_id", "ticket_id", "id", "ts"):
                     if key in ctx_result:
                         target = EntityId(str(ctx_result[key]))
@@ -215,10 +217,22 @@ class TestFullAgencyLoop:
         print("STEP 3: SUBMIT EXTERNAL ACTION → EVENT QUEUE")
         print("=" * 70)
 
-        # Find a ticket entity to target (so actors watching it activate)
+        # Find an entity that an internal actor ACTUALLY watches
         state_engine = app.registry.get("state")
-        tickets = await state_engine.query_entities("ticket")
-        target_ticket_id = tickets[0].get("id", "tck_001") if tickets else "tck_001"
+        watched_entity_id = None
+        watcher_id = None
+        for aid, astate in (agency._actor_states or {}).items():
+            if astate.watched_entities:
+                watched_entity_id = str(astate.watched_entities[0])
+                watcher_id = aid
+                break
+
+        if not watched_entity_id:
+            # Fallback: use first ticket
+            tickets = await state_engine.query_entities("ticket")
+            watched_entity_id = tickets[0].get("id", "tck_001") if tickets else "tck_001"
+
+        print(f"  Targeting watched entity: {watched_entity_id} (watched by: {watcher_id})")
 
         external_envelope = ActionEnvelope(
             actor_id=ActorId(agent_id),
@@ -226,7 +240,7 @@ class TestFullAgencyLoop:
             action_type="zendesk_tickets_update",
             target_service=ServiceId("tickets"),
             payload={
-                "id": target_ticket_id,
+                "id": watched_entity_id,
                 "status": "open",
                 "assignee_id": agent_id,
             },
@@ -234,7 +248,7 @@ class TestFullAgencyLoop:
             priority=EnvelopePriority.EXTERNAL,
         )
         event_queue.submit(external_envelope)
-        print(f"  Submitted: {external_envelope.action_type} targeting {target_ticket_id}")
+        print(f"  Submitted: {external_envelope.action_type} targeting {watched_entity_id}")
         print(f"  Queue size: {event_queue.size}")
 
         # ────────────────────────────────────────────────────
@@ -243,6 +257,13 @@ class TestFullAgencyLoop:
         print("\n" + "=" * 70)
         print("STEP 4: RUN SIMULATION LOOP")
         print("=" * 70)
+
+        # Diagnostic: check agency state before run
+        print(f"  Agency prompt_builder: {agency._prompt_builder is not None}")
+        print(f"  Agency actor_states: {len(agency._actor_states)}")
+        print(f"  Agency available_actions: {len(agency._available_actions)}")
+        for aid, astate in agency._actor_states.items():
+            print(f"    {aid}: watching {astate.watched_entities[:3]}")
 
         stop_reason = await runner.run()
 
