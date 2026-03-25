@@ -105,8 +105,12 @@ output_dir = "reports"
 # ── Feedback Engine ──────────────────────────────────────────
 
 [feedback]
-annotations_db_path = "data/annotations.db"
 external_sync_enabled = false
+auto_annotate_gaps = true
+promotion_min_runs = 3
+promotion_min_annotations = 1
+promotion_min_operations = 3
+promotion_max_error_rate = 0.3
 
 # ── Dashboard ────────────────────────────────────────────────
 

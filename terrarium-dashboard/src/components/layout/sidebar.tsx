@@ -21,11 +21,13 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      'flex flex-col border-r border-border bg-bg-surface transition-all',
+      'flex flex-col border-r border-border/50 bg-gradient-to-b from-bg-surface to-bg-base transition-all duration-300',
       collapsed ? 'w-14' : 'w-56',
     )}>
-      <div className={cn('flex items-center gap-2 p-4', collapsed && 'justify-center')}>
-        <Hexagon size={20} className="text-accent" />
+      <div className={cn('flex items-center gap-2.5 p-4 pb-6', collapsed && 'justify-center')}>
+        <div className="rounded-lg bg-accent/10 p-1.5">
+          <Hexagon size={20} className="text-accent" />
+        </div>
         {!collapsed && <span className="text-lg font-semibold tracking-tight">Terrarium</span>}
       </div>
       <nav className="flex-1 space-y-1 px-2">
@@ -38,10 +40,10 @@ export function Sidebar() {
               title={collapsed ? item.label : undefined}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-2 rounded px-3 py-2 text-sm transition-colors',
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200',
                 isActive
-                  ? 'border-l-2 border-accent bg-bg-elevated text-text-primary'
-                  : 'border-l-2 border-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+                  ? 'bg-accent/10 shadow-sm border border-accent/20 text-text-primary'
+                  : 'border border-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary',
                 collapsed && 'justify-center px-2',
               )}
             >

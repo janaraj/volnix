@@ -14,7 +14,7 @@ import { FidelityIndicator } from '@/components/domain/fidelity-indicator';
 import { ScoreBar } from '@/components/domain/score-bar';
 import { ServiceBadge } from '@/components/domain/service-badge';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
-import { formatCurrency, truncateId } from '@/lib/formatters';
+import { capitalize, formatCurrency, truncateId } from '@/lib/formatters';
 
 interface ContextViewProps {
   runId: string;
@@ -61,7 +61,7 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
 
       <div className="flex items-center gap-2">
         <RunStatusBadge status={run.status} />
-        <span className="text-sm text-text-secondary font-mono">{run.world_def.name}</span>
+        <span className="text-sm text-text-secondary font-mono">{capitalize(run.world_def.name)}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -84,13 +84,13 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
 
       <div className="flex flex-wrap gap-2">
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.reality_preset}
+          {capitalize(run.reality_preset)}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.config_snapshot?.behavior ?? 'static'}
+          {capitalize(run.config_snapshot?.behavior ?? 'static')}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.mode}
+          {capitalize(run.mode)}
         </span>
       </div>
     </div>

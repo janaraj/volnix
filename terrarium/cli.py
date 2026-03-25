@@ -1298,8 +1298,53 @@ async def _ledger_impl(
 
 
 # ===================================================================
-# Deferred commands (5)
+# Feedback commands (5) — G4a
 # ===================================================================
+
+
+@app.command()
+def annotate(
+    service: Annotated[str, typer.Argument(help="Service name to annotate")],
+    message: Annotated[
+        str | None,
+        typer.Option("--message", "-m", help="Annotation text"),
+    ] = None,
+    tag: Annotated[
+        str | None,
+        typer.Option("--tag", "-t", help="Annotation tag"),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option("--run", "-r", help="Associated run ID"),
+    ] = None,
+) -> None:
+    """Add a behavioral annotation to a service."""
+    asyncio.run(_annotate_impl(service, message, tag, run_id))
+
+
+async def _annotate_impl(
+    service: str, message: str | None, tag: str | None, run_id: str | None
+) -> None:
+    if not message:
+        print_error("Annotation text is required: --message / -m")
+        raise typer.Exit(1)
+    try:
+        async with app_context() as terrarium:
+            feedback = terrarium.registry.get("feedback")
+            seq = await feedback.add_annotation(
+                service_id=service,
+                text=message,
+                author="user",
+                tag=tag,
+                run_id=run_id,
+            )
+            console.print(f"[green]Annotation #{seq} added to '{service}'[/green]")
+            console.print(f"  Text: {message}")
+            if tag:
+                console.print(f"  Tag: {tag}")
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -1311,27 +1356,38 @@ def capture(
     ] = "last",
 ) -> None:
     """Capture a bootstrapped service surface from a completed run."""
-    console.print(_DEFERRED_MSG)
-    raise typer.Exit(0)
+    asyncio.run(_capture_impl(service, run_from))
 
 
-@app.command()
-def compile_pack(
-    service: Annotated[str, typer.Argument(help="Service name to compile a pack for")],
-    from_source: Annotated[str, typer.Argument(help="Source profile to compile from")],
-) -> None:
-    """Generate a Tier 1 verified pack from a profile or captured service."""
-    console.print(_DEFERRED_MSG)
-    raise typer.Exit(0)
+async def _capture_impl(service: str, run_from: str) -> None:
+    try:
+        async with app_context() as terrarium:
+            # Resolve "last" to the most recent run
+            actual_run_id = run_from
+            if run_from == "last":
+                from terrarium.core.types import RunId
+                runs = await terrarium.run_manager.list_runs()
+                if not runs:
+                    print_error("No runs found")
+                    raise typer.Exit(1)
+                actual_run_id = runs[0]["run_id"]
 
+            feedback = terrarium.registry.get("feedback")
+            captured = await feedback.capture_service(actual_run_id, service)
 
-@app.command()
-def verify_pack(
-    service: Annotated[str, typer.Argument(help="Service name whose pack to validate")],
-) -> None:
-    """Validate a Tier 1 pack for correctness and completeness."""
-    console.print(_DEFERRED_MSG)
-    raise typer.Exit(0)
+            console.print(f"[bold]Captured surface for '{service}' from run {actual_run_id}[/bold]")
+            console.print(f"  Operations: {len(captured.operations_observed)}")
+            for op in captured.operations_observed:
+                console.print(f"    - {op.name} (called {op.call_count}x)")
+            console.print(f"  Entity mutations: {len(captured.entity_mutations)}")
+            for mut in captured.entity_mutations:
+                console.print(f"    - {mut.entity_type}.{mut.operation} ({mut.count}x)")
+            console.print(f"  Errors: {len(captured.error_patterns)}")
+            console.print(f"  Annotations: {len(captured.annotations)}")
+            console.print(f"  Behavioral rules: {len(captured.behavioral_rules)}")
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -1339,33 +1395,187 @@ def promote(
     service: Annotated[str, typer.Argument(help="Service name to promote")],
     submit_pr: Annotated[
         bool,
-        typer.Option("--submit-pr", help="Submit a PR to the community profiles repo"),
+        typer.Option("--submit-pr", help="Print instructions for submitting a community PR"),
     ] = False,
 ) -> None:
-    """Promote a captured service to Tier 2 community profile."""
-    console.print(_DEFERRED_MSG)
-    raise typer.Exit(0)
+    """Promote a bootstrapped service to Tier 2 curated profile."""
+    asyncio.run(_promote_impl(service, submit_pr))
+
+
+async def _promote_impl(service: str, submit_pr: bool) -> None:
+    try:
+        async with app_context() as terrarium:
+            feedback = terrarium.registry.get("feedback")
+            responder = terrarium.registry.get("responder")
+            profile_registry = getattr(responder, "_profile_registry", None)
+
+            if not profile_registry:
+                print_error("Profile registry not available")
+                raise typer.Exit(1)
+
+            profile = profile_registry.get_profile(service)
+            if profile is None:
+                print_error(f"No profile found for '{service}'")
+                raise typer.Exit(1)
+
+            # Build captured surface from profile data for evaluation
+            from terrarium.engines.feedback.models import (
+                CapturedSurface,
+                ObservedMutation,
+                ObservedOperation,
+            )
+            from datetime import UTC, datetime
+
+            captured = CapturedSurface(
+                service_name=service,
+                run_id="manual-promote",
+                captured_at=datetime.now(UTC).isoformat(),
+                operations_observed=[
+                    ObservedOperation(
+                        name=op.name,
+                        call_count=1,
+                        parameter_keys=(
+                            list(op.parameters.keys())
+                            if op.parameters else []
+                        ),
+                        response_keys=(
+                            list(
+                                op.response_schema.get(
+                                    "properties", {}
+                                ).keys()
+                            )
+                            if op.response_schema else []
+                        ),
+                    )
+                    for op in profile.operations
+                ],
+                # H10 fix: include entity mutations from profile
+                entity_mutations=[
+                    ObservedMutation(
+                        entity_type=e.name,
+                        operation="create",
+                        count=1,
+                    )
+                    for e in profile.entities
+                ],
+                fidelity_source=profile.fidelity_source,
+            )
+
+            evaluation = await feedback.evaluate_promotion(service, captured)
+
+            console.print(f"[bold]Promotion evaluation for '{service}'[/bold]")
+            console.print(f"  Current: {evaluation.current_fidelity}")
+            console.print(f"  Eligible: {'[green]Yes[/green]' if evaluation.eligible else '[red]No[/red]'}")
+            for met in evaluation.criteria_met:
+                console.print(f"  [green]✓[/green] {met}")
+            for missing in evaluation.criteria_missing:
+                console.print(f"  [red]✗[/red] {missing}")
+            console.print(f"  Recommendation: {evaluation.recommendation}")
+
+            if evaluation.eligible:
+                result = await feedback.promote_service(service, profile)
+                console.print(f"\n[green]Promoted '{service}' to {result.new_fidelity} (v{result.version})[/green]")
+                if result.profile_path:
+                    console.print(f"  Saved: {result.profile_path}")
+
+            if submit_pr:
+                console.print("\n[yellow]To submit to community profiles:[/yellow]")
+                console.print("  1. Fork https://github.com/terrarium-project/profiles")
+                console.print(f"  2. Copy the profile YAML to profiles/{service}.profile.yaml")
+                console.print("  3. Submit a pull request")
+
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
 
 
 @app.command()
-def annotate(
-    world: Annotated[str, typer.Argument(help="Name or ID of the world")],
-    run_id: Annotated[
-        str | None,
-        typer.Option("--run", "-r", help="Specific run ID"),
-    ] = None,
-    message: Annotated[
-        str | None,
-        typer.Option("--message", "-m", help="Annotation text"),
-    ] = None,
-    tag: Annotated[
-        str | None,
-        typer.Option("--tag", "-t", help="Annotation tag"),
-    ] = None,
+def compile_pack(
+    service: Annotated[str, typer.Argument(help="Service name to compile a pack for")],
+    from_source: Annotated[str, typer.Argument(help="Source profile path or service name")],
 ) -> None:
-    """Add a human annotation to a world run for feedback and evaluation."""
-    console.print(_DEFERRED_MSG)
-    raise typer.Exit(0)
+    """Generate a Tier 1 verified pack scaffold from a profile."""
+    asyncio.run(_compile_pack_impl(service, from_source))
+
+
+async def _compile_pack_impl(service: str, from_source: str) -> None:
+    from pathlib import Path
+
+    try:
+        from terrarium.engines.feedback.pack_compiler import PackCompiler
+        from terrarium.packs.profile_loader import ProfileLoader
+
+        # Load profile from file path or service name
+        source_path = Path(from_source)
+        if source_path.exists():
+            loader = ProfileLoader(source_path.parent)
+            profile = loader.load(source_path.stem.replace(".profile", ""))
+        else:
+            async with app_context() as terrarium:
+                responder = terrarium.registry.get("responder")
+                registry = getattr(responder, "_profile_registry", None)
+                profile = registry.get_profile(from_source) if registry else None
+
+        if profile is None:
+            print_error(f"Could not load profile from '{from_source}'")
+            raise typer.Exit(1)
+
+        compiler = PackCompiler()
+        result = await compiler.compile(profile)
+
+        console.print(f"[bold]Generated Tier 1 pack scaffold for '{service}'[/bold]")
+        console.print(f"  Output: {result.output_dir}")
+        console.print(f"  Files: {len(result.files_generated)}")
+        for f in result.files_generated:
+            console.print(f"    - {Path(f).name}")
+        console.print(f"  Handler stubs: {result.handler_stubs}")
+        console.print(
+            "\n[yellow]Next: implement deterministic handlers in handlers.py[/yellow]"
+        )
+
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command()
+def verify_pack(
+    service: Annotated[str, typer.Argument(help="Service name whose pack to validate")],
+) -> None:
+    """Validate a Tier 1 pack for correctness and completeness."""
+    asyncio.run(_verify_pack_impl(service))
+
+
+async def _verify_pack_impl(service: str) -> None:
+    from pathlib import Path
+
+    from terrarium.engines.feedback.pack_verifier import PackVerifier
+
+    pack_dir = Path(__file__).resolve().parent / "packs" / "verified" / service
+    if not pack_dir.exists():
+        print_error(f"Pack directory not found: {pack_dir}")
+        raise typer.Exit(1)
+
+    verifier = PackVerifier()
+    result = await verifier.verify(pack_dir)
+
+    console.print(f"[bold]Pack verification: {service}[/bold]")
+    for check in result.checks:
+        icon = "[green]✓[/green]" if check.passed else "[red]✗[/red]"
+        console.print(f"  {icon} {check.name}: {check.message}")
+
+    if result.warnings:
+        console.print("\n[yellow]Warnings:[/yellow]")
+        for w in result.warnings:
+            console.print(f"  ⚠ {w}")
+
+    if result.passed:
+        console.print(f"\n[green]Pack '{service}' passed all checks[/green]")
+    else:
+        console.print(f"\n[red]Pack '{service}' failed verification[/red]")
+        for e in result.errors:
+            console.print(f"  {e}")
+        raise typer.Exit(1)
 
 
 # ===================================================================

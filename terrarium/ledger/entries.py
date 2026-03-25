@@ -188,6 +188,53 @@ class SnapshotEntry(LedgerEntry):
     size_bytes: int = 0
 
 
+class FeedbackAnnotationEntry(LedgerEntry):
+    """Records a service annotation added via the feedback engine.
+
+    Attributes:
+        service_id: The annotated service.
+        annotation_text: The annotation content.
+        author: Who added the annotation.
+    """
+
+    entry_type: str = "feedback.annotation"
+    service_id: str = ""
+    annotation_text: str = ""
+    author: str = ""
+
+
+class FeedbackPromotionEntry(LedgerEntry):
+    """Records a fidelity tier promotion.
+
+    Attributes:
+        service_name: The promoted service.
+        previous_fidelity: The old fidelity source.
+        new_fidelity: The new fidelity source.
+        profile_version: The new profile version string.
+    """
+
+    entry_type: str = "feedback.promotion"
+    service_name: str = ""
+    previous_fidelity: str = ""
+    new_fidelity: str = ""
+    profile_version: str = ""
+
+
+class FeedbackCaptureEntry(LedgerEntry):
+    """Records a service surface capture from a run.
+
+    Attributes:
+        service_name: The captured service.
+        run_id: The run captured from.
+        operations_count: Number of operations observed.
+    """
+
+    entry_type: str = "feedback.capture"
+    service_name: str = ""
+    run_id: str = ""
+    operations_count: int = 0
+
+
 class ActorActivationEntry(LedgerEntry):
     """Records the activation of an internal actor.
 
@@ -240,6 +287,9 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "snapshot": SnapshotEntry,
     "actor_activation": ActorActivationEntry,
     "action_generation": ActionGenerationEntry,
+    "feedback.annotation": FeedbackAnnotationEntry,
+    "feedback.promotion": FeedbackPromotionEntry,
+    "feedback.capture": FeedbackCaptureEntry,
 }
 
 

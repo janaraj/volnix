@@ -167,6 +167,49 @@ class StateEngine(BaseEngine):
             wall_now = datetime.now(timezone.utc)
             if ctx.world_time is None:
                 logger.warning("ActionContext missing world_time — using wall clock (breaks replay determinism)")
+
+            # Derive outcome from pipeline verdicts
+            outcome = "success"
+            if ctx.short_circuited:
+                step = ctx.short_circuit_step or ""
+                if step == "policy":
+                    verdict = ctx.policy_result.verdict if ctx.policy_result else None
+                    if verdict == StepVerdict.DENY:
+                        outcome = "blocked"
+                    elif verdict == StepVerdict.HOLD:
+                        outcome = "held"
+                    elif verdict == StepVerdict.ESCALATE:
+                        outcome = "escalated"
+                    else:
+                        outcome = "policy_hit"
+                elif step == "permission":
+                    outcome = "denied"
+                elif step == "budget":
+                    outcome = "budget_exhausted"
+                else:
+                    outcome = "error"
+
+            # Serialize applied state deltas
+            delta_dicts = [
+                {
+                    "entity_type": d.entity_type,
+                    "entity_id": str(d.entity_id),
+                    "operation": d.operation,
+                    "fields": d.fields,
+                    "previous_fields": d.previous_fields,
+                }
+                for d in applied_deltas
+            ]
+
+            # Extract cost and response body from ActionContext
+            cost_dict = None
+            if ctx.computed_cost is not None:
+                cost_dict = ctx.computed_cost.model_dump(mode="json")
+
+            response_body = None
+            if proposal is not None:
+                response_body = proposal.response_body
+
             event = WorldEvent(
                 event_type=f"world.{ctx.action}",
                 timestamp=Timestamp(
@@ -180,6 +223,11 @@ class StateEngine(BaseEngine):
                 # Use explicit target or infer from first delta
                 target_entity=ctx.target_entity or (applied_deltas[0].entity_id if applied_deltas else None),
                 input_data=ctx.input_data or {},
+                response_body=response_body,
+                outcome=outcome,
+                state_deltas=delta_dicts,
+                cost=cost_dict,
+                run_id=ctx.run_id if ctx.run_id else None,
             )
             await self._event_log.append(event)
 
@@ -283,6 +331,14 @@ class StateEngine(BaseEngine):
                         action="populate",
                         target_entity=entity_id,
                         input_data=fields,
+                        state_deltas=[{
+                            "entity_type": entity_type,
+                            "entity_id": str(entity_id),
+                            "operation": "create",
+                            "fields": fields,
+                            "previous_fields": None,
+                        }],
+                        outcome="success",
                     )
                     await self._event_log.append(event)
                     created_events.append(event)

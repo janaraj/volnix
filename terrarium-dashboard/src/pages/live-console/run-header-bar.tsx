@@ -4,7 +4,7 @@ import type { Run } from '@/types/domain';
 import type { ConnectionStatus } from '@/types/ui';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
 import { cn } from '@/lib/cn';
-import { formatTick } from '@/lib/formatters';
+import { capitalize, formatTick } from '@/lib/formatters';
 
 interface RunHeaderBarProps {
   run: Run;
@@ -36,7 +36,7 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
 
       {/* Title row */}
       <div className="flex items-center gap-3">
-        <h1 className="truncate text-xl font-semibold">{run.world_def.name}</h1>
+        <h1 className="truncate text-xl font-semibold">{capitalize(run.world_def.name)}</h1>
         <RunStatusBadge status={run.status} />
         <div className="flex items-center gap-1.5 text-xs text-text-muted">
           <span className={cn('inline-block h-2 w-2 rounded-full', statusCfg.color)} />

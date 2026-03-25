@@ -40,12 +40,22 @@ class RunComparator:
             else:
                 labels[str(run_id)] = str(run_id)
 
+        # Compute divergence points and include full run metadata
+        divergence_points = await self.compute_divergence_points(run_ids)
+        runs_metadata: list[dict[str, Any]] = []
+        for rid in run_ids:
+            meta = await self._artifact_store.load_artifact(rid, "metadata")
+            if meta:
+                runs_metadata.append(meta)
+
         return {
             "run_ids": [str(r) for r in run_ids],
             "labels": labels,
             "scores": scores,
             "events": events,
             "entity_states": entity_states,
+            "divergence_points": divergence_points,
+            "runs": runs_metadata,
         }
 
     async def compare_scores(self, run_ids: list[RunId]) -> dict[str, Any]:
@@ -205,6 +215,68 @@ class RunComparator:
         return {
             "by_type": by_type,
         }
+
+    async def compute_divergence_points(
+        self, run_ids: list[RunId],
+    ) -> list[dict[str, Any]]:
+        """Find ticks where runs diverge in their event signatures.
+
+        Compares ``(event_type, actor_id, action)`` sets at each tick.
+        A divergence point is a tick where these sets differ between runs.
+
+        Args:
+            run_ids: The runs to compare.
+
+        Returns:
+            A list of divergence point dicts, each with ``tick``, ``type``,
+            and ``per_run`` keys.
+        """
+        logs: dict[str, list[dict[str, Any]]] = {}
+        for rid in run_ids:
+            events = await self._artifact_store.load_artifact(rid, "event_log")
+            logs[str(rid)] = events if isinstance(events, list) else []
+
+        def _group_by_tick(events: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+            grouped: dict[int, list[dict[str, Any]]] = {}
+            for e in events:
+                ts = e.get("timestamp")
+                tick = ts.get("tick", 0) if isinstance(ts, dict) else 0
+                grouped.setdefault(tick, []).append(e)
+            return grouped
+
+        tick_groups = {rid: _group_by_tick(evts) for rid, evts in logs.items()}
+        all_ticks = sorted(set().union(*(g.keys() for g in tick_groups.values())))
+        rid_list = [str(r) for r in run_ids]
+
+        points: list[dict[str, Any]] = []
+        for tick in all_ticks:
+            sigs: dict[str, set[tuple[str, str, str]]] = {}
+            for rid in rid_list:
+                events_at_tick = tick_groups.get(rid, {}).get(tick, [])
+                sigs[rid] = {
+                    (
+                        e.get("event_type", ""),
+                        e.get("actor_id", ""),
+                        e.get("action", ""),
+                    )
+                    for e in events_at_tick
+                }
+
+            frozen_sigs = [frozenset(s) for s in sigs.values()]
+            if len(frozen_sigs) >= 2 and len(set(frozen_sigs)) > 1:
+                points.append({
+                    "tick": tick,
+                    "type": "event_set_mismatch",
+                    "per_run": {
+                        rid: [
+                            {"event_type": s[0], "actor_id": s[1], "action": s[2]}
+                            for s in sig_set
+                        ]
+                        for rid, sig_set in sigs.items()
+                    },
+                })
+
+        return points
 
     def format_comparison(self, comparison: dict[str, Any]) -> str:
         """Format a comparison dict as a human-readable string.

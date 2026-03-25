@@ -88,54 +88,51 @@ class TestHelpAndBasics:
 # ===================================================================
 
 
-class TestDeferredCommands:
-    """Tests for the 5 deferred (not-yet-implemented) commands."""
+class TestFeedbackCommands:
+    """Tests for the 5 feedback/promotion commands (G4a)."""
 
-    def test_capture_deferred(self):
-        result = runner.invoke(app, ["capture", "some-service"])
+    def test_verify_pack_email(self):
+        """verify-pack on existing email pack succeeds."""
+        result = runner.invoke(app, ["verify-pack", "email"])
         assert result.exit_code == 0
-        assert "not yet implemented" in result.output
+        assert "passed all checks" in result.output
 
-    def test_compile_pack_deferred(self):
-        result = runner.invoke(app, ["compile-pack", "some-service", "some-source"])
-        assert result.exit_code == 0
-        assert "not yet implemented" in result.output
+    def test_verify_pack_missing(self):
+        """verify-pack on non-existent pack fails."""
+        result = runner.invoke(app, ["verify-pack", "nonexistent_pack_xyz"])
+        assert result.exit_code == 1
 
-    def test_verify_pack_deferred(self):
-        result = runner.invoke(app, ["verify-pack", "some-service"])
-        assert result.exit_code == 0
-        assert "not yet implemented" in result.output
+    def test_annotate_requires_message(self):
+        """annotate without --message exits with error."""
+        result = runner.invoke(app, ["annotate", "stripe"])
+        assert result.exit_code == 1
+        assert "required" in result.output.lower()
 
-    def test_promote_deferred(self):
-        result = runner.invoke(app, ["promote", "some-service"])
-        assert result.exit_code == 0
-        assert "not yet implemented" in result.output
+    def test_compile_pack_missing_source(self):
+        """compile-pack with nonexistent source exits with error."""
+        result = runner.invoke(app, ["compile-pack", "test", "/tmp/nonexistent_xyz.yaml"])
+        assert result.exit_code == 1
 
-    def test_annotate_deferred(self):
-        result = runner.invoke(app, ["annotate", "some-world"])
+    def test_capture_help(self):
+        """capture --help shows usage."""
+        result = runner.invoke(app, ["capture", "--help"])
         assert result.exit_code == 0
-        assert "not yet implemented" in result.output
+        assert "capture" in result.output.lower()
 
-    def test_capture_with_run_option(self):
-        """Deferred capture with --run option still exits 0."""
-        result = runner.invoke(app, ["capture", "some-service", "--run", "run-123"])
+    def test_promote_help(self):
+        """promote --help shows usage."""
+        result = runner.invoke(app, ["promote", "--help"])
         assert result.exit_code == 0
-        assert "not yet implemented" in result.output
 
-    def test_promote_with_submit_pr(self):
-        """Deferred promote with --submit-pr still exits 0."""
-        result = runner.invoke(app, ["promote", "some-service", "--submit-pr"])
+    def test_annotate_help(self):
+        """annotate --help shows usage."""
+        result = runner.invoke(app, ["annotate", "--help"])
         assert result.exit_code == 0
-        assert "not yet implemented" in result.output
 
-    def test_annotate_with_options(self):
-        """Deferred annotate with all options still exits 0."""
-        result = runner.invoke(
-            app,
-            ["annotate", "world1", "--run", "r1", "--message", "good", "--tag", "review"],
-        )
+    def test_compile_pack_help(self):
+        """compile-pack --help shows usage."""
+        result = runner.invoke(app, ["compile-pack", "--help"])
         assert result.exit_code == 0
-        assert "not yet implemented" in result.output
 
 
 # ===================================================================

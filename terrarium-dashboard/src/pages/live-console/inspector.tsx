@@ -5,6 +5,7 @@ import { SectionLoading } from '@/components/feedback/section-loading';
 import { ActorBadge } from '@/components/domain/actor-badge';
 import { ScoreBar } from '@/components/domain/score-bar';
 import { ServiceBadge } from '@/components/domain/service-badge';
+import { capitalize } from '@/lib/formatters';
 
 interface InspectorProps {
   runId: string;
@@ -71,13 +72,13 @@ function RunInspector({ run }: { run: Run }) {
       {/* Mode / preset / behavior badges */}
       <div className="flex flex-wrap gap-2">
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.mode}
+          {capitalize(run.mode)}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.reality_preset}
+          {capitalize(run.reality_preset)}
         </span>
         <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-          {run.config_snapshot?.behavior ?? 'static'}
+          {capitalize(run.config_snapshot?.behavior ?? 'static')}
         </span>
       </div>
 

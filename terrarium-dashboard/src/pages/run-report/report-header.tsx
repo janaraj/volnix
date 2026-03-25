@@ -4,6 +4,7 @@ import type { Run } from '@/types/domain';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
 import { ScoreGrade } from '@/components/domain/score-grade';
 import { ScoreBar } from '@/components/domain/score-bar';
+import { capitalize } from '@/lib/formatters';
 
 interface ReportHeaderProps {
   run: Run;
@@ -34,7 +35,7 @@ export function ReportHeader({ run }: ReportHeaderProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="truncate text-2xl font-semibold">{run.world_def.name}</h1>
+            <h1 className="truncate text-2xl font-bold tracking-tight">{capitalize(run.world_def.name)}</h1>
             <RunStatusBadge status={run.status} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -44,21 +45,21 @@ export function ReportHeader({ run }: ReportHeaderProps) {
               return (
                 <span
                   key={label}
-                  className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-secondary"
+                  className="rounded-md border border-border/30 bg-bg-elevated/60 px-2 py-0.5 text-xs text-text-secondary"
                 >
-                  {String(v)}
+                  {capitalize(String(v))}
                 </span>
               );
             })}
             {run.config_snapshot?.seed != null && (
-              <span className="rounded-full bg-bg-elevated px-2 py-0.5 font-mono text-xs text-text-muted">
+              <span className="rounded-md border border-border/30 bg-bg-elevated/60 px-2 py-0.5 font-mono text-xs text-text-muted">
                 seed: {run.config_snapshot?.seed}
               </span>
             )}
           </div>
         </div>
         {hasScore && (
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-2 rounded-xl border border-border/30 bg-bg-surface p-3 shadow-sm">
             <ScoreGrade score={run.governance_score!} />
             <div className="w-40">
               <ScoreBar value={run.governance_score!} label="Governance" />

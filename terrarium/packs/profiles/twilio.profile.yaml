@@ -1,0 +1,424 @@
+profile_name: twilio
+service_name: twilio
+category: communications
+version: 1.0.0
+fidelity_source: curated_profile
+operations:
+- name: twilio_create_message
+  service: twilio
+  description: Send an outbound SMS or WhatsApp message from a Twilio-enabled sender
+    to a destination address.
+  http_method: POST
+  http_path: /2010-04-01/Accounts/{AccountSid}/Messages.json
+  parameters:
+    AccountSid:
+      type: string
+    To:
+      type: string
+    From:
+      type: string
+    Body:
+      type: string
+    MediaUrl:
+      type: string
+    StatusCallback:
+      type: string
+  required_params:
+  - AccountSid
+  - To
+  - From
+  response_schema:
+    type: object
+    properties:
+      sid:
+        type: string
+      account_sid:
+        type: string
+      to:
+        type: string
+      from:
+        type: string
+      body:
+        type: string
+      status:
+        type: string
+      direction:
+        type: string
+      date_created:
+        type: string
+  is_read_only: false
+  creates_entity: message
+- name: twilio_list_messages
+  service: twilio
+  description: List message records for the account, optionally filtered by sender,
+    recipient, or date.
+  http_method: GET
+  http_path: /2010-04-01/Accounts/{AccountSid}/Messages.json
+  parameters:
+    AccountSid:
+      type: string
+    To:
+      type: string
+    From:
+      type: string
+    PageSize:
+      type: string
+    Page:
+      type: string
+  required_params:
+  - AccountSid
+  response_schema:
+    type: object
+    properties:
+      messages:
+        type: string
+      next_page_uri:
+        type: string
+      previous_page_uri:
+        type: string
+  is_read_only: true
+- name: twilio_get_message
+  service: twilio
+  description: Retrieve a single message resource by SID.
+  http_method: GET
+  http_path: /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}.json
+  parameters:
+    AccountSid:
+      type: string
+    MessageSid:
+      type: string
+  required_params:
+  - AccountSid
+  - MessageSid
+  response_schema:
+    type: object
+    properties:
+      sid:
+        type: string
+      account_sid:
+        type: string
+      to:
+        type: string
+      from:
+        type: string
+      body:
+        type: string
+      status:
+        type: string
+      error_code:
+        type: string
+  is_read_only: true
+- name: twilio_create_call
+  service: twilio
+  description: Initiate an outbound voice call using a TwiML URL or application instructions.
+  http_method: POST
+  http_path: /2010-04-01/Accounts/{AccountSid}/Calls.json
+  parameters:
+    AccountSid:
+      type: string
+    To:
+      type: string
+    From:
+      type: string
+    Url:
+      type: string
+    Twiml:
+      type: string
+    StatusCallback:
+      type: string
+  required_params:
+  - AccountSid
+  - To
+  - From
+  response_schema:
+    type: object
+    properties:
+      sid:
+        type: string
+      account_sid:
+        type: string
+      to:
+        type: string
+      from:
+        type: string
+      status:
+        type: string
+      direction:
+        type: string
+      start_time:
+        type: string
+  is_read_only: false
+  creates_entity: call
+- name: twilio_get_call
+  service: twilio
+  description: Retrieve a single call resource by SID.
+  http_method: GET
+  http_path: /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}.json
+  parameters:
+    AccountSid:
+      type: string
+    CallSid:
+      type: string
+  required_params:
+  - AccountSid
+  - CallSid
+  response_schema:
+    type: object
+    properties:
+      sid:
+        type: string
+      account_sid:
+        type: string
+      to:
+        type: string
+      from:
+        type: string
+      status:
+        type: string
+      duration:
+        type: string
+      direction:
+        type: string
+  is_read_only: true
+- name: twilio_update_call
+  service: twilio
+  description: Update an in-progress call, commonly to complete or cancel it, or redirect
+    it to new TwiML instructions.
+  http_method: POST
+  http_path: /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}.json
+  parameters:
+    AccountSid:
+      type: string
+    CallSid:
+      type: string
+    Status:
+      type: string
+    Url:
+      type: string
+    Twiml:
+      type: string
+  required_params:
+  - AccountSid
+  - CallSid
+  response_schema:
+    type: object
+    properties:
+      sid:
+        type: string
+      status:
+        type: string
+      date_updated:
+        type: string
+  is_read_only: false
+  mutates_entity: call
+- name: twilio_list_incoming_phone_numbers
+  service: twilio
+  description: List phone numbers owned by the account.
+  http_method: GET
+  http_path: /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
+  parameters:
+    AccountSid:
+      type: string
+    PhoneNumber:
+      type: string
+    FriendlyName:
+      type: string
+    PageSize:
+      type: string
+  required_params:
+  - AccountSid
+  response_schema:
+    type: object
+    properties:
+      incoming_phone_numbers:
+        type: string
+      next_page_uri:
+        type: string
+  is_read_only: true
+entities:
+- name: message
+  identity_field: sid
+  fields:
+    sid:
+      type: string
+    account_sid:
+      type: string
+    to:
+      type: string
+    from:
+      type: string
+    body:
+      type: string
+    status:
+      type: string
+    direction:
+      type: string
+    error_code:
+      type: string
+    date_created:
+      type: string
+  required:
+  - sid
+  - account_sid
+  - to
+  - from
+  - status
+- name: call
+  identity_field: sid
+  fields:
+    sid:
+      type: string
+    account_sid:
+      type: string
+    to:
+      type: string
+    from:
+      type: string
+    status:
+      type: string
+    direction:
+      type: string
+    duration:
+      type: string
+    start_time:
+      type: string
+  required:
+  - sid
+  - account_sid
+  - to
+  - from
+  - status
+- name: incoming_phone_number
+  identity_field: sid
+  fields:
+    sid:
+      type: string
+    account_sid:
+      type: string
+    phone_number:
+      type: string
+    friendly_name:
+      type: string
+    capabilities:
+      type: string
+    status:
+      type: string
+  required:
+  - sid
+  - account_sid
+  - phone_number
+state_machines:
+- entity_type: message
+  field: status
+  transitions:
+    queued:
+    - sending
+    - failed
+    - canceled
+    sending:
+    - sent
+    - failed
+    sent:
+    - delivered
+    - undelivered
+    - failed
+    delivered: []
+    undelivered: []
+    failed: []
+    canceled: []
+- entity_type: call
+  field: status
+  transitions:
+    queued:
+    - ringing
+    - canceled
+    - failed
+    ringing:
+    - in-progress
+    - no-answer
+    - busy
+    - failed
+    - canceled
+    in-progress:
+    - completed
+    - busy
+    - failed
+    completed: []
+    busy: []
+    no-answer: []
+    failed: []
+    canceled: []
+error_modes:
+- code: AUTHENTICATION_FAILED
+  when: Account SID or auth token is missing, invalid, or does not match the target
+    account.
+  http_status: 403
+  response_body: {}
+- code: INVALID_PHONE_NUMBER
+  when: A To or From value is not a valid E.164 address or an unsupported channel
+    prefix is used.
+  http_status: 400
+  response_body: {}
+- code: RESOURCE_NOT_FOUND
+  when: The referenced MessageSid, CallSid, or AccountSid does not exist or is not
+    accessible.
+  http_status: 404
+  response_body: {}
+- code: INVALID_REQUEST
+  when: Required parameters are missing or mutually exclusive inputs like Url and
+    Twiml are misused.
+  http_status: 400
+  response_body: {}
+- code: CONFLICTING_CALL_STATE
+  when: A call update is requested for a call that is already completed, failed, or
+    canceled.
+  http_status: 409
+  response_body: {}
+behavioral_notes:
+- Twilio resource identifiers are SIDs with type-specific prefixes such as AC for
+  accounts, SM for messages, and CA for calls.
+- 'Phone numbers should be treated as E.164 strings, while WhatsApp addresses use
+  the whatsapp: prefix.'
+- Message and call creation are asynchronous; initial responses may return a queued
+  status before final delivery or completion outcomes are known.
+- Call creation typically requires either a Url or inline Twiml instructions; simulators
+  should reject requests that provide neither.
+- List operations are paginated and commonly return collection arrays plus paging
+  metadata such as next_page_uri.
+examples: []
+responder_prompt: 'You are simulating the twilio API.
+
+  Behave like a Twilio-style communications API with account-scoped REST endpoints.
+
+  Return realistic Twilio SID values for created resources.
+
+  Enforce required parameters strictly.
+
+  Treat phone numbers as E.164 unless they use a channel prefix like whatsapp:.
+
+  For create_message, require To and From and at least one of Body or MediaUrl.
+
+  For create_call, require To, From, and exactly one of Url or Twiml unless the caller
+  clearly intends both to be accepted; prefer rejecting ambiguous combinations with
+  INVALID_REQUEST.
+
+  Keep message and call lifecycle states realistic and consistent with the defined
+  state machines.
+
+  Read-only operations must not mutate state.
+
+  Mutation operations should update date/status fields and preserve stable resource
+  identities.
+
+  On missing resources, return RESOURCE_NOT_FOUND with the mapped HTTP status.
+
+  On authentication or account mismatch problems, return AUTHENTICATION_FAILED.
+
+  Responses should resemble Twilio REST resources with string-valued fields and account-scoped
+  identifiers.'
+confidence: 0.7
+source_chain:
+- context_hub
+- llm_inference
+auth_pattern: ''
+base_url: ''

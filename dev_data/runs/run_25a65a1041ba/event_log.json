@@ -1,0 +1,18 @@
+[
+  {
+    "event_type": "world.twilio_create_message",
+    "service_id": "twilio",
+    "action": "twilio_create_message",
+    "input_data": {
+      "to": "+15551234567",
+      "body": "Updated"
+    },
+    "response_body": {
+      "sid": "SM00000000000000000000000000000000",
+      "status": "INVALID_PHONE_NUMBER",
+      "to": "+15551234567",
+      "from": "+15559876543",
+      "body": "The From phone number is not configured for this account."
+    }
+  }
+]

@@ -15,10 +15,10 @@ const STATUS_CONFIG: Record<ConnectionStatus, { dot: string; label: string }> = 
 export function StatusBar({ connectionStatus = 'disconnected' }: StatusBarProps) {
   const config = STATUS_CONFIG[connectionStatus];
   return (
-    <div className="flex h-8 items-center justify-between border-t border-border bg-bg-surface px-4 text-xs text-text-muted">
-      <span>Terrarium Dashboard</span>
+    <div className="flex h-9 items-center justify-between border-t border-border/30 bg-gradient-to-r from-bg-surface to-bg-base px-4 text-xs text-text-muted">
+      <span className="font-medium tracking-wide">Terrarium Dashboard</span>
       <span className="flex items-center gap-2">
-        <span className={cn('h-2 w-2 rounded-full', config.dot)} />
+        <span className={cn('h-2 w-2 rounded-full ring-2 ring-current/20', config.dot)} />
         {config.label}
       </span>
     </div>

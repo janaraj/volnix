@@ -74,11 +74,25 @@ class RunManager:
         self._active_run = str(run_id)
         await asyncio.to_thread(self._save_run_metadata, run_id)
 
-    async def complete_run(self, run_id: RunId, status: str = "completed") -> None:
-        """Mark a run as completed."""
+    async def complete_run(
+        self,
+        run_id: RunId,
+        status: str = "completed",
+        summary: dict[str, Any] | None = None,
+    ) -> None:
+        """Mark a run as completed, optionally storing run summary.
+
+        Args:
+            run_id: The run to complete.
+            status: Final status (default: ``"completed"``).
+            summary: Optional dict of computed summary fields to persist
+                in metadata (event_count, current_tick, governance_score, etc.).
+        """
         run = self._get_or_raise(run_id)
         run["status"] = status
         run["completed_at"] = datetime.now(UTC).isoformat()
+        if summary:
+            run["summary"] = summary
         if self._active_run == str(run_id):
             self._active_run = None
         await asyncio.to_thread(self._save_run_metadata, run_id)
