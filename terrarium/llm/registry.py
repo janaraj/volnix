@@ -71,8 +71,14 @@ class ProviderRegistry:
             await self.shutdown_all()
         resolver = secret_resolver or EnvVarResolver()
         for name, entry in config.providers.items():
-            provider = self._create_provider(name, entry, resolver)
-            self.register(name, provider)
+            try:
+                provider = self._create_provider(name, entry, resolver)
+                self.register(name, provider)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to initialize provider '%s': %s (skipping)", name, exc,
+                )
 
     def _create_provider(
         self,

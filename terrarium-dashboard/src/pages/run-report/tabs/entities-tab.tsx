@@ -18,14 +18,6 @@ interface EntitiesTabProps {
 
 const ENTITY_DEFAULTS = { entity: '', entity_type: '' };
 
-const ENTITY_TYPE_OPTIONS: Record<string, string> = {
-  '': 'All types',
-  ticket: 'Tickets',
-  customer: 'Customers',
-  charge: 'Charges',
-  message: 'Messages',
-};
-
 // ---------------------------------------------------------------------------
 // StateChangeRow
 // ---------------------------------------------------------------------------
@@ -194,7 +186,12 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
   return (
     <div>
       <QueryGuard query={entitiesQuery} loadingFallback={<EntityCardSkeleton />}>
-        {(data) => (
+        {(data) => {
+          const entityTypeOptions = Array.from(
+            new Set(data.items.map((e) => e.entity_type)),
+          ).sort();
+
+          return (
           <>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
@@ -206,8 +203,9 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
                 onChange={(e) => setUrlState({ entity_type: e.target.value })}
                 className="rounded border border-bg-elevated bg-bg-surface px-3 py-1.5 text-sm text-text-primary"
               >
-                {Object.entries(ENTITY_TYPE_OPTIONS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                <option value="">All types</option>
+                {entityTypeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
@@ -227,7 +225,8 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
               </div>
             )}
           </>
-        )}
+          );
+        }}
       </QueryGuard>
 
       {selectedEntityId && (

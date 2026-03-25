@@ -264,7 +264,8 @@ describe('RunReportPage', () => {
     renderPage('run-test-001', '?tab=entities');
     await waitFor(() => {
       expect(screen.getByText('TK-2847')).toBeInTheDocument();
-      expect(screen.getByText('ticket')).toBeInTheDocument();
+      // 'ticket' appears in both entity card badge and dynamic filter dropdown
+      expect(screen.getAllByText('ticket').length).toBeGreaterThanOrEqual(1);
     });
   });
 
