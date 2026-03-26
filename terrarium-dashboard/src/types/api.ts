@@ -12,11 +12,19 @@ export interface RunsListResponse {
 }
 
 export interface EventsListResponse {
+  run_id?: string; // present in backend response, not used by frontend
   events: WorldEvent[];
   total: number;
 }
 
+export interface EventDetailResponse {
+  event: WorldEvent;
+  causal_ancestors: string[];
+  causal_descendants: string[];
+}
+
 export interface EntitiesListResponse {
+  run_id?: string; // present in backend response, not used by frontend
   entities: Entity[];
   total: number;
 }

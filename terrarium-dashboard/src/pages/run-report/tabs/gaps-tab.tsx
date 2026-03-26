@@ -7,7 +7,6 @@ import { SectionLoading } from '@/components/feedback/section-loading';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { ActorBadge } from '@/components/domain/actor-badge';
 import { gapResponseToLabel } from '@/lib/classifiers';
-import { truncateId } from '@/lib/formatters';
 import type { CapabilityGap } from '@/types/domain';
 import type { GapsResponse } from '@/types/api';
 
@@ -103,14 +102,14 @@ export function GapsTab({ runId }: GapsTabProps) {
                     const Icon = GAP_RESPONSE_ICONS[gap.response] ?? Circle;
                     const color = GAP_RESPONSE_COLORS[gap.response] ?? 'text-text-muted';
                     return (
-                      <tr key={gap.event_id} className="border-b border-bg-elevated">
+                      <tr key={`${gap.tick}-${gap.agent}-${gap.tool}`} className="border-b border-bg-elevated">
                         <td className="px-3 py-2">
-                          <span className="font-mono text-xs text-text-muted">{truncateId(gap.event_id, 12)}</span>
+                          <span className="font-mono text-xs text-text-muted">{gap.tick}</span>
                         </td>
-                        <td className="px-3 py-2"><ActorBadge actorId={gap.actor_id} /></td>
+                        <td className="px-3 py-2"><ActorBadge actorId={gap.agent} /></td>
                         <td className="px-3 py-2">
-                          <span className="font-mono text-xs text-info">{gap.requested_tool}</span>
-                          <p className="text-xs text-text-muted">{gap.description}</p>
+                          <span className="font-mono text-xs text-info">{gap.tool}</span>
+                          <p className="text-xs text-text-muted">{gap.response_label}</p>
                         </td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>

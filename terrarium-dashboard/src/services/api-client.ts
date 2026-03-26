@@ -1,6 +1,6 @@
-import type { Run, WorldEvent, Entity, AgentSummary } from '@/types/domain';
+import type { Run, Entity, AgentSummary } from '@/types/domain';
 import type {
-  RunsListResponse, EventsListResponse, EntitiesListResponse,
+  RunsListResponse, EventsListResponse, EventDetailResponse, EntitiesListResponse,
   GapsResponse, ScorecardResponse, CompareResponse,
   RunListParams, EventFilterParams, EntityFilterParams,
 } from '@/types/api';
@@ -60,7 +60,7 @@ export class ApiClient {
     return this.request('GET', `/api/v1/runs/${runId}/events`, params as Record<string, unknown>);
   }
 
-  async getRunEvent(runId: string, eventId: string): Promise<WorldEvent> {
+  async getRunEvent(runId: string, eventId: string): Promise<EventDetailResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/events/${eventId}`);
   }
 

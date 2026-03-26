@@ -353,7 +353,11 @@ function EventDetail({
         </button>
       </div>
       <QueryGuard query={eventQuery} loadingFallback={<SectionLoading />}>
-        {(event) => (
+        {(data) => {
+          const event = data.event;
+          const ancestors = data.causal_ancestors ?? [];
+          const descendants = data.causal_descendants ?? [];
+          return (
           <div className="space-y-4">
             {/* Summary */}
             <p className="text-sm text-text-secondary">
@@ -442,7 +446,7 @@ function EventDetail({
             )}
 
             {/* Causal chain -- CLICKABLE links that update ?event= param */}
-            {((event.causal_parent_ids ?? []).length > 0 || event.caused_by) && (
+            {(ancestors.length > 0 || event.caused_by) && (
               <div>
                 <div className="flex items-center gap-1 text-xs text-text-muted mb-1">
                   <GitBranch size={12} />
@@ -452,29 +456,29 @@ function EventDetail({
                   {event.caused_by && (
                     <CausalLink eventId={event.caused_by} onSelect={onSelectEvent} />
                   )}
-                  {(event.causal_parent_ids ?? [])
-                    .filter((id) => id !== event.caused_by)
-                    .map((id) => (
+                  {ancestors
+                    .filter((id: string) => id !== event.caused_by)
+                    .map((id: string) => (
                       <CausalLink key={id} eventId={id} onSelect={onSelectEvent} />
                     ))}
                 </div>
               </div>
             )}
-            {(event.causal_child_ids ?? []).length > 0 && (
+            {descendants.length > 0 && (
               <div>
                 <div className="flex items-center gap-1 text-xs text-text-muted mb-1">
                   <GitBranch size={12} />
                   <span>Caused:</span>
                 </div>
                 <div className="ml-3 flex flex-wrap gap-2">
-                  {(event.causal_child_ids ?? []).map((id) => (
+                  {descendants.map((id: string) => (
                     <CausalLink key={id} eventId={id} onSelect={onSelectEvent} />
                   ))}
                 </div>
               </div>
             )}
-            {((event.causal_parent_ids ?? []).length > 0 ||
-              (event.causal_child_ids ?? []).length > 0) && (
+            {(ancestors.length > 0 ||
+              descendants.length > 0) && (
               <p className="text-xs text-text-muted">[View causal chain &rarr;]</p>
             )}
 
@@ -486,7 +490,8 @@ function EventDetail({
               />
             </div>
           </div>
-        )}
+          );
+        }}
       </QueryGuard>
     </div>
   );

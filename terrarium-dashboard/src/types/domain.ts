@@ -163,43 +163,52 @@ export interface WorldEvent {
 }
 
 // -- Entities ---------------------------------------------------------------
+// Mirrors: http_rest.py entity detail handler response
 
 export interface StateChange {
   event_id: string;
+  event_type: string;
   timestamp: string;
-  actor_id: string;
-  field: string;
-  old_value: unknown;
-  new_value: unknown;
+  operation: string; // 'create' | 'update' | 'delete'
+  fields: Record<string, unknown>;
+  previous_fields: Record<string, unknown>;
 }
 
 export interface Entity {
-  id: string;
+  entity_id: string; // backend field name (not "id")
   entity_type: string;
+  current_state: Record<string, unknown>; // backend field name (not "fields")
+  state_history?: StateChange[];
+  // List endpoint may include these:
   service_id?: string;
-  fields?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
-  state_history?: StateChange[];
 }
 
 // -- Actors -----------------------------------------------------------------
-
-export interface BudgetValues {
-  api_calls: number;
-  llm_spend_usd: number;
-  world_actions: number;
-}
+// Mirrors: http_rest.py actor detail handler response
 
 export interface AgentSummary {
   actor_id: string;
-  role: string;
-  actor_type: 'agent' | 'human' | 'system';
-  budget_total: BudgetValues;
-  budget_remaining: BudgetValues;
+  definition: Record<string, unknown>; // contains role, type, permissions, budget
+  scorecard: Record<string, number> | null;
   action_count: number;
-  governance_score: number | null;
-  action_history?: WorldEvent[];
+  last_action_at: string | null;
+}
+
+/** Helper: extract role from actor definition. */
+export function getActorRole(actor: AgentSummary): string {
+  return String(actor.definition?.role ?? 'unknown');
+}
+
+/** Helper: extract actor type from definition. */
+export function getActorType(actor: AgentSummary): string {
+  return String(actor.definition?.type ?? 'external');
+}
+
+/** Helper: extract governance score from scorecard. */
+export function getGovernanceScore(actor: AgentSummary): number | null {
+  return actor.scorecard?.overall_score ?? null;
 }
 
 // -- Governance -------------------------------------------------------------
@@ -229,17 +238,16 @@ export interface PolicyHit {
 }
 
 // -- Capability gaps --------------------------------------------------------
+// Mirrors: reporter/capability_gaps.py GapAnalyzer.analyze() output
 
 export type GapResponse = 'hallucinated' | 'adapted' | 'escalated' | 'skipped';
 
 export interface CapabilityGap {
-  event_id: string;
-  timestamp: string;
-  actor_id: string;
-  requested_tool: string;
-  response: GapResponse;
-  description: string;
-  next_actions: string[];
+  tick: string;
+  agent: string;
+  tool: string;
+  response: string; // GapResponse value
+  response_label: string; // GapResponse name (HALLUCINATED, ADAPTED, etc.)
 }
 
 // -- Entity updates (WebSocket push) ----------------------------------------

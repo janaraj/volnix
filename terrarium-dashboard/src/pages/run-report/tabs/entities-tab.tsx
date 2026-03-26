@@ -8,7 +8,6 @@ import { EmptyState } from '@/components/feedback/empty-state';
 import { EntityCardSkeleton } from '@/components/feedback/skeletons';
 import { JsonViewer } from '@/components/domain/json-viewer';
 import { TimestampCell } from '@/components/domain/timestamp-cell';
-import { ActorBadge } from '@/components/domain/actor-badge';
 import { cn } from '@/lib/cn';
 import type { Entity, StateChange } from '@/types/domain';
 
@@ -23,6 +22,10 @@ const ENTITY_DEFAULTS = { entity: '', entity_type: '' };
 // ---------------------------------------------------------------------------
 
 function StateChangeRow({ change, isLast }: { change: StateChange; isLast: boolean }) {
+  const changedEntries = Object.entries(change.fields).filter(
+    ([key, value]) => change.previous_fields[key] !== value,
+  );
+
   return (
     <div className="flex gap-3">
       {/* Timeline dot + connector */}
@@ -32,15 +35,16 @@ function StateChangeRow({ change, isLast }: { change: StateChange; isLast: boole
       </div>
       {/* Content */}
       <div className="pb-4">
-        <p className="text-sm text-text-primary">
-          <span className="font-medium">{change.field}</span>
-          <span className="text-text-muted"> → </span>
-          <span className="font-mono text-xs text-info">{String(change.new_value)}</span>
-        </p>
+        {changedEntries.map(([key, value]) => (
+          <p key={key} className="text-sm text-text-primary">
+            <span className="font-medium">{key}</span>
+            <span className="text-text-muted"> → </span>
+            <span className="font-mono text-xs text-info">{String(value)}</span>
+          </p>
+        ))}
         <p className="mt-0.5 flex items-center gap-1 text-xs text-text-muted">
           <TimestampCell iso={change.timestamp} />
-          <span> · by </span>
-          <ActorBadge actorId={change.actor_id} />
+          <span> · {change.operation}</span>
         </p>
       </div>
     </div>
@@ -84,7 +88,7 @@ function EntityDetailPanel({
             {/* Current State */}
             <section>
               <h4 className="mb-2 text-sm font-medium uppercase text-text-muted">Current State</h4>
-              <JsonViewer data={entity.fields ?? {}} />
+              <JsonViewer data={entity.current_state ?? {}} />
             </section>
 
             {/* History */}
@@ -123,8 +127,8 @@ function EntityCard({
   onSelect: () => void;
 }) {
   const keyFields = useMemo(
-    () => Object.entries(entity.fields ?? {}).slice(0, 4),
-    [entity.fields],
+    () => Object.entries(entity.current_state ?? {}).slice(0, 4),
+    [entity.current_state],
   );
   const changeCount = entity.state_history?.length ?? 0;
 
@@ -137,7 +141,7 @@ function EntityCard({
     >
       <div className="mb-2 flex items-start justify-between">
         <div>
-          <p className="font-mono text-sm font-semibold text-text-primary">{entity.id}</p>
+          <p className="font-mono text-sm font-semibold text-text-primary">{entity.entity_id}</p>
           <span className="mt-0.5 inline-block rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-muted">
             {entity.entity_type}
           </span>
@@ -216,10 +220,10 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {data.entities.map((entity) => (
                   <EntityCard
-                    key={entity.id}
+                    key={entity.entity_id}
                     entity={entity}
-                    isSelected={entity.id === selectedEntityId}
-                    onSelect={() => setUrlState({ entity: entity.id })}
+                    isSelected={entity.entity_id === selectedEntityId}
+                    onSelect={() => setUrlState({ entity: entity.entity_id })}
                   />
                 ))}
               </div>
