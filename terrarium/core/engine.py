@@ -71,6 +71,7 @@ class BaseEngine(ABC):
         self._bus = bus
         self._healthy = True
         await self._on_initialize()
+        await self._record_lifecycle("init")
 
     async def start(self) -> None:
         """Start the engine, subscribing to events and enabling processing."""
@@ -79,6 +80,7 @@ class BaseEngine(ABC):
                 await self._bus.subscribe(topic, self._dispatch_event)
         self._started = True
         await self._on_start()
+        await self._record_lifecycle("start")
 
     async def stop(self) -> None:
         """Gracefully stop the engine and release resources."""
@@ -86,10 +88,16 @@ class BaseEngine(ABC):
         if self._bus is not None:
             for topic in self.subscriptions:
                 try:
-                    await self._bus.unsubscribe(topic, self._dispatch_event)
+                    await self._bus.unsubscribe(
+                        topic, self._dispatch_event
+                    )
                 except Exception:
-                    logger.debug("Failed to unsubscribe %s from topic %s", self.engine_name, topic)
+                    logger.debug(
+                        "Failed to unsubscribe %s from topic %s",
+                        self.engine_name, topic,
+                    )
         await self._on_stop()
+        await self._record_lifecycle("stop")
 
     async def health_check(self) -> dict[str, Any]:
         """Return a health-check payload for this engine.
@@ -153,6 +161,22 @@ class BaseEngine(ABC):
         """
         if self._bus is not None:
             await self._bus.publish(event)
+
+    async def _record_lifecycle(self, event_type: str) -> None:
+        """L2: Record EngineLifecycleEntry to ledger."""
+        ledger = getattr(self, "_ledger", None)
+        if ledger is None:
+            return
+        try:
+            from terrarium.ledger.entries import EngineLifecycleEntry
+
+            entry = EngineLifecycleEntry(
+                engine_name=self.engine_name,
+                event_type=event_type,
+            )
+            await ledger.append(entry)
+        except Exception:
+            pass  # Best-effort — don't fail engine lifecycle
 
     async def _dispatch_event(self, event: Event) -> None:
         """Internal dispatcher that routes an inbound event to :meth:`_handle_event`.

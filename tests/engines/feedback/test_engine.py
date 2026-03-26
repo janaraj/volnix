@@ -36,7 +36,6 @@ async def test_engine_initializes(
         "_profile_registry": MagicMock(),
         "_profile_loader": MagicMock(),
         "auto_annotate_gaps": True,
-        "promotion_min_runs": 3,
         "promotion_min_annotations": 1,
         "promotion_min_operations": 3,
         "promotion_max_error_rate": 0.3,
@@ -73,7 +72,6 @@ async def test_auto_annotate_capability_gap(
         "_profile_registry": profile_registry,
         "_profile_loader": MagicMock(),
         "auto_annotate_gaps": True,
-        "promotion_min_runs": 3,
         "promotion_min_annotations": 1,
         "promotion_min_operations": 3,
         "promotion_max_error_rate": 0.3,
@@ -106,7 +104,6 @@ async def test_add_annotation_records_ledger(
         "_profile_registry": MagicMock(),
         "_profile_loader": MagicMock(),
         "auto_annotate_gaps": True,
-        "promotion_min_runs": 3,
         "promotion_min_annotations": 1,
         "promotion_min_operations": 3,
         "promotion_max_error_rate": 0.3,
@@ -134,7 +131,6 @@ async def test_engine_without_deps(mock_event_bus):
 
     config = {
         "auto_annotate_gaps": True,
-        "promotion_min_runs": 3,
         "promotion_min_annotations": 1,
         "promotion_min_operations": 3,
         "promotion_max_error_rate": 0.3,

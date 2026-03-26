@@ -41,7 +41,7 @@ enabled = false                     # disabled by default in dev
 output_dir = "./dev_data/reports"
 
 [feedback]
-annotations_db_path = "./dev_data/annotations.db"
+# annotations_db_path removed — DB path managed by ConnectionManager
 
 [dashboard]
 host = "127.0.0.1"

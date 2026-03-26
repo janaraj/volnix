@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any
 
-from terrarium.core.types import ActorId
+from terrarium.core.types import ActorId, ToolName
 from terrarium.gateway.config import GatewayConfig
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ class Gateway:
         )
 
         # Create protocol adapters
-        from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
         from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
 
         mcp_adapter = MCPServerAdapter(self)
         http_adapter = HTTPRestAdapter(self, self._config)
@@ -65,12 +65,13 @@ class Gateway:
 
     async def handle_request(
         self,
-        protocol: str,
-        actor_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
+        actor_id: ActorId,
+        tool_name: ToolName,
+        input_data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Handle an incoming request from any protocol.
+        """Handle an inbound tool-call request from an actor.
+
+        Matches ``GatewayProtocol.handle_request()`` exactly.
 
         1. Resolve tool -> (service_id, action)
         2. Delegate to app.handle_action() -> 7-step pipeline
@@ -81,16 +82,19 @@ class Gateway:
         """
         start = time.monotonic()
 
+        # Infer protocol from actor_id prefix for ledger recording
+        protocol = self._infer_protocol(str(actor_id))
+
         # Resolve tool
-        resolution = self._tool_map.get(tool_name)
+        tool = str(tool_name)
+        resolution = self._tool_map.get(tool)
         if resolution is None:
-            # Capability gap -- return structured response, not error
             await self._record_request(
-                protocol, actor_id, tool_name, "capability_gap", 0,
+                protocol, str(actor_id), tool, "capability_gap", 0,
             )
             return {
                 "status": "capability_not_available",
-                "message": f"Tool '{tool_name}' is not available in this world.",
+                "message": f"Tool '{tool}' is not available in this world.",
                 "available_tools": list(self._tool_map.keys()),
             }
 
@@ -98,19 +102,44 @@ class Gateway:
 
         # Delegate to pipeline (THE pipeline -- no shortcuts)
         result = await self._app.handle_action(
-            actor_id=actor_id,
+            actor_id=str(actor_id),
             service_id=service_id,
             action=action,
-            input_data=arguments,
+            input_data=input_data,
         )
 
         latency_ms = (time.monotonic() - start) * 1000
         status = "error" if "error" in result else "success"
         await self._record_request(
-            protocol, actor_id, tool_name, status, latency_ms,
+            protocol, str(actor_id), tool, status, latency_ms,
         )
 
         return result
+
+    async def deliver_observation(
+        self,
+        actor_id: ActorId,
+        observation: dict[str, Any],
+    ) -> None:
+        """Push an observation event to an actor."""
+        logger.debug(
+            "Gateway: deliver_observation to %s: %s",
+            actor_id, list(observation.keys()),
+        )
+
+    @staticmethod
+    def _infer_protocol(actor_id: str) -> str:
+        """Infer protocol from actor ID for ledger recording."""
+        if actor_id.startswith("mcp-"):
+            return "mcp"
+        if actor_id.startswith("http-"):
+            return "http"
+        if actor_id in ("system", "environment"):
+            return "internal"
+        # Compiled actors (e.g., "developer-a3b1799d") are internal
+        if "-" in actor_id and not actor_id.startswith(("mcp-", "http-")):
+            return "internal"
+        return "unknown"
 
     async def get_tool_manifest(
         self, actor_id: str | None = None, protocol: str = "mcp",
@@ -174,9 +203,3 @@ class Gateway:
             await adapter.stop_server()
         self._started = False
 
-    async def deliver_observation(self, event: Any, actor_id: Any) -> None:
-        """Deliver an observation event to an external actor.
-
-        Placeholder for Phase E2 when observation routing is implemented.
-        """
-        pass

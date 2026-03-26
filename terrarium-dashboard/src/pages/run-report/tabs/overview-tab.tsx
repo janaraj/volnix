@@ -1,3 +1,5 @@
+import type { LucideIcon } from 'lucide-react';
+import { Shield, Zap, Users, Layers } from 'lucide-react';
 import type { Run, WorldEvent } from '@/types/domain';
 import type { ScorecardResponse } from '@/types/api';
 import { useRunEvents } from '@/hooks/queries/use-events';
@@ -32,10 +34,13 @@ const MAX_KEY_EVENTS = 10;
 // MetricCard
 // ---------------------------------------------------------------------------
 
-function MetricCard({ title, value }: { title: string; value: React.ReactNode }) {
+function MetricCard({ title, value, icon: Icon }: { title: string; value: React.ReactNode; icon?: LucideIcon }) {
   return (
     <div className="card p-4">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{title}</p>
+      <div className="flex items-center gap-1.5">
+        {Icon && <Icon size={12} className="text-text-muted" />}
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">{title}</p>
+      </div>
       <div className="mt-1.5 text-2xl font-bold tabular-nums">{value}</div>
     </div>
   );
@@ -50,13 +55,10 @@ function MetricCards({ run }: { run: Run }) {
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      <MetricCard
-        title="Score"
-        value={hasScore ? <ScoreGrade score={run.governance_score!} /> : <span className="text-text-muted">--</span>}
-      />
-      <MetricCard title="Events" value={run.event_count ?? 0} />
-      <MetricCard title="Actors" value={run.actor_count ?? 0} />
-      <MetricCard title="Services" value={(run.services ?? []).length} />
+      <MetricCard title="Score" icon={Shield} value={hasScore ? <ScoreGrade score={run.governance_score!} /> : <span className="text-text-muted">&mdash;</span>} />
+      <MetricCard title="Events" icon={Zap} value={run.event_count != null ? run.event_count : '\u2014'} />
+      <MetricCard title="Actors" icon={Users} value={run.actor_count != null ? run.actor_count : '\u2014'} />
+      <MetricCard title="Services" icon={Layers} value={(run.services ?? []).length > 0 ? (run.services ?? []).length : '\u2014'} />
     </div>
   );
 }

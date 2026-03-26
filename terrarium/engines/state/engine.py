@@ -63,18 +63,23 @@ class StateEngine(BaseEngine):
         from terrarium.engines.state.event_log import EventLog
         from terrarium.engines.state.causal_graph import CausalGraph
         from terrarium.persistence.migrations import MigrationRunner
-        from terrarium.persistence.sqlite import SQLiteDatabase
         from terrarium.persistence.snapshot import SnapshotStore
         from terrarium.engines.state.config import StateConfig
 
         # Parse config through typed model (no hardcoded defaults in engine)
         config = StateConfig(**{k: v for k, v in self._config.items() if not k.startswith("_")})
-        Path(config.db_path).parent.mkdir(parents=True, exist_ok=True)
 
-        self._db = SQLiteDatabase(config.db_path, wal_mode=True)
+        # Fix #8: Use persistence layer factory instead of constructing
+        # SQLiteDatabase directly. This keeps DB construction confined
+        # to the persistence module (source guard allowlist).
+        injected_db = self._config.get("_db")
+        if injected_db is not None:
+            self._db = injected_db
+        else:
+            from terrarium.persistence.manager import create_database
+            Path(config.db_path).parent.mkdir(parents=True, exist_ok=True)
+            self._db = await create_database(config.db_path)
         try:
-            await self._db.connect()
-
             # Apply migrations (centralised schema management)
             runner = MigrationRunner(self._db)
             for migration in STATE_MIGRATIONS:
@@ -252,15 +257,26 @@ class StateEngine(BaseEngine):
                 )
                 await self._ledger.append(entry)
 
-        # 5. Event is returned in StepResult.events so the DAG publishes it
-        #    once via _publish_step_event(). No self.publish() here to avoid
-        #    duplicate delivery.
+        # 5. Include proposed_events from the responder (Fix #1)
+        #    These are synthetic events the responder wants to emit alongside
+        #    the main action event (e.g., side effects, notifications).
+        all_events = [event]
+        proposed_events = getattr(proposal, "proposed_events", None)
+        if proposed_events:
+            for pe in proposed_events:
+                await self._event_log.append(pe)
+            all_events.extend(proposed_events)
 
+        # Events returned in StepResult so the DAG publishes them.
+        # No self.publish() here to avoid duplicate delivery.
         return StepResult(
             step_name="commit",
             verdict=StepVerdict.ALLOW,
-            events=[event],
-            metadata={"event_id": str(event.event_id), "deltas": len(applied_deltas)},
+            events=all_events,
+            metadata={
+                "event_id": str(event.event_id),
+                "deltas": len(applied_deltas),
+            },
         )
 
     # -- State operations ------------------------------------------------------

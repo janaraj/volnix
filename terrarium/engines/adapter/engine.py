@@ -31,7 +31,7 @@ class AgentAdapterEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "adapter"
-    subscriptions: ClassVar[list[str]] = ["world"]
+    subscriptions: ClassVar[list[str]] = []  # capability checks via pipeline step, not events
     dependencies: ClassVar[list[str]] = ["state", "permission"]
 
     # Injected by app._inject_cross_engine_deps()

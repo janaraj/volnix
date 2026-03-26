@@ -12,7 +12,7 @@ def test_total_count():
     for cat_name in CATEGORIES:
         prims = get_primitives_for_category(cat_name)
         total += len(prims)
-    assert total == 45
+    assert total == 52
 
 
 def test_communication_primitives():

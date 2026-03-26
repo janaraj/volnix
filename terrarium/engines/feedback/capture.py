@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
+from terrarium.core.types import RunId, ServiceId
 from terrarium.engines.feedback.annotations import AnnotationStore
 from terrarium.engines.feedback.models import (
     CapturedSurface,
@@ -35,7 +36,9 @@ class ServiceCapture:
         self._artifacts = artifact_store
         self._annotations = annotation_store
 
-    async def capture(self, run_id: str, service_name: str) -> CapturedSurface:
+    async def capture(
+        self, run_id: RunId | str, service_name: ServiceId | str
+    ) -> CapturedSurface:
         """Extract observed behavior for *service_name* from *run_id*.
 
         Steps:

@@ -168,6 +168,11 @@ def test_entry_registry_all_types():
         FeedbackAnnotationEntry,
         FeedbackCaptureEntry,
         FeedbackPromotionEntry,
+        FeedbackSyncEntry,
+        FeedbackSyncUpdateEntry,
+        WorldCompilationEntry,
+        ServiceResolutionEntry,
+        ProfileInferenceEntry,
     )
 
     expected = {
@@ -183,6 +188,11 @@ def test_entry_registry_all_types():
         "feedback.annotation": FeedbackAnnotationEntry,
         "feedback.promotion": FeedbackPromotionEntry,
         "feedback.capture": FeedbackCaptureEntry,
+        "feedback.sync": FeedbackSyncEntry,
+        "feedback.sync_update": FeedbackSyncUpdateEntry,
+        "world_compilation": WorldCompilationEntry,
+        "service_resolution": ServiceResolutionEntry,
+        "profile_inference": ProfileInferenceEntry,
     }
     assert ENTRY_REGISTRY == expected
 

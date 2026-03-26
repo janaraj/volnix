@@ -66,7 +66,7 @@ class WorldAnimatorEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "animator"
-    subscriptions: ClassVar[list[str]] = ["simulation", "world"]
+    subscriptions: ClassVar[list[str]] = []  # animator uses tick() scheduling, not event-driven
     dependencies: ClassVar[list[str]] = ["state"]
 
     # -- BaseEngine hook -------------------------------------------------------

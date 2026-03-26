@@ -28,20 +28,30 @@ class OpenAPIProvider:
 
     async def supports(self, service_name: str) -> bool:
         """Check if we have a local spec file for this service."""
-        if self._spec_dir and (self._spec_dir / f"{service_name}.yaml").exists():
-            return True
-        if self._spec_dir and (self._spec_dir / f"{service_name}.yml").exists():
-            return True
-        if self._spec_dir and (self._spec_dir / f"{service_name}.json").exists():
-            return True
+        import asyncio
+
+        return await asyncio.to_thread(self._supports_sync, service_name)
+
+    def _supports_sync(self, service_name: str) -> bool:
+        """Sync helper for supports()."""
+        if not self._spec_dir:
+            return False
+        for ext in (".yaml", ".yml", ".json"):
+            if (self._spec_dir / f"{service_name}{ext}").exists():
+                return True
         return False
 
     async def fetch(self, service_name: str) -> dict[str, Any] | None:
         """Parse an OpenAPI spec for a service."""
+        import asyncio
+
         if self._spec_dir is None:
             return None
 
-        # Try YAML then JSON
+        return await asyncio.to_thread(self._fetch_sync, service_name)
+
+    def _fetch_sync(self, service_name: str) -> dict[str, Any] | None:
+        """Sync helper for fetch()."""
         for ext in (".yaml", ".yml", ".json"):
             path = self._spec_dir / f"{service_name}{ext}"
             if path.exists():

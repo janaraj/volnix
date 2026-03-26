@@ -94,18 +94,16 @@ async def test_mcp_gateway_handle_request_delegation():
 
     # Simulate what the call_tool handler does
     result = await gateway.handle_request(
-        protocol="mcp",
         actor_id=adapter._actor_id,
         tool_name="email_send",
-        arguments={"from_addr": "a@b.com", "to_addr": "c@d.com"},
+        input_data={"from_addr": "a@b.com", "to_addr": "c@d.com"},
     )
 
     assert result == expected
     gateway.handle_request.assert_awaited_once_with(
-        protocol="mcp",
         actor_id="mcp-agent",
         tool_name="email_send",
-        arguments={"from_addr": "a@b.com", "to_addr": "c@d.com"},
+        input_data={"from_addr": "a@b.com", "to_addr": "c@d.com"},
     )
 
 
@@ -123,11 +121,13 @@ async def test_mcp_stop_server():
 
 @pytest.mark.asyncio
 async def test_mcp_translate_passthrough():
-    """translate_inbound/outbound are no-ops for MCP (SDK handles it)."""
+    """translate_inbound/outbound are pass-throughs for MCP (SDK handles it)."""
     gateway = _make_mock_gateway()
     adapter = MCPServerAdapter(gateway)
-    assert adapter.translate_inbound("anything") is None
-    assert adapter.translate_outbound("anything") is None
+    result = await adapter.translate_inbound("tool", {"key": "val"})
+    assert result == {"key": "val"}
+    result = await adapter.translate_outbound("tool", {"resp": "data"})
+    assert result == {"resp": "data"}
 
 
 @pytest.mark.asyncio

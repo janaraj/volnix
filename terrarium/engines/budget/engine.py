@@ -44,7 +44,7 @@ class BudgetEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "budget"
-    subscriptions: ClassVar[list[str]] = ["world"]
+    subscriptions: ClassVar[list[str]] = []  # budget checks via pipeline step, not events
     dependencies: ClassVar[list[str]] = ["state"]
 
     def __init__(self) -> None:
@@ -202,8 +202,19 @@ class BudgetEngine(BaseEngine):
         """Alias for execute — check budget for the action."""
         return await self.execute(ctx)
 
-    async def deduct(self, actor_id: ActorId, cost: ActionCost) -> BudgetState:
+    async def deduct(
+        self,
+        actor_id: ActorId,
+        api_calls: int = 0,
+        llm_spend_usd: float = 0.0,
+        world_actions: int = 0,
+    ) -> BudgetState:
         """Directly deduct a cost from an actor's budget."""
+        cost = ActionCost(
+            api_calls=api_calls,
+            llm_spend_usd=llm_spend_usd,
+            world_actions=world_actions,
+        )
         self._tracker.deduct(actor_id, cost)
         state = self._tracker.get_budget_state(actor_id)
         if state is None:

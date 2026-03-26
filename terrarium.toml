@@ -105,12 +105,16 @@ output_dir = "reports"
 # ── Feedback Engine ──────────────────────────────────────────
 
 [feedback]
-external_sync_enabled = false
 auto_annotate_gaps = true
-promotion_min_runs = 3
 promotion_min_annotations = 1
 promotion_min_operations = 3
 promotion_max_error_rate = 0.3
+external_sync_enabled = false
+sync_check_on_startup = false
+sync_max_concurrent = 5
+signals_enabled = true
+signals_max_runs = 100
+signals_include_event_logs = true
 
 # ── Dashboard ────────────────────────────────────────────────
 

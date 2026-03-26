@@ -31,13 +31,17 @@ class CompilerServiceResolver:
         profile_loader: Any | None = None,
         profile_inferrer: Any | None = None,
         profile_registry: Any | None = None,
+        ledger: Any | None = None,
+        bus: Any | None = None,
     ) -> None:
         self._packs = pack_registry
         self._kernel = kernel
         self._resolver = resolver
-        self._profile_loader = profile_loader  # ProfileLoader instance
-        self._profile_inferrer = profile_inferrer  # ProfileInferrer instance
-        self._profile_registry = profile_registry  # ProfileRegistry (shared with responder + adapter)
+        self._profile_loader = profile_loader
+        self._profile_inferrer = profile_inferrer
+        self._profile_registry = profile_registry
+        self._ledger = ledger
+        self._bus = bus
 
     def get_available_categories(self) -> str:
         """Return comma-separated list of available semantic categories."""
@@ -86,6 +90,11 @@ class CompilerServiceResolver:
             try:
                 pack = self._packs.get_pack(name)
                 surface = ServiceSurface.from_pack(pack)
+                await self._record_resolution(
+                    service_name, "tier1_pack", 1.0,
+                    len(surface.operations),
+                    len(surface.entity_schemas),
+                )
                 return ServiceResolution(
                     service_name=service_name,
                     spec_reference=str(spec_reference),
@@ -135,6 +144,12 @@ class CompilerServiceResolver:
                 from terrarium.packs.profile_surface import profile_to_surface
 
                 surface = profile_to_surface(profile)
+                await self._record_resolution(
+                    service_name, "tier2_yaml_profile",
+                    surface.confidence,
+                    len(surface.operations),
+                    len(surface.entity_schemas),
+                )
                 return ServiceResolution(
                     service_name=service_name,
                     spec_reference=str(spec_reference),
@@ -167,14 +182,45 @@ class CompilerServiceResolver:
                     # Validate via conversion BEFORE saving/registering
                     surface = profile_to_surface(profile)
                     if surface.operations:
-                        # Save to disk so the profile persists across restarts
                         if self._profile_loader:
                             self._profile_loader.save(profile)
-                        # Register in the shared profile registry so the
-                        # responder and adapter can use it immediately
-                        # (without waiting for a restart)
                         if self._profile_registry:
                             self._profile_registry.register(profile)
+
+                    # L5: Record profile inference
+                    if self._ledger:
+                        from terrarium.ledger.entries import (
+                            ProfileInferenceEntry,
+                        )
+
+                        try:
+                            await self._ledger.append(
+                                ProfileInferenceEntry(
+                                    service_name=name,
+                                    sources_used=list(
+                                        profile.source_chain or []
+                                    ),
+                                    confidence=profile.confidence,
+                                    operations_count=len(
+                                        profile.operations
+                                    ),
+                                    entities_count=len(
+                                        profile.entities
+                                    ),
+                                    fidelity_source=(
+                                        profile.fidelity_source
+                                    ),
+                                )
+                            )
+                        except Exception:
+                            pass
+
+                    await self._record_resolution(
+                        service_name, "tier2_inferred",
+                        surface.confidence,
+                        len(surface.operations),
+                        len(surface.entity_schemas),
+                    )
                     return ServiceResolution(
                         service_name=service_name,
                         spec_reference=str(spec_reference),
@@ -204,3 +250,50 @@ class CompilerServiceResolver:
             parts = spec_ref.split("/", 1)
             return parts[0], parts[1]
         return "auto", str(spec_ref)
+
+    async def _record_resolution(
+        self,
+        service_name: str,
+        resolution_source: str,
+        confidence: float,
+        operations_count: int,
+        entities_count: int,
+    ) -> None:
+        """Record service resolution to ledger + publish to bus."""
+        if self._ledger:
+            from terrarium.ledger.entries import ServiceResolutionEntry
+
+            try:
+                await self._ledger.append(ServiceResolutionEntry(
+                    service_name=service_name,
+                    resolution_source=resolution_source,
+                    confidence=confidence,
+                    operations_count=operations_count,
+                    entities_count=entities_count,
+                ))
+            except Exception:
+                pass
+
+        if self._bus:
+            from terrarium.core.events import WorldEvent
+            from terrarium.core.types import ActorId, ServiceId, Timestamp
+            from datetime import UTC, datetime
+
+            now = datetime.now(UTC)
+            try:
+                await self._bus.publish(WorldEvent(
+                    event_type="world.service_resolved",
+                    timestamp=Timestamp(
+                        world_time=now, wall_time=now, tick=0,
+                    ),
+                    actor_id=ActorId("world_compiler"),
+                    service_id=ServiceId(service_name),
+                    action="resolve_service",
+                    input_data={
+                        "resolution_source": resolution_source,
+                        "confidence": confidence,
+                        "operations": operations_count,
+                    },
+                ))
+            except Exception:
+                pass

@@ -16,12 +16,13 @@ EXPECTED_CATEGORY_NAMES = {
     "code_devops",
     "scheduling",
     "monitoring_observability",
+    "social_media",
 }
 
 
 def test_all_9_categories():
     """CATEGORIES dict has exactly 9 entries."""
-    assert len(CATEGORIES) == 9
+    assert len(CATEGORIES) == 10
 
 
 def test_category_names():

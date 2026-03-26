@@ -127,7 +127,7 @@ async def test_http_call_tool():
     assert resp.json() == expected
     gateway.handle_request.assert_awaited_once()
     call_kwargs = gateway.handle_request.call_args.kwargs
-    assert call_kwargs["protocol"] == "http"
+    assert "actor_id" in call_kwargs  # protocol inference from actor_id
     assert call_kwargs["tool_name"] == "email_send"
 
 
@@ -156,9 +156,14 @@ async def test_http_call_tool_capability_gap():
 
 @pytest.mark.asyncio
 async def test_http_query_entities():
-    """GET /api/v1/entities/{type} queries state engine."""
+    """GET /api/v1/entities/{type} queries through app.read_entities."""
     entities = [{"email_id": "e1", "status": "sent"}]
-    gateway = _make_mock_gateway(entity_result=entities)
+    gateway = _make_mock_gateway()
+    gateway._app.read_entities = AsyncMock(return_value={
+        "entity_type": "email",
+        "count": 1,
+        "entities": entities,
+    })
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
 
@@ -187,11 +192,13 @@ async def test_http_stop_server():
 
 @pytest.mark.asyncio
 async def test_http_translate_passthrough():
-    """translate_inbound/outbound are no-ops (FastAPI handles it)."""
+    """translate_inbound/outbound are pass-throughs (FastAPI handles it)."""
     gateway = _make_mock_gateway()
     adapter = HTTPRestAdapter(gateway)
-    assert adapter.translate_inbound("anything") is None
-    assert adapter.translate_outbound("anything") is None
+    result = await adapter.translate_inbound("tool", {"key": "val"})
+    assert result == {"key": "val"}
+    result = await adapter.translate_outbound("tool", {"resp": "data"})
+    assert result == {"resp": "data"}
 
 
 @pytest.mark.asyncio
@@ -377,7 +384,7 @@ async def test_http_pack_route_mounted():
     gateway.handle_request.assert_awaited()
     call_kwargs = gateway.handle_request.call_args.kwargs
     assert call_kwargs["tool_name"] == "email_send"
-    assert call_kwargs["protocol"] == "http"
+    assert "actor_id" in call_kwargs  # protocol inference from actor_id
 
 
 @pytest.mark.asyncio
@@ -482,7 +489,7 @@ async def test_http_call_tool_empty_arguments():
     assert resp.status_code == 200
     assert resp.json() == expected
     call_kwargs = gateway.handle_request.call_args.kwargs
-    assert call_kwargs["arguments"] == {}
+    assert call_kwargs["input_data"] == {}
 
 
 @pytest.mark.asyncio

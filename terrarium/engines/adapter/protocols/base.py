@@ -5,31 +5,41 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from terrarium.core import ActionContext, ActorId
+from terrarium.core.types import ToolName
 
 
 class ProtocolAdapter(ABC):
     """Abstract base for all protocol adapters.
 
     Each concrete adapter translates between one external protocol
-    (MCP, ACP, OpenAI, Anthropic, HTTP) and the internal ActionContext.
+    (MCP, ACP, OpenAI, Anthropic, HTTP) and the internal format.
+
+    Method signatures match ``core.protocols.AdapterProtocol``.
     """
 
     protocol_name: ClassVar[str] = ""
 
     @abstractmethod
-    async def translate_inbound(self, raw_request: Any) -> ActionContext:
-        """Translate a raw protocol request into an ActionContext."""
+    async def translate_inbound(
+        self,
+        tool_name: ToolName,
+        raw_input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate an external tool invocation into canonical form."""
         ...
 
     @abstractmethod
-    async def translate_outbound(self, ctx: ActionContext) -> Any:
-        """Translate an ActionContext back to the external protocol format."""
+    async def translate_outbound(
+        self,
+        tool_name: ToolName,
+        internal_response: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate an internal response back to external format."""
         ...
 
     @abstractmethod
-    async def get_tool_manifest(self, actor_id: ActorId) -> list[dict[str, Any]]:
-        """Return the tool manifest for an actor in this protocol's format."""
+    async def get_tool_manifest(self) -> list[dict[str, Any]]:
+        """Return the manifest of all tools this adapter exposes."""
         ...
 
     @abstractmethod

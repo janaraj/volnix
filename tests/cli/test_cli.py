@@ -583,8 +583,9 @@ class TestInspectCommand:
     def test_inspect_policies(self):
         """inspect policies shows policy list."""
         terrarium, engines = _make_mock_terrarium()
+        from terrarium.core.types import PolicyId
         engines["policy"].get_active_policies = AsyncMock(
-            return_value=[{"name": "budget_check", "enforcement": "block"}]
+            return_value=[PolicyId("budget_check"), PolicyId("rate_limit")]
         )
 
         with _patch_app_context(terrarium):

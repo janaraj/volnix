@@ -49,7 +49,6 @@ async def annotation_store(annotation_db):
 def feedback_config():
     """Default FeedbackConfig for testing."""
     return FeedbackConfig(
-        promotion_min_runs=2,
         promotion_min_annotations=1,
     )
 

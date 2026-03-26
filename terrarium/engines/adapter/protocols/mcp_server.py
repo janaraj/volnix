@@ -15,7 +15,7 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from terrarium.core import ActionContext, ActorId
+from terrarium.core.types import ToolName
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
 
 logger = logging.getLogger(__name__)
@@ -53,10 +53,9 @@ class MCPServerAdapter(ProtocolAdapter):
         async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             """Handle tool call -> Gateway -> Pipeline -> Response."""
             result = await gateway.handle_request(
-                protocol="mcp",
                 actor_id=adapter_self._actor_id,
                 tool_name=name,
-                arguments=arguments or {},
+                input_data=arguments or {},
             )
             return [TextContent(
                 type="text",
@@ -80,14 +79,22 @@ class MCPServerAdapter(ProtocolAdapter):
         """Stop the MCP server."""
         self._server = None
 
-    def translate_inbound(self, raw_request: Any) -> Any:
-        """Not used -- MCP SDK handles protocol translation."""
-        pass
+    async def translate_inbound(
+        self,
+        tool_name: ToolName,
+        raw_input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate inbound. MCP SDK handles parsing; pass-through."""
+        return raw_input
 
-    def translate_outbound(self, result: Any) -> Any:
-        """Not used -- MCP SDK handles protocol translation."""
-        pass
+    async def translate_outbound(
+        self,
+        tool_name: ToolName,
+        internal_response: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate outbound. MCP SDK handles serialization; pass-through."""
+        return internal_response
 
-    async def get_tool_manifest(self, actor_id: ActorId | None = None) -> list[dict]:
-        """Delegate to gateway."""
+    async def get_tool_manifest(self) -> list[dict[str, Any]]:
+        """Return tool manifest for the MCP protocol."""
         return await self._gateway.get_tool_manifest(protocol="mcp")

@@ -6,6 +6,7 @@ Any source of API specifications implements this protocol:
 - Future: MCP manifest provider, etc.
 """
 from __future__ import annotations
+
 from typing import Any, Protocol, runtime_checkable
 
 

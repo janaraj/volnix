@@ -51,7 +51,6 @@ def test_response_proposal_accepts_concrete_events():
     assert proposal.proposed_events == [event]
 
 
-@staged_guardrail(reason="State commit path still ignores responder-proposed events")
 @pytest.mark.asyncio
 async def test_commit_step_honors_proposed_events(app, make_action_context):
     state = app.registry.get("state")
@@ -81,7 +80,6 @@ async def test_commit_step_honors_proposed_events(app, make_action_context):
     assert any(event.event_type == "world.synthetic" for event in timeline)
 
 
-@staged_guardrail(reason="Snapshot labels are not yet confined to the snapshots directory")
 @pytest.mark.asyncio
 async def test_snapshot_labels_preserve_path_containment(tmp_path):
     config = PersistenceConfig(base_dir=str(tmp_path / "data"))

@@ -50,7 +50,9 @@ class ContextHubProvider:
 
     async def is_available(self) -> bool:
         """True when ``npx`` is on PATH (npm must be installed)."""
-        return shutil.which("npx") is not None
+        import asyncio
+
+        return await asyncio.to_thread(shutil.which, "npx") is not None
 
     async def supports(self, service_name: str) -> bool:
         """True when ``chub search`` finds content for *service_name*."""
@@ -175,7 +177,7 @@ class ContextHubProvider:
             m = _RESULT_RE.match(line)
             if m:
                 content_id = m.group(1)
-                langs = [l.strip() for l in m.group(2).split(",")]
+                langs = [lang.strip() for lang in m.group(2).split(",")]
                 results.append((content_id, langs))
         return results
 

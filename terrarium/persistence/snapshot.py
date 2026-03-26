@@ -43,7 +43,10 @@ class SnapshotStore:
         """
         await asyncio.to_thread(self._snapshots_dir.mkdir, parents=True, exist_ok=True)
 
-        snapshot_id = SnapshotId(f"snap_{run_id}_{label}_{uuid4().hex[:8]}")
+        # Sanitize label to prevent path traversal (Fix #2)
+        import re
+        safe_label = re.sub(r"[^a-zA-Z0-9_-]", "_", label)
+        snapshot_id = SnapshotId(f"snap_{run_id}_{safe_label}_{uuid4().hex[:8]}")
         db_file = self._snapshots_dir / f"{snapshot_id}.db"
         meta_file = self._snapshots_dir / f"{snapshot_id}.json"
 
