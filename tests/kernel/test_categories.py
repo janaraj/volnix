@@ -17,16 +17,17 @@ EXPECTED_CATEGORY_NAMES = {
     "scheduling",
     "monitoring_observability",
     "social_media",
+    "trading",
 }
 
 
-def test_all_9_categories():
-    """CATEGORIES dict has exactly 9 entries."""
-    assert len(CATEGORIES) == 10
+def test_all_categories():
+    """CATEGORIES dict has exactly 11 entries."""
+    assert len(CATEGORIES) == 11
 
 
 def test_category_names():
-    """All 9 expected category names are present and nothing extra."""
+    """All expected category names are present and nothing extra."""
     assert set(CATEGORIES.keys()) == EXPECTED_CATEGORY_NAMES
 
 

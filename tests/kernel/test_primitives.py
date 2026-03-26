@@ -5,14 +5,14 @@ from terrarium.kernel.primitives import SemanticPrimitive, get_primitives_for_ca
 
 
 def test_total_count():
-    """There are 45 total primitives (9 categories x 5 each)."""
+    """Total primitives across all categories (11 categories)."""
     from terrarium.kernel.categories import CATEGORIES
 
     total = 0
     for cat_name in CATEGORIES:
         prims = get_primitives_for_category(cat_name)
         total += len(prims)
-    assert total == 52
+    assert total == 58
 
 
 def test_communication_primitives():
