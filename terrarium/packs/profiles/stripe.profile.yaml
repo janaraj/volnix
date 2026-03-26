@@ -1,0 +1,656 @@
+profile_name: stripe
+service_name: stripe
+category: money_transactions
+version: 0.1.0
+fidelity_source: bootstrapped
+operations:
+- name: stripe_create_customer
+  service: stripe
+  description: Creates a customer record for storing identity, billing details, and
+    payment methods.
+  http_method: POST
+  http_path: /v1/customers
+  parameters:
+    email:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+  required_params: []
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      description:
+        type: string
+      created:
+        type: string
+  is_read_only: false
+  creates_entity: customer
+- name: stripe_get_customer
+  service: stripe
+  description: Retrieves an existing customer by ID.
+  http_method: GET
+  http_path: /v1/customers/{customer}
+  parameters:
+    customer:
+      type: string
+  required_params:
+  - customer
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      deleted:
+        type: string
+  is_read_only: true
+- name: stripe_create_payment_intent
+  service: stripe
+  description: Creates a payment intent to track a payment through authorization and
+    capture.
+  http_method: POST
+  http_path: /v1/payment_intents
+  parameters:
+    amount:
+      type: string
+    currency:
+      type: string
+    customer:
+      type: string
+    description:
+      type: string
+    capture_method:
+      type: string
+  required_params:
+  - amount
+  - currency
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      amount:
+        type: string
+      currency:
+        type: string
+      status:
+        type: string
+      client_secret:
+        type: string
+      customer:
+        type: string
+  is_read_only: false
+  creates_entity: payment_intent
+- name: stripe_get_payment_intent
+  service: stripe
+  description: Retrieves a payment intent and its current lifecycle state.
+  http_method: GET
+  http_path: /v1/payment_intents/{intent}
+  parameters:
+    intent:
+      type: string
+  required_params:
+  - intent
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      amount:
+        type: string
+      currency:
+        type: string
+      status:
+        type: string
+      customer:
+        type: string
+  is_read_only: true
+- name: stripe_confirm_payment_intent
+  service: stripe
+  description: Confirms a payment intent to attempt payment completion or advance
+    authentication.
+  http_method: POST
+  http_path: /v1/payment_intents/{intent}/confirm
+  parameters:
+    intent:
+      type: string
+    payment_method:
+      type: string
+    return_url:
+      type: string
+  required_params:
+  - intent
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      status:
+        type: string
+      client_secret:
+        type: string
+      latest_charge:
+        type: string
+  is_read_only: false
+  mutates_entity: payment_intent
+- name: stripe_capture_payment_intent
+  service: stripe
+  description: Captures funds for a previously authorized manual-capture payment intent.
+  http_method: POST
+  http_path: /v1/payment_intents/{intent}/capture
+  parameters:
+    intent:
+      type: string
+    amount_to_capture:
+      type: string
+  required_params:
+  - intent
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      status:
+        type: string
+      amount_received:
+        type: string
+  is_read_only: false
+  creates_entity: settlement
+  mutates_entity: payment_intent
+- name: stripe_cancel_payment_intent
+  service: stripe
+  description: Cancels a payment intent that has not yet completed.
+  http_method: POST
+  http_path: /v1/payment_intents/{intent}/cancel
+  parameters:
+    intent:
+      type: string
+    cancellation_reason:
+      type: string
+  required_params:
+  - intent
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      status:
+        type: string
+      cancellation_reason:
+        type: string
+  is_read_only: false
+  mutates_entity: payment_intent
+- name: stripe_create_checkout_session
+  service: stripe
+  description: Creates a hosted Checkout Session for one-time payment or subscription
+    collection.
+  http_method: POST
+  http_path: /v1/checkout/sessions
+  parameters:
+    mode:
+      type: string
+    success_url:
+      type: string
+    cancel_url:
+      type: string
+    customer:
+      type: string
+    client_reference_id:
+      type: string
+  required_params:
+  - mode
+  - success_url
+  - cancel_url
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      url:
+        type: string
+      mode:
+        type: string
+      status:
+        type: string
+      payment_status:
+        type: string
+  is_read_only: false
+  creates_entity: checkout_session
+- name: stripe_get_checkout_session
+  service: stripe
+  description: Retrieves a Checkout Session and its payment state.
+  http_method: GET
+  http_path: /v1/checkout/sessions/{session}
+  parameters:
+    session:
+      type: string
+  required_params:
+  - session
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      mode:
+        type: string
+      status:
+        type: string
+      payment_status:
+        type: string
+      customer:
+        type: string
+  is_read_only: true
+- name: stripe_create_subscription
+  service: stripe
+  description: Creates a recurring subscription for a customer.
+  http_method: POST
+  http_path: /v1/subscriptions
+  parameters:
+    customer:
+      type: string
+    price:
+      type: string
+    collection_method:
+      type: string
+  required_params:
+  - customer
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      customer:
+        type: string
+      status:
+        type: string
+      current_period_end:
+        type: string
+  is_read_only: false
+  creates_entity: subscription
+- name: stripe_cancel_subscription
+  service: stripe
+  description: Cancels an active subscription.
+  http_method: DELETE
+  http_path: /v1/subscriptions/{subscription}
+  parameters:
+    subscription:
+      type: string
+  required_params:
+  - subscription
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      status:
+        type: string
+      canceled_at:
+        type: string
+  is_read_only: false
+  mutates_entity: subscription
+- name: stripe_create_refund
+  service: stripe
+  description: Creates a refund against a charge or payment intent.
+  http_method: POST
+  http_path: /v1/refunds
+  parameters:
+    charge:
+      type: string
+    payment_intent:
+      type: string
+    amount:
+      type: string
+    reason:
+      type: string
+  required_params: []
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      object:
+        type: string
+      amount:
+        type: string
+      status:
+        type: string
+      charge:
+        type: string
+      payment_intent:
+        type: string
+  is_read_only: false
+  creates_entity: reversal
+  mutates_entity: transaction
+- name: stripe_get_balance
+  service: stripe
+  description: Retrieves the current available and pending account balance.
+  http_method: GET
+  http_path: /v1/balance
+  parameters: {}
+  required_params: []
+  response_schema:
+    type: object
+    properties:
+      object:
+        type: string
+      livemode:
+        type: string
+      available:
+        type: string
+      pending:
+        type: string
+  is_read_only: true
+entities:
+- name: customer
+  identity_field: id
+  fields:
+    id:
+      type: string
+    email:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    created:
+      type: string
+  required:
+  - id
+- name: payment_intent
+  identity_field: id
+  fields:
+    id:
+      type: string
+    amount:
+      type: string
+    currency:
+      type: string
+    customer:
+      type: string
+    status:
+      type: string
+    capture_method:
+      type: string
+    client_secret:
+      type: string
+  required:
+  - id
+  - amount
+  - currency
+  - status
+- name: checkout_session
+  identity_field: id
+  fields:
+    id:
+      type: string
+    mode:
+      type: string
+    status:
+      type: string
+    payment_status:
+      type: string
+    url:
+      type: string
+    customer:
+      type: string
+  required:
+  - id
+  - mode
+  - status
+- name: subscription
+  identity_field: id
+  fields:
+    id:
+      type: string
+    customer:
+      type: string
+    status:
+      type: string
+    current_period_end:
+      type: string
+    cancel_at_period_end:
+      type: string
+  required:
+  - id
+  - customer
+  - status
+- name: transaction
+  identity_field: id
+  fields:
+    id:
+      type: string
+    amount:
+      type: string
+    currency:
+      type: string
+    status:
+      type: string
+    payment_intent:
+      type: string
+  required:
+  - id
+  - amount
+  - currency
+  - status
+- name: authorization
+  identity_field: id
+  fields:
+    id:
+      type: string
+    payment_intent:
+      type: string
+    amount:
+      type: string
+    status:
+      type: string
+  required:
+  - id
+  - payment_intent
+  - amount
+  - status
+- name: settlement
+  identity_field: id
+  fields:
+    id:
+      type: string
+    payment_intent:
+      type: string
+    amount:
+      type: string
+    status:
+      type: string
+  required:
+  - id
+  - payment_intent
+  - amount
+  - status
+- name: reversal
+  identity_field: id
+  fields:
+    id:
+      type: string
+    amount:
+      type: string
+    status:
+      type: string
+    charge:
+      type: string
+    payment_intent:
+      type: string
+  required:
+  - id
+  - amount
+  - status
+- name: balance
+  identity_field: id
+  fields:
+    id:
+      type: string
+    available:
+      type: string
+    pending:
+      type: string
+    currency:
+      type: string
+  required:
+  - id
+  - available
+  - pending
+state_machines:
+- entity_type: payment_intent
+  field: status
+  transitions:
+    requires_payment_method:
+    - requires_confirmation
+    - canceled
+    requires_confirmation:
+    - requires_action
+    - processing
+    - requires_capture
+    - succeeded
+    - canceled
+    requires_action:
+    - processing
+    - requires_confirmation
+    - canceled
+    processing:
+    - succeeded
+    - canceled
+    requires_capture:
+    - succeeded
+    - canceled
+    succeeded: []
+    canceled: []
+- entity_type: checkout_session
+  field: status
+  transitions:
+    open:
+    - complete
+    - expired
+    complete: []
+    expired: []
+- entity_type: subscription
+  field: status
+  transitions:
+    incomplete:
+    - active
+    - incomplete_expired
+    - canceled
+    trialing:
+    - active
+    - canceled
+    active:
+    - past_due
+    - unpaid
+    - canceled
+    past_due:
+    - active
+    - unpaid
+    - canceled
+    unpaid:
+    - active
+    - canceled
+    canceled: []
+    incomplete_expired: []
+error_modes:
+- code: INVALID_REQUEST_ERROR
+  when: Required parameters are missing, malformed, or mutually incompatible.
+  http_status: 400
+  response_body: {}
+- code: AUTHENTICATION_ERROR
+  when: The API key is missing, invalid, or not permitted for the requested resource.
+  http_status: 403
+  response_body: {}
+- code: RESOURCE_MISSING
+  when: The requested customer, payment intent, checkout session, subscription, or
+    refund does not exist.
+  http_status: 404
+  response_body: {}
+- code: IDEMPOTENCY_CONFLICT
+  when: An idempotency key is reused with parameters that differ from the original
+    request.
+  http_status: 409
+  response_body: {}
+- code: PAYMENT_INTENT_UNEXPECTED_STATE
+  when: A confirm, capture, or cancel request is made for a payment intent in an invalid
+    lifecycle state.
+  http_status: 409
+  response_body: {}
+behavioral_notes:
+- Stripe resource IDs are opaque strings such as cus_, pi_, cs_, sub_, and re_ and
+  should be preserved exactly.
+- Amount values are integer minor units encoded as strings in this profile, for example
+  1099 for USD 10.99.
+- Create operations typically return object metadata plus current lifecycle status
+  immediately, even if downstream settlement is asynchronous.
+- Confirming a payment intent may return requires_action instead of succeeded when
+  additional customer authentication is needed.
+- Manual capture flows use payment intents that can enter requires_capture before
+  settlement.
+- Checkout sessions are hosted payment flows and expose a redirect URL when first
+  created.
+- Refunds may be partial if amount is less than the original captured amount.
+- Read operations should not invent side effects; mutation operations should update
+  stored entity state consistently across linked entities.
+examples: []
+responder_prompt: 'You are simulating the stripe API. Return realistic Stripe-like
+  JSON objects and errors for the operations in this profile.
+
+  Use canonical Stripe-style IDs such as cus_123, pi_123, cs_123, sub_123, ch_123,
+  and re_123.
+
+  Enforce required parameters, lifecycle constraints, and HTTP semantics from the
+  profile.
+
+  Preserve state across operations so later reads reflect earlier creates and mutations.
+
+  For payment flows, prefer realistic statuses such as requires_payment_method, requires_confirmation,
+  requires_action, processing, requires_capture, succeeded, and canceled.
+
+  For subscription flows, use statuses such as incomplete, trialing, active, past_due,
+  unpaid, and canceled.
+
+  When returning errors, use the declared error codes and matching HTTP statuses.
+
+  Keep responses concise but plausible, with fields aligned to the relevant Stripe
+  resource shape.'
+confidence: 0.7
+source_chain:
+- kernel:money_transactions
+- context_hub
+- llm_inference
+auth_pattern: ''
+base_url: ''

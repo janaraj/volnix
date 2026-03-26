@@ -447,8 +447,9 @@ async def _serve_impl(world: str, settings: str | None, host: str, port: int) ->
                 saved.write_text(reviewer.to_yaml(compiled_plan))
                 console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
-            console.print("[bold]Generating world...[/bold]")
-            await terrarium.compile_and_run(compiled_plan)
+            console.print("[bold]Generating world and creating run...[/bold]")
+            run_id = await terrarium.create_run(compiled_plan, mode=compiled_plan.mode)
+            console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
 
             # Wire user-specified host/port into gateway config
             gw_config = terrarium.gateway.config
@@ -466,15 +467,14 @@ async def _serve_impl(world: str, settings: str | None, host: str, port: int) ->
             if tools:
                 console.print(f"\nAvailable tools ({len(tools)}):")
                 for tool in tools:
-                    name = tool.get("name", "?")
+                    tname = tool.get("name", "?")
                     desc = str(tool.get("description", ""))[:60]
-                    console.print(f"  [cyan]{name}[/cyan] -- {desc}")
+                    console.print(f"  [cyan]{tname}[/cyan] -- {desc}")
 
-            try:
-                while True:
-                    await asyncio.sleep(1)
-            except asyncio.CancelledError:
-                pass
+            # Start HTTP server (uvicorn) — blocks until Ctrl+C
+            http_adapter = terrarium.gateway._adapters.get("http")
+            if http_adapter:
+                await http_adapter.run_server(host=host, port=port)
     except KeyboardInterrupt:
         console.print("\n[yellow]Shutting down servers...[/yellow]")
     except TerrariumError as exc:

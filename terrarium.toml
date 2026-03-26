@@ -36,27 +36,27 @@ timeout_per_step_seconds = 30
 # ── Event Bus ────────────────────────────────────────────────
 
 [bus]
-db_path = "data/bus.db"
+# db_path: defaults to ~/.terrarium/data/bus.db (set by paths.py)
 queue_size = 1000
 persistence_enabled = true
 
 # ── Ledger ───────────────────────────────────────────────────
 
 [ledger]
-db_path = "data/ledger.db"
+# db_path: defaults to ~/.terrarium/data/ledger.db (set by paths.py)
 retention_days = 90
 
 # ── Persistence ──────────────────────────────────────────────
 
 [persistence]
-base_dir = "data"
+# base_dir: defaults to ~/.terrarium/data/ (set by paths.py)
 wal_mode = true
 
 # ── State Engine ─────────────────────────────────────────────
 
 [state]
-db_path = "data/state.db"
-snapshot_dir = "snapshots"
+# db_path: defaults to ~/.terrarium/data/state.db (set by paths.py)
+# snapshot_dir: defaults to ~/.terrarium/data/snapshots/ (set by paths.py)
 
 # ── Policy Engine ────────────────────────────────────────────
 
@@ -163,7 +163,7 @@ middleware = ["auth", "rate_limit", "audit_log"]
 # ── Runs ─────────────────────────────────────────────────────
 
 [runs]
-data_dir = "data/runs"
+# data_dir: defaults to ~/.terrarium/data/runs/ (set by paths.py)
 snapshot_on_complete = true
 
 # ── Agency Engine ──────────────────────────────────────────

@@ -6,7 +6,11 @@ lookup, initialization, and graceful shutdown.
 
 from __future__ import annotations
 
+import logging
+
 from terrarium.llm.config import LLMConfig, LLMProviderEntry
+
+logger = logging.getLogger(__name__)
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.secrets import ChainResolver, EnvVarResolver, SecretResolver
 from terrarium.llm.types import ProviderInfo
@@ -71,12 +75,17 @@ class ProviderRegistry:
             await self.shutdown_all()
         resolver = secret_resolver or EnvVarResolver()
         for name, entry in config.providers.items():
+            # Skip providers whose required API key is not available
+            if entry.api_key_ref and not resolver.resolve(entry.api_key_ref):
+                logger.debug(
+                    "Skipping provider '%s': %s not set", name, entry.api_key_ref,
+                )
+                continue
             try:
                 provider = self._create_provider(name, entry, resolver)
                 self.register(name, provider)
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).warning(
+                logger.warning(
                     "Failed to initialize provider '%s': %s (skipping)", name, exc,
                 )
 

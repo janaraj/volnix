@@ -16,7 +16,7 @@ async def test_initialize(registry):
     """Registry loads 9 categories and all services from TOML."""
     cats = registry.list_categories()
     svcs = registry.list_services()
-    assert len(cats) == 10
+    assert len(cats) == 11
     assert len(svcs) >= 33  # services.toml has at least 33 services
 
 
@@ -70,7 +70,7 @@ async def test_get_service_mapping(registry):
 async def test_list_categories(registry):
     """list_categories returns 9 sorted names."""
     cats = registry.list_categories()
-    assert len(cats) == 10
+    assert len(cats) == 11
     assert cats == sorted(cats)
     assert "communication" in cats
     assert "money_transactions" in cats
