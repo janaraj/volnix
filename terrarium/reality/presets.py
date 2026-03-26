@@ -1,7 +1,7 @@
 """Reality presets -- ideal, messy, hostile.
 
 Each preset defines default labels for all five world-condition dimensions.
-Preset data is stored in YAML files under ``reality/data/presets/``.
+Built-in presets live in ``terrarium/presets/``. User presets in ``~/.terrarium/presets/``.
 The label system resolves labels to full attribute values.
 """
 
@@ -14,11 +14,11 @@ import yaml
 
 from terrarium.core.errors import InvalidPresetError
 from terrarium.core.types import RealityPreset
+from terrarium.paths import list_presets, official_presets_dir, resolve_preset
 from terrarium.reality.dimensions import WorldConditions
 from terrarium.reality.labels import resolve_dimension, resolve_label
 
-_PRESETS_DIR = Path(__file__).parent / "data" / "presets"
-_COMPILER_PRESETS_DIR = Path(__file__).parent / "data" / "compiler_presets"
+_PRESETS_DIR = official_presets_dir()
 
 
 def load_preset(preset: RealityPreset | str) -> WorldConditions:
@@ -87,6 +87,9 @@ def load_from_yaml(path: str | Path) -> WorldConditions:
 def _get_preset_path(preset: str) -> Path:
     """Resolve preset name to YAML file path.
 
+    Checks user presets (``~/.terrarium/presets/``) first, then
+    built-in presets (``terrarium/presets/``).
+
     Parameters
     ----------
     preset:
@@ -102,27 +105,27 @@ def _get_preset_path(preset: str) -> Path:
     InvalidPresetError:
         If no YAML file exists for the preset name.
     """
-    path = _PRESETS_DIR / f"{preset}.yaml"
-    if not path.exists():
-        raise InvalidPresetError(
-            f"Unknown preset: {preset!r}. "
-            f"Available: {[p.stem for p in _PRESETS_DIR.glob('*.yaml')]}",
-            context={"preset": preset},
-        )
-    return path
+    resolved = resolve_preset(preset)
+    if resolved:
+        return resolved
+    available = [p["name"] for p in list_presets()]
+    raise InvalidPresetError(
+        f"Unknown preset: {preset!r}. Available: {available}",
+        context={"preset": preset},
+    )
 
 
 def load_compiler_preset(name: str) -> dict[str, Any]:
     """Load a compiler preset YAML file (ideal, messy, hostile, or custom).
 
-    Compiler presets combine: reality + behavior + fidelity + mode + animator.
-    They provide complete compilation parameters for a given world character.
+    Compiler presets are merged into the same file as reality presets.
+    The ``compiler:`` section contains behavior, fidelity, mode, animator.
 
     Parameters
     ----------
     name:
-        Preset name (e.g. ``"messy"``). Looks up in
-        ``reality/data/compiler_presets/{name}.yaml``.
+        Preset name (e.g. ``"messy"``). Resolved via
+        ``resolve_preset()`` (user → built-in).
 
     Returns
     -------
@@ -132,13 +135,17 @@ def load_compiler_preset(name: str) -> dict[str, Any]:
     Raises
     ------
     InvalidPresetError:
-        If no compiler preset exists with that name.
+        If no preset exists with that name.
     """
-    path = _COMPILER_PRESETS_DIR / f"{name}.yaml"
-    if not path.exists():
-        available = [p.stem for p in _COMPILER_PRESETS_DIR.glob("*.yaml")]
+    resolved = resolve_preset(name)
+    if not resolved:
+        available = [p["name"] for p in list_presets()]
         raise InvalidPresetError(
             f"Unknown compiler preset: {name!r}. Available: {available}",
             context={"preset": name},
         )
-    return yaml.safe_load(path.read_text())
+    data = yaml.safe_load(resolved.read_text()) or {}
+    # Return the compiler section; wrap if needed for backward compat
+    if "compiler" in data:
+        return data
+    return {"compiler": data}

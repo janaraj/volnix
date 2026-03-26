@@ -1,11 +1,13 @@
 """Shared fixtures for live integration tests.
 
-All tests in this directory require GOOGLE_API_KEY in the environment.
-They make real LLM calls to gemini-3-flash-preview.
+All tests in this directory require a real LLM provider:
+  - codex-acp (default, configured in terrarium.toml)
+  - OR GOOGLE_API_KEY for direct Gemini access
 """
 from __future__ import annotations
 
 import os
+import shutil
 
 import pytest
 
@@ -15,11 +17,22 @@ from terrarium.persistence.config import PersistenceConfig
 from terrarium.engines.state.config import StateConfig
 
 
-def pytest_collection_modifyitems(config, items):
-    """Skip ALL tests in this directory if GOOGLE_API_KEY is not set."""
+def _has_llm_provider() -> bool:
+    """Check if any LLM provider is available."""
+    if shutil.which("codex-acp"):
+        return True
     if os.environ.get("GOOGLE_API_KEY"):
+        return True
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return True
+    return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip ALL tests in this directory if no LLM provider is available."""
+    if _has_llm_provider():
         return
-    skip = pytest.mark.skip(reason="GOOGLE_API_KEY not set — live tests require real LLM")
+    skip = pytest.mark.skip(reason="No LLM provider available (need codex-acp or GOOGLE_API_KEY)")
     for item in items:
         if "tests/live" in str(item.fspath):
             item.add_marker(skip)
@@ -27,9 +40,9 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 async def live_app(tmp_path):
-    """Fully bootstrapped TerrariumApp with REAL Gemini LLM.
+    """Fully bootstrapped TerrariumApp with real LLM provider.
 
-    Loads config from terrarium.toml (picks up GOOGLE_API_KEY from env).
+    Uses codex-acp (default) or Gemini (if GOOGLE_API_KEY is set).
     Uses temporary databases for isolation.
     """
     loader = ConfigLoader()

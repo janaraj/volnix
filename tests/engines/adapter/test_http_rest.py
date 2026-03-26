@@ -512,3 +512,283 @@ async def test_http_call_tool_pipeline_error_response():
     data = resp.json()
     assert "error" in data
     assert "validation" in data["error"]
+
+
+# ── External agent compatibility tests ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_http_call_tool_raw_arguments():
+    """POST with raw arguments (no wrapper) is auto-detected and forwarded."""
+    expected = {"ticket": {"id": "ticket-001", "subject": "Help", "status": "open"}}
+    gateway = _make_mock_gateway(handle_result=expected)
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Raw arguments — no "arguments" wrapper
+        resp = await client.post(
+            "/api/v1/actions/zendesk_tickets_show",
+            json={"id": "ticket-001"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Raw-mode returns envelope response
+    assert "structured_content" in data
+    assert "content" in data
+    assert "is_error" in data
+    assert data["is_error"] is False
+
+    # Single-entity unwrapped: {"ticket": {...}} → inner dict
+    assert data["structured_content"]["id"] == "ticket-001"
+    assert data["structured_content"]["subject"] == "Help"
+
+    # Gateway received raw arguments as input_data
+    call_kwargs = gateway.handle_request.call_args.kwargs
+    assert call_kwargs["input_data"] == {"id": "ticket-001"}
+    assert call_kwargs["actor_id"] == "http-agent"
+
+
+@pytest.mark.asyncio
+async def test_http_call_tool_raw_mode_with_actor_header():
+    """Raw-mode requests can pass actor_id via X-Actor-Id header."""
+    expected = {"ticket": {"id": "ticket-001"}}
+    gateway = _make_mock_gateway(handle_result=expected)
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/actions/zendesk_tickets_show",
+            json={"id": "ticket-001"},
+            headers={"x-actor-id": "my-agent"},
+        )
+
+    assert resp.status_code == 200
+    call_kwargs = gateway.handle_request.call_args.kwargs
+    assert call_kwargs["actor_id"] == "my-agent"
+
+
+@pytest.mark.asyncio
+async def test_http_call_tool_raw_mode_error_envelope():
+    """Raw-mode error responses set is_error=True in envelope."""
+    error_result = {"error": "Permission denied", "step": "permission"}
+    gateway = _make_mock_gateway(handle_result=error_result)
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/actions/zendesk_tickets_show",
+            json={"id": "ticket-001"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_error"] is True
+    assert "Permission denied" in data["content"]
+
+
+@pytest.mark.asyncio
+async def test_http_call_tool_raw_mode_multi_key_not_unwrapped():
+    """Multi-key responses are not unwrapped in raw mode."""
+    multi_result = {"tickets": [{"id": "t-1"}], "count": 1, "next_page": None}
+    gateway = _make_mock_gateway(handle_result=multi_result)
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/actions/zendesk_tickets_list",
+            json={},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    # Multi-key: full dict is structured_content (not unwrapped)
+    assert "tickets" in data["structured_content"]
+    assert data["structured_content"]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_http_call_tool_wrapped_mode_unchanged():
+    """Wrapped-mode (SDK) responses are returned raw, not enveloped."""
+    expected = {"email_id": "email-abc123", "status": "sent"}
+    gateway = _make_mock_gateway(handle_result=expected)
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Wrapped format — existing SDK behavior
+        resp = await client.post(
+            "/api/v1/actions/email_send",
+            json={
+                "actor_id": "sdk-agent",
+                "arguments": {"to_addr": "test@test.com"},
+            },
+        )
+
+    assert resp.status_code == 200
+    # Wrapped mode: raw response, no envelope
+    assert resp.json() == expected
+    assert "structured_content" not in resp.json()
+
+
+# ── Audit fix tests: edge cases, failure paths, security ─────────
+
+
+@pytest.mark.asyncio
+async def test_http_raw_mode_none_result():
+    """Raw mode: gateway returns None → enveloped with is_error=True."""
+    gateway = _make_mock_gateway()
+    gateway.handle_request = AsyncMock(return_value=None)  # Explicit None
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/actions/some_tool", json={"id": "1"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "structured_content" in data
+    assert data["structured_content"] is None
+    assert data["is_error"] is True
+
+
+@pytest.mark.asyncio
+async def test_http_raw_mode_string_result():
+    """Raw mode: gateway returns string → enveloped."""
+    gateway = _make_mock_gateway()
+    gateway.handle_request = AsyncMock(return_value="raw error message")
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/actions/some_tool", json={"id": "1"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "structured_content" in data
+    assert data["structured_content"] == "raw error message"
+
+
+@pytest.mark.asyncio
+async def test_http_raw_mode_list_result():
+    """Raw mode: gateway returns list → enveloped."""
+    gateway = _make_mock_gateway()
+    gateway.handle_request = AsyncMock(return_value=["item1", "item2"])
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/actions/some_tool", json={})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["structured_content"] == ["item1", "item2"]
+    assert data["is_error"] is False
+
+
+@pytest.mark.asyncio
+async def test_http_raw_mode_empty_actor_header_defaults():
+    """Empty X-Actor-Id header → falls back to 'http-agent'."""
+    gateway = _make_mock_gateway()
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/actions/some_tool",
+            json={"id": "1"},
+            headers={"x-actor-id": ""},
+        )
+
+    call_kwargs = gateway.handle_request.call_args.kwargs
+    assert call_kwargs["actor_id"] == "http-agent"
+
+
+@pytest.mark.asyncio
+async def test_http_wrapped_arguments_not_dict_returns_422():
+    """Wrapped request with non-dict arguments → 422."""
+    gateway = _make_mock_gateway()
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/actions/some_tool",
+            json={"actor_id": "test", "arguments": "not_a_dict"},
+        )
+
+    assert resp.status_code == 422
+    assert "arguments must be a dict" in resp.json()["error"]
+    gateway.handle_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_http_pack_route_malformed_json_returns_422():
+    """Pack route with non-JSON POST body → 422 (not silently swallowed)."""
+    gateway = _make_mock_gateway(
+        tools=[{
+            "method": "POST",
+            "path": "/email/v1/messages/send",
+            "content_type": "application/json",
+            "tool_name": "email_send",
+        }],
+    )
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/email/v1/messages/send",
+            content=b"this is not json",
+            headers={"content-type": "application/json"},
+        )
+
+    assert resp.status_code == 422
+    assert "Malformed JSON" in resp.json()["error"]
+    gateway.handle_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_http_pack_route_actor_id_from_header_not_body():
+    """Pack route uses X-Actor-Id header, NOT actor_id from body (security)."""
+    expected = {"email_id": "e1"}
+    gateway = _make_mock_gateway(
+        tools=[{
+            "method": "POST",
+            "path": "/email/v1/messages/send",
+            "content_type": "application/json",
+            "tool_name": "email_send",
+        }],
+        handle_result=expected,
+    )
+    adapter = HTTPRestAdapter(gateway)
+    await adapter.start_server()
+
+    transport = httpx.ASGITransport(app=adapter.fastapi_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/email/v1/messages/send",
+            json={"to": "user@test.com", "actor_id": "admin"},
+            headers={"x-actor-id": "regular-agent"},
+        )
+
+    assert resp.status_code == 200
+    call_kwargs = gateway.handle_request.call_args.kwargs
+    # Header takes precedence, body actor_id is treated as a tool argument
+    assert call_kwargs["actor_id"] == "regular-agent"

@@ -226,9 +226,11 @@ async def _plan_impl(description: str, output: Path | None, fmt: str) -> None:
         async with app_context() as terrarium:
             compiler = terrarium.registry.get("world_compiler")
 
-            desc_path = Path(description)
-            if desc_path.exists() and desc_path.suffix in (".yaml", ".yml"):
-                compiled = await compiler.compile_from_yaml(str(desc_path))
+            from terrarium.paths import resolve_blueprint
+
+            resolved = resolve_blueprint(description)
+            if resolved:
+                compiled = await compiler.compile_from_yaml(str(resolved))
             else:
                 compiled = await compiler.compile_from_nl(description)
 
@@ -312,11 +314,22 @@ async def _run_impl(
 
             # Step 1: Compile
             console.print("[bold]Step 1/4: Compiling world...[/bold]")
-            world_path = Path(world)
-            if world_path.exists() and world_path.suffix in (".yaml", ".yml"):
-                compiled_plan = await compiler.compile_from_yaml(str(world_path), settings)
+            from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
+
+            resolved = resolve_blueprint(world)
+            if resolved:
+                console.print(f"  Using: [cyan]{resolved}[/cyan]")
+                compiled_plan = await compiler.compile_from_yaml(str(resolved), settings)
             else:
                 compiled_plan = await compiler.compile_from_nl(world)
+                # Auto-save to ~/.terrarium/blueprints/
+                from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+                reviewer = PlanReviewer()
+                name = sanitize_filename(compiled_plan.name)
+                saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
+                saved.write_text(reviewer.to_yaml(compiled_plan))
+                console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
             if mode:
                 compiled_plan = compiled_plan.model_copy(update={"mode": mode})
@@ -417,8 +430,22 @@ async def _serve_impl(world: str, settings: str | None, host: str, port: int) ->
         async with app_context() as terrarium:
             compiler = terrarium.registry.get("world_compiler")
 
+            from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
+
             console.print(f"[bold]Compiling world from {world}...[/bold]")
-            compiled_plan = await compiler.compile_from_yaml(world, settings)
+            resolved = resolve_blueprint(world)
+            if resolved:
+                console.print(f"  Using: [cyan]{resolved}[/cyan]")
+                compiled_plan = await compiler.compile_from_yaml(str(resolved), settings)
+            else:
+                compiled_plan = await compiler.compile_from_nl(world)
+                from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+                reviewer = PlanReviewer()
+                name = sanitize_filename(compiled_plan.name)
+                saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
+                saved.write_text(reviewer.to_yaml(compiled_plan))
+                console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
             console.print("[bold]Generating world...[/bold]")
             await terrarium.compile_and_run(compiled_plan)
@@ -456,7 +483,115 @@ async def _serve_impl(world: str, settings: str | None, host: str, port: int) ->
 
 
 # ===================================================================
-# Command 6: report
+# Command 6: mcp (NEW — stdio MCP server for agent subprocess connections)
+# ===================================================================
+
+
+@app.command()
+def mcp(
+    world: Annotated[str, typer.Argument(help="Path to YAML world definition or NL description")],
+    settings: Annotated[
+        str | None,
+        typer.Option("--settings", "-s", help="Path to compiler settings YAML"),
+    ] = None,
+) -> None:
+    """Run Terrarium as MCP stdio server for agent subprocess connections.
+
+    Agents spawn this command as a subprocess and communicate via MCP protocol
+    over stdin/stdout. Accepts a YAML world file or a natural language description.
+
+    Examples:
+      terrarium mcp world.yaml
+      terrarium mcp "Support team with email and tickets"
+    """
+    asyncio.run(_mcp_impl(world, settings))
+
+
+async def _mcp_impl(world: str, settings: str | None) -> None:
+    try:
+        async with app_context() as terrarium:
+            compiler = terrarium.registry.get("world_compiler")
+
+            import sys as _sys
+
+            from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
+
+            resolved = resolve_blueprint(world)
+            if resolved:
+                print(f"Using: {resolved}", file=_sys.stderr)
+                plan = await compiler.compile_from_yaml(str(resolved), settings)
+            else:
+                plan = await compiler.compile_from_nl(world)
+                # Auto-save — stderr so MCP stdio protocol isn't corrupted
+                from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+                reviewer = PlanReviewer()
+                name = sanitize_filename(plan.name)
+                saved = user_blueprints_dir() / f"{name}_{plan.seed}.yaml"
+                saved.write_text(reviewer.to_yaml(plan))
+                print(f"Saved: {saved}", file=_sys.stderr)
+
+            await terrarium.compile_and_run(plan)
+
+            mcp_adapter = terrarium.gateway._adapters.get("mcp")
+            if mcp_adapter is None:
+                print_error("MCP adapter not available")
+                raise typer.Exit(1)
+
+            await mcp_adapter.start_server()
+            await mcp_adapter.run_stdio()
+    except TerrariumError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1) from None
+
+
+# ===================================================================
+# Command 7: blueprints (list available world blueprints + presets)
+# ===================================================================
+
+
+@app.command()
+def blueprints(
+    tier: Annotated[
+        str | None,
+        typer.Option("--tier", "-t", help="Filter by tier: official, community, user"),
+    ] = None,
+    presets: Annotated[
+        bool,
+        typer.Option("--presets", help="List reality presets instead of blueprints"),
+    ] = False,
+) -> None:
+    """List available world blueprints and reality presets."""
+    from terrarium.paths import list_blueprints, list_presets
+
+    if presets:
+        items = list_presets()
+        if not items:
+            console.print("[dim]No presets found.[/dim]")
+            return
+        console.print("[bold]Reality Presets:[/bold]")
+        for item in items:
+            tier_label = item["tier"].upper()
+            console.print(f"  [cyan]{tier_label:10s}[/cyan] {item['name']}")
+        return
+
+    items = list_blueprints()
+    if tier:
+        items = [i for i in items if i["tier"] == tier]
+
+    if not items:
+        console.print("[dim]No blueprints found.[/dim]")
+        return
+
+    console.print("[bold]World Blueprints:[/bold]")
+    for item in items:
+        tier_label = item["tier"].upper()
+        desc = item["description"][:60] if item["description"] else ""
+        console.print(f"  [cyan]{tier_label:10s}[/cyan] {item['name']:30s} {desc}")
+
+
+# ===================================================================
+# Command 8: report
 # ===================================================================
 
 

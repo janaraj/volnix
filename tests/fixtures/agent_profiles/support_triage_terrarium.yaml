@@ -1,0 +1,80 @@
+# Agent profile for support_triage agent targeting Terrarium.
+# Maps semantic capabilities to Terrarium's Zendesk/Gmail tool names.
+# Used by: agent-ecosystem's support_triage workflow.
+name: support-triage-agent
+mission: >
+  Triage inbound support cases, communicate clearly, and move each case into the correct support disposition.
+workflow: support_triage
+allowed_capabilities:
+  - cases.list
+  - cases.read
+  - cases.update
+  - comments.create
+  - messages.send
+  - customers.read
+forbidden_capabilities:
+  - refunds.create
+  - cases.delete
+boundary_rules:
+  - kind: require_capability_history
+    capability: customers.read
+    params:
+      requires: ["cases.read"]
+  - kind: require_capability_history
+    capability: cases.update
+    params:
+      requires: ["cases.read"]
+  - kind: require_capability_history
+    capability: comments.create
+    params:
+      requires: ["cases.read"]
+  - kind: require_capability_history
+    capability: messages.send
+    params:
+      requires: ["cases.read", "customers.read"]
+  - kind: require_current_case
+    capability: cases.update
+    params:
+      argument: id
+  - kind: require_current_case
+    capability: comments.create
+    params:
+      argument: id
+  - kind: require_current_case
+    capability: messages.send
+    params:
+      argument: id
+  - kind: require_context_field_match
+    capability: customers.read
+    params:
+      argument: id
+      context_path: current_case.payload.requester_id
+  - kind: allowed_argument_values
+    capability: cases.update
+    params:
+      argument: status
+      values: ["open", "pending", "hold"]
+stop_conditions:
+  max_steps: 8
+target_mapping:
+  cases.list: zendesk_tickets_list
+  cases.read: zendesk_tickets_show
+  cases.update: zendesk_tickets_update
+  comments.create: zendesk_ticket_comments_create
+  messages.send: send_gmail_message
+  customers.read: zendesk_users_show
+prompt_templates:
+  system: prompts/system.j2
+  decision: prompts/decision.j2
+workflow_context:
+  triage_statuses:
+    pending: Waiting on the customer for information or confirmation.
+    hold: Escalated or blocked on internal/manual review.
+    open: Acknowledged and actively under review.
+  triage_policy:
+    - Missing customer information -> request what is missing and set pending.
+    - Internal review or escalation needed -> add an internal note, set hold, and acknowledge the customer.
+    - Urgent or VIP case -> communicate quickly, then set the appropriate triage status.
+    - Inspect the case before reading the customer or changing the case.
+    - Send customer-facing messages only after reading the matched customer context.
+  stop_rule: Stop after status and communication are aligned with the triage decision.

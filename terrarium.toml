@@ -193,11 +193,12 @@ infer_on_missing = true
 # ── Defaults ─────────────────────────────────────────────────
 
 [llm.defaults]
-type = "google"
-default_model = "gemini-2.5-flash"
+type = "acp"
+provider = "codex_acp"
+default_model = ""
 max_tokens = 4096
 temperature = 0.7
-timeout_seconds = 60
+timeout_seconds = 300
 
 # ── Provider Registry ────────────────────────────────────────
 

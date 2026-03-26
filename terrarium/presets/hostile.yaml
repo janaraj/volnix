@@ -1,0 +1,16 @@
+# Hostile — chaotic data, frequently broken services, difficult people.
+information: poorly_maintained
+reliability: frequently_broken
+friction: many_difficult_people
+complexity: frequently_confusing
+boundaries: many_gaps
+
+compiler:
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  animator:
+    creativity: high
+    event_frequency: frequent
+    contextual_targeting: true
+    escalation_on_inaction: true
