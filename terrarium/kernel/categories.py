@@ -93,4 +93,13 @@ CATEGORIES: dict[str, SemanticCategory] = {
         primitives=["post", "comment", "vote", "profile", "community", "feed", "thread"],
         example_services=["reddit", "twitter", "linkedin", "facebook"],
     ),
+    "trading": SemanticCategory(
+        name="trading",
+        description=(
+            "Services for securities trading, order management,"
+            " market data, and portfolio tracking."
+        ),
+        primitives=["order", "position", "quote", "bar", "fill", "account"],
+        example_services=["alpaca", "interactive_brokers", "td_ameritrade", "robinhood"],
+    ),
 }

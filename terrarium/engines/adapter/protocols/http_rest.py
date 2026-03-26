@@ -34,10 +34,12 @@ Uses: Gateway.handle_request() for all tool calls
 """
 
 import asyncio
+import json as _json
 import logging
 from typing import Any, ClassVar
 
 from terrarium.core.types import ToolName
+from terrarium.engines.adapter.protocols._response import unwrap_single_entity
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
 
 logger = logging.getLogger(__name__)
@@ -121,7 +123,15 @@ class HTTPRestAdapter(ProtocolAdapter):
 
         @app.post("/api/v1/actions/{tool_name}")
         async def call_tool(tool_name: str, request: StarletteRequest):
-            """Execute a tool call through the full pipeline."""
+            """Execute a tool call through the full pipeline.
+
+            Accepts two request body formats (auto-detected):
+              Wrapped (Terrarium SDK):  {"actor_id": "...", "arguments": {...}}
+              Raw (standard transport): {...tool arguments directly...}
+
+            Raw-mode requests receive an envelope response:
+              {"structured_content": {...}, "content": "...", "is_error": bool}
+            """
             try:
                 body = await request.json()
             except Exception:
@@ -131,13 +141,47 @@ class HTTPRestAdapter(ProtocolAdapter):
                     status_code=422,
                     content={"error": "Malformed JSON in request body"},
                 )
-            actor_id = body.get("actor_id", "http-agent")
-            arguments = body.get("arguments", {})
-            return await gateway.handle_request(
+
+            # Detect format: wrapped (SDK) vs raw (standard tool transport)
+            if "arguments" in body:
+                if isinstance(body["arguments"], dict):
+                    actor_id = body.get("actor_id", "http-agent")
+                    arguments = body["arguments"]
+                    raw_mode = False
+                else:
+                    from starlette.responses import JSONResponse as _JR
+
+                    return _JR(
+                        status_code=422,
+                        content={"error": "arguments must be a dict"},
+                    )
+            else:
+                actor_id = (
+                    request.headers.get("x-actor-id", "").strip()
+                    or "http-agent"
+                )
+                arguments = body
+                raw_mode = True
+
+            result = await gateway.handle_request(
                 actor_id=actor_id,
                 tool_name=tool_name,
                 input_data=arguments,
             )
+
+            if raw_mode:
+                if isinstance(result, dict):
+                    is_error = "error" in result and result.get("error") is not None
+                    unwrapped = unwrap_single_entity(result)
+                else:
+                    is_error = result is None
+                    unwrapped = result
+                return {
+                    "structured_content": unwrapped,
+                    "content": _json.dumps(unwrapped, default=str),
+                    "is_error": is_error,
+                }
+            return result
 
         @app.get("/api/v1/health")
         async def health():
@@ -920,11 +964,21 @@ class HTTPRestAdapter(ProtocolAdapter):
                             body = await request.json()
                             arguments = body.get("arguments", body)
                         except Exception:
-                            arguments = {}
+                            from starlette.responses import JSONResponse
+
+                            return JSONResponse(
+                                status_code=422,
+                                content={"error": "Malformed JSON in request body"},
+                            )
                         # Path params override body values
                         arguments.update(path_params)
+                    # Actor ID from header only (never from body — prevents impersonation)
+                    actor_id = (
+                        request.headers.get("x-actor-id", "").strip()
+                        or "http-agent"
+                    )
                     return await gateway.handle_request(
-                        actor_id=arguments.pop("actor_id", "http-agent"),
+                        actor_id=actor_id,
                         tool_name=tn,
                         input_data=arguments,
                     )

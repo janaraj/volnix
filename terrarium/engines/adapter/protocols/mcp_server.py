@@ -52,11 +52,18 @@ class MCPServerAdapter(ProtocolAdapter):
         @server.call_tool()
         async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             """Handle tool call -> Gateway -> Pipeline -> Response."""
+            from terrarium.engines.adapter.protocols._response import (
+                unwrap_single_entity,
+            )
+
             result = await gateway.handle_request(
                 actor_id=adapter_self._actor_id,
                 tool_name=name,
                 input_data=arguments or {},
             )
+            # Unwrap single-entity wrappers for cleaner tool output
+            if isinstance(result, dict):
+                result = unwrap_single_entity(result)
             return [TextContent(
                 type="text",
                 text=json.dumps(result, default=str),

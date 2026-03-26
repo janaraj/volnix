@@ -61,6 +61,9 @@ class ConfigLoader:
         # Layer 5: resolve secure refs
         config = self._resolve_refs(config)
 
+        # Layer 6: default data paths to ~/.terrarium/data/ (if not overridden)
+        config = self._apply_user_data_defaults(config)
+
         return TerrariumConfig.model_validate(config)
 
     @staticmethod
@@ -75,6 +78,28 @@ class ConfigLoader:
         """
         with open(path, "rb") as f:
             return tomllib.load(f)
+
+    @staticmethod
+    def _apply_user_data_defaults(config: dict[str, Any]) -> dict[str, Any]:
+        """Set default data paths to ``~/.terrarium/data/`` if not overridden.
+
+        Only applies when no explicit path was set by TOML layers or env vars.
+        Development overrides (e.g. ``./dev_data/``) take precedence.
+        """
+        from terrarium.paths import user_data_dir
+
+        data_dir = user_data_dir()
+        defaults = {
+            ("persistence", "base_dir"): str(data_dir),
+            ("state", "db_path"): str(data_dir / "state.db"),
+            ("state", "snapshot_dir"): str(data_dir / "snapshots"),
+            ("runs", "data_dir"): str(data_dir / "runs"),
+            ("bus", "db_path"): str(data_dir / "bus.db"),
+            ("ledger", "db_path"): str(data_dir / "ledger.db"),
+        }
+        for (section, key), default_val in defaults.items():
+            config.setdefault(section, {}).setdefault(key, default_val)
+        return config
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

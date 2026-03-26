@@ -1,0 +1,16 @@
+# Messy (default) — somewhat neglected data, occasionally flaky services.
+information: somewhat_neglected
+reliability: occasionally_flaky
+friction: some_difficult_people
+complexity: moderately_challenging
+boundaries: a_few_gaps
+
+compiler:
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  animator:
+    creativity: medium
+    event_frequency: moderate
+    contextual_targeting: true
+    escalation_on_inaction: true

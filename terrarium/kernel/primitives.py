@@ -353,6 +353,49 @@ _PRIMITIVES: list[SemanticPrimitive] = [
         description="A connected series of posts or comments forming a conversation.",
         fields={"thread_id": "str", "root_post_id": "str", "reply_count": "int"},
     ),
+    # -- trading --
+    SemanticPrimitive(
+        name="order",
+        category="trading",
+        description="A trade order with side, quantity, price, and lifecycle state.",
+        fields={"order_id": "str", "symbol": "str", "qty": "float",
+                "side": "str", "type": "str", "status": "str"},
+    ),
+    SemanticPrimitive(
+        name="position",
+        category="trading",
+        description="An open position in a security with entry price and P&L.",
+        fields={"symbol": "str", "qty": "float", "avg_entry_price": "float",
+                "unrealized_pl": "float", "side": "str"},
+    ),
+    SemanticPrimitive(
+        name="quote",
+        category="trading",
+        description="A bid/ask quote for a security at a point in time.",
+        fields={"symbol": "str", "bid_price": "float", "ask_price": "float",
+                "timestamp": "str"},
+    ),
+    SemanticPrimitive(
+        name="bar",
+        category="trading",
+        description="An OHLCV candle for a security over a time period.",
+        fields={"symbol": "str", "open": "float", "high": "float",
+                "low": "float", "close": "float", "volume": "int"},
+    ),
+    SemanticPrimitive(
+        name="fill",
+        category="trading",
+        description="An execution/fill event recording that an order was matched.",
+        fields={"order_id": "str", "price": "float", "qty": "float",
+                "side": "str", "symbol": "str"},
+    ),
+    SemanticPrimitive(
+        name="account",
+        category="trading",
+        description="A brokerage account with balances, margins, and trading permissions.",
+        fields={"account_id": "str", "equity": "float", "buying_power": "float",
+                "cash": "float", "portfolio_value": "float"},
+    ),
 ]
 
 # Build a lookup index by category

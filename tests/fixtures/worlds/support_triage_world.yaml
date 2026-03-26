@@ -1,0 +1,40 @@
+# World fixture for external agent E2E tests.
+# Provides tickets + email services with seeded data for triage scenarios.
+world:
+  name: "Support Triage World"
+  description: >
+    Mid-size SaaS support team with open tickets waiting for triage.
+    Some tickets are past SLA. Agent must inspect, triage, and communicate.
+
+  services:
+    email: verified/email
+    tickets: verified/tickets
+
+  actors:
+    - role: triage-agent
+      id: http-agent
+      type: external
+      count: 1
+      permissions:
+        read: [email, tickets]
+        write: [email, tickets]
+      budget:
+        api_calls: 100
+        llm_spend: 5.00
+
+    - role: customer
+      count: 5
+      type: internal
+
+  seeds:
+    - "VIP customer Margaret Chen waiting 3 days for broken API integration"
+    - "New customer asking about password reset, status: new"
+    - "Urgent billing discrepancy from a churning customer"
+
+compiler:
+  seed: 42
+  behavior: reactive
+  fidelity: strict
+  mode: governed
+  reality:
+    preset: messy
