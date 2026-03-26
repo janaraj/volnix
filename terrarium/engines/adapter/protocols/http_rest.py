@@ -876,30 +876,35 @@ class HTTPRestAdapter(ProtocolAdapter):
             queue: asyncio.Queue = asyncio.Queue()
 
             def _classify(event: Any) -> dict:
-                """Classify bus event into message type."""
-                et = getattr(event, "event_type", "")
+                """Classify bus event by Python type hierarchy."""
+                from terrarium.core.events import (
+                    BudgetEvent,
+                    SimulationEvent,
+                )
+                from terrarium.simulation.runner import SimulationStatus
+
                 try:
                     data = event.model_dump(mode="json") if hasattr(event, "model_dump") else {}
                 except Exception:
+                    logger.warning("Event serialization failed: %s", type(event).__name__)
                     data = {}
-                et_lower = et.lower()
-                if "budget" in et_lower:
+
+                if isinstance(event, BudgetEvent):
                     msg_type = "budget_update"
-                elif "run_complete" in et_lower or "simulation_end" in et_lower:
+                elif isinstance(event, SimulationEvent) and event.status == SimulationStatus.COMPLETED:
                     msg_type = "run_complete"
-                elif "entity" in et_lower or "state_mutation" in et_lower:
-                    msg_type = "entity_update"
-                elif "status" in et_lower:
+                elif isinstance(event, SimulationEvent):
                     msg_type = "status"
                 else:
                     msg_type = "event"
-                return {
-                    "type": msg_type,
-                    "event_type": et,
-                    "data": data,
-                }
+
+                return {"type": msg_type, "data": data}
 
             async def _on_event(event: Any) -> None:
+                # Run-scoped: only forward events for this run
+                event_run = getattr(event, "run_id", None)
+                if event_run is not None and str(event_run) != run_id:
+                    return
                 await queue.put(_classify(event))
 
             await bus.subscribe("*", _on_event)
@@ -936,8 +941,35 @@ class HTTPRestAdapter(ProtocolAdapter):
         # (Claude Desktop, Cursor, Windsurf, LangGraph MCP adapters)
         await self._mount_mcp_endpoint(app, gateway)
 
+        # Mount dashboard frontend (MUST be last — catches all unmatched routes)
+        self._mount_dashboard(app)
+
         self._app_instance = app
         logger.info("HTTP REST adapter created")
+
+    def _mount_dashboard(self, app: Any) -> None:
+        """Mount dashboard static files from ``dashboard.static_dir`` config."""
+        from pathlib import Path
+
+        app_config = getattr(self._gateway, "_app", None)
+        dashboard_cfg = getattr(
+            getattr(app_config, "_config", None), "dashboard", None
+        )
+        static_dir = getattr(dashboard_cfg, "static_dir", "") if dashboard_cfg else ""
+        if not static_dir:
+            return
+
+        dist = Path(static_dir)
+        if not dist.is_dir():
+            logger.debug("Dashboard dir not found: %s", dist)
+            return
+
+        from starlette.staticfiles import StaticFiles
+
+        app.mount(
+            "/", StaticFiles(directory=str(dist), html=True), name="frontend"
+        )
+        logger.info("Dashboard frontend mounted from %s", dist)
 
     async def _mount_pack_routes(self, app: Any, gateway: Any) -> None:
         """Auto-mount HTTP routes from pack tool definitions."""

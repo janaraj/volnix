@@ -42,7 +42,7 @@ describe('useRunEvent', () => {
   it('fetches single event', async () => {
     const { result } = renderHook(() => useRunEvent('run-1', 'evt-test-001'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.event_id).toBeDefined();
+    expect(result.current.data?.event).toBeDefined();
   });
 
   it('disables query when eventId is empty', () => {

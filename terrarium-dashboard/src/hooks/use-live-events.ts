@@ -69,10 +69,15 @@ export function useLiveEvents(runId: string): ConnectionStatus {
             queryKeys.runs.actor(runId, actor_id),
             (old) => {
               if (!old) return old;
+              const oldBudgetRemaining = (old.definition?.budget_remaining as Record<string, number>) ?? {};
+              const oldBudgetTotal = (old.definition?.budget_total as Record<string, number>) ?? {};
               return {
                 ...old,
-                budget_remaining: { ...old.budget_remaining, [budget_type]: remaining },
-                budget_total: { ...old.budget_total, [budget_type]: total },
+                definition: {
+                  ...old.definition,
+                  budget_remaining: { ...oldBudgetRemaining, [budget_type]: remaining },
+                  budget_total: { ...oldBudgetTotal, [budget_type]: total },
+                },
               };
             },
           );
@@ -88,7 +93,7 @@ export function useLiveEvents(runId: string): ConnectionStatus {
               if (!old) return old;
               return {
                 ...old,
-                fields: { ...old.fields, ...update.fields },
+                current_state: { ...old.current_state, ...update.fields },
                 updated_at: new Date().toISOString(),
               };
             },
@@ -101,8 +106,8 @@ export function useLiveEvents(runId: string): ConnectionStatus {
               return {
                 ...old,
                 entities: old.entities.map((e) =>
-                  e.id === update.entity_id
-                    ? { ...e, fields: { ...(e.fields ?? {}), ...update.fields }, updated_at: new Date().toISOString() }
+                  e.entity_id === update.entity_id
+                    ? { ...e, current_state: { ...(e.current_state ?? {}), ...update.fields }, updated_at: new Date().toISOString() }
                     : e,
                 ),
               };

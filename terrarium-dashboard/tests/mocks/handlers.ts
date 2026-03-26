@@ -26,7 +26,11 @@ export const handlers = [
   }),
 
   http.get('/api/v1/runs/:id/events/:eventId', () => {
-    return HttpResponse.json(createMockEventList()[0]);
+    return HttpResponse.json({
+      event: createMockEventList()[0],
+      causal_ancestors: [],
+      causal_descendants: [],
+    });
   }),
 
   http.get('/api/v1/runs/:id/scorecard', () => {
@@ -55,12 +59,10 @@ export const handlers = [
   http.get('/api/v1/runs/:id/actors/:actorId', () => {
     return HttpResponse.json({
       actor_id: 'agent-alpha',
-      role: 'support-agent',
-      actor_type: 'agent',
-      budget_total: { api_calls: 500, llm_spend_usd: 10, world_actions: 200 },
-      budget_remaining: { api_calls: 361, llm_spend_usd: 7.2, world_actions: 153 },
+      definition: { role: 'support-agent', type: 'agent', permissions: [], budget: {} },
+      scorecard: { overall_score: 90, policy_compliance: 94 },
       action_count: 47,
-      governance_score: 0.9,
+      last_action_at: '2026-03-01T09:15:00Z',
     });
   }),
 

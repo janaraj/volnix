@@ -1,4 +1,5 @@
 import type { Run } from '@/types/domain';
+import { getActorRole, getActorType, getGovernanceScore } from '@/types/domain';
 import { useActor } from '@/hooks/queries/use-actors';
 import { QueryGuard } from '@/components/feedback/query-guard';
 import { SectionLoading } from '@/components/feedback/section-loading';
@@ -30,9 +31,9 @@ function AgentInspector({ runId, actorId }: { runId: string; actorId: string }) 
         {(agent) => (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <ActorBadge actorId={agent.actor_id} role={agent.role} />
+              <ActorBadge actorId={agent.actor_id} role={getActorRole(agent)} />
               <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-                {agent.actor_type}
+                {getActorType(agent)}
               </span>
             </div>
 
@@ -40,8 +41,10 @@ function AgentInspector({ runId, actorId }: { runId: string; actorId: string }) 
             <div className="space-y-2">
               <p className="text-xs uppercase text-text-muted">Budgets</p>
               {Object.entries(BUDGET_LABELS).map(([key, label]) => {
-                const remaining = agent.budget_remaining[key as keyof typeof agent.budget_remaining] ?? 0;
-                const total = agent.budget_total[key as keyof typeof agent.budget_total] ?? 1;
+                const budgetRemaining = (agent.definition?.budget as any)?.remaining ?? {};
+                const budgetTotal = (agent.definition?.budget as any)?.total ?? {};
+                const remaining = (budgetRemaining[key] as number) ?? 0;
+                const total = (budgetTotal[key] as number) ?? 1;
                 return <ScoreBar key={key} value={total > 0 ? remaining / total : 0} label={label} />;
               })}
             </div>
@@ -51,9 +54,9 @@ function AgentInspector({ runId, actorId }: { runId: string; actorId: string }) 
               <span className="text-text-muted">
                 Actions: <span className="font-mono text-text-primary">{agent.action_count}</span>
               </span>
-              {agent.governance_score != null && (
+              {getGovernanceScore(agent) != null && (
                 <span className="text-text-muted">
-                  Governance: <span className="font-mono text-text-primary">{agent.governance_score}</span>
+                  Governance: <span className="font-mono text-text-primary">{getGovernanceScore(agent)}</span>
                 </span>
               )}
             </div>

@@ -1,5 +1,6 @@
 import { X, GitBranch } from 'lucide-react';
 import type { Run } from '@/types/domain';
+import { getActorRole, getActorType, getGovernanceScore } from '@/types/domain';
 import { useRunEvent } from '@/hooks/queries/use-events';
 import { useActor } from '@/hooks/queries/use-actors';
 import { QueryGuard } from '@/components/feedback/query-guard';
@@ -127,7 +128,11 @@ function EventDetailView({
       </div>
 
       <QueryGuard query={query} loadingFallback={<SectionLoading />}>
-        {(event) => (
+        {(data) => {
+          const event = data.event;
+          const ancestors = data.causal_ancestors ?? [];
+          const descendants = data.causal_descendants ?? [];
+          return (
           <div className="space-y-4">
             {/* Summary line */}
             <div className="flex items-center gap-2 text-sm">
@@ -194,26 +199,26 @@ function EventDetailView({
             )}
 
             {/* Causal chain */}
-            {((event.causal_parent_ids ?? []).length > 0 || (event.causal_child_ids ?? []).length > 0) && (
+            {(ancestors.length > 0 || descendants.length > 0) && (
               <div className="space-y-2">
                 <p className="flex items-center gap-1 text-xs uppercase text-text-muted">
                   <GitBranch size={12} /> Causal Chain
                 </p>
-                {(event.causal_parent_ids ?? []).length > 0 && (
+                {ancestors.length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-text-muted">Caused by:</p>
                     <div className="flex flex-wrap gap-2">
-                      {(event.causal_parent_ids ?? []).map((pid) => (
+                      {ancestors.map((pid) => (
                         <CausalLink key={pid} eventId={pid} onSelect={onSelectEvent} />
                       ))}
                     </div>
                   </div>
                 )}
-                {(event.causal_child_ids ?? []).length > 0 && (
+                {descendants.length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-text-muted">Caused:</p>
                     <div className="flex flex-wrap gap-2">
-                      {(event.causal_child_ids ?? []).map((cid) => (
+                      {descendants.map((cid) => (
                         <CausalLink key={cid} eventId={cid} onSelect={onSelectEvent} />
                       ))}
                     </div>
@@ -225,7 +230,8 @@ function EventDetailView({
             {/* Fidelity */}
             <FidelityIndicator tier={event.fidelity_tier ?? 2} source={event.fidelity?.fidelity_source ?? undefined} />
           </div>
-        )}
+          );
+        }}
       </QueryGuard>
     </div>
   );
@@ -262,9 +268,9 @@ function AgentDetailView({
         {(agent) => (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <ActorBadge actorId={agent.actor_id} role={agent.role} />
+              <ActorBadge actorId={agent.actor_id} role={getActorRole(agent)} />
               <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
-                {agent.actor_type}
+                {getActorType(agent)}
               </span>
             </div>
 
@@ -272,8 +278,10 @@ function AgentDetailView({
             <div className="space-y-2">
               <p className="text-xs uppercase text-text-muted">Budgets</p>
               {Object.entries(BUDGET_LABELS).map(([key, label]) => {
-                const remaining = agent.budget_remaining[key as keyof typeof agent.budget_remaining] ?? 0;
-                const total = agent.budget_total[key as keyof typeof agent.budget_total] ?? 1;
+                const budgetRemaining = (agent.definition?.budget as any)?.remaining ?? {};
+                const budgetTotal = (agent.definition?.budget as any)?.total ?? {};
+                const remaining = (budgetRemaining[key] as number) ?? 0;
+                const total = (budgetTotal[key] as number) ?? 1;
                 return <ScoreBar key={key} value={total > 0 ? remaining / total : 0} label={label} />;
               })}
             </div>
@@ -283,9 +291,9 @@ function AgentDetailView({
               <span className="text-text-muted">
                 Actions: <span className="font-mono text-text-primary">{agent.action_count}</span>
               </span>
-              {agent.governance_score != null && (
+              {getGovernanceScore(agent) != null && (
                 <span className="text-text-muted">
-                  Governance: <span className="font-mono text-text-primary">{agent.governance_score}</span>
+                  Governance: <span className="font-mono text-text-primary">{getGovernanceScore(agent)}</span>
                 </span>
               )}
             </div>

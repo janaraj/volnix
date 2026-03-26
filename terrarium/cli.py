@@ -428,50 +428,51 @@ def serve(
 async def _serve_impl(world: str, settings: str | None, host: str, port: int) -> None:
     try:
         async with app_context() as terrarium:
-            compiler = terrarium.registry.get("world_compiler")
-
-            from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
-
-            console.print(f"[bold]Compiling world from {world}...[/bold]")
-            resolved = resolve_blueprint(world)
-            if resolved:
-                console.print(f"  Using: [cyan]{resolved}[/cyan]")
-                compiled_plan = await compiler.compile_from_yaml(str(resolved), settings)
-            else:
-                compiled_plan = await compiler.compile_from_nl(world)
-                from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
-
-                reviewer = PlanReviewer()
-                name = sanitize_filename(compiled_plan.name)
-                saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
-                saved.write_text(reviewer.to_yaml(compiled_plan))
-                console.print(f"  Saved: [cyan]{saved}[/cyan]")
-
-            console.print("[bold]Generating world and creating run...[/bold]")
-            run_id = await terrarium.create_run(compiled_plan, mode=compiled_plan.mode)
-            console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
-
-            # Wire user-specified host/port into gateway config
+            # 1. Start server immediately — dashboard accessible right away
             gw_config = terrarium.gateway.config
             gw_config.host = host
             gw_config.port = port
-
-            console.print("[bold]Starting protocol servers...[/bold]")
             await terrarium.gateway.start_adapters()
 
             console.print(f"[green]HTTP server: http://{host}:{port}[/green]")
-            console.print("[green]MCP server:  stdio[/green]")
-            console.print("[dim]Press Ctrl+C to stop[/dim]")
+            console.print("[dim]Dashboard ready. Compiling world in background...[/dim]")
 
-            tools = await terrarium.gateway.get_tool_manifest()
-            if tools:
-                console.print(f"\nAvailable tools ({len(tools)}):")
-                for tool in tools:
-                    tname = tool.get("name", "?")
-                    desc = str(tool.get("description", ""))[:60]
-                    console.print(f"  [cyan]{tname}[/cyan] -- {desc}")
+            # 2. Compile + generate in background (concurrent with uvicorn)
+            async def _compile_world() -> None:
+                try:
+                    from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
 
-            # Start HTTP server (uvicorn) — blocks until Ctrl+C
+                    compiler = terrarium.registry.get("world_compiler")
+                    resolved = resolve_blueprint(world)
+                    if resolved:
+                        console.print(f"  Compiling: [cyan]{resolved}[/cyan]")
+                        compiled_plan = await compiler.compile_from_yaml(
+                            str(resolved), settings
+                        )
+                    else:
+                        compiled_plan = await compiler.compile_from_nl(world)
+                        from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+                        reviewer = PlanReviewer()
+                        name = sanitize_filename(compiled_plan.name)
+                        saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
+                        saved.write_text(reviewer.to_yaml(compiled_plan))
+                        console.print(f"  Saved: [cyan]{saved}[/cyan]")
+
+                    console.print("  Generating world...")
+                    run_id = await terrarium.create_run(
+                        compiled_plan, mode=compiled_plan.mode
+                    )
+                    console.print(f"  Run ready: [cyan]{run_id}[/cyan]")
+
+                    tools = await terrarium.gateway.get_tool_manifest()
+                    console.print(f"  [green]{len(tools)} tools available[/green]")
+                except Exception as exc:
+                    console.print(f"[red]Compilation failed: {exc}[/red]")
+
+            asyncio.create_task(_compile_world())
+
+            # 3. Run uvicorn — blocks until Ctrl+C
             http_adapter = terrarium.gateway._adapters.get("http")
             if http_adapter:
                 await http_adapter.run_server(host=host, port=port)

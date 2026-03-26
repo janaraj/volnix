@@ -152,6 +152,7 @@ max_registrations = 100
 host = "127.0.0.1"
 port = 8200
 enabled = false
+static_dir = "terrarium-dashboard/dist"
 
 # ── Gateway ──────────────────────────────────────────────────
 
