@@ -112,6 +112,16 @@ class TerrariumApp:
             self._gateway = Gateway(app=self, config=self._config.gateway)
             await self._gateway.initialize()
 
+            # 11. Webhook delivery (optional — bus subscriber)
+            self._webhook_manager = None
+            if self._config.webhook.enabled:
+                from terrarium.webhook.manager import WebhookManager
+
+                self._webhook_manager = WebhookManager(
+                    self._config.webhook
+                )
+                await self._webhook_manager.start(self._bus)
+
             self._started = True
             logger.info(
                 "TerrariumApp started with %d engines",
@@ -332,6 +342,8 @@ class TerrariumApp:
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
+        if hasattr(self, "_webhook_manager") and self._webhook_manager:
+            await self._webhook_manager.stop()
         if self._gateway:
             await self._gateway.shutdown()
         if self._provider_registry:

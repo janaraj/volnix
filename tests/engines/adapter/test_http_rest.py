@@ -507,7 +507,8 @@ async def test_http_call_tool_pipeline_error_response():
             json={"arguments": {"from_addr": "a@b.com"}},
         )
 
-    assert resp.status_code == 200
+    # StatusCodeMiddleware maps validation step errors → 422
+    assert resp.status_code == 422
     data = resp.json()
     assert "error" in data
     assert "validation" in data["error"]

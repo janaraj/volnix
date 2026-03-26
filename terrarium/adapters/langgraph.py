@@ -1,0 +1,71 @@
+"""LangGraph adapter — convert Terrarium tools to LangChain tools.
+
+Requires: ``pip install langchain-core``
+
+Usage::
+
+    from terrarium.adapters.langgraph import langgraph_tools
+    tools = await langgraph_tools(url="http://localhost:8080")
+    agent = create_react_agent(model, tools)
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from terrarium.sdk import execute_tool
+
+
+async def langgraph_tools(
+    url: str = "http://localhost:8080",
+    actor_id: str = "langgraph-agent",
+) -> list[Any]:
+    """Load Terrarium tools as LangChain StructuredTool objects.
+
+    Each tool calls the Terrarium HTTP API directly (no leaked
+    connections — each call is independent).
+
+    Raises:
+        ImportError: If langchain-core is not installed.
+    """
+    try:
+        from langchain_core.tools import StructuredTool
+    except ImportError:
+        raise ImportError(
+            "langchain-core is required for LangGraph adapter. "
+            "Install with: pip install langchain-core"
+        )
+
+    from terrarium.sdk import get_tool_manifest
+
+    tool_defs = await get_tool_manifest(url=url, fmt="mcp")
+
+    tools = []
+    for td in tool_defs:
+        name = td.get("name", "")
+        desc = td.get("description", "")
+        if not name:
+            continue
+
+        # H3 fix: use execute_tool (stateless) to avoid leaked connections
+        # H1 fix: no persistent client to leak
+        async def _invoke(
+            _url: str = url,
+            _name: str = name,
+            _actor: str = actor_id,
+            **kwargs: Any,
+        ) -> str:
+            import json
+
+            result = await execute_tool(
+                url=_url, tool=_name, args=kwargs, actor_id=_actor
+            )
+            return json.dumps(result, default=str)
+
+        tools.append(StructuredTool(
+            name=name,
+            description=desc,
+            coroutine=_invoke,
+            func=lambda **kw: None,  # sync placeholder (required)
+        ))
+
+    return tools

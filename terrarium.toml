@@ -116,6 +116,36 @@ signals_enabled = true
 signals_max_runs = 100
 signals_include_event_logs = true
 
+# ── API Surface Middleware ───────────────────────────────────
+
+[middleware]
+auth_enabled = false
+status_codes_enabled = true
+prefixes_enabled = false
+
+[middleware.auth_rules]
+stripe = "Bearer sk_.*"
+slack = "Bearer xoxb-.*"
+gmail = "Bearer ya29\\..*"
+github = "Bearer (ghp_|gho_|github_pat_).*"
+jira = "Bearer .*"
+shopify = "Bearer shpat_.*"
+
+[middleware.service_prefixes]
+stripe = "/stripe"
+slack = "/slack/api"
+jira = "/jira"
+shopify = "/shopify"
+
+# ── Webhook Event Delivery ───────────────────────────────────
+
+[webhook]
+enabled = false
+max_retries = 3
+retry_backoff_base = 1.0
+delivery_timeout = 10.0
+max_registrations = 100
+
 # ── Dashboard ────────────────────────────────────────────────
 
 [dashboard]

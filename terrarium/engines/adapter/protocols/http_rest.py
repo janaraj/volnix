@@ -78,12 +78,46 @@ class HTTPRestAdapter(ProtocolAdapter):
 
         gateway = self._gateway
 
+        # API surface middleware (Phase E2b)
+        from terrarium.middleware.config import MiddlewareConfig
+
+        app_config = getattr(gateway._app, "_config", None)
+        if app_config and hasattr(app_config, "middleware"):
+            mw_cfg = app_config.middleware
+        else:
+            mw_cfg = MiddlewareConfig()
+
+        # H1 fix: Starlette middleware is LIFO (last added = first inbound).
+        # Order: StatusCode added first → Auth added last → Auth runs first
+        # inbound. This ensures auth is checked before processing, and
+        # status codes are fixed after processing. CORS (added earlier)
+        # runs outermost, so it handles preflight before auth.
+        if mw_cfg.status_codes_enabled:
+            from terrarium.middleware.status_codes import (
+                StatusCodeMiddleware,
+            )
+
+            app.add_middleware(StatusCodeMiddleware, config=mw_cfg)
+
+        if mw_cfg.auth_enabled:
+            from terrarium.middleware.auth import AuthMiddleware
+
+            app.add_middleware(AuthMiddleware, config=mw_cfg)
+
+        self._middleware_config = mw_cfg
+
         @app.get("/api/v1/tools")
         async def list_tools(
             actor_id: str = fastapi.Query(default="http-agent"),
+            format: str = fastapi.Query(
+                default="mcp",
+                description="Tool format: mcp, http, openai, anthropic",
+            ),
         ):
             """List all tools available in this world."""
-            return await gateway.get_tool_manifest(actor_id=actor_id, protocol="http")
+            return await gateway.get_tool_manifest(
+                actor_id=actor_id, protocol=format,
+            )
 
         @app.post("/api/v1/actions/{tool_name}")
         async def call_tool(tool_name: str, request: StarletteRequest):
@@ -155,6 +189,101 @@ class HTTPRestAdapter(ProtocolAdapter):
                     await bus.unsubscribe("*", _on_event)
                 except Exception:
                     logger.debug("Failed to unsubscribe from event bus")
+
+        # -- Webhook endpoints -------------------------------------------------
+
+        webhook_mgr = getattr(gateway._app, "_webhook_manager", None)
+
+        def _check_webhook_auth(request: StarletteRequest) -> bool:
+            """C3: Check admin token if configured."""
+            if webhook_mgr and webhook_mgr._config.admin_token:
+                auth = request.headers.get("authorization", "")
+                expected = (
+                    f"Bearer {webhook_mgr._config.admin_token}"
+                )
+                return auth == expected
+            return True  # No token = open access
+
+        @app.post("/api/v1/webhooks")
+        async def register_webhook(request: StarletteRequest):
+            """Register a webhook subscription."""
+            from starlette.responses import JSONResponse
+
+            # M6: 503 when disabled
+            if webhook_mgr is None:
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "Webhooks not enabled"},
+                )
+            # C3: admin auth
+            if not _check_webhook_auth(request):
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Unauthorized"},
+                )
+            # H5: malformed JSON
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": "Invalid JSON body"},
+                )
+            try:
+                sub_id = webhook_mgr.register(
+                    url=body.get("url", ""),
+                    events=body.get("events", ["world.*"]),
+                    service=body.get("service", ""),
+                    secret=body.get("secret", ""),
+                )
+                return {"id": sub_id, "status": "registered"}
+            except ValueError as exc:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": str(exc)},
+                )
+
+        @app.delete("/api/v1/webhooks/{webhook_id}")
+        async def unregister_webhook(
+            webhook_id: str, request: StarletteRequest
+        ):
+            """Remove a webhook subscription."""
+            from starlette.responses import JSONResponse
+
+            if webhook_mgr is None:
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "Webhooks not enabled"},
+                )
+            if not _check_webhook_auth(request):
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Unauthorized"},
+                )
+            removed = webhook_mgr.unregister(webhook_id)
+            if removed:
+                return {"status": "removed"}
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Webhook not found"},
+            )
+
+        @app.get("/api/v1/webhooks")
+        async def list_webhooks():
+            """List all registered webhooks."""
+            if webhook_mgr is None:
+                return {"webhooks": [], "enabled": False}
+            return {
+                "webhooks": webhook_mgr.list_webhooks(),
+                "enabled": True,
+            }
+
+        @app.get("/api/v1/webhooks/stats")
+        async def webhook_stats():
+            """Webhook delivery statistics."""
+            if webhook_mgr is None:
+                return {"enabled": False}
+            return webhook_mgr.get_stats()
 
         # -- Report endpoints --------------------------------------------------
 
@@ -748,6 +877,21 @@ class HTTPRestAdapter(ProtocolAdapter):
         # Mount real-world API paths from pack http_path definitions
         await self._mount_pack_routes(app, gateway)
 
+        # Mount service-prefixed URL aliases (Phase E2b)
+        if mw_cfg.prefixes_enabled and mw_cfg.service_prefixes:
+            from terrarium.middleware.prefix_router import (
+                mount_service_prefixes,
+            )
+
+            routes = await gateway.get_tool_manifest(protocol="http")
+            mount_service_prefixes(
+                app, routes, mw_cfg.service_prefixes, gateway
+            )
+
+        # G6: Mount MCP SSE/HTTP endpoint for remote MCP clients
+        # (Claude Desktop, Cursor, Windsurf, LangGraph MCP adapters)
+        await self._mount_mcp_endpoint(app, gateway)
+
         self._app_instance = app
         logger.info("HTTP REST adapter created")
 
@@ -791,6 +935,68 @@ class HTTPRestAdapter(ProtocolAdapter):
                 app.post(path)(make_handler(tool_name, "POST"))
             elif method == "GET":
                 app.get(path)(make_handler(tool_name, "GET"))
+
+    async def _mount_mcp_endpoint(
+        self, app: Any, gateway: Any
+    ) -> None:
+        """Mount MCP SSE/HTTP endpoint for remote MCP clients.
+
+        Uses the MCP SDK's StreamableHTTPSessionManager as a raw ASGI
+        app mounted at /mcp. This avoids double-response issues (C4)
+        and private attribute access (C5).
+
+        The session manager's run() is started via FastAPI lifespan (C1).
+        """
+        mcp_adapter = gateway._adapters.get("mcp")
+        if mcp_adapter is None or mcp_adapter._server is None:
+            logger.debug(
+                "No MCP adapter available — skipping /mcp endpoint"
+            )
+            return
+
+        try:
+            from mcp.server.streamable_http_manager import (
+                StreamableHTTPSessionManager,
+            )
+
+            session_manager = StreamableHTTPSessionManager(
+                app=mcp_adapter._server,
+                stateless=True,
+            )
+            self._mcp_session_manager = session_manager
+
+            # C1 fix: start session manager via app lifespan
+            original_lifespan = getattr(app, "router", app).lifespan_context
+
+            import contextlib
+
+            @contextlib.asynccontextmanager
+            async def lifespan_with_mcp(a: Any):
+                async with session_manager.run():
+                    if original_lifespan:
+                        async with original_lifespan(a):
+                            yield
+                    else:
+                        yield
+
+            app.router.lifespan_context = lifespan_with_mcp
+
+            # C4+C5 fix: mount as raw ASGI app (no double response,
+            # no request._send)
+            from starlette.routing import Mount
+
+            app.mount("/mcp", app=session_manager.handle_request)
+
+            logger.info("MCP SSE endpoint mounted at /mcp")
+        except ImportError:
+            logger.debug(
+                "MCP StreamableHTTP not available — "
+                "skipping /mcp endpoint"
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to mount MCP SSE endpoint: %s", exc
+            )
 
     async def run_server(self, host: str = "0.0.0.0", port: int = 8080) -> None:
         """Run the FastAPI server (blocking)."""

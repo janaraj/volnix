@@ -1696,6 +1696,112 @@ async def _signals_impl(fmt: str) -> None:
 
 
 # ===================================================================
+# Agent Integration: config export + attach/detach
+# ===================================================================
+
+
+@app.command(name="config")
+def config_cmd(
+    export: Annotated[
+        str,
+        typer.Option("--export", help="Export target (e.g., claude-desktop, openai-tools)"),
+    ] = "",
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8080,
+) -> None:
+    """Export configuration for agent integration."""
+    if not export:
+        from terrarium.cli_exports.templates import EXPORT_REGISTRY
+
+        console.print("[bold]Available export targets:[/bold]")
+        for name in sorted(EXPORT_REGISTRY.keys()):
+            console.print(f"  terrarium config --export {name}")
+        return
+
+    from terrarium.cli_exports.templates import EXPORT_REGISTRY
+
+    template_fn = EXPORT_REGISTRY.get(export)
+    if template_fn is None:
+        print_error(
+            f"Unknown export target: '{export}'. "
+            f"Available: {', '.join(sorted(EXPORT_REGISTRY.keys()))}"
+        )
+        raise typer.Exit(1)
+
+    url = f"http://{host}:{port}"
+
+    # For tool-manifest exports, fetch tools from a running server
+    if export in ("openai-tools", "anthropic-tools"):
+        try:
+            from terrarium.sdk import get_tool_manifest
+
+            fmt = "openai" if export == "openai-tools" else "anthropic"
+            tools = get_tool_manifest(url=url, format=fmt)
+        except Exception:
+            tools = []
+            console.print(
+                f"[yellow]Could not fetch tools from {url} — "
+                f"using empty list[/yellow]"
+            )
+    else:
+        tools = []
+
+    output = template_fn(url, tools)
+    console.print(output)
+
+
+@app.command()
+def attach(
+    agent: Annotated[str, typer.Argument(help="Agent type: claude-desktop, cursor, windsurf")],
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8080,
+) -> None:
+    """Patch agent config to connect to Terrarium."""
+    import json
+
+    from terrarium.cli_exports.attach import _get_config_path, patch_config
+    from terrarium.cli_exports.templates import EXPORT_REGISTRY
+
+    config_path = _get_config_path(agent)
+    if config_path is None:
+        print_error(f"Unknown agent type: '{agent}'")
+        raise typer.Exit(1)
+
+    template_fn = EXPORT_REGISTRY.get(agent)
+    if template_fn is None:
+        print_error(f"No export template for '{agent}'")
+        raise typer.Exit(1)
+
+    url = f"http://{host}:{port}"
+    snippet = template_fn(url, [])
+    patch = json.loads(snippet)
+
+    patch_config(config_path, patch)
+    console.print(f"[green]Attached to {agent} at {config_path}[/green]")
+    console.print(f"  Terrarium URL: {url}")
+    console.print(f"  Backup: {config_path}.terrarium-backup")
+
+
+@app.command()
+def detach(
+    agent: Annotated[str, typer.Argument(help="Agent type to restore")],
+) -> None:
+    """Restore agent config from backup."""
+    from terrarium.cli_exports.attach import _get_config_path, restore_config
+
+    config_path = _get_config_path(agent)
+    if config_path is None:
+        print_error(f"Unknown agent type: '{agent}'")
+        raise typer.Exit(1)
+
+    if restore_config(config_path):
+        console.print(f"[green]Detached from {agent} — config restored[/green]")
+    else:
+        print_error(f"No backup found for {agent} at {config_path}")
+        raise typer.Exit(1)
+
+
+# ===================================================================
 # Command: dashboard
 # ===================================================================
 

@@ -34,12 +34,10 @@ def test_google_provider_get_info():
     assert "gemini-3-flash-preview" in info.available_models
 
 
-def test_google_provider_list_models():
+async def test_google_provider_list_models():
     """list_models returns the expected static model list."""
-    import asyncio
-
     provider = GoogleNativeProvider(api_key="test-key")
-    models = asyncio.get_event_loop().run_until_complete(provider.list_models())
+    models = await provider.list_models()
     assert "gemini-3-flash-preview" in models
     assert len(models) >= 3
 

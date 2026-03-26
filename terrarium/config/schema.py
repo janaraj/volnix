@@ -33,6 +33,8 @@ from terrarium.engines.feedback.config import FeedbackConfig
 from terrarium.engines.agency.config import AgencyConfig
 from terrarium.engines.world_compiler.config import WorldCompilerConfig
 from terrarium.simulation.config import SimulationRunnerConfig
+from terrarium.middleware.config import MiddlewareConfig
+from terrarium.webhook.config import WebhookConfig
 from terrarium.validation.config import ValidationConfig
 
 
@@ -97,3 +99,5 @@ class TerrariumConfig(BaseModel):
     profiles: ProfileConfig = Field(default_factory=ProfileConfig)
     simulation_runner: SimulationRunnerConfig = Field(default_factory=SimulationRunnerConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
+    middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
+    webhook: WebhookConfig = Field(default_factory=WebhookConfig)
