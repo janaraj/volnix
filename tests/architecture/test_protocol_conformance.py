@@ -43,7 +43,6 @@ def test_state_engine_matches_state_protocol():
     )
 
 
-@staged_guardrail(reason="PolicyEngine protocol surface still diverges from PolicyEngineProtocol")
 def test_policy_engine_matches_policy_protocol():
     assert_method_signature_matches_protocol(
         PolicyEngine,
@@ -52,7 +51,6 @@ def test_policy_engine_matches_policy_protocol():
     )
 
 
-@staged_guardrail(reason="BudgetEngine protocol surface still diverges from BudgetEngineProtocol")
 def test_budget_engine_matches_budget_protocol():
     assert_method_signature_matches_protocol(
         BudgetEngine,
@@ -61,7 +59,6 @@ def test_budget_engine_matches_budget_protocol():
     )
 
 
-@staged_guardrail(reason="Gateway request surface still diverges from GatewayProtocol")
 def test_gateway_matches_gateway_protocol():
     assert_method_signature_matches_protocol(
         Gateway,
@@ -70,7 +67,6 @@ def test_gateway_matches_gateway_protocol():
     )
 
 
-@staged_guardrail(reason="HTTP adapter surface still diverges from AdapterProtocol")
 def test_http_adapter_matches_adapter_protocol():
     assert_method_signature_matches_protocol(
         HTTPRestAdapter,
@@ -79,7 +75,6 @@ def test_http_adapter_matches_adapter_protocol():
     )
 
 
-@staged_guardrail(reason="MCP adapter surface still diverges from AdapterProtocol")
 def test_mcp_adapter_matches_adapter_protocol():
     assert_method_signature_matches_protocol(
         MCPServerAdapter,

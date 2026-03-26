@@ -12,7 +12,9 @@ The agent sees whichever protocol it connects with:
 Same underlying operation, multiple external representations.
 """
 from __future__ import annotations
+
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -38,7 +40,9 @@ class APIOperation(BaseModel, frozen=True):
 
     # Response schema
     response_schema: dict[str, Any] = Field(default_factory=dict)
-    response_status_codes: dict[int, str] = Field(default_factory=dict)  # {200: "OK", 404: "Not Found"}
+    response_status_codes: dict[int, str] = Field(
+        default_factory=dict
+    )  # e.g. {200: "OK", 404: "Not Found"}
 
     # Auth & pagination
     auth_type: str = ""                          # "bearer", "api_key", "oauth2"

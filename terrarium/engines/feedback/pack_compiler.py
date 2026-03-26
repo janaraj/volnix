@@ -8,12 +8,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 
 from terrarium.engines.feedback.models import PackCompileResult
 from terrarium.packs.profile_schema import ServiceProfileData
 
 logger = logging.getLogger(__name__)
+
+_VALID_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _sanitize_identifier(name: str) -> str:
+    """Ensure a name is a valid Python identifier.
+
+    C3/M9 fix: replaces invalid characters with underscores.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    return sanitized or "unknown"
 
 
 class PackCompiler:
@@ -122,7 +136,8 @@ class PackCompiler:
 
         # Entity schemas
         for entity in profile.entities:
-            var_name = f"{entity.name.upper()}_ENTITY_SCHEMA"
+            safe_entity = _sanitize_identifier(entity.name)
+            var_name = f"{safe_entity.upper()}_ENTITY_SCHEMA"
             lines.append(f"{var_name} = {{")
             lines.append('    "type": "object",')
             lines.append('    "properties": {')
@@ -197,7 +212,8 @@ class PackCompiler:
         ]
 
         for op in profile.operations:
-            func_name = f"handle_{op.name}"
+            safe_name = _sanitize_identifier(op.name)
+            func_name = f"handle_{safe_name}"
             lines.append(f"async def {func_name}(ctx: ActionContext) -> ResponseProposal:")
             lines.append(f'    """Handle {op.name}: {op.description}')
             lines.append("")
@@ -231,10 +247,12 @@ class PackCompiler:
 
         # Build import lines — guard against empty lists (M6)
         handler_parts = [
-            f"handle_{op.name}" for op in profile.operations
+            f"handle_{_sanitize_identifier(op.name)}"
+            for op in profile.operations
         ]
         entity_schema_parts = [
-            f"{e.name.upper()}_ENTITY_SCHEMA" for e in profile.entities
+            f"{_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA"
+            for e in profile.entities
         ]
 
         # Handler imports
@@ -254,7 +272,7 @@ class PackCompiler:
 
         # Handler map
         handler_map = "\n".join(
-            f'        "{op.name}": handle_{op.name},'
+            f'        "{op.name}": handle_{_sanitize_identifier(op.name)},'
             for op in profile.operations
         )
         if not handler_map:
@@ -262,7 +280,8 @@ class PackCompiler:
 
         # Entity refs
         entity_refs = "\n".join(
-            f'            "{e.name}": {e.name.upper()}_ENTITY_SCHEMA,'
+            f'            "{e.name}": '
+            f'{_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA,'
             for e in profile.entities
         )
         if not entity_refs:

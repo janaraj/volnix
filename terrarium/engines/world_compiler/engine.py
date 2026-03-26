@@ -154,6 +154,9 @@ class WorldCompilerEngine(BaseEngine):
                 "Set GOOGLE_API_KEY environment variable and configure "
                 "llm.providers in terrarium.toml"
             )
+        import time as _time
+
+        _compile_start = _time.monotonic()
         logger.info("Generating world '%s' (behavior=%s)", plan.name, plan.behavior)
 
         from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
@@ -368,6 +371,34 @@ class WorldCompilerEngine(BaseEngine):
         # Generate report
         reviewer = PlanReviewer()
         result["report"] = reviewer.generate_report(plan, result)
+
+        # L3: Record compilation to ledger
+        _compile_ms = (_time.monotonic() - _compile_start) * 1000
+        _ledger = getattr(self, "_ledger", None)
+        if _ledger is not None:
+            from terrarium.ledger.entries import WorldCompilationEntry
+
+            try:
+                await _ledger.append(WorldCompilationEntry(
+                    plan_name=plan.name,
+                    behavior=plan.behavior,
+                    seed=plan.seed,
+                    services=list(plan.services.keys()),
+                    entity_count=sum(
+                        len(v) for v in all_entities.values()
+                    ),
+                    entity_types=list(all_entities.keys()),
+                    actor_count=len(actors),
+                    seeds_processed=len(plan.seeds),
+                    total_retries=sum(retry_counts.values()),
+                    warnings_count=len(warnings),
+                    snapshot_id=str(snapshot_id) if snapshot_id else "",
+                    duration_ms=_compile_ms,
+                ))
+            except Exception as exc:
+                logger.warning(
+                    "Compilation ledger entry failed: %s", exc
+                )
 
         # Publish generation complete event
         await self.publish(WorldEvent(

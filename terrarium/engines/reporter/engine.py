@@ -23,7 +23,7 @@ class ReportGeneratorEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "reporter"
-    subscriptions: ClassVar[list[str]] = ["simulation"]
+    subscriptions: ClassVar[list[str]] = []  # reports generated on-demand, not event-driven
     dependencies: ClassVar[list[str]] = ["state"]
 
     def __init__(self) -> None:

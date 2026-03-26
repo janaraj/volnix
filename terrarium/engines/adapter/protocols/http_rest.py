@@ -37,7 +37,7 @@ import asyncio
 import logging
 from typing import Any, ClassVar
 
-from terrarium.core import ActorId
+from terrarium.core.types import ToolName
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
 
 logger = logging.getLogger(__name__)
@@ -100,10 +100,9 @@ class HTTPRestAdapter(ProtocolAdapter):
             actor_id = body.get("actor_id", "http-agent")
             arguments = body.get("arguments", {})
             return await gateway.handle_request(
-                protocol="http",
                 actor_id=actor_id,
                 tool_name=tool_name,
-                arguments=arguments,
+                input_data=arguments,
             )
 
         @app.get("/api/v1/health")
@@ -115,36 +114,14 @@ class HTTPRestAdapter(ProtocolAdapter):
             entity_type: str,
             actor_id: str = fastapi.Query(default="http-agent"),
         ):
-            """Query entities — read-only view with permission check."""
-            from terrarium.core.context import ActionContext as _ActCtx
-            from terrarium.core.types import ActorId as _ActId
-            from terrarium.core.types import ServiceId as _SvcId
-            from terrarium.core.types import StepVerdict as _Verdict
+            """Query entities via app layer (Fix #9).
 
-            permission_engine = gateway._app.registry.get("permission")
-            ctx = _ActCtx(
-                request_id="entity-query",
-                actor_id=_ActId(actor_id),
-                service_id=_SvcId(entity_type),
-                action=f"query_{entity_type}",
-                input_data={},
+            State reads go through app.query_entities() — not
+            directly to the state engine or through the tool pipeline.
+            """
+            return await gateway._app.read_entities(
+                actor_id, entity_type
             )
-            result = await permission_engine.execute(ctx)
-            if result.verdict != _Verdict.ALLOW:
-                from starlette.responses import JSONResponse
-
-                return JSONResponse(
-                    status_code=403,
-                    content={"error": "Permission denied", "message": result.message},
-                )
-
-            state = gateway._app.registry.get("state")
-            entities = await state.query_entities(entity_type)
-            return {
-                "entity_type": entity_type,
-                "count": len(entities),
-                "entities": entities,
-            }
 
         @app.websocket("/api/v1/events/stream")
         async def event_stream(websocket: WebSocket):
@@ -803,10 +780,9 @@ class HTTPRestAdapter(ProtocolAdapter):
                         # Path params override body values
                         arguments.update(path_params)
                     return await gateway.handle_request(
-                        protocol="http",
                         actor_id=arguments.pop("actor_id", "http-agent"),
                         tool_name=tn,
-                        arguments=arguments,
+                        input_data=arguments,
                     )
 
                 return handler
@@ -828,16 +804,24 @@ class HTTPRestAdapter(ProtocolAdapter):
         """Stop the HTTP server."""
         self._app_instance = None
 
-    def translate_inbound(self, raw_request: Any) -> Any:
-        """Not used -- FastAPI handles request parsing."""
-        pass
+    async def translate_inbound(
+        self,
+        tool_name: ToolName,
+        raw_input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate inbound request. FastAPI handles parsing; this is a pass-through."""
+        return raw_input
 
-    def translate_outbound(self, result: Any) -> Any:
-        """Not used -- FastAPI handles response serialization."""
-        pass
+    async def translate_outbound(
+        self,
+        tool_name: ToolName,
+        internal_response: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate outbound response. FastAPI handles serialization; pass-through."""
+        return internal_response
 
-    async def get_tool_manifest(self, actor_id: ActorId | None = None) -> list[dict]:
-        """Delegate to gateway."""
+    async def get_tool_manifest(self) -> list[dict[str, Any]]:
+        """Return tool manifest for the HTTP protocol."""
         return await self._gateway.get_tool_manifest(protocol="http")
 
     @property

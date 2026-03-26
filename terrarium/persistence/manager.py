@@ -25,6 +25,19 @@ def _default_db_factory(db_path: str, wal_mode: bool) -> Database:
     return SQLiteDatabase(db_path, wal_mode=wal_mode)
 
 
+async def create_database(path: str, wal_mode: bool = True) -> Database:
+    """Create, connect, and return a SQLiteDatabase.
+
+    Standalone factory for engines that need a DB without going through
+    ConnectionManager (e.g., StateEngine in test fixtures).
+    This keeps SQLiteDatabase construction confined to the persistence
+    layer (in the source guard allowlist).
+    """
+    db = SQLiteDatabase(path, wal_mode=wal_mode)
+    await db.connect()
+    return db
+
+
 class ConnectionManager:
     """Manages database connections across the Terrarium system.
 

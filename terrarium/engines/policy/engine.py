@@ -8,25 +8,23 @@ user-defined YAML policies — no hardcoded conditions.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from terrarium.core import (
     ActionContext,
     ActorId,
     BaseEngine,
-    EnforcementMode,
     Event,
-    PipelineStep,
     PolicyId,
     StepResult,
     StepVerdict,
     WorldMode,
 )
 from terrarium.core.events import PolicyFlagEvent
-from terrarium.core.types import Timestamp
-from terrarium.engines.policy.evaluator import ConditionEvaluator
+from terrarium.core.types import ServiceId, Timestamp
 from terrarium.engines.policy.enforcement import EnforcementHandler
+from terrarium.engines.policy.evaluator import ConditionEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +44,7 @@ class PolicyEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "policy"
-    subscriptions: ClassVar[list[str]] = ["approval"]
+    subscriptions: ClassVar[list[str]] = []  # policy checks via pipeline step, not events
     dependencies: ClassVar[list[str]] = ["state"]
 
     def __init__(self) -> None:
@@ -92,7 +90,7 @@ class PolicyEngine(BaseEngine):
 
         # Ungoverned mode: all enforcement becomes LOG
         if self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned":
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             ts = Timestamp(world_time=now, wall_time=now, tick=0)
             events = [
                 PolicyFlagEvent(
@@ -126,17 +124,46 @@ class PolicyEngine(BaseEngine):
         """Alias for execute — evaluate policies against the context."""
         return await self.execute(ctx)
 
-    async def get_active_policies(self) -> list[dict[str, Any]]:
-        """Return all currently active policies."""
-        return list(self._policies)
+    async def get_active_policies(
+        self, service_id: ServiceId | None = None
+    ) -> list[PolicyId]:
+        """Return identifiers of currently active policies.
+
+        Args:
+            service_id: If given, filter to policies relevant to this service.
+        """
+        policies = self._policies
+        if service_id is not None:
+            policies = [
+                p for p in policies
+                if str(service_id) in str(p.get("services", ""))
+                or not p.get("services")
+            ]
+        return [
+            PolicyId(p.get("id", p.get("name", f"policy-{i}")))
+            for i, p in enumerate(policies)
+        ]
 
     async def resolve_hold(
-        self, hold_id: str, approved: bool, approver: ActorId
-    ) -> None:
-        """Resolve a held action (stub — full hold queue is Phase G)."""
+        self,
+        hold_id: str,
+        approved: bool,
+        approver: ActorId,
+        reason: str | None = None,
+    ) -> Event:
+        """Resolve a held action by approving or rejecting it."""
+        now = datetime.now(UTC)
         logger.info(
-            "Hold %s resolved: approved=%s by %s",
-            hold_id, approved, approver,
+            "Hold %s resolved: approved=%s by %s reason=%s",
+            hold_id, approved, approver, reason,
+        )
+        return PolicyFlagEvent(
+            event_type="policy.hold_resolved",
+            timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+            policy_id=PolicyId(hold_id),
+            actor_id=approver,
+            action=f"hold_{'approved' if approved else 'rejected'}",
+            reason=reason or ("approved" if approved else "rejected"),
         )
 
     async def add_policy(self, policy_def: dict[str, Any]) -> PolicyId:

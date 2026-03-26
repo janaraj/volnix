@@ -71,13 +71,13 @@ function RunInspector({ run }: { run: Run }) {
 
       {/* Mode / preset / behavior badges */}
       <div className="flex flex-wrap gap-2">
-        <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
+        <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
           {capitalize(run.mode)}
         </span>
-        <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
+        <span className="rounded-md border border-info/20 bg-info/10 px-2 py-0.5 text-xs font-medium text-info">
           {capitalize(run.reality_preset)}
         </span>
-        <span className="rounded bg-bg-elevated px-2 py-0.5 text-xs font-mono text-text-secondary">
+        <span className="rounded-md border border-warning/20 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
           {capitalize(run.config_snapshot?.behavior ?? 'static')}
         </span>
       </div>

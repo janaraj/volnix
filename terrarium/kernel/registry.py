@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from terrarium.kernel.categories import CATEGORIES, SemanticCategory
-from terrarium.kernel.primitives import get_primitives_for_category, SemanticPrimitive
+from terrarium.kernel.primitives import get_primitives_for_category
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,10 @@ class SemanticRegistry:
                 else:
                     logger.warning("Service '%s' maps to unknown category '%s'", svc, cat)
         self._initialized = True
-        logger.info("Kernel: %d categories, %d services", len(self._categories), len(self._service_map))
+        logger.info(
+            "Kernel: %d categories, %d services",
+            len(self._categories), len(self._service_map),
+        )
 
     def _check_initialized(self) -> None:
         """Guard: raise if registry has not been initialized."""

@@ -82,15 +82,21 @@ class TerrariumApp:
             self._artifact_store = RunArtifactStore(config=self._config.runs)
 
             # 6. Engine registry + wiring
+            # Fix #8: inject state DB via ConnectionManager instead of
+            # letting StateEngine construct SQLiteDatabase directly
+            state_db = await self._conn_mgr.get_connection("state")
             self._registry = create_default_registry()
-            await wire_engines(self._registry, self._bus, self._config)
+            await wire_engines(
+                self._registry, self._bus, self._config,
+                engine_overrides={"state": {"_db": state_db}},
+            )
 
             # 7. Post-wiring dependency injection
             await self._inject_cross_engine_deps()
 
             # 7. Build pipeline (bus and ledger passed via constructor)
             steps = self._registry.get_pipeline_steps()
-            steps["validation"] = ValidationStep()
+            steps["validation"] = ValidationStep(ledger=self._ledger)
             self._pipeline = build_pipeline_from_config(
                 self._config.pipeline, steps, bus=self._bus, ledger=self._ledger,
             )
@@ -231,6 +237,8 @@ class TerrariumApp:
                 profile_loader=profile_loader,
                 profile_inferrer=profile_inferrer,
                 profile_registry=profile_registry,
+                ledger=self._ledger,
+                bus=self._bus,
             )
 
         compiler._config["_state_engine"] = state_engine
@@ -320,6 +328,7 @@ class TerrariumApp:
         feedback._config["_profile_loader"] = getattr(
             responder, "_profile_loader", None
         )
+        feedback._config["_run_manager"] = self._run_manager
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
@@ -339,6 +348,22 @@ class TerrariumApp:
         self._artifact_store = None
         self._scheduler = None
         self._started = False
+
+    async def read_entities(
+        self, actor_id: str, entity_type: str
+    ) -> dict[str, Any]:
+        """Read entities — read-only state access.
+
+        Used by HTTP adapter for entity query endpoint.
+        Keeps state access in the app layer (not in adapters).
+        """
+        state = self._registry.get("state")
+        entities = await state.query_entities(entity_type)
+        return {
+            "entity_type": entity_type,
+            "count": len(entities),
+            "entities": entities,
+        }
 
     async def handle_action(
         self,
@@ -366,8 +391,9 @@ class TerrariumApp:
 
         await self._pipeline.execute(ctx)
 
-        # Publish committed event to bus so AgencyEngine + other subscribers hear it
-        if not ctx.short_circuited and self._bus:
+        # B6 fix: publish event for ALL actions (including short-circuited)
+        # so AgencyEngine + other subscribers can react to blocked/denied actions
+        if self._bus:
             from terrarium.core.events import WorldEvent
             from terrarium.core.types import ActionSource, EntityId, Timestamp
 
@@ -377,6 +403,12 @@ class TerrariumApp:
                 deltas = ctx.response_proposal.proposed_state_deltas or []
                 if deltas:
                     target = EntityId(str(deltas[0].entity_id))
+
+            # Determine outcome from pipeline result
+            outcome = "success"
+            if ctx.short_circuited:
+                sc_step = getattr(ctx, "short_circuit_step", "")
+                outcome = f"blocked_at_{sc_step}" if sc_step else "blocked"
 
             event = WorldEvent(
                 event_type=f"world.{action}",
@@ -391,6 +423,7 @@ class TerrariumApp:
                 target_entity=target,
                 input_data=input_data,
                 source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
+                outcome=outcome,
             )
             try:
                 await self._bus.publish(event)

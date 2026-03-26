@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { ExternalLink, Radio, Users, Zap, Layers, Clock } from 'lucide-react';
+import { ExternalLink, Radio, Users, Zap, Layers, Clock, Shield } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatRelativeTime, truncateId, capitalize } from '@/lib/formatters';
 import { runReportPath, liveConsolePath } from '@/constants/routes';
@@ -18,53 +18,21 @@ interface RunCardProps {
 }
 
 // ---------------------------------------------------------------------------
-// Badge helper
+// Dimension badge helper
 // ---------------------------------------------------------------------------
 
-const BADGE_ITEMS: Array<{ label: string; value: (r: Run) => string | number | null | undefined }> = [
-  { label: 'Preset', value: (r) => r.reality_preset },
-  { label: 'Behavior', value: (r) => r.config_snapshot?.behavior },
-  { label: 'Fidelity', value: (r) => r.fidelity_mode },
-  { label: 'Mode', value: (r) => r.mode },
-  { label: 'Seed', value: (r) => r.config_snapshot?.seed },
-];
+const DIMENSION_COLORS: Record<string, string> = {
+  blue: 'bg-info/10 text-info border-info/20',
+  amber: 'bg-warning/10 text-warning border-warning/20',
+  purple: 'bg-accent/10 text-accent border-accent/20',
+  green: 'bg-success/10 text-success border-success/20',
+};
 
-function BadgeRow({ run }: { run: Run }) {
+function DimensionBadge({ value, color }: { value: string; color: string }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {BADGE_ITEMS.map(({ label, value }) => {
-        const v = value(run);
-        if (v === null || v === undefined) return null;
-        return (
-          <span key={label} className="rounded-md bg-bg-elevated/80 px-1.5 py-0.5 text-[11px] text-text-secondary">
-            {label}: {capitalize(String(v))}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stats helper
-// ---------------------------------------------------------------------------
-
-function StatsRow({ run }: { run: Run }) {
-  const duration =
-    run.started_at && run.completed_at
-      ? `${Math.round((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000)}s`
-      : run.started_at
-        ? 'running...'
-        : '--';
-
-  return (
-    <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-muted">
-      <span className="inline-flex items-center gap-1"><Users size={11} /> {run.actor_count ?? 0} actors</span>
-      <span className="inline-flex items-center gap-1"><Zap size={11} /> {run.event_count ?? 0} events</span>
-      <span className="inline-flex items-center gap-1"><Layers size={11} /> {(run.services ?? []).length} services</span>
-      <span className="inline-flex items-center gap-1"><Clock size={11} /> {duration}</span>
-      <span>{formatRelativeTime(run.created_at)}</span>
-    </div>
+    <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium', DIMENSION_COLORS[color] ?? DIMENSION_COLORS.blue)}>
+      {capitalize(value)}
+    </span>
   );
 }
 
@@ -85,15 +53,29 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
     }
   };
 
+  const duration =
+    run.started_at && run.completed_at
+      ? `${Math.round((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000)}s`
+      : run.started_at
+        ? 'running...'
+        : '--';
+
+  const actorCount = run.actor_count ?? 0;
+  const eventCount = run.event_count ?? 0;
+  const serviceCount = (run.services ?? []).length;
+  const hasAnyStats = actorCount > 0 || eventCount > 0 || serviceCount > 0;
+
   return (
     <div
       className={cn(
-        'card elevate-on-hover p-5',
-        selected && 'border-accent/50 !bg-accent/5',
+        'card elevate-on-hover p-0 overflow-hidden',
+        run.status === 'running' && 'ring-1 ring-info/30',
+        run.status === 'failed' && 'ring-1 ring-error/20',
+        selected && '!border-accent/50 ring-1 ring-accent/30',
       )}
     >
-      {/* Top row: checkbox, status, tag, actions */}
-      <div className="mb-3 flex items-center justify-between">
+      {/* Section 1: Header — checkbox, status, tag, action */}
+      <div className="px-5 pt-4 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <input
             type="checkbox"
@@ -128,23 +110,47 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
         </div>
       </div>
 
-      {/* World name */}
-      <p className="mb-2 text-sm text-text-secondary">{capitalize(run.world_def.name)}</p>
+      {/* Section 2: Body — world name + dimension badges */}
+      <div className="px-5 pb-3">
+        <p className="mb-2 text-sm text-text-secondary">{capitalize(run.world_def.name)}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {run.reality_preset && <DimensionBadge value={run.reality_preset} color="blue" />}
+          {run.config_snapshot?.behavior && <DimensionBadge value={run.config_snapshot.behavior} color="amber" />}
+          {run.fidelity_mode && <DimensionBadge value={run.fidelity_mode} color="green" />}
+          {run.mode && <DimensionBadge value={run.mode} color="purple" />}
+        </div>
 
-      {/* Badge row */}
-      <div className="mb-2">
-        <BadgeRow run={run} />
+        {/* Conditional score bar */}
+        {run.governance_score != null && (
+          <div className="mt-2 flex items-center gap-2">
+            <Shield size={12} className="shrink-0 text-text-muted" />
+            <div className="flex-1">
+              <ScoreBar value={run.governance_score} label="Governance" />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Conditional score bar */}
-      {run.governance_score != null && (
-        <div className="mb-2">
-          <ScoreBar value={run.governance_score} label="Governance" />
+      {/* Section 3: Footer — stats (non-zero only) + time */}
+      <div className="border-t border-border/20 bg-bg-elevated/30 px-5 py-2.5 flex items-center justify-between text-xs text-text-muted">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {hasAnyStats && (
+            <>
+              {actorCount > 0 && (
+                <span className="inline-flex items-center gap-1"><Users size={11} /> {actorCount} actors</span>
+              )}
+              {eventCount > 0 && (
+                <span className="inline-flex items-center gap-1"><Zap size={11} /> {eventCount} events</span>
+              )}
+              {serviceCount > 0 && (
+                <span className="inline-flex items-center gap-1"><Layers size={11} /> {serviceCount} services</span>
+              )}
+            </>
+          )}
+          <span className="inline-flex items-center gap-1"><Clock size={11} /> {duration}</span>
         </div>
-      )}
-
-      {/* Stats row */}
-      <StatsRow run={run} />
+        <span>{formatRelativeTime(run.created_at)}</span>
+      </div>
     </div>
   );
 }

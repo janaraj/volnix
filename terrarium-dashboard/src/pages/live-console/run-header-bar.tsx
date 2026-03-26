@@ -12,11 +12,11 @@ interface RunHeaderBarProps {
   eventCount: number;
 }
 
-const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string }> = {
-  connecting: { color: 'bg-warning', label: 'Connecting' },
-  connected: { color: 'bg-success', label: 'Connected' },
-  disconnected: { color: 'bg-error', label: 'Disconnected' },
-  reconnecting: { color: 'bg-warning', label: 'Reconnecting' },
+const STATUS_CONFIG: Record<ConnectionStatus, { dot: string; label: string }> = {
+  connecting: { dot: 'bg-warning', label: 'Connecting' },
+  connected: { dot: 'bg-success', label: 'Connected' },
+  disconnected: { dot: 'bg-error', label: 'Disconnected' },
+  reconnecting: { dot: 'bg-warning', label: 'Reconnecting' },
 };
 
 export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBarProps) {
@@ -38,9 +38,15 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
       <div className="flex items-center gap-3">
         <h1 className="truncate text-xl font-semibold">{capitalize(run.world_def.name)}</h1>
         <RunStatusBadge status={run.status} />
-        <div className="flex items-center gap-1.5 text-xs text-text-muted">
-          <span className={cn('inline-block h-2 w-2 rounded-full', statusCfg.color)} />
-          {statusCfg.label}
+        <div className={cn(
+          'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+          connectionStatus === 'connected' && 'bg-success/10 text-success border-success/20',
+          connectionStatus === 'connecting' && 'bg-warning/10 text-warning border-warning/20',
+          connectionStatus === 'disconnected' && 'bg-error/10 text-error border-error/20',
+          connectionStatus === 'reconnecting' && 'bg-warning/10 text-warning border-warning/20',
+        )}>
+          <span className={cn('h-2 w-2 rounded-full', statusCfg.dot, connectionStatus === 'connected' && 'animate-pulse')} />
+          {capitalize(statusCfg.label)}
         </div>
       </div>
 

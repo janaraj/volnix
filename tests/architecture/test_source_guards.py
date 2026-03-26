@@ -23,9 +23,6 @@ _ALLOWED_SQLITE_CONSTRUCTORS = {
     "terrarium/persistence/manager.py",
     "terrarium/persistence/snapshot.py",
 }
-_KNOWN_STAGED_SQLITE_CONSTRUCTORS = {
-    "terrarium/engines/state/engine.py",
-}
 _ALLOWED_CONCRETE_ENGINE_IMPORTERS = {
     "terrarium/registry/composition.py",
 }
@@ -34,10 +31,9 @@ _ALLOWED_CONCRETE_ENGINE_IMPORTERS = {
 def test_sqlite_database_construction_has_no_unexpected_offenders():
     """Concrete DB construction should stay tightly bounded."""
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"SQLiteDatabase"}))
-    assert offenders == (_ALLOWED_SQLITE_CONSTRUCTORS | _KNOWN_STAGED_SQLITE_CONSTRUCTORS)
+    assert offenders == _ALLOWED_SQLITE_CONSTRUCTORS
 
 
-@staged_guardrail(reason="StateEngine still constructs SQLiteDatabase directly instead of pure DI")
 def test_sqlite_database_construction_is_confined_to_allowlist():
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"SQLiteDatabase"}))
     assert offenders == _ALLOWED_SQLITE_CONSTRUCTORS
@@ -56,7 +52,6 @@ def test_dynamic_imports_are_confined_to_pack_loader():
     assert offenders == {"terrarium/packs/loader.py"}
 
 
-@staged_guardrail(reason="HTTP adapter still performs direct state reads outside the gateway")
 def test_external_entrypoints_do_not_call_state_read_apis():
     adapter_paths = list((PRODUCT_ROOT / "engines" / "adapter").rglob("*.py"))
     gateway_paths = list((PRODUCT_ROOT / "gateway").rglob("*.py"))

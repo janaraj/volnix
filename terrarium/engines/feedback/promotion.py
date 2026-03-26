@@ -152,7 +152,6 @@ class TierPromoter:
             criteria_missing=criteria_missing,
             recommendation=recommendation,
             annotation_count=annotation_count,
-            run_count=1,
         )
 
     async def promote(

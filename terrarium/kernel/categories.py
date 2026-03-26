@@ -84,4 +84,13 @@ CATEGORIES: dict[str, SemanticCategory] = {
         primitives=["metric", "alert", "incident", "dashboard", "log_stream"],
         example_services=["datadog", "pagerduty", "grafana"],
     ),
+    "social_media": SemanticCategory(
+        name="social_media",
+        description=(
+            "Services for public content sharing, social engagement,"
+            " and community interaction."
+        ),
+        primitives=["post", "comment", "vote", "profile", "community", "feed", "thread"],
+        example_services=["reddit", "twitter", "linkedin", "facebook"],
+    ),
 }

@@ -19,6 +19,7 @@ async def wire_engines(
     registry: EngineRegistry,
     bus: object,
     config: TerrariumConfig,
+    engine_overrides: dict[str, dict] | None = None,
 ) -> None:
     """Wire all registered engines with the event bus and configuration.
 
@@ -29,12 +30,18 @@ async def wire_engines(
         registry: The engine registry containing all engines to wire.
         bus: The shared event bus instance.
         config: The root Terrarium configuration.
+        engine_overrides: Optional per-engine config overrides (e.g.,
+            injected dependencies like ``{"state": {"_db": db_instance}}``).
     """
+    overrides = engine_overrides or {}
     order = registry.resolve_initialization_order()
     for engine_name in order:
         engine = registry.get(engine_name)
         config_obj = getattr(config, engine_name, None)
         engine_config = config_obj.model_dump() if config_obj is not None else {}
+        # Merge any overrides (e.g., injected DB instances)
+        if engine_name in overrides:
+            engine_config.update(overrides[engine_name])
         await engine.initialize(engine_config, bus)
         await inject_dependencies(engine, registry)
         await engine.start()

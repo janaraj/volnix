@@ -86,10 +86,10 @@ async def test_gateway_handle_request_success():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="agent-1",
         tool_name="email_send",
-        arguments={"from_addr": "a@b.com", "to_addr": "c@d.com",
+        input_data={"from_addr": "a@b.com", "to_addr": "c@d.com",
                     "subject": "test", "body": "hello"},
     )
 
@@ -109,10 +109,10 @@ async def test_gateway_handle_request_capability_gap():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="http",
+        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
-        arguments={},
+        input_data={},
     )
 
     assert result["status"] == "capability_not_available"
@@ -130,10 +130,9 @@ async def test_gateway_records_to_ledger():
     await gw.initialize()
 
     await gw.handle_request(
-        protocol="mcp",
-        actor_id="agent-1",
+        actor_id="mcp-agent-1",
         tool_name="email_send",
-        arguments={},
+        input_data={},
     )
 
     app.ledger.append.assert_awaited()
@@ -152,10 +151,10 @@ async def test_gateway_records_capability_gap_to_ledger():
     await gw.initialize()
 
     await gw.handle_request(
-        protocol="http",
+        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
-        arguments={},
+        input_data={},
     )
 
     app.ledger.append.assert_awaited()
@@ -201,10 +200,10 @@ async def test_gateway_handle_request_records_error():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="http",
+        
         actor_id="agent-1",
         tool_name="email_send",
-        arguments={},
+        input_data={},
     )
 
     assert "error" in result
@@ -222,10 +221,10 @@ async def test_gateway_no_ledger():
 
     # Should not raise
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="agent-1",
         tool_name="email_send",
-        arguments={},
+        input_data={},
     )
     assert "email_id" in result
 
@@ -332,10 +331,10 @@ async def test_new_pack_tools_not_routable_until_tool_map_refreshed():
 
     # handle_request returns capability_gap for the new tool
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="agent-1",
         tool_name="calendar_create",
-        arguments={},
+        input_data={},
     )
     assert result["status"] == "capability_not_available"
 
@@ -356,10 +355,10 @@ async def test_gateway_handle_request_empty_arguments():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="agent-1",
         tool_name="email_send",
-        arguments={},
+        input_data={},
     )
 
     assert result == expected
@@ -376,10 +375,10 @@ async def test_gateway_handle_request_pipeline_error_dict():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="http",
+        
         actor_id="agent-1",
         tool_name="email_send",
-        arguments={"from_addr": "a@b.com"},
+        input_data={"from_addr": "a@b.com"},
     )
 
     assert "error" in result
@@ -398,10 +397,10 @@ async def test_gateway_handle_request_missing_tool_fields():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="",
         tool_name="email_send",
-        arguments={},
+        input_data={},
     )
 
     assert result == expected
@@ -418,10 +417,10 @@ async def test_gateway_capability_gap_lists_available_tools():
     await gw.initialize()
 
     result = await gw.handle_request(
-        protocol="mcp",
+        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
-        arguments={},
+        input_data={},
     )
 
     assert result["status"] == "capability_not_available"

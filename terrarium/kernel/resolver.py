@@ -9,7 +9,7 @@ Tries sources in confidence order:
 6. Kernel classification (primitives only)
 """
 import logging
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from terrarium.kernel.external_spec import ExternalSpecProvider
 from terrarium.kernel.registry import SemanticRegistry
@@ -101,7 +101,9 @@ class ServiceResolver:
 
         return None
 
-    def _surface_from_spec(self, spec: dict, service_name: str, source: str) -> ServiceSurface | None:
+    def _surface_from_spec(
+        self, spec: dict, service_name: str, source: str
+    ) -> ServiceSurface | None:
         """Convert an external spec dict to a ServiceSurface."""
         category = self._kernel.get_category(service_name) or "unknown"
         operations = []

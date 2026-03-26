@@ -22,13 +22,14 @@ _REQUIRED_FILES = ("pack.py", "schemas.py", "handlers.py", "state_machines.py")
 
 
 def _get_all_assignments(tree: ast.Module) -> list[str]:
-    """Extract all top-level variable names from AST.
+    """Extract top-level variable names from AST.
 
-    Handles both ``x = ...`` (ast.Assign) and ``x: type = ...``
-    (ast.AnnAssign).
+    M5 fix: Only checks module-level statements (``tree.body``),
+    not nested assignments inside functions or classes.
+    Handles both ``x = ...`` and ``x: type = ...``.
     """
     names: list[str] = []
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name):

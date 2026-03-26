@@ -310,6 +310,49 @@ _PRIMITIVES: list[SemanticPrimitive] = [
         description="A stream of structured log entries.",
         fields={"stream_id": "str", "source": "str", "level": "str"},
     ),
+    # -- social_media --
+    SemanticPrimitive(
+        name="post",
+        category="social_media",
+        description="A piece of published content (tweet, Reddit submission, LinkedIn post).",
+        fields={"post_id": "str", "author_id": "str", "content": "str", "score": "int"},
+    ),
+    SemanticPrimitive(
+        name="comment",
+        category="social_media",
+        description="A reply to a post or another comment.",
+        fields={"comment_id": "str", "post_id": "str", "author_id": "str", "body": "str"},
+    ),
+    SemanticPrimitive(
+        name="vote",
+        category="social_media",
+        description="An engagement action on content (upvote, downvote, like).",
+        fields={"vote_id": "str", "user_id": "str", "target_id": "str", "direction": "str"},
+    ),
+    SemanticPrimitive(
+        name="profile",
+        category="social_media",
+        description="A user's public identity and social graph metrics.",
+        fields={"profile_id": "str", "username": "str", "follower_count": "int"},
+    ),
+    SemanticPrimitive(
+        name="community",
+        category="social_media",
+        description="A group or topic where content is organised (subreddit, topic).",
+        fields={"community_id": "str", "name": "str", "member_count": "int"},
+    ),
+    SemanticPrimitive(
+        name="feed",
+        category="social_media",
+        description="A personalised stream of content for a user.",
+        fields={"user_id": "str", "items": "list[str]", "algorithm": "str"},
+    ),
+    SemanticPrimitive(
+        name="thread",
+        category="social_media",
+        description="A connected series of posts or comments forming a conversation.",
+        fields={"thread_id": "str", "root_post_id": "str", "reply_count": "int"},
+    ),
 ]
 
 # Build a lookup index by category

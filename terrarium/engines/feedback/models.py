@@ -43,9 +43,9 @@ class CapturedSurface(BaseModel, frozen=True):
     observed about a service during a single simulation run.
     """
 
-    service_name: str  # ServiceId (str NewType)
-    run_id: str        # RunId (str NewType)
-    captured_at: str   # ISO timestamp
+    service_name: str
+    run_id: str
+    captured_at: str  # ISO timestamp
     operations_observed: list[ObservedOperation] = Field(
         default_factory=list
     )
@@ -60,7 +60,7 @@ class CapturedSurface(BaseModel, frozen=True):
 class PromotionEvaluation(BaseModel, frozen=True):
     """Result of evaluating a service for tier promotion."""
 
-    service_name: str  # ServiceId
+    service_name: str
     eligible: bool
     current_fidelity: str
     proposed_fidelity: str
@@ -68,13 +68,12 @@ class PromotionEvaluation(BaseModel, frozen=True):
     criteria_missing: list[str] = Field(default_factory=list)
     recommendation: str = ""
     annotation_count: int = 0
-    run_count: int = 0
 
 
 class PromotionResult(BaseModel, frozen=True):
     """Outcome of executing a tier promotion."""
 
-    service_name: str  # ServiceId
+    service_name: str
     previous_fidelity: str
     new_fidelity: str
     profile_path: str

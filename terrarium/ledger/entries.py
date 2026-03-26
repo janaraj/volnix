@@ -188,6 +188,79 @@ class SnapshotEntry(LedgerEntry):
     size_bytes: int = 0
 
 
+class WorldCompilationEntry(LedgerEntry):
+    """Records a world compilation outcome.
+
+    Attributes:
+        plan_name: Name of the compiled world plan.
+        behavior: Behavior mode (static/reactive/dynamic).
+        seed: Reproducibility seed.
+        services: List of service names in the world.
+        entity_count: Total entities generated.
+        entity_types: List of entity type names.
+        actor_count: Number of actors generated.
+        seeds_processed: Number of seed scenarios applied.
+        total_retries: Sum of all retry attempts.
+        warnings_count: Number of warnings during compilation.
+        snapshot_id: State snapshot ID if created.
+        duration_ms: Wall-clock compilation time.
+    """
+
+    entry_type: str = "world_compilation"
+    plan_name: str = ""
+    behavior: str = ""
+    seed: int | None = None
+    services: list[str] = Field(default_factory=list)
+    entity_count: int = 0
+    entity_types: list[str] = Field(default_factory=list)
+    actor_count: int = 0
+    seeds_processed: int = 0
+    total_retries: int = 0
+    warnings_count: int = 0
+    snapshot_id: str = ""
+    duration_ms: float = 0.0
+
+
+class ServiceResolutionEntry(LedgerEntry):
+    """Records how a service was resolved during compilation.
+
+    Attributes:
+        service_name: The service being resolved.
+        resolution_source: How it was resolved (tier1_pack, tier2_yaml_profile, etc.).
+        confidence: Confidence score of the resolution.
+        operations_count: Number of operations in the resolved surface.
+        entities_count: Number of entity types in the resolved surface.
+    """
+
+    entry_type: str = "service_resolution"
+    service_name: str = ""
+    resolution_source: str = ""
+    confidence: float = 0.0
+    operations_count: int = 0
+    entities_count: int = 0
+
+
+class ProfileInferenceEntry(LedgerEntry):
+    """Records when a service profile is bootstrapped via LLM.
+
+    Attributes:
+        service_name: The inferred service.
+        sources_used: Which sources contributed (context_hub, openapi, etc.).
+        confidence: Confidence score based on sources.
+        operations_count: Operations in the generated profile.
+        entities_count: Entity types in the generated profile.
+        fidelity_source: Always "bootstrapped" for inferred profiles.
+    """
+
+    entry_type: str = "profile_inference"
+    service_name: str = ""
+    sources_used: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    operations_count: int = 0
+    entities_count: int = 0
+    fidelity_source: str = "bootstrapped"
+
+
 class FeedbackAnnotationEntry(LedgerEntry):
     """Records a service annotation added via the feedback engine.
 
@@ -233,6 +306,26 @@ class FeedbackCaptureEntry(LedgerEntry):
     service_name: str = ""
     run_id: str = ""
     operations_count: int = 0
+
+
+class FeedbackSyncEntry(LedgerEntry):
+    """Records an external sync drift check."""
+
+    entry_type: str = "feedback.sync"
+    service_name: str = ""
+    source: str = ""
+    has_drift: bool = False
+    operations_added: int = 0
+    operations_removed: int = 0
+
+
+class FeedbackSyncUpdateEntry(LedgerEntry):
+    """Records an applied sync update to a profile."""
+
+    entry_type: str = "feedback.sync_update"
+    service_name: str = ""
+    changes_applied: int = 0
+    new_version: str = ""
 
 
 class ActorActivationEntry(LedgerEntry):
@@ -290,6 +383,11 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "feedback.annotation": FeedbackAnnotationEntry,
     "feedback.promotion": FeedbackPromotionEntry,
     "feedback.capture": FeedbackCaptureEntry,
+    "feedback.sync": FeedbackSyncEntry,
+    "feedback.sync_update": FeedbackSyncUpdateEntry,
+    "world_compilation": WorldCompilationEntry,
+    "service_resolution": ServiceResolutionEntry,
+    "profile_inference": ProfileInferenceEntry,
 }
 
 

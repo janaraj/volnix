@@ -660,18 +660,13 @@ async def _inspect_impl(
 
             elif resource == "policies":
                 policy_engine = terrarium.registry.get("policy")
-                policies = await policy_engine.get_active_policies()
+                policy_ids = await policy_engine.get_active_policies()
                 if fmt == "json":
-                    print_json(policies)
+                    print_json([str(pid) for pid in policy_ids])
                 else:
-                    for i, p in enumerate(policies):
-                        console.print(
-                            Panel(
-                                json.dumps(p, indent=2, default=str),
-                                title=f"Policy {i + 1}",
-                            )
-                        )
-                    if not policies:
+                    for i, pid in enumerate(policy_ids):
+                        console.print(f"  {i + 1}. {pid}")
+                    if not policy_ids:
                         console.print("[dim]No policies configured[/dim]")
 
             elif resource in ("services", "tools"):
@@ -1533,7 +1528,7 @@ async def _compile_pack_impl(service: str, from_source: str) -> None:
             "\n[yellow]Next: implement deterministic handlers in handlers.py[/yellow]"
         )
 
-    except (TerrariumError, RuntimeError) as exc:
+    except (TerrariumError, RuntimeError, OSError) as exc:
         print_error(str(exc))
         raise typer.Exit(1)
 
@@ -1557,7 +1552,11 @@ async def _verify_pack_impl(service: str) -> None:
         raise typer.Exit(1)
 
     verifier = PackVerifier()
-    result = await verifier.verify(pack_dir)
+    try:
+        result = await verifier.verify(pack_dir)
+    except (OSError, PermissionError) as exc:
+        print_error(f"Cannot read pack files: {exc}")
+        raise typer.Exit(1)
 
     console.print(f"[bold]Pack verification: {service}[/bold]")
     for check in result.checks:
@@ -1575,6 +1574,124 @@ async def _verify_pack_impl(service: str) -> None:
         console.print(f"\n[red]Pack '{service}' failed verification[/red]")
         for e in result.errors:
             console.print(f"  {e}")
+        raise typer.Exit(1)
+
+
+# ===================================================================
+# G4b: Sync + Signals commands
+# ===================================================================
+
+
+@app.command()
+def sync(
+    service: Annotated[
+        str | None, typer.Argument(help="Service name to check (omit for all)")
+    ] = None,
+    check_all: Annotated[
+        bool, typer.Option("--all", help="Check all profiled services")
+    ] = False,
+    apply: Annotated[
+        bool, typer.Option("--apply", help="Apply proposed updates")
+    ] = False,
+) -> None:
+    """Check external API drift for profiled services."""
+    asyncio.run(_sync_impl(service, check_all, apply))
+
+
+async def _sync_impl(
+    service: str | None, check_all: bool, apply: bool
+) -> None:
+    try:
+        async with app_context() as terrarium:
+            feedback = terrarium.registry.get("feedback")
+
+            if check_all or service is None:
+                reports = await feedback.check_sync_all()
+                if not reports:
+                    console.print("[green]No drift detected across all services[/green]")
+                    return
+                console.print(f"[bold]Drift detected in {len(reports)} source(s):[/bold]")
+                for report in reports:
+                    _print_drift_report(report)
+            else:
+                reports = await feedback.check_sync(service)
+                if not reports:
+                    console.print(f"[green]No drift for '{service}'[/green]")
+                    return
+                for report in reports:
+                    _print_drift_report(report)
+
+                if apply and reports:
+                    proposal = await feedback.propose_sync_update(service)
+                    if proposal:
+                        console.print(
+                            f"\n[bold]Proposed {len(proposal.proposed_changes)} changes:[/bold]"
+                        )
+                        for change in proposal.proposed_changes:
+                            console.print(f"  - {change.change_type}: {change.description}")
+                        updated = await feedback.apply_sync_update(service, proposal)
+                        console.print(
+                            f"\n[green]Applied. Profile updated to v{updated.version}[/green]"
+                        )
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+def _print_drift_report(report: Any) -> None:
+    """Pretty-print a DriftReport."""
+    console.print(f"\n  [bold]{report.service_name}[/bold] ({report.source})")
+    if report.operations_added:
+        shown = report.operations_added[:5]
+        extra = len(report.operations_added) - 5
+        suffix = f" (+{extra} more)" if extra > 0 else ""
+        console.print(f"    Added: {', '.join(shown)}{suffix}")
+    if report.operations_removed:
+        shown = report.operations_removed[:5]
+        extra = len(report.operations_removed) - 5
+        suffix = f" (+{extra} more)" if extra > 0 else ""
+        console.print(f"    Removed: {', '.join(shown)}{suffix}")
+    if report.summary:
+        console.print(f"    Summary: {report.summary}")
+
+
+@app.command()
+def signals(
+    fmt: Annotated[
+        str, typer.Option("--format", "-f", help="Output format")
+    ] = "table",
+) -> None:
+    """Display local signals from your run history."""
+    asyncio.run(_signals_impl(fmt))
+
+
+async def _signals_impl(fmt: str) -> None:
+    try:
+        async with app_context() as terrarium:
+            feedback = terrarium.registry.get("feedback")
+            result = await feedback.get_local_signals()
+
+            if fmt == "json":
+                import json
+                console.print(json.dumps(result.model_dump(mode="json"), indent=2))
+                return
+
+            console.print(f"[bold]Local Signals[/bold] ({result.total_runs} runs)")
+            console.print()
+
+            for name, signal in result.signals.items():
+                console.print(f"  [bold]{name}[/bold]: {signal.summary}")
+                for entry in signal.entries[:5]:
+                    parts = [f"{k}={v}" for k, v in entry.items()]
+                    console.print(f"    {', '.join(parts)}")
+                if len(signal.entries) > 5:
+                    console.print(
+                        f"    ... and {len(signal.entries) - 5} more"
+                    )
+                console.print()
+
+    except (TerrariumError, RuntimeError) as exc:
+        print_error(str(exc))
         raise typer.Exit(1)
 
 

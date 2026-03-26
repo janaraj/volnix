@@ -176,11 +176,12 @@ const columns: ColumnDef<WorldEvent>[] = [
   {
     accessorKey: 'action',
     header: 'Action',
-    cell: ({ getValue }) => (
-      <span className="truncate text-sm text-text-secondary">
-        {getValue<string>()}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const action = row.original.action;
+      const eventType = row.original.event_type;
+      const display = action || String(eventType).replace(/_/g, ' ');
+      return <span className="truncate text-sm text-text-secondary capitalize">{display}</span>;
+    },
   },
   {
     accessorKey: 'outcome',
@@ -357,7 +358,7 @@ function EventDetail({
             {/* Summary */}
             <p className="text-sm text-text-secondary">
               <span className="text-text-primary">{event.actor_id}</span> &rarr;{' '}
-              {event.action ?? event.event_type} &rarr;{' '}
+              {event.action ? event.action : String(event.event_type).replace(/_/g, ' ')} &rarr;{' '}
               <span className="uppercase font-medium">{event.outcome ?? ''}</span>
             </p>
 
