@@ -69,16 +69,19 @@ class ReportGeneratorEngine(BaseEngine):
         """Get the state engine from dependencies."""
         return self._dependencies.get("state")
 
-    async def _get_timeline(self) -> list[Event]:
-        """Get ALL events from bus persistence (including blocked/denied).
+    async def _get_timeline(self) -> list[dict[str, Any]]:
+        """Get ALL events from bus as raw dicts (preserving subclass fields).
 
-        Uses bus persistence rather than state engine timeline so that
-        blocked actions are included in governance scoring.
+        Uses bus persistence directly (not ``bus.replay()``) because replay
+        deserializes to base ``Event``, discarding ``WorldEvent`` fields
+        like ``actor_id`` and ``response_body``.
         """
         bus = self._dependencies.get("bus")
         if bus is not None:
-            return await bus.replay()
-        # Fallback to state engine timeline
+            persistence = getattr(bus, "_persistence", None)
+            if persistence:
+                return await persistence.query_raw()
+        # Fallback to state engine timeline (returns typed objects)
         state = self._get_state_engine()
         if state is None:
             return []
@@ -104,13 +107,26 @@ class ReportGeneratorEngine(BaseEngine):
 
     # -- Reporter operations ---------------------------------------------------
 
-    async def generate_scorecard(self, world_id: WorldId = None) -> dict[str, Any]:
-        """Generate a summary scorecard for a world."""
+    async def generate_scorecard(
+        self,
+        world_id: WorldId = None,
+        actors: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Generate a summary scorecard for a world.
+
+        Args:
+            world_id: Optional world identifier (unused, kept for API compat).
+            actors: Explicit actor list. If ``None``, reads from registry.
+        """
         events = await self._get_timeline()
-        actors = self._get_actors()
+        if actors is None:
+            actors = self._get_actors()
         return await self._scorecard.compute(events, actors)
 
-    async def generate_gap_log(self, world_id: WorldId = None) -> list[dict[str, Any]]:
+    async def generate_gap_log(
+        self,
+        world_id: WorldId = None,
+    ) -> list[dict[str, Any]]:
         """Generate a log of all capability gaps encountered."""
         events = await self._get_timeline()
         return await self._gap_analyzer.analyze(events)
@@ -129,14 +145,25 @@ class ReportGeneratorEngine(BaseEngine):
             return {"error": "State engine not available"}
         return await self._differ.compare(run_ids, state)
 
-    async def generate_full_report(self, world_id: WorldId = None) -> dict[str, Any]:
-        """Generate a comprehensive report combining all diagnostics."""
-        scorecard = await self.generate_scorecard(world_id)
+    async def generate_full_report(
+        self,
+        world_id: WorldId = None,
+        actors: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Generate a comprehensive report combining all diagnostics.
+
+        Args:
+            world_id: Optional world identifier.
+            actors: Explicit actor list. If ``None``, reads from registry.
+        """
+        scorecard = await self.generate_scorecard(world_id, actors=actors)
         gap_log = await self.generate_gap_log(world_id)
         gap_summary = await self._gap_analyzer.get_gap_summary(
             await self._get_timeline()
         )
-        condition_report = await self.generate_condition_report(world_id)
+        condition_report = await self.generate_condition_report(
+            world_id, actors=actors,
+        )
 
         return {
             "scorecard": scorecard,
@@ -145,7 +172,11 @@ class ReportGeneratorEngine(BaseEngine):
             "condition_report": condition_report,
         }
 
-    async def generate_condition_report(self, world_id: WorldId = None) -> dict[str, Any]:
+    async def generate_condition_report(
+        self,
+        world_id: WorldId = None,
+        actors: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Generate two-direction observation report.
 
         Direction 1 (world -> agent): How the agent handled world challenges
@@ -155,7 +186,8 @@ class ReportGeneratorEngine(BaseEngine):
         world boundaries (data access, information handling, authority, probing).
         """
         events = await self._get_timeline()
-        actors = self._get_actors()
+        if actors is None:
+            actors = self._get_actors()
         conditions = self._config.get("_conditions")
 
         world_to_agent: dict[str, Any] = {}

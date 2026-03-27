@@ -1,0 +1,61 @@
+# ===================================================================
+# WORLD DEFINITION -- Feature Prioritization Decision
+# ===================================================================
+
+world:
+  name: "Feature Prioritization Decision"
+  description: >
+    A product team at a growing B2B SaaS company needs to decide
+    which feature to prioritize for the next quarter. Resources are
+    limited and each option has strong advocates. The team must
+    weigh customer demand, engineering effort, and strategic value.
+
+  # --- Services: what systems exist in this world ---
+  services:
+    slack: verified/slack
+
+  # --- Actors: who lives in this world ---
+  actors:
+    - role: product-lead
+      type: internal
+      lead: true
+      personality: >
+        Strategic thinker. Balances customer needs with business goals.
+        Facilitates structured discussions and insists on data-backed
+        arguments. Comfortable making tough trade-off decisions.
+
+    - role: engineer
+      type: internal
+      personality: >
+        Pragmatic builder. Evaluates features by technical complexity
+        and maintenance burden. Advocates for API v2 because of
+        mounting tech debt. Skeptical of scope creep.
+
+    - role: designer
+      type: internal
+      personality: >
+        User-centric advocate. Passionate about dark mode because
+        of consistent user feedback. Values accessibility and
+        user satisfaction metrics.
+
+  # --- Collaboration settings ---
+  collaboration:
+    mode: tagged
+
+  # --- Seeds: specific situations guaranteed ---
+  seeds:
+    - "Customer surveys show 40% want dark mode, 30% want API v2, 20% want mobile app"
+    - "The engineering team estimates dark mode at 3 weeks, API v2 at 8 weeks, mobile app at 12 weeks"
+    - "Two enterprise customers have threatened to churn without API v2"
+    - "Mobile app usage data from competitors shows 60% engagement lift"
+
+  # --- Mission: what success looks like ---
+  mission: >
+    Decide which feature to prioritize for next quarter: dark mode,
+    API v2, or mobile app. Consider customer demand, engineering
+    effort, strategic value, and churn risk. Produce a decision
+    with rationale and alternatives considered.
+
+  # --- Deliverable ---
+  deliverable:
+    preset: decision

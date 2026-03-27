@@ -51,6 +51,14 @@ class FidelityConfig(BaseModel):
     mode: str = "auto"  # auto | strict | exploratory
 
 
+class LoggingConfig(BaseModel):
+    """Application logging configuration."""
+    model_config = ConfigDict(frozen=True)
+    level: str = "WARNING"
+    format: str = "text"
+    llm_debug: bool = False
+
+
 class DashboardConfig(BaseModel):
     """Web dashboard configuration."""
     model_config = ConfigDict(frozen=True)
@@ -99,5 +107,6 @@ class TerrariumConfig(BaseModel):
     profiles: ProfileConfig = Field(default_factory=ProfileConfig)
     simulation_runner: SimulationRunnerConfig = Field(default_factory=SimulationRunnerConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)

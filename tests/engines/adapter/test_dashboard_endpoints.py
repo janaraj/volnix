@@ -183,6 +183,9 @@ def _make_dashboard_gateway():
             return SAMPLE_SCORECARD
         if artifact_type == "report":
             return SAMPLE_REPORT
+        if artifact_type == "config":
+            # Entities are in the compilation config, not the report
+            return {"entities": SAMPLE_REPORT["entities"]}
         return None
 
     artifact_store.load_artifact = AsyncMock(side_effect=_load_artifact)

@@ -137,6 +137,13 @@ slack = "/slack/api"
 jira = "/jira"
 shopify = "/shopify"
 
+# ── Logging ──────────────────────────────────────────────────
+
+[logging]
+level = "INFO"                      # DEBUG | INFO | WARNING | ERROR
+format = "text"                     # text | json (future)
+llm_debug = false                   # Write LLM responses to data/llm_debug/
+
 # ── Webhook Event Delivery ───────────────────────────────────
 
 [webhook]

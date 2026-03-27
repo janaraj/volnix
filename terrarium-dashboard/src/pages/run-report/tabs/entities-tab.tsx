@@ -22,8 +22,9 @@ const ENTITY_DEFAULTS = { entity: '', entity_type: '' };
 // ---------------------------------------------------------------------------
 
 function StateChangeRow({ change, isLast }: { change: StateChange; isLast: boolean }) {
-  const changedEntries = Object.entries(change.fields).filter(
-    ([key, value]) => change.previous_fields[key] !== value,
+  const prev = change.previous_fields ?? {};
+  const changedEntries = Object.entries(change.fields ?? {}).filter(
+    ([key, value]) => prev[key] !== value,
   );
 
   return (
@@ -158,12 +159,17 @@ function EntityCard({
 
       {/* Key fields */}
       <div className="mb-2 space-y-1">
-        {keyFields.map(([key, value]) => (
-          <div key={key} className="flex justify-between text-xs">
-            <span className="text-text-muted">{key}</span>
-            <span className="font-mono text-text-secondary">{String(value)}</span>
-          </div>
-        ))}
+        {keyFields.map(([key, value]) => {
+          const display = Array.isArray(value) ? value.join(', ') : String(value ?? '');
+          return (
+            <div key={key} className="flex justify-between gap-2 text-xs">
+              <span className="shrink-0 text-text-muted">{key}</span>
+              <span className="truncate text-right font-mono text-text-secondary" title={display}>
+                {display}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Footer */}
@@ -189,6 +195,14 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
 
   return (
     <div>
+      {selectedEntityId && (
+        <EntityDetailPanel
+          runId={runId}
+          entityId={selectedEntityId}
+          onClose={() => setUrlState({ entity: '' })}
+        />
+      )}
+
       <QueryGuard query={entitiesQuery} loadingFallback={<EntityCardSkeleton />}>
         {(data) => {
           const entityTypeOptions = Array.from(
@@ -232,14 +246,6 @@ export function EntitiesTab({ runId }: EntitiesTabProps) {
           );
         }}
       </QueryGuard>
-
-      {selectedEntityId && (
-        <EntityDetailPanel
-          runId={runId}
-          entityId={selectedEntityId}
-          onClose={() => setUrlState({ entity: '' })}
-        />
-      )}
     </div>
   );
 }

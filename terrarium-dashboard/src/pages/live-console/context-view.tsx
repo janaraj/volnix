@@ -155,7 +155,7 @@ function EventDetailView({
               </div>
               <div className="space-y-1">
                 <p className="text-xs uppercase text-text-muted">Output</p>
-                <JsonViewer data={event.output_data} />
+                <JsonViewer data={event.response_body} />
               </div>
             </div>
 

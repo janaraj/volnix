@@ -108,6 +108,33 @@ class BusPersistence:
             events.append(event)
         return events
 
+    async def query_raw(
+        self,
+        from_sequence: int = 0,
+        filters: dict[str, Any] | None = None,
+        limit: int | None = None,
+        order: str = "asc",
+    ) -> list[dict[str, Any]]:
+        """Query events as raw JSON dicts, preserving all subclass fields.
+
+        Unlike :meth:`query` which deserializes to base ``Event`` (losing
+        subclass fields like ``actor_id``), this returns the original JSON
+        payloads as dicts.
+        """
+        rows = await self._log.query(
+            from_sequence=from_sequence,
+            filters=filters,
+            limit=limit,
+            order=order,
+        )
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                results.append(json.loads(row["payload"]))
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return results
+
     async def get_count(self) -> int:
         """Return the total number of persisted events."""
         return await self._log.count()

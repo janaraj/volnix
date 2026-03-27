@@ -10,6 +10,16 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+
+def _aid(e: Any) -> str:
+    """Extract actor_id as string from dict or object."""
+    if isinstance(e, dict):
+        v = e.get("actor_id")
+    else:
+        v = getattr(e, "actor_id", None)
+    return str(v) if v is not None else ""
+from typing import Any
+
 from terrarium.core.types import ActorId
 from terrarium.core.events import (
     PermissionDeniedEvent,
@@ -240,7 +250,7 @@ class AgentBoundaryAnalyzer:
         # Check for permission denied followed immediately by same action (bypass attempt)
         actor_events = [
             e for e in events
-            if hasattr(e, "actor_id") and str(e.actor_id) == aid
+            if _aid(e) == aid
         ]
 
         for i in range(len(actor_events) - 1):

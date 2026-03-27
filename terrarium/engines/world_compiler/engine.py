@@ -336,6 +336,10 @@ class WorldCompilerEngine(BaseEngine):
                 retry_counts[seed_section] = seed_result.get("retry_count", 0)
                 validation_sections[seed_section] = seed_result["result"].model_dump(mode="json")
 
+        # Step 6.5: DEDUP entities (seed versions win on conflict)
+        from terrarium.utils.collections import dedup_entity_collection
+        all_entities = dedup_entity_collection(all_entities, key="id", strategy="last_wins")
+
         # Step 7: final validation gate before state/actor side effects
         final_validation = await validator.validate_world(
             plan,

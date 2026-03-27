@@ -378,7 +378,7 @@ function EventDetail({
                 <p className="mb-1 text-xs font-medium uppercase text-text-muted">
                   Output
                 </p>
-                <JsonViewer data={event.output_data} />
+                <JsonViewer data={event.response_body} />
               </div>
             </div>
 

@@ -1,0 +1,64 @@
+# ===================================================================
+# WORLD DEFINITION -- Product Launch Campaign Brainstorm
+# ===================================================================
+
+world:
+  name: "Product Launch Campaign Brainstorm"
+  description: >
+    A creative team brainstorming a launch campaign for a new
+    productivity app called "FlowState". The app targets remote
+    workers who struggle with focus and deep work. The team needs
+    fresh, memorable ideas across multiple channels.
+
+  # --- Services: what systems exist in this world ---
+  services:
+    slack: verified/slack
+
+  # --- Actors: who lives in this world ---
+  actors:
+    - role: creative-director
+      type: internal
+      lead: true
+      personality: >
+        Big-picture thinker. Pushes the team toward bold,
+        unconventional ideas. Kills safe or generic concepts
+        quickly. Values authenticity and emotional resonance
+        over feature-focused messaging.
+
+    - role: copywriter
+      type: internal
+      personality: >
+        Wordsmith with a knack for memorable taglines. Thinks
+        in headlines and hooks. Tends to iterate rapidly,
+        throwing out many options to find the gem. Loves
+        wordplay and cultural references.
+
+    - role: social-media-specialist
+      type: internal
+      personality: >
+        Platform-native thinker. Knows what performs on each
+        channel. Advocates for short-form video and interactive
+        content. Data-driven about engagement metrics. Pushes
+        for creator partnerships over traditional ads.
+
+  # --- Collaboration settings ---
+  collaboration:
+    mode: tagged
+
+  # --- Seeds: specific situations guaranteed ---
+  seeds:
+    - "FlowState launches in 6 weeks with a $50K marketing budget"
+    - "Target audience is remote workers aged 25-40 who use Slack daily"
+    - "Competitors have focused on productivity guilt messaging"
+    - "Beta users say the app feels like putting on noise-canceling headphones for your brain"
+
+  # --- Mission: what success looks like ---
+  mission: >
+    Brainstorm a launch campaign for FlowState. Generate at least
+    5 distinct campaign ideas spanning social media, content marketing,
+    and community engagement. Each idea should have a tagline, channel
+    strategy, and estimated effort level.
+
+  # --- Deliverable ---
+  deliverable:
+    preset: brainstorm
