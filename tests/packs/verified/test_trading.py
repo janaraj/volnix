@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.trading -- TradingPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.alpaca -- TradingPack through pack's own handle_action."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ import pytest
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ServicePack
-from terrarium.packs.verified.trading.handlers import (
+from terrarium.packs.verified.alpaca.handlers import (
     SLIPPAGE_BPS,
     _compute_fill_price,
 )
-from terrarium.packs.verified.trading.pack import TradingPack
-from terrarium.packs.verified.trading.state_machines import (
+from terrarium.packs.verified.alpaca.pack import TradingPack
+from terrarium.packs.verified.alpaca.state_machines import (
     ORDER_TRANSITIONS,
 )
 
@@ -313,7 +313,7 @@ def sample_state():
 class TestTradingPackMetadata:
     def test_pack_name_and_category(self, pack):
         """Pack identifies as trading/trading with fidelity_tier 1."""
-        assert pack.pack_name == "trading"
+        assert pack.pack_name == "alpaca"
         assert pack.category == "trading"
         assert pack.fidelity_tier == 1
 
@@ -350,7 +350,7 @@ class TestOrderLifecycle:
     async def test_market_buy_fills_immediately(self, pack, sample_state):
         """Market buy creates order + position + account update + activity (4 deltas)."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "10",
@@ -395,7 +395,7 @@ class TestOrderLifecycle:
     async def test_market_sell_existing_position(self, pack, sample_state):
         """Market sell AAPL with existing position increases cash."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -421,7 +421,7 @@ class TestOrderLifecycle:
     async def test_limit_buy_fills_when_ask_below_limit(self, pack, sample_state):
         """Limit buy with limit_price > ask fills at ask price."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -440,7 +440,7 @@ class TestOrderLifecycle:
     async def test_limit_buy_no_fill_when_ask_above_limit(self, pack, sample_state):
         """Limit buy with limit_price < ask does not fill."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -461,7 +461,7 @@ class TestOrderLifecycle:
     async def test_cancel_accepted_order(self, pack, sample_state):
         """Cancelling an accepted order sets status to cancelled."""
         result = await pack.handle_action(
-            ToolName("alpaca_cancel_order"),
+            ToolName("cancel_order"),
             {"id": "ord_open"},
             sample_state,
         )
@@ -476,7 +476,7 @@ class TestOrderLifecycle:
     async def test_stop_buy_triggers(self, pack, sample_state):
         """Stop buy triggers when ask >= stop_price."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "10",
@@ -496,7 +496,7 @@ class TestOrderLifecycle:
     async def test_stop_buy_no_trigger(self, pack, sample_state):
         """Stop buy does not trigger when ask < stop_price."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "10",
@@ -514,7 +514,7 @@ class TestOrderLifecycle:
     async def test_stop_limit_triggers_then_limit_fills(self, pack, sample_state):
         """Stop-limit triggers on stop, then fills at limit when ask <= limit."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "5",
@@ -541,7 +541,7 @@ class TestOrderErrors:
     async def test_create_order_invalid_symbol(self, pack, sample_state):
         """Unknown symbol returns 422 error."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "FAKE",
                 "qty": "10",
@@ -557,7 +557,7 @@ class TestOrderErrors:
     async def test_create_order_untradable_asset(self, pack, sample_state):
         """Asset with tradable=False returns 422 error."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "HALT",
                 "qty": "10",
@@ -573,7 +573,7 @@ class TestOrderErrors:
     async def test_create_order_insufficient_buying_power(self, pack, sample_state):
         """Buy exceeding buying_power returns 403 error."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10000",
@@ -594,7 +594,7 @@ class TestOrderErrors:
             {**sample_state["alpaca_accounts"][0], "trading_blocked": True}
         ]
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -610,7 +610,7 @@ class TestOrderErrors:
     async def test_cancel_filled_order(self, pack, sample_state):
         """Cancelling a filled order returns 422 error."""
         result = await pack.handle_action(
-            ToolName("alpaca_cancel_order"),
+            ToolName("cancel_order"),
             {"id": "ord_filled"},
             sample_state,
         )
@@ -627,7 +627,7 @@ class TestAccountState:
     async def test_get_account_returns_fields(self, pack, sample_state):
         """Get account returns all standard Alpaca account fields."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_account"),
+            ToolName("get_account"),
             {},
             sample_state,
         )
@@ -644,7 +644,7 @@ class TestAccountState:
     async def test_get_account_empty_state(self, pack):
         """Empty accounts list returns 404 error."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_account"),
+            ToolName("get_account"),
             {},
             {"alpaca_accounts": []},
         )
@@ -654,7 +654,7 @@ class TestAccountState:
     async def test_buying_power_math_on_buy(self, pack, sample_state):
         """After market buy: new_bp = old_bp - (fill_price * qty)."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "TSLA",
                 "qty": "5",
@@ -687,7 +687,7 @@ class TestPositions:
     async def test_position_created_on_first_buy(self, pack, sample_state):
         """Buying NVDA (no existing position) creates a new position."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "10",
@@ -711,7 +711,7 @@ class TestPositions:
     async def test_position_avg_price_updated(self, pack, sample_state):
         """Buying more AAPL updates avg_entry_price with weighted average."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "50",
@@ -738,7 +738,7 @@ class TestPositions:
     async def test_close_position_generates_sell_order(self, pack, sample_state):
         """Closing AAPL position creates market sell + deletes position + updates account."""
         result = await pack.handle_action(
-            ToolName("alpaca_close_position"),
+            ToolName("close_position"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -770,7 +770,7 @@ class TestPositions:
     async def test_list_positions_enriches_with_live_pl(self, pack, sample_state):
         """P&L computed from current quote, not stored values."""
         result = await pack.handle_action(
-            ToolName("alpaca_list_positions"),
+            ToolName("list_positions"),
             {},
             sample_state,
         )
@@ -787,7 +787,7 @@ class TestPositions:
     async def test_get_position_not_found(self, pack, sample_state):
         """Getting position for a symbol with no position returns 404."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_position"),
+            ToolName("get_position"),
             {"symbol": "GOOG"},
             sample_state,
         )
@@ -804,7 +804,7 @@ class TestMarketData:
     async def test_get_bars_returns_alpaca_format(self, pack, sample_state):
         """Bars response uses Alpaca short-field format {t, o, h, l, c, v, n, vw}."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_bars"),
+            ToolName("get_bars"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -819,7 +819,7 @@ class TestMarketData:
     async def test_get_bars_filters_by_symbol(self, pack, sample_state):
         """Only bars matching requested symbol are returned."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_bars"),
+            ToolName("get_bars"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -829,7 +829,7 @@ class TestMarketData:
     async def test_get_bars_pagination(self, pack, sample_state):
         """Limit=1 returns 1 bar and a next_page_token."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_bars"),
+            ToolName("get_bars"),
             {"symbol": "AAPL", "limit": "1"},
             sample_state,
         )
@@ -840,7 +840,7 @@ class TestMarketData:
     async def test_get_latest_quote_alpaca_format(self, pack, sample_state):
         """Latest quote uses Alpaca short-field format {t, bp, bs, bx, ap, as, ax, c}."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_latest_quote"),
+            ToolName("get_latest_quote"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -856,7 +856,7 @@ class TestMarketData:
     async def test_get_snapshot_composition(self, pack, sample_state):
         """Snapshot contains latestQuote, minuteBar, dailyBar, prevDailyBar."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_snapshot"),
+            ToolName("get_snapshot"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -880,7 +880,7 @@ class TestClockAndAssets:
     async def test_get_clock(self, pack, sample_state):
         """Clock returns is_open, next_open, next_close."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_clock"),
+            ToolName("get_clock"),
             {},
             sample_state,
         )
@@ -892,7 +892,7 @@ class TestClockAndAssets:
     async def test_list_assets_all(self, pack, sample_state):
         """Listing all assets returns all 4 assets."""
         result = await pack.handle_action(
-            ToolName("alpaca_list_assets"),
+            ToolName("list_assets"),
             {},
             sample_state,
         )
@@ -902,7 +902,7 @@ class TestClockAndAssets:
     async def test_list_assets_filter_inactive(self, pack, sample_state):
         """Filtering by status=inactive returns only HALT."""
         result = await pack.handle_action(
-            ToolName("alpaca_list_assets"),
+            ToolName("list_assets"),
             {"status": "inactive"},
             sample_state,
         )
@@ -920,7 +920,7 @@ class TestNews:
     async def test_get_news_all(self, pack, sample_state):
         """Get news returns all articles (sorted newest first)."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_news"),
+            ToolName("get_news"),
             {},
             sample_state,
         )
@@ -933,7 +933,7 @@ class TestNews:
     async def test_get_news_filter_by_symbol(self, pack, sample_state):
         """Filtering by symbols=NVDA returns only NVDA news."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_news"),
+            ToolName("get_news"),
             {"symbols": "NVDA"},
             sample_state,
         )
@@ -944,7 +944,7 @@ class TestNews:
     async def test_get_news_pagination(self, pack, sample_state):
         """Limit=1 returns 1 article and a next_page_token."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_news"),
+            ToolName("get_news"),
             {"limit": "1"},
             sample_state,
         )
@@ -955,7 +955,7 @@ class TestNews:
     async def test_get_news_strips_internal_fields(self, pack, sample_state):
         """Internal metadata fields are stripped from news response."""
         result = await pack.handle_action(
-            ToolName("alpaca_get_news"),
+            ToolName("get_news"),
             {},
             sample_state,
         )
@@ -1111,7 +1111,7 @@ class TestPackAutoDiscovery:
         """TradingPack is a ServicePack subclass."""
         assert issubclass(TradingPack, ServicePack)
         pack = TradingPack()
-        assert pack.pack_name == "trading"
+        assert pack.pack_name == "alpaca"
         assert pack.fidelity_tier == 1
 
 
@@ -1128,7 +1128,7 @@ class TestBugFixEquityAllPositions:
     ):
         """Buy NVDA when AAPL position already exists. Equity must include both."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "NVDA",
                 "qty": "10",
@@ -1174,7 +1174,7 @@ class TestBugFixCancelStateMachine:
             }
         )
         result = await pack.handle_action(
-            ToolName("alpaca_cancel_order"),
+            ToolName("cancel_order"),
             {"id": "ord_new_test"},
             sample_state,
         )
@@ -1192,7 +1192,7 @@ class TestBugFixClosePositionEquity:
     ):
         """Closing AAPL position must update equity to reflect no AAPL."""
         result = await pack.handle_action(
-            ToolName("alpaca_close_position"),
+            ToolName("close_position"),
             {"symbol": "AAPL"},
             sample_state,
         )
@@ -1218,7 +1218,7 @@ class TestBugFixZeroQtyPosition:
     ):
         """Sell 100 AAPL (exact position qty) via create_order → position deleted."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "100",
@@ -1245,7 +1245,7 @@ class TestBugFixInputValidation:
 
     async def test_zero_qty_rejected(self, pack, sample_state):
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "0",
@@ -1260,7 +1260,7 @@ class TestBugFixInputValidation:
 
     async def test_negative_qty_rejected(self, pack, sample_state):
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "-10",
@@ -1276,7 +1276,7 @@ class TestBugFixInputValidation:
         self, pack, sample_state
     ):
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -1294,7 +1294,7 @@ class TestBugFixInputValidation:
         self, pack, sample_state
     ):
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "AAPL",
                 "qty": "10",
@@ -1317,7 +1317,7 @@ class TestBugFixStateConsistency:
     ):
         """After a buy, equity must exactly equal cash + sum(position market values)."""
         result = await pack.handle_action(
-            ToolName("alpaca_create_order"),
+            ToolName("create_order"),
             {
                 "symbol": "TSLA",
                 "qty": "5",

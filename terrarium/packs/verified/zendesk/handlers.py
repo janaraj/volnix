@@ -39,11 +39,11 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-async def handle_zendesk_tickets_create(
+async def handle_tickets_create(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_create`` action.
+    """Handle the ``tickets_create`` action.
 
     Creates a ticket entity with status="new" and an initial comment
     derived from the ticket description. Produces two StateDelta creates:
@@ -105,11 +105,11 @@ async def handle_zendesk_tickets_create(
     )
 
 
-async def handle_zendesk_tickets_update(
+async def handle_tickets_update(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_update`` action.
+    """Handle the ``tickets_update`` action.
 
     Finds the ticket by ID and applies field updates. For status changes,
     records previous_fields. Always bumps updated_at.
@@ -159,11 +159,11 @@ async def handle_zendesk_tickets_update(
     )
 
 
-async def handle_zendesk_tickets_delete(
+async def handle_tickets_delete(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_delete`` action.
+    """Handle the ``tickets_delete`` action.
 
     Soft-deletes a ticket by marking it with status="deleted".
     Zendesk does not truly destroy tickets on DELETE -- they become
@@ -200,11 +200,11 @@ async def handle_zendesk_tickets_delete(
     )
 
 
-async def handle_zendesk_tickets_search(
+async def handle_tickets_search(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_search`` action.
+    """Handle the ``tickets_search`` action.
 
     Searches tickets by matching the query string (case-insensitive)
     against subject, description, and tags. Supports basic Zendesk
@@ -272,11 +272,11 @@ async def handle_zendesk_tickets_search(
     )
 
 
-async def handle_zendesk_tickets_list(
+async def handle_tickets_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_list`` action.
+    """Handle the ``tickets_list`` action.
 
     Filters state["tickets"] by status, assignee_id, and requester_id.
     Supports pagination via page and per_page. No state mutations.
@@ -312,11 +312,11 @@ async def handle_zendesk_tickets_list(
     )
 
 
-async def handle_zendesk_tickets_show(
+async def handle_tickets_show(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_tickets_show`` action.
+    """Handle the ``tickets_show`` action.
 
     Finds a single ticket by ID. No state mutations.
     """
@@ -334,11 +334,11 @@ async def handle_zendesk_tickets_show(
     )
 
 
-async def handle_zendesk_ticket_comments_create(
+async def handle_ticket_comments_create(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_ticket_comments_create`` action.
+    """Handle the ``ticket_comments_create`` action.
 
     Creates a comment entity and updates the parent ticket's updated_at.
     Produces two StateDelta objects.
@@ -394,11 +394,11 @@ async def handle_zendesk_ticket_comments_create(
     )
 
 
-async def handle_zendesk_ticket_comments_list(
+async def handle_ticket_comments_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_ticket_comments_list`` action.
+    """Handle the ``ticket_comments_list`` action.
 
     Filters state["comments"] by ticket_id. No state mutations.
     """
@@ -415,11 +415,11 @@ async def handle_zendesk_ticket_comments_list(
     )
 
 
-async def handle_zendesk_users_list(
+async def handle_users_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_users_list`` action.
+    """Handle the ``users_list`` action.
 
     Filters state["users"] by role. Supports pagination. No state mutations.
     """
@@ -445,11 +445,11 @@ async def handle_zendesk_users_list(
     )
 
 
-async def handle_zendesk_users_show(
+async def handle_users_show(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_users_show`` action.
+    """Handle the ``users_show`` action.
 
     Finds a single user by ID. No state mutations.
     """
@@ -467,11 +467,11 @@ async def handle_zendesk_users_show(
     )
 
 
-async def handle_zendesk_groups_list(
+async def handle_groups_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_groups_list`` action.
+    """Handle the ``groups_list`` action.
 
     Returns all groups from state["groups"]. Supports pagination. No state mutations.
     """
@@ -495,11 +495,11 @@ async def handle_zendesk_groups_list(
     )
 
 
-async def handle_zendesk_groups_show(
+async def handle_groups_show(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``zendesk_groups_show`` action.
+    """Handle the ``groups_show`` action.
 
     Finds a single group by ID. No state mutations.
     """

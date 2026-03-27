@@ -57,12 +57,12 @@ boundary_rules:
 stop_conditions:
   max_steps: 8
 target_mapping:
-  cases.list: zendesk_tickets_list
-  cases.read: zendesk_tickets_show
-  cases.update: zendesk_tickets_update
-  comments.create: zendesk_ticket_comments_create
-  messages.send: send_gmail_message
-  customers.read: zendesk_users_show
+  cases.list: tickets_list
+  cases.read: tickets_show
+  cases.update: tickets_update
+  comments.create: ticket_comments_create
+  messages.send: messages_send
+  customers.read: users_show
 prompt_templates:
   system: prompts/system.j2
   decision: prompts/decision.j2

@@ -235,7 +235,7 @@ class CompilerServiceResolver:
     def _parse_spec_reference(self, spec_ref: Any) -> tuple[str, str]:
         """Parse spec reference into (tier, name).
 
-        'verified/email' → ('verified', 'email')
+        'verified/gmail' → ('verified', 'gmail')
         'profiled/stripe' → ('profiled', 'stripe')
         'stripe' → ('auto', 'stripe')
         dict → ('complex', pack_name_from_provider_key)

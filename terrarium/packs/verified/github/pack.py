@@ -11,7 +11,7 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.repos.handlers import (
+from terrarium.packs.verified.github.handlers import (
     handle_add_issue_comment,
     handle_create_issue,
     handle_create_pull_request,
@@ -28,7 +28,7 @@ from terrarium.packs.verified.repos.handlers import (
     handle_update_issue,
     handle_update_pull_request,
 )
-from terrarium.packs.verified.repos.schemas import (
+from terrarium.packs.verified.github.schemas import (
     COMMIT_ENTITY_SCHEMA,
     ISSUE_COMMENT_ENTITY_SCHEMA,
     ISSUE_ENTITY_SCHEMA,
@@ -38,7 +38,7 @@ from terrarium.packs.verified.repos.schemas import (
     REPOSITORY_ENTITY_SCHEMA,
     REVIEW_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.repos.state_machines import (
+from terrarium.packs.verified.github.state_machines import (
     ISSUE_TRANSITIONS,
     PULL_REQUEST_TRANSITIONS,
     REVIEW_TRANSITIONS,
@@ -55,7 +55,7 @@ class ReposPack(ServicePack):
     get_pull_request_files, list_commits.
     """
 
-    pack_name: ClassVar[str] = "repos"
+    pack_name: ClassVar[str] = "github"
     category: ClassVar[str] = "code"
     fidelity_tier: ClassVar[int] = 1
 

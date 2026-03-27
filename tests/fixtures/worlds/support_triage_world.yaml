@@ -7,8 +7,8 @@ world:
     Some tickets are past SLA. Agent must inspect, triage, and communicate.
 
   services:
-    email: verified/email
-    tickets: verified/tickets
+    gmail: verified/gmail
+    zendesk: verified/zendesk
 
   actors:
     - role: triage-agent
@@ -16,8 +16,8 @@ world:
       type: external
       count: 1
       permissions:
-        read: [email, tickets]
-        write: [email, tickets]
+        read: [gmail, zendesk]
+        write: [gmail, zendesk]
       budget:
         api_calls: 100
         llm_spend: 5.00

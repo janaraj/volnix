@@ -11,16 +11,16 @@ world:
 
   # ─── Services: what systems exist in this world ───
   services:
-    email: verified/email
-    chat: verified/chat
-    tickets: verified/tickets
-    payments: profiled/stripe
+    gmail: verified/gmail
+    slack: verified/slack
+    zendesk: verified/zendesk
+    stripe: profiled/stripe
     web:
       provider: verified/browser
       sites:
         - domain: dashboard.acme.com
           type: internal_dashboard
-          renders_from: [tickets, email, payments]
+          renders_from: [zendesk, gmail, stripe]
         - domain: knowledge.acme.com
           type: knowledge_base
           description: "Internal KB with support procedures and refund policies"
@@ -31,8 +31,8 @@ world:
       count: 2
       type: external
       permissions:
-        read: [tickets, email, chat, payments, web]
-        write: [tickets, email, chat]
+        read: [zendesk, gmail, slack, stripe, web]
+        write: [zendesk, gmail, slack]
         actions:
           refund_create: { max_amount: 5000 }
       budget:

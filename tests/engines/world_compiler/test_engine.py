@@ -9,7 +9,7 @@ from terrarium.engines.world_compiler.engine import WorldCompilerEngine
 from terrarium.engines.world_compiler.plan import WorldPlan
 from terrarium.llm.types import LLMResponse
 from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ class TestWorldCompilerEngine:
             "world": {
                 "name": "YAML E2E",
                 "description": "End-to-end test",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [{"role": "agent", "type": "external", "count": 1}],
                 "mission": "test all paths",
             }
@@ -69,8 +69,8 @@ class TestWorldCompilerEngine:
         assert plan.source == "yaml"
         assert plan.mission == "test all paths"
         # Email should be resolved via pack
-        if "email" in plan.services:
-            assert plan.services["email"].resolution_source == "tier1_pack"
+        if "gmail" in plan.services:
+            assert plan.services["gmail"].resolution_source == "tier1_pack"
 
     @pytest.mark.asyncio
     async def test_compile_from_nl(self, pack_registry, kernel):
@@ -79,7 +79,7 @@ class TestWorldCompilerEngine:
             "world": {
                 "name": "NL World",
                 "description": "From natural language",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [{"role": "agent", "type": "external", "count": 1}],
                 "policies": [],
                 "seeds": [],
@@ -119,7 +119,7 @@ class TestWorldCompilerEngine:
         world_file.write_text(yaml.dump({
             "world": {
                 "name": "Default Settings",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [],
             }
         }))

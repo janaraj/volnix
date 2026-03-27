@@ -82,8 +82,8 @@ class TestFullAgencyLoop:
 
         from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.email.pack import EmailPack
-        from terrarium.packs.verified.tickets.pack import TicketsPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
+        from terrarium.packs.verified.zendesk.pack import TicketsPack
         from terrarium.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -96,12 +96,12 @@ class TestFullAgencyLoop:
             behavior="dynamic",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email", spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail", spec_reference="verified/gmail",
                     surface=email_surface, resolution_source="tier1_pack",
                 ),
-                "tickets": ServiceResolution(
-                    service_name="tickets", spec_reference="verified/tickets",
+                "zendesk": ServiceResolution(
+                    service_name="zendesk", spec_reference="verified/zendesk",
                     surface=tickets_surface, resolution_source="tier1_pack",
                 ),
             },
@@ -237,7 +237,7 @@ class TestFullAgencyLoop:
         external_envelope = ActionEnvelope(
             actor_id=ActorId(agent_id),
             source=ActionSource.EXTERNAL,
-            action_type="zendesk_tickets_update",
+            action_type="tickets_update",
             target_service=ServiceId("tickets"),
             payload={
                 "id": watched_entity_id,

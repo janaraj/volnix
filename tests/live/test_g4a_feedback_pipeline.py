@@ -116,7 +116,7 @@ class TestFeedbackPipelineE2E:
         )
         from terrarium.kernel.surface import ServiceSurface
         from terrarium.packs.profile_surface import profile_to_surface
-        from terrarium.packs.verified.email.pack import EmailPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
         from terrarium.reality.presets import load_preset
 
         twilio_surface = profile_to_surface(profile)
@@ -129,9 +129,9 @@ class TestFeedbackPipelineE2E:
             behavior="static",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email",
-                    spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
                     surface=email_surface,
                     resolution_source="tier1_pack",
                 ),

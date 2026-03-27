@@ -51,7 +51,7 @@ async def test_permission_deny_at_step_1(app):
         id=ActorId("agent-perm"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email", "chat"], "read": ["email", "chat", "payments"]},
+        permissions={"write": ["gmail", "slack"], "read": ["gmail", "slack", "stripe"]},
     )
     _register_actors(app, agent)
 
@@ -61,7 +61,7 @@ async def test_permission_deny_at_step_1(app):
 
     result = await app.handle_action(
         actor_id="agent-perm",
-        service_id="payments",
+        service_id="stripe",
         action="stripe_refunds_create",
         input_data={"amount": 100},
     )
@@ -77,7 +77,7 @@ async def test_policy_hold_at_step_2(app):
         id=ActorId("agent-policy"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["payments"], "read": "all"},
+        permissions={"write": ["stripe"], "read": "all"},
     )
     _register_actors(app, agent)
 
@@ -95,7 +95,7 @@ async def test_policy_hold_at_step_2(app):
 
     result = await app.handle_action(
         actor_id="agent-policy",
-        service_id="payments",
+        service_id="stripe",
         action="stripe_refunds_create",
         input_data={"amount": 100},
     )
@@ -127,7 +127,7 @@ async def test_budget_exhaust_at_step_3(app):
     for _ in range(2):
         await app.handle_action(
             actor_id="agent-budget",
-            service_id="email",
+            service_id="gmail",
             action="email_send",
             input_data={"to": "test@test.com"},
         )
@@ -135,7 +135,7 @@ async def test_budget_exhaust_at_step_3(app):
     # Third action should be denied
     result = await app.handle_action(
         actor_id="agent-budget",
-        service_id="email",
+        service_id="gmail",
         action="email_send",
         input_data={"to": "test@test.com"},
     )
@@ -151,7 +151,7 @@ async def test_governed_vs_ungoverned(app):
         id=ActorId("agent-compare"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email"], "read": ["email"]},
+        permissions={"write": ["gmail"], "read": ["gmail"]},
     )
     _register_actors(app, agent)
 
@@ -161,7 +161,7 @@ async def test_governed_vs_ungoverned(app):
 
     result_governed = await app.handle_action(
         actor_id="agent-compare",
-        service_id="payments",
+        service_id="stripe",
         action="stripe_refunds_create",
         input_data={"amount": 100},
     )
@@ -172,7 +172,7 @@ async def test_governed_vs_ungoverned(app):
 
     result_ungoverned = await app.handle_action(
         actor_id="agent-compare",
-        service_id="payments",
+        service_id="stripe",
         action="stripe_refunds_create",
         input_data={"amount": 100},
     )
@@ -228,7 +228,7 @@ async def test_agent_passes_all_governance_and_completes_action(app):
         id=ActorId("agent-success"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email", "chat"], "read": "all"},
+        permissions={"write": ["gmail", "slack"], "read": "all"},
         budget={"api_calls": 100},
     )
     _register_actors(app, agent)
@@ -249,7 +249,7 @@ async def test_agent_passes_all_governance_and_completes_action(app):
 
     result = await app.handle_action(
         actor_id="agent-success",
-        service_id="email",
+        service_id="gmail",
         action="email_send",
         input_data={
             "from_addr": "agent@acme.com",
@@ -271,7 +271,7 @@ async def test_agent_succeeds_with_log_policy_triggered(app):
         id=ActorId("agent-log"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email"], "read": "all"},
+        permissions={"write": ["gmail"], "read": "all"},
         budget={"api_calls": 50},
     )
     _register_actors(app, agent)
@@ -292,7 +292,7 @@ async def test_agent_succeeds_with_log_policy_triggered(app):
 
     result = await app.handle_action(
         actor_id="agent-log",
-        service_id="email",
+        service_id="gmail",
         action="email_send",
         input_data={
             "from_addr": "agent@acme.com",
@@ -313,7 +313,7 @@ async def test_agent_multiple_actions_within_budget(app):
         id=ActorId("agent-budget-ok"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email"], "read": "all"},
+        permissions={"write": ["gmail"], "read": "all"},
         budget={"api_calls": 5},
     )
     _register_actors(app, agent)
@@ -329,7 +329,7 @@ async def test_agent_multiple_actions_within_budget(app):
     for i in range(3):
         result = await app.handle_action(
             actor_id="agent-budget-ok",
-            service_id="email",
+            service_id="gmail",
             action="email_send",
             input_data={
                 "from_addr": "agent@acme.com",
@@ -349,7 +349,7 @@ async def test_agent_below_policy_threshold_succeeds(app):
         id=ActorId("agent-under-limit"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email"], "read": "all"},
+        permissions={"write": ["gmail"], "read": "all"},
         budget={"api_calls": 100},
     )
     _register_actors(app, agent)
@@ -370,7 +370,7 @@ async def test_agent_below_policy_threshold_succeeds(app):
 
     result = await app.handle_action(
         actor_id="agent-under-limit",
-        service_id="email",
+        service_id="gmail",
         action="email_send",
         input_data={
             "from_addr": "agent@acme.com",
@@ -392,7 +392,7 @@ async def test_full_governed_lifecycle_with_ledger_trace(app):
         id=ActorId("agent-lifecycle"),
         type=ActorType.AGENT,
         role="support-agent",
-        permissions={"write": ["email"], "read": "all"},
+        permissions={"write": ["gmail"], "read": "all"},
         budget={"api_calls": 10},
     )
     _register_actors(app, agent)
@@ -409,7 +409,7 @@ async def test_full_governed_lifecycle_with_ledger_trace(app):
     for i in range(2):
         result = await app.handle_action(
             actor_id="agent-lifecycle",
-            service_id="email",
+            service_id="gmail",
             action="email_send",
             input_data={
                 "from_addr": "agent@acme.com",

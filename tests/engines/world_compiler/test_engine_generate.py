@@ -17,7 +17,7 @@ from terrarium.kernel.registry import SemanticRegistry
 from terrarium.kernel.surface import ServiceSurface
 from terrarium.llm.types import LLMResponse
 from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 from terrarium.reality.presets import load_preset
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -205,9 +205,9 @@ def _make_plan_with_email() -> WorldPlan:
         description="Test",
         seed=42,
         services={
-            "email": ServiceResolution(
-                service_name="email",
-                spec_reference="verified/email",
+            "gmail": ServiceResolution(
+                service_name="gmail",
+                spec_reference="verified/gmail",
                 surface=surface,
                 resolution_source="tier1_pack",
             )

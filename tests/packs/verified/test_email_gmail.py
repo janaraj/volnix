@@ -1,10 +1,10 @@
-"""Tests for Gmail-aligned handlers in terrarium.packs.verified.email."""
+"""Tests for Gmail-aligned handlers in terrarium.packs.verified.gmail."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 
 
 @pytest.fixture
@@ -77,9 +77,9 @@ def gmail_state():
 
 class TestSendGmailMessage:
     async def test_creates_message_and_thread(self, email_pack, gmail_state):
-        """send_gmail_message creates both message and thread entities."""
+        """messages_send creates both message and thread entities."""
         proposal = await email_pack.handle_action(
-            ToolName("send_gmail_message"),
+            ToolName("messages_send"),
             {
                 "to": "bob@test.com",
                 "from": "alice@test.com",
@@ -113,9 +113,9 @@ class TestSendGmailMessage:
 
 class TestSearchGmailMessages:
     async def test_search_by_query(self, email_pack, gmail_state):
-        """search_gmail_messages filters by query substring."""
+        """messages_search filters by query substring."""
         proposal = await email_pack.handle_action(
-            ToolName("search_gmail_messages"),
+            ToolName("messages_search"),
             {"q": "report"},
             gmail_state,
         )
@@ -124,9 +124,9 @@ class TestSearchGmailMessages:
         assert body["messages"][0]["id"] == "msg_003"
 
     async def test_search_by_label(self, email_pack, gmail_state):
-        """search_gmail_messages filters by labelIds."""
+        """messages_search filters by labelIds."""
         proposal = await email_pack.handle_action(
-            ToolName("search_gmail_messages"),
+            ToolName("messages_search"),
             {"labelIds": ["SENT"]},
             gmail_state,
         )
@@ -135,9 +135,9 @@ class TestSearchGmailMessages:
         assert body["messages"][0]["id"] == "msg_003"
 
     async def test_search_with_max_results(self, email_pack, gmail_state):
-        """search_gmail_messages paginates via maxResults."""
+        """messages_search paginates via maxResults."""
         proposal = await email_pack.handle_action(
-            ToolName("search_gmail_messages"),
+            ToolName("messages_search"),
             {"maxResults": 1},
             gmail_state,
         )
@@ -145,18 +145,18 @@ class TestSearchGmailMessages:
         assert proposal.response_body["resultSizeEstimate"] == 1
 
     async def test_search_no_filters_returns_all(self, email_pack, gmail_state):
-        """search_gmail_messages with no filters returns all messages."""
+        """messages_search with no filters returns all messages."""
         proposal = await email_pack.handle_action(
-            ToolName("search_gmail_messages"),
+            ToolName("messages_search"),
             {},
             gmail_state,
         )
         assert proposal.response_body["resultSizeEstimate"] == 3
 
     async def test_search_returns_id_and_thread_id(self, email_pack, gmail_state):
-        """search_gmail_messages results include id and threadId."""
+        """messages_search results include id and threadId."""
         proposal = await email_pack.handle_action(
-            ToolName("search_gmail_messages"),
+            ToolName("messages_search"),
             {"q": "Hello"},
             gmail_state,
         )
@@ -167,9 +167,9 @@ class TestSearchGmailMessages:
 
 class TestGetGmailMessage:
     async def test_returns_full_message(self, email_pack, gmail_state):
-        """get_gmail_message returns the complete message object."""
+        """messages_get returns the complete message object."""
         proposal = await email_pack.handle_action(
-            ToolName("get_gmail_message"),
+            ToolName("messages_get"),
             {"id": "msg_001"},
             gmail_state,
         )
@@ -181,9 +181,9 @@ class TestGetGmailMessage:
         assert proposal.proposed_state_deltas == []
 
     async def test_message_not_found(self, email_pack, gmail_state):
-        """get_gmail_message returns error for unknown ID."""
+        """messages_get returns error for unknown ID."""
         proposal = await email_pack.handle_action(
-            ToolName("get_gmail_message"),
+            ToolName("messages_get"),
             {"id": "msg_nonexistent"},
             gmail_state,
         )
@@ -192,9 +192,9 @@ class TestGetGmailMessage:
 
 class TestModifyGmailMessage:
     async def test_add_and_remove_labels(self, email_pack, gmail_state):
-        """modify_gmail_message applies addLabelIds and removeLabelIds."""
+        """messages_modify applies addLabelIds and removeLabelIds."""
         proposal = await email_pack.handle_action(
-            ToolName("modify_gmail_message"),
+            ToolName("messages_modify"),
             {
                 "id": "msg_001",
                 "addLabelIds": ["STARRED"],
@@ -213,9 +213,9 @@ class TestModifyGmailMessage:
         assert delta.entity_type == "gmail_message"
 
     async def test_modify_not_found(self, email_pack, gmail_state):
-        """modify_gmail_message returns error for unknown message."""
+        """messages_modify returns error for unknown message."""
         proposal = await email_pack.handle_action(
-            ToolName("modify_gmail_message"),
+            ToolName("messages_modify"),
             {"id": "msg_nonexistent", "addLabelIds": ["STARRED"]},
             gmail_state,
         )
@@ -224,9 +224,9 @@ class TestModifyGmailMessage:
 
 class TestTrashGmailMessage:
     async def test_moves_to_trash(self, email_pack, gmail_state):
-        """trash_gmail_message adds TRASH and removes INBOX."""
+        """messages_trash adds TRASH and removes INBOX."""
         proposal = await email_pack.handle_action(
-            ToolName("trash_gmail_message"),
+            ToolName("messages_trash"),
             {"id": "msg_001"},
             gmail_state,
         )
@@ -240,9 +240,9 @@ class TestTrashGmailMessage:
         assert "INBOX" in delta.previous_fields["labelIds"]
 
     async def test_trash_not_found(self, email_pack, gmail_state):
-        """trash_gmail_message returns error for unknown message."""
+        """messages_trash returns error for unknown message."""
         proposal = await email_pack.handle_action(
-            ToolName("trash_gmail_message"),
+            ToolName("messages_trash"),
             {"id": "msg_nonexistent"},
             gmail_state,
         )
@@ -251,9 +251,9 @@ class TestTrashGmailMessage:
 
 class TestDeleteGmailMessage:
     async def test_permanently_deletes(self, email_pack, gmail_state):
-        """delete_gmail_message produces a delete delta."""
+        """messages_delete produces a delete delta."""
         proposal = await email_pack.handle_action(
-            ToolName("delete_gmail_message"),
+            ToolName("messages_delete"),
             {"id": "msg_002"},
             gmail_state,
         )
@@ -265,9 +265,9 @@ class TestDeleteGmailMessage:
         assert str(delta.entity_id) == "msg_002"
 
     async def test_delete_not_found(self, email_pack, gmail_state):
-        """delete_gmail_message returns error for unknown message."""
+        """messages_delete returns error for unknown message."""
         proposal = await email_pack.handle_action(
-            ToolName("delete_gmail_message"),
+            ToolName("messages_delete"),
             {"id": "msg_nonexistent"},
             gmail_state,
         )
@@ -276,9 +276,9 @@ class TestDeleteGmailMessage:
 
 class TestCreateGmailDraft:
     async def test_creates_draft(self, email_pack, gmail_state):
-        """create_gmail_draft produces a draft entity create delta."""
+        """drafts_create produces a draft entity create delta."""
         proposal = await email_pack.handle_action(
-            ToolName("create_gmail_draft"),
+            ToolName("drafts_create"),
             {
                 "to": "dave@test.com",
                 "subject": "Draft subject",
@@ -301,9 +301,9 @@ class TestCreateGmailDraft:
 
 class TestListGmailLabels:
     async def test_returns_labels(self, email_pack, gmail_state):
-        """list_gmail_labels returns all labels from state."""
+        """labels_list returns all labels from state."""
         proposal = await email_pack.handle_action(
-            ToolName("list_gmail_labels"),
+            ToolName("labels_list"),
             {},
             gmail_state,
         )
@@ -317,9 +317,9 @@ class TestListGmailLabels:
         assert proposal.proposed_state_deltas == []
 
     async def test_empty_labels(self, email_pack):
-        """list_gmail_labels returns empty list when no labels in state."""
+        """labels_list returns empty list when no labels in state."""
         proposal = await email_pack.handle_action(
-            ToolName("list_gmail_labels"),
+            ToolName("labels_list"),
             {},
             {},
         )

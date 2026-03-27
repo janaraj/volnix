@@ -1,10 +1,10 @@
-"""Tests for terrarium.packs.verified.payments -- PaymentsPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.stripe -- PaymentsPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.payments.pack import PaymentsPack
+from terrarium.packs.verified.stripe.pack import PaymentsPack
 from terrarium.validation.schema import SchemaValidator
 from terrarium.validation.state_machine import StateMachineValidator
 
@@ -191,7 +191,7 @@ def sample_state():
 class TestPaymentsPackMetadata:
     def test_metadata(self, payments_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert payments_pack.pack_name == "payments"
+        assert payments_pack.pack_name == "stripe"
         assert payments_pack.category == "money"
         assert payments_pack.fidelity_tier == 1
 

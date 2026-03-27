@@ -56,12 +56,12 @@ class TestToolDiscovery:
 
         tool_names = {t["name"] for t in resp.json()}
         expected = {
-            "zendesk_tickets_list",
-            "zendesk_tickets_show",
-            "zendesk_tickets_update",
-            "zendesk_ticket_comments_create",
-            "zendesk_users_show",
-            "send_gmail_message",
+            "tickets_list",
+            "tickets_show",
+            "tickets_update",
+            "ticket_comments_create",
+            "users_show",
+            "messages_send",
         }
         assert expected.issubset(tool_names)
 
@@ -75,7 +75,7 @@ class TestRawArgumentExecution:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
             )
 
@@ -90,7 +90,7 @@ class TestRawArgumentExecution:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
             )
 
@@ -107,7 +107,7 @@ class TestRawArgumentExecution:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
             )
 
@@ -127,7 +127,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_update",
+                "/api/v1/actions/tickets_update",
                 json={"id": "ticket-001", "status": "closed"},
             )
 
@@ -150,7 +150,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_list",
+                "/api/v1/actions/tickets_list",
                 json={},
             )
 
@@ -167,7 +167,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
                 headers={"x-actor-id": "triage-agent-42"},
             )
@@ -187,7 +187,7 @@ class TestBackwardCompatibility:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={
                     "actor_id": "sdk-agent",
                     "arguments": {"id": "ticket-001"},
@@ -207,7 +207,7 @@ class TestBackwardCompatibility:
             transport=http_transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={
                     "actor_id": "sdk-agent-99",
                     "arguments": {"id": "ticket-001"},
@@ -241,7 +241,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_list", json={}
+                "/api/v1/actions/tickets_list", json={}
             )
         assert resp.status_code == 200
         tickets = resp.json()["structured_content"]["tickets"]
@@ -263,7 +263,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
             )
         assert resp.status_code == 200
@@ -285,7 +285,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_update",
+                "/api/v1/actions/tickets_update",
                 json={"id": "ticket-001", "status": "open"},
             )
         assert resp.status_code == 200
@@ -313,7 +313,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "ticket-001"},
             )
 
@@ -351,7 +351,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show", json={"id": "t-1"}
+                "/api/v1/actions/tickets_show", json={"id": "t-1"}
             )
 
         data = resp.json()
@@ -405,7 +405,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={"id": "t-1", "actor_id": "impersonator"},
                 headers={"x-actor-id": "real-agent"},
             )
@@ -422,7 +422,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_show",
+                "/api/v1/actions/tickets_show",
                 json={
                     "actor_id": "agent-1",
                     "arguments": {"id": "t-1"},
@@ -443,7 +443,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/zendesk_tickets_list", json={}
+                "/api/v1/actions/tickets_list", json={}
             )
 
         assert resp.status_code == 200

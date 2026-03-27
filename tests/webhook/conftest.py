@@ -52,7 +52,7 @@ def sample_event():
     class FakeEvent:
         event_type = "world.email_send"
         event_id = "evt-123"
-        service_id = "email"
+        service_id = "gmail"
         action = "email_send"
         timestamp = datetime.now(UTC).isoformat()
         input_data = {"to": "a@b.com", "body": "hello"}

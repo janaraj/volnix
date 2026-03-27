@@ -25,7 +25,7 @@ class TestNLParser:
             "world": {
                 "name": "Support Center",
                 "description": "A support team",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [{"role": "agent", "type": "external", "count": 1}],
                 "policies": [],
                 "seeds": [],
@@ -68,7 +68,7 @@ class TestNLParser:
             "world": {
                 "name": "Structured",
                 "description": "from structured output",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [],
                 "policies": [],
                 "seeds": [],

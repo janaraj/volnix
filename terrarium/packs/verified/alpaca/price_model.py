@@ -10,7 +10,7 @@ script or test to produce bar entities that can be loaded into state.
 
 Usage::
 
-    from terrarium.packs.verified.trading.price_model import (
+    from terrarium.packs.verified.alpaca.price_model import (
         generate_price_series,
         generate_quote_from_price,
         generate_initial_account,

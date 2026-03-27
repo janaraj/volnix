@@ -91,11 +91,11 @@ def _find_message(state: dict[str, Any], channel_id: str, ts: str) -> dict[str, 
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_list_channels(
+async def handle_channels_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_list_channels`` action.
+    """Handle the ``channels_list`` action.
 
     Returns channels from state with cursor-based pagination.
     No state mutations.
@@ -120,11 +120,11 @@ async def handle_slack_list_channels(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_post_message(
+async def handle_chat_postMessage(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_post_message`` action.
+    """Handle the ``chat_postMessage`` action.
 
     Creates a new message entity in the target channel.
     """
@@ -171,11 +171,11 @@ async def handle_slack_post_message(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_update_message(
+async def handle_chat_update(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_update_message`` action.
+    """Handle the ``chat_update`` action.
 
     Finds a message by channel_id + ts, updates the text field,
     and sets the ``edited`` metadata.
@@ -219,11 +219,11 @@ async def handle_slack_update_message(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_delete_message(
+async def handle_chat_delete(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_delete_message`` action.
+    """Handle the ``chat_delete`` action.
 
     Finds a message by channel_id + ts and deletes it.
     """
@@ -257,11 +257,11 @@ async def handle_slack_delete_message(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_reply_to_thread(
+async def handle_chat_replyToThread(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_reply_to_thread`` action.
+    """Handle the ``chat_replyToThread`` action.
 
     Creates a threaded reply and increments the parent message's reply_count.
     Produces two deltas: one create for the reply, one update for the parent.
@@ -328,11 +328,11 @@ async def handle_slack_reply_to_thread(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_add_reaction(
+async def handle_reactions_add(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_add_reaction`` action.
+    """Handle the ``reactions_add`` action.
 
     Adds an emoji reaction to the target message. If the user already
     reacted with the same emoji, returns an ``already_reacted`` error.
@@ -391,11 +391,11 @@ async def handle_slack_add_reaction(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_remove_reaction(
+async def handle_reactions_remove(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_remove_reaction`` action.
+    """Handle the ``reactions_remove`` action.
 
     Removes an emoji reaction from the target message. Returns an error
     if the reaction or user is not found.
@@ -457,11 +457,11 @@ async def handle_slack_remove_reaction(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_get_channel_history(
+async def handle_conversations_history(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_get_channel_history`` action.
+    """Handle the ``conversations_history`` action.
 
     Filters messages by channel, sorts by ts descending, applies
     cursor-based pagination. No state mutations.
@@ -491,11 +491,11 @@ async def handle_slack_get_channel_history(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_get_thread_replies(
+async def handle_conversations_replies(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_get_thread_replies`` action.
+    """Handle the ``conversations_replies`` action.
 
     Returns all messages belonging to a thread (matching thread_ts),
     sorted by ts ascending. No state mutations.
@@ -520,11 +520,11 @@ async def handle_slack_get_thread_replies(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_get_users(
+async def handle_users_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_get_users`` action.
+    """Handle the ``users_list`` action.
 
     Returns users from state with cursor-based pagination.
     No state mutations.
@@ -549,11 +549,11 @@ async def handle_slack_get_users(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_get_user_profile(
+async def handle_users_profile_get(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_get_user_profile`` action.
+    """Handle the ``users_profile_get`` action.
 
     Finds a user by ID in state and returns their profile.
     """
@@ -582,11 +582,11 @@ async def handle_slack_get_user_profile(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_create_channel(
+async def handle_conversations_create(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_create_channel`` action.
+    """Handle the ``conversations_create`` action.
 
     Creates a new channel entity with the caller as creator and initial member.
     """
@@ -642,11 +642,11 @@ async def handle_slack_create_channel(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_archive_channel(
+async def handle_conversations_archive(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_archive_channel`` action.
+    """Handle the ``conversations_archive`` action.
 
     Sets is_archived=True on the target channel.
     """
@@ -680,11 +680,11 @@ async def handle_slack_archive_channel(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_join_channel(
+async def handle_conversations_join(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_join_channel`` action.
+    """Handle the ``conversations_join`` action.
 
     Adds the user to the channel's members array and increments num_members.
     """
@@ -748,11 +748,11 @@ async def handle_slack_join_channel(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_set_channel_topic(
+async def handle_conversations_setTopic(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_set_channel_topic`` action.
+    """Handle the ``conversations_setTopic`` action.
 
     Updates the topic value, creator, and last_set timestamp on a channel.
     """
@@ -797,11 +797,11 @@ async def handle_slack_set_channel_topic(
 # ---------------------------------------------------------------------------
 
 
-async def handle_slack_get_channel_info(
+async def handle_conversations_info(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``slack_get_channel_info`` action.
+    """Handle the ``conversations_info`` action.
 
     Returns detailed information about a single channel.
     """

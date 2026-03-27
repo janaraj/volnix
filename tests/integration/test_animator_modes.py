@@ -28,7 +28,7 @@ from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
 from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
 from terrarium.engines.animator.context import AnimatorContext
 from terrarium.kernel.surface import ServiceSurface
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 from terrarium.reality.presets import load_preset
 from terrarium.scheduling.scheduler import WorldScheduler
 
@@ -50,9 +50,9 @@ def _make_plan(preset: str = "messy", behavior: str = "dynamic") -> WorldPlan:
         behavior=behavior,
         mode="governed",
         services={
-            "email": ServiceResolution(
-                service_name="email",
-                spec_reference="verified/email",
+            "gmail": ServiceResolution(
+                service_name="gmail",
+                spec_reference="verified/gmail",
                 surface=surface,
                 resolution_source="tier1_pack",
             )
@@ -198,7 +198,7 @@ class TestReactiveMode:
                 tick=1,
             ),
             actor_id=ActorId("agent-1"),
-            service_id=ServiceId("email"),
+            service_id=ServiceId("gmail"),
             action="email_send",
             input_data={},
         )

@@ -6,7 +6,7 @@ API object shapes and the official @stripe/mcp tool surface.
 
 from __future__ import annotations
 
-from terrarium.packs.verified.payments.state_machines import (
+from terrarium.packs.verified.stripe.state_machines import (
     DISPUTE_STATES,
     INVOICE_STATES,
     PAYMENT_INTENT_STATES,

@@ -210,7 +210,7 @@ def mock_artifact_store():
         },
         {
             "event_type": "world.email_send",
-            "service_id": "email",
+            "service_id": "gmail",
             "action": "email_send",
             "input_data": {"to": "a@b.com"},
             "response_body": {"id": "msg-001"},

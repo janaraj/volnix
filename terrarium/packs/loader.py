@@ -103,8 +103,8 @@ def _module_path_from_filepath(filepath: Path) -> str | None:
 
     Finds the 'terrarium' PACKAGE directory (the one containing __init__.py)
     and builds the module path from there.
-    Example: /Users/.../terrarium/packs/verified/email/pack.py
-           -> terrarium.packs.verified.email.pack
+    Example: /Users/.../terrarium/packs/verified/gmail/pack.py
+           -> terrarium.packs.verified.gmail.pack
     """
     parts = filepath.resolve().parts
     # Find the FIRST 'terrarium' in the path that has an __init__.py

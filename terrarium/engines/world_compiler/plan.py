@@ -16,7 +16,7 @@ from terrarium.reality.dimensions import WorldConditions
 class ServiceResolution(BaseModel, frozen=True):
     """Resolution metadata for a single service."""
     service_name: str
-    spec_reference: str          # "verified/email", "profiled/stripe", bare "stripe"
+    spec_reference: str          # "verified/gmail", "profiled/stripe", bare "stripe"
     surface: ServiceSurface
     resolution_source: str       # "tier1_pack", "context_hub", "openapi", "llm_inference", "kernel_inference"
 

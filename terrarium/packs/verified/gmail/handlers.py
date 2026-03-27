@@ -6,8 +6,9 @@ any state mutations expressed as StateDelta objects.
 Handlers import ONLY from terrarium.core (types, context). They NEVER
 import from persistence/, engines/, or bus/.
 
-This module contains both Gmail-aligned handlers (handle_*_gmail_*)
-and legacy email_* handlers for backward compatibility.
+This module contains both Gmail-aligned handlers (handle_messages_*,
+handle_drafts_*, handle_labels_*) and legacy email_* handlers for
+backward compatibility.
 """
 
 from __future__ import annotations
@@ -45,11 +46,11 @@ def _now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 
-async def handle_send_gmail_message(
+async def handle_messages_send(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``send_gmail_message`` action.
+    """Handle the ``messages_send`` action.
 
     Creates a message entity with Gmail-style fields and a corresponding
     thread entity.  Produces two StateDelta creates (message + thread).
@@ -102,11 +103,11 @@ async def handle_send_gmail_message(
     )
 
 
-async def handle_search_gmail_messages(
+async def handle_messages_search(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``search_gmail_messages`` action.
+    """Handle the ``messages_search`` action.
 
     Filters state["messages"] by query string (substring in subject, body,
     from_addr, to_addr) and by labelIds intersection.  Paginates via
@@ -150,11 +151,11 @@ async def handle_search_gmail_messages(
     )
 
 
-async def handle_get_gmail_message(
+async def handle_messages_get(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``get_gmail_message`` action.
+    """Handle the ``messages_get`` action.
 
     Finds a message by ID and returns the full message object.
     No state mutations.
@@ -171,11 +172,11 @@ async def handle_get_gmail_message(
     )
 
 
-async def handle_modify_gmail_message(
+async def handle_messages_modify(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``modify_gmail_message`` action.
+    """Handle the ``messages_modify`` action.
 
     Adds/removes labels from a message.  Produces a StateDelta update on
     labelIds.
@@ -216,11 +217,11 @@ async def handle_modify_gmail_message(
     )
 
 
-async def handle_trash_gmail_message(
+async def handle_messages_trash(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``trash_gmail_message`` action.
+    """Handle the ``messages_trash`` action.
 
     Adds "TRASH" label and removes "INBOX" if present.  Produces a
     StateDelta update on labelIds.
@@ -258,11 +259,11 @@ async def handle_trash_gmail_message(
     )
 
 
-async def handle_delete_gmail_message(
+async def handle_messages_delete(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``delete_gmail_message`` action.
+    """Handle the ``messages_delete`` action.
 
     Permanently deletes a message.  Produces a StateDelta delete.
     """
@@ -293,11 +294,11 @@ async def handle_delete_gmail_message(
     )
 
 
-async def handle_create_gmail_draft(
+async def handle_drafts_create(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``create_gmail_draft`` action.
+    """Handle the ``drafts_create`` action.
 
     Creates a draft entity.  Produces a StateDelta create on "draft" type.
     """
@@ -326,11 +327,11 @@ async def handle_create_gmail_draft(
     )
 
 
-async def handle_list_gmail_labels(
+async def handle_labels_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``list_gmail_labels`` action.
+    """Handle the ``labels_list`` action.
 
     Returns labels from state.  No state mutations.
     """

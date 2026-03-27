@@ -274,7 +274,7 @@ SENTIMENT_ENTITY_SCHEMA: dict = {
 TRADING_TOOL_DEFINITIONS: list[dict] = [
     # ── Broker: Account ────────────────────────────────────────
     {
-        "name": "alpaca_get_account",
+        "name": "get_account",
         "description": "Get the account details including equity, buying power, and margin status.",
         "http_path": "/v2/account",
         "http_method": "GET",
@@ -297,7 +297,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Broker: Orders ─────────────────────────────────────────
     {
-        "name": "alpaca_create_order",
+        "name": "create_order",
         "description": "Submit a new order (market, limit, stop, stop_limit, trailing_stop).",
         "http_path": "/v2/orders",
         "http_method": "POST",
@@ -353,7 +353,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "alpaca_list_orders",
+        "name": "list_orders",
         "description": "List orders, optionally filtered by status.",
         "http_path": "/v2/orders",
         "http_method": "GET",
@@ -381,7 +381,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "array"},
     },
     {
-        "name": "alpaca_get_order",
+        "name": "get_order",
         "description": "Get a single order by ID.",
         "http_path": "/v2/orders/{id}",
         "http_method": "GET",
@@ -398,7 +398,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "alpaca_cancel_order",
+        "name": "cancel_order",
         "description": "Cancel an open order.",
         "http_path": "/v2/orders/{id}",
         "http_method": "DELETE",
@@ -416,7 +416,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Broker: Positions ──────────────────────────────────────
     {
-        "name": "alpaca_list_positions",
+        "name": "list_positions",
         "description": "List all open positions with live P&L computed from current quotes.",
         "http_path": "/v2/positions",
         "http_method": "GET",
@@ -428,7 +428,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "array"},
     },
     {
-        "name": "alpaca_get_position",
+        "name": "get_position",
         "description": "Get a single position by symbol with live P&L.",
         "http_path": "/v2/positions/{symbol}",
         "http_method": "GET",
@@ -445,7 +445,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "alpaca_close_position",
+        "name": "close_position",
         "description": "Close an open position by generating a market order for the opposite side.",
         "http_path": "/v2/positions/{symbol}",
         "http_method": "DELETE",
@@ -463,7 +463,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Market Data: Bars ──────────────────────────────────────
     {
-        "name": "alpaca_get_bars",
+        "name": "get_bars",
         "description": "Get historical OHLCV bars for a stock.",
         "http_path": "/v2/stocks/{symbol}/bars",
         "http_method": "GET",
@@ -510,7 +510,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Market Data: Quotes ────────────────────────────────────
     {
-        "name": "alpaca_get_latest_quote",
+        "name": "get_latest_quote",
         "description": "Get the latest bid/ask quote for a stock.",
         "http_path": "/v2/stocks/{symbol}/quotes/latest",
         "http_method": "GET",
@@ -534,7 +534,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Market Data: Trades ────────────────────────────────────
     {
-        "name": "alpaca_get_latest_trade",
+        "name": "get_latest_trade",
         "description": "Get the latest trade for a stock.",
         "http_path": "/v2/stocks/{symbol}/trades/latest",
         "http_method": "GET",
@@ -558,7 +558,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Market Data: Snapshot ──────────────────────────────────
     {
-        "name": "alpaca_get_snapshot",
+        "name": "get_snapshot",
         "description": "Get a complete snapshot (latest quote + bar + trade) for a stock.",
         "http_path": "/v2/stocks/{symbol}/snapshot",
         "http_method": "GET",
@@ -585,7 +585,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Reference: Clock ───────────────────────────────────────
     {
-        "name": "alpaca_get_clock",
+        "name": "get_clock",
         "description": "Get the current market clock (open/closed, next open/close times).",
         "http_path": "/v2/clock",
         "http_method": "GET",
@@ -606,7 +606,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Reference: Assets ──────────────────────────────────────
     {
-        "name": "alpaca_list_assets",
+        "name": "list_assets",
         "description": "List tradable assets, optionally filtered by status or asset class.",
         "http_path": "/v2/assets",
         "http_method": "GET",
@@ -629,7 +629,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── News ───────────────────────────────────────────────────
     {
-        "name": "alpaca_get_news",
+        "name": "get_news",
         "description": "Get news articles, optionally filtered by symbols and date range.",
         "http_path": "/v1beta1/news",
         "http_method": "GET",
@@ -761,7 +761,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     },
     # ── Animator/System: Market Evolution ──────────────────────
     {
-        "name": "alpaca_update_quote",
+        "name": "update_quote",
         "description": (
             "Update a stock quote (bid/ask). Used by the Animator to "
             "evolve prices in dynamic/reactive mode."
@@ -785,7 +785,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "alpaca_create_bar",
+        "name": "create_bar",
         "description": (
             "Create a new OHLCV bar. Used by the Animator to advance "
             "price series in dynamic mode."
@@ -811,7 +811,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "alpaca_create_news",
+        "name": "create_news",
         "description": (
             "Create a news article. Used by the Animator to inject "
             "breaking news, earnings releases, or rumors."

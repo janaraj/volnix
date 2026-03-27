@@ -91,9 +91,9 @@ class TestHelpAndBasics:
 class TestFeedbackCommands:
     """Tests for the 5 feedback/promotion commands (G4a)."""
 
-    def test_verify_pack_email(self):
-        """verify-pack on existing email pack succeeds."""
-        result = runner.invoke(app, ["verify-pack", "email"])
+    def test_verify_pack_gmail(self):
+        """verify-pack on existing gmail pack succeeds."""
+        result = runner.invoke(app, ["verify-pack", "gmail"])
         assert result.exit_code == 0
         assert "passed all checks" in result.output
 

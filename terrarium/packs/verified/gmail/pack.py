@@ -2,9 +2,9 @@
 
 Provides the canonical tool surface for email-category services.
 
-Gmail-aligned tools: search_gmail_messages, get_gmail_message,
-send_gmail_message, create_gmail_draft, modify_gmail_message,
-trash_gmail_message, delete_gmail_message, list_gmail_labels.
+Gmail-aligned tools: messages_search, messages_get,
+messages_send, drafts_create, messages_modify,
+messages_trash, messages_delete, labels_list.
 
 Legacy tools (backward compatible): email_send, email_list, email_read,
 email_search, email_reply, email_mark_read.
@@ -17,23 +17,23 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.email.handlers import (
-    handle_create_gmail_draft,
-    handle_delete_gmail_message,
+from terrarium.packs.verified.gmail.handlers import (
+    handle_drafts_create,
+    handle_messages_delete,
     handle_email_list,
     handle_email_mark_read,
     handle_email_read,
     handle_email_reply,
     handle_email_search,
     handle_email_send,
-    handle_get_gmail_message,
-    handle_list_gmail_labels,
-    handle_modify_gmail_message,
-    handle_search_gmail_messages,
-    handle_send_gmail_message,
-    handle_trash_gmail_message,
+    handle_messages_get,
+    handle_labels_list,
+    handle_messages_modify,
+    handle_messages_search,
+    handle_messages_send,
+    handle_messages_trash,
 )
-from terrarium.packs.verified.email.schemas import (
+from terrarium.packs.verified.gmail.schemas import (
     DRAFT_ENTITY_SCHEMA,
     EMAIL_ENTITY_SCHEMA,
     EMAIL_TOOL_DEFINITIONS,
@@ -43,34 +43,34 @@ from terrarium.packs.verified.email.schemas import (
     MESSAGE_ENTITY_SCHEMA,
     THREAD_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.email.state_machines import EMAIL_TRANSITIONS
+from terrarium.packs.verified.gmail.state_machines import EMAIL_TRANSITIONS
 
 
 class EmailPack(ServicePack):
     """Verified pack for email communication services.
 
-    Gmail-aligned tools: search_gmail_messages, get_gmail_message,
-    send_gmail_message, create_gmail_draft, modify_gmail_message,
-    trash_gmail_message, delete_gmail_message, list_gmail_labels.
+    Gmail-aligned tools: messages_search, messages_get,
+    messages_send, drafts_create, messages_modify,
+    messages_trash, messages_delete, labels_list.
 
     Legacy tools: email_send, email_list, email_read, email_search,
     email_reply, email_mark_read.
     """
 
-    pack_name: ClassVar[str] = "email"
+    pack_name: ClassVar[str] = "gmail"
     category: ClassVar[str] = "communication"
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
         # Gmail-aligned handlers
-        "send_gmail_message": handle_send_gmail_message,
-        "search_gmail_messages": handle_search_gmail_messages,
-        "get_gmail_message": handle_get_gmail_message,
-        "modify_gmail_message": handle_modify_gmail_message,
-        "trash_gmail_message": handle_trash_gmail_message,
-        "delete_gmail_message": handle_delete_gmail_message,
-        "create_gmail_draft": handle_create_gmail_draft,
-        "list_gmail_labels": handle_list_gmail_labels,
+        "messages_send": handle_messages_send,
+        "messages_search": handle_messages_search,
+        "messages_get": handle_messages_get,
+        "messages_modify": handle_messages_modify,
+        "messages_trash": handle_messages_trash,
+        "messages_delete": handle_messages_delete,
+        "drafts_create": handle_drafts_create,
+        "labels_list": handle_labels_list,
         # Legacy handlers (backward compatibility)
         "email_send": handle_email_send,
         "email_list": handle_email_list,

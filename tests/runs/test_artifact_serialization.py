@@ -37,7 +37,7 @@ async def test_event_with_state_deltas_serializes(artifact_store, tmp_path):
         event_type="world.create_ticket",
         timestamp=_ts(),
         actor_id=ActorId("agent-1"),
-        service_id=ServiceId("tickets"),
+        service_id=ServiceId("zendesk"),
         action="create_ticket",
         state_deltas=[
             {
@@ -68,7 +68,7 @@ async def test_event_with_cost_serializes(artifact_store, tmp_path):
         event_type="world.send",
         timestamp=_ts(),
         actor_id=ActorId("agent-1"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action="send",
         cost={"api_calls": 3, "llm_spend_usd": 0.15, "world_actions": 2},
     )
@@ -131,7 +131,7 @@ async def test_event_with_outcome_serializes(artifact_store, tmp_path):
         event_type="world.blocked_action",
         timestamp=_ts(),
         actor_id=ActorId("agent-1"),
-        service_id=ServiceId("payments"),
+        service_id=ServiceId("stripe"),
         action="transfer",
         outcome="blocked",
     )
@@ -150,7 +150,7 @@ async def test_event_with_run_id_serializes(artifact_store, tmp_path):
         event_type="world.send",
         timestamp=_ts(),
         actor_id=ActorId("agent-1"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action="send",
         run_id="run-test-6",
     )

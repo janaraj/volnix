@@ -7,7 +7,7 @@ import pytest
 from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
 from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
 from terrarium.kernel.surface import ServiceSurface
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 from terrarium.reality.presets import load_preset
 
 
@@ -23,9 +23,9 @@ def _make_plan() -> WorldPlan:
         behavior="dynamic",
         mode="governed",
         services={
-            "email": ServiceResolution(
-                service_name="email",
-                spec_reference="verified/email",
+            "gmail": ServiceResolution(
+                service_name="gmail",
+                spec_reference="verified/gmail",
                 surface=surface,
                 resolution_source="tier1_pack",
             )

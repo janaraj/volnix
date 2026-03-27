@@ -529,7 +529,7 @@ async def test_http_call_tool_raw_arguments():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # Raw arguments — no "arguments" wrapper
         resp = await client.post(
-            "/api/v1/actions/zendesk_tickets_show",
+            "/api/v1/actions/tickets_show",
             json={"id": "ticket-001"},
         )
 
@@ -563,7 +563,7 @@ async def test_http_call_tool_raw_mode_with_actor_header():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/zendesk_tickets_show",
+            "/api/v1/actions/tickets_show",
             json={"id": "ticket-001"},
             headers={"x-actor-id": "my-agent"},
         )
@@ -584,7 +584,7 @@ async def test_http_call_tool_raw_mode_error_envelope():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/zendesk_tickets_show",
+            "/api/v1/actions/tickets_show",
             json={"id": "ticket-001"},
         )
 
@@ -605,7 +605,7 @@ async def test_http_call_tool_raw_mode_multi_key_not_unwrapped():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/zendesk_tickets_list",
+            "/api/v1/actions/tickets_list",
             json={},
         )
 

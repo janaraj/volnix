@@ -10,7 +10,7 @@ def _make_pack_registry():
     registry = MagicMock()
 
     mock_pack = MagicMock()
-    mock_pack.pack_name = "email"
+    mock_pack.pack_name = "gmail"
     mock_pack.category = "communication"
     mock_pack.fidelity_tier = 1
     mock_pack.get_tools.return_value = [

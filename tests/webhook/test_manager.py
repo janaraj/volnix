@@ -32,7 +32,7 @@ async def test_event_delivered_to_matching_webhook(
     webhook_manager.register(
         url="http://agent.example.com:3000/hook",
         events=["world.email_*"],
-        service="email",
+        service="gmail",
     )
 
     with patch.object(

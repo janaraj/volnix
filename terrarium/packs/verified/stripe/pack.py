@@ -12,7 +12,7 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.payments.handlers import (
+from terrarium.packs.verified.stripe.handlers import (
     handle_cancel_payment_intent,
     handle_close_dispute,
     handle_confirm_payment_intent,
@@ -35,7 +35,7 @@ from terrarium.packs.verified.payments.handlers import (
     handle_update_customer,
     handle_update_dispute,
 )
-from terrarium.packs.verified.payments.schemas import (
+from terrarium.packs.verified.stripe.schemas import (
     CHARGE_ENTITY_SCHEMA,
     CUSTOMER_ENTITY_SCHEMA,
     DISPUTE_ENTITY_SCHEMA,
@@ -44,7 +44,7 @@ from terrarium.packs.verified.payments.schemas import (
     PAYMENTS_TOOL_DEFINITIONS,
     REFUND_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.payments.state_machines import (
+from terrarium.packs.verified.stripe.state_machines import (
     DISPUTE_TRANSITIONS,
     INVOICE_TRANSITIONS,
     PAYMENT_INTENT_TRANSITIONS,
@@ -63,7 +63,7 @@ class PaymentsPack(ServicePack):
     get_dispute, close_dispute, list_disputes, update_dispute.
     """
 
-    pack_name: ClassVar[str] = "payments"
+    pack_name: ClassVar[str] = "stripe"
     category: ClassVar[str] = "money"
     fidelity_tier: ClassVar[int] = 1
 

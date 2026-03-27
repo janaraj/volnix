@@ -47,7 +47,7 @@ from terrarium.validation.consistency import ConsistencyValidator
 def _make_ctx(
     action: str = "email_send",
     actor_id: str = "test-agent",
-    service_id: str = "email",
+    service_id: str = "gmail",
     input_data: dict | None = None,
 ) -> ActionContext:
     return ActionContext(
@@ -483,7 +483,7 @@ class TestP29ProposedEventsType:
             event_type="world.test",
             timestamp=_timestamp(),
             actor_id=ActorId("test-actor"),
-            service_id=ServiceId("email"),
+            service_id=ServiceId("gmail"),
             action="email_send",
             input_data={},
         )

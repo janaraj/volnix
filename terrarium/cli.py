@@ -413,19 +413,34 @@ async def _run_impl(
 
 @app.command()
 def serve(
-    world: Annotated[str, typer.Argument(help="Path to YAML world definition")],
+    world: Annotated[str, typer.Argument(help="Blueprint name, YAML path, or NL description")] = "",
     settings: Annotated[
         str | None,
         typer.Option("--settings", "-s", help="Path to compiler settings YAML"),
     ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", "-r", help="Re-serve existing run (skip compilation)"),
+    ] = None,
     host: Annotated[str, typer.Option("--host", help="HTTP server bind host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", "-p", help="HTTP server bind port")] = 8080,
 ) -> None:
-    """Compile world and start MCP/HTTP servers for agent connections."""
-    asyncio.run(_serve_impl(world, settings, host, port))
+    """Start MCP/HTTP servers for agent connections.
+
+    Examples:
+      terrarium serve customer_support              # compile + serve blueprint
+      terrarium serve --run run_64ca8171df83        # re-serve existing run (instant)
+      terrarium serve "Support team with email"     # compile from NL + serve
+    """
+    if not world and not run:
+        print_error("Provide a world (blueprint name, YAML, or NL) or --run <run_id>")
+        raise typer.Exit(1)
+    asyncio.run(_serve_impl(world, settings, run, host, port))
 
 
-async def _serve_impl(world: str, settings: str | None, host: str, port: int) -> None:
+async def _serve_impl(
+    world: str, settings: str | None, run_id: str | None, host: str, port: int,
+) -> None:
     try:
         async with app_context() as terrarium:
             # 1. Start server immediately — dashboard accessible right away
@@ -435,44 +450,64 @@ async def _serve_impl(world: str, settings: str | None, host: str, port: int) ->
             await terrarium.gateway.start_adapters()
 
             console.print(f"[green]HTTP server: http://{host}:{port}[/green]")
-            console.print("[dim]Dashboard ready. Compiling world in background...[/dim]")
 
-            # 2. Compile + generate in background (concurrent with uvicorn)
-            async def _compile_world() -> None:
-                try:
-                    from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
+            if run_id:
+                # Re-serve existing run — instant, no compilation
+                console.print(f"  Loading run: [cyan]{run_id}[/cyan]")
+                run = await terrarium.run_manager.get_run(run_id)
+                if run is None:
+                    console.print(f"[red]Run {run_id} not found[/red]")
+                    raise typer.Exit(1)
+                tools = await terrarium.gateway.get_tool_manifest()
+                console.print(f"  [green]{len(tools)} tools available[/green]")
+            else:
+                # Compile + generate in background (concurrent with uvicorn)
+                console.print("[dim]Compiling world in background...[/dim]")
 
-                    compiler = terrarium.registry.get("world_compiler")
-                    resolved = resolve_blueprint(world)
-                    if resolved:
-                        console.print(f"  Compiling: [cyan]{resolved}[/cyan]")
-                        compiled_plan = await compiler.compile_from_yaml(
-                            str(resolved), settings
+                async def _compile_world() -> None:
+                    try:
+                        from terrarium.paths import (
+                            resolve_blueprint,
+                            sanitize_filename,
+                            user_blueprints_dir,
                         )
-                    else:
-                        compiled_plan = await compiler.compile_from_nl(world)
-                        from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
 
-                        reviewer = PlanReviewer()
-                        name = sanitize_filename(compiled_plan.name)
-                        saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
-                        saved.write_text(reviewer.to_yaml(compiled_plan))
-                        console.print(f"  Saved: [cyan]{saved}[/cyan]")
+                        compiler = terrarium.registry.get("world_compiler")
+                        resolved = resolve_blueprint(world)
+                        if resolved:
+                            console.print(f"  Compiling: [cyan]{resolved}[/cyan]")
+                            compiled_plan = await compiler.compile_from_yaml(
+                                str(resolved), settings
+                            )
+                        else:
+                            compiled_plan = await compiler.compile_from_nl(world)
+                            from terrarium.engines.world_compiler.plan_reviewer import (
+                                PlanReviewer,
+                            )
 
-                    console.print("  Generating world...")
-                    run_id = await terrarium.create_run(
-                        compiled_plan, mode=compiled_plan.mode
-                    )
-                    console.print(f"  Run ready: [cyan]{run_id}[/cyan]")
+                            reviewer = PlanReviewer()
+                            name = sanitize_filename(compiled_plan.name)
+                            saved = (
+                                user_blueprints_dir()
+                                / f"{name}_{compiled_plan.seed}.yaml"
+                            )
+                            saved.write_text(reviewer.to_yaml(compiled_plan))
+                            console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
-                    tools = await terrarium.gateway.get_tool_manifest()
-                    console.print(f"  [green]{len(tools)} tools available[/green]")
-                except Exception as exc:
-                    console.print(f"[red]Compilation failed: {exc}[/red]")
+                        console.print("  Generating world...")
+                        new_run_id = await terrarium.create_run(
+                            compiled_plan, mode=compiled_plan.mode
+                        )
+                        console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
 
-            asyncio.create_task(_compile_world())
+                        tools = await terrarium.gateway.get_tool_manifest()
+                        console.print(f"  [green]{len(tools)} tools available[/green]")
+                    except Exception as exc:
+                        console.print(f"[red]Compilation failed: {exc}[/red]")
 
-            # 3. Run uvicorn — blocks until Ctrl+C
+                asyncio.create_task(_compile_world())
+
+            # Run uvicorn — blocks until Ctrl+C
             http_adapter = terrarium.gateway._adapters.get("http")
             if http_adapter:
                 await http_adapter.run_server(host=host, port=port)

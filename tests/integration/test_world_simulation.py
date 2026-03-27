@@ -310,7 +310,7 @@ class TestNLToWorldFlow:
 
         sys_prompt, user_prompt = NL_TO_WORLD_DEF.render(
             categories="communication, crm, payments",
-            verified_packs="email",
+            verified_packs="gmail",
             description=description,
         )
         print(f"\n--- System Prompt (first 200 chars) ---")
@@ -324,7 +324,7 @@ class TestNLToWorldFlow:
                 "name": "Support Team Simulation",
                 "description": "A support team handling email with 10 customers, "
                 "some of whom are frustrated from slow resolution times.",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [
                     {
                         "role": "support-agent",
@@ -454,7 +454,7 @@ class TestNLToWorldFlow:
         print("=" * 70)
 
         _ensure_agent(app, "agent-1")
-        action = await app.handle_action("agent-1", "email", "email_send", {
+        action = await app.handle_action("agent-1", "gmail", "email_send", {
             "from_addr": "agent@acme.com",
             "to_addr": "customer@test.com",
             "subject": "Re: Your support ticket",
@@ -573,7 +573,7 @@ class TestLiveWorldGeneration:
 
         # Agent action after generation
         action = await live_app.handle_action(
-            "agent-1", "email", "email_send",
+            "agent-1", "gmail", "email_send",
             {
                 "from_addr": "agent@acme.com",
                 "to_addr": "customer@test.com",

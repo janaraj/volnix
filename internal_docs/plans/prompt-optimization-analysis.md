@@ -90,4 +90,4 @@ Each entity type requires 1 LLM call = ~13 serial calls + 2 personality calls + 
 
 1. **Permission short-circuit:** Agent actions blocked because test uses string actor IDs ("support-agent") not matching compiled actor IDs. Fix: use actual actor IDs from `result["actors"]`.
 2. **43 "no response_schema" warnings:** Tool definitions don't include response schemas. Fix: add `response_schema` to tool definitions in schemas.py.
-3. **`list_gmail_labels` flagged as mutation:** GET endpoint but no parameters defined. Fix: add empty parameters `{}`.
+3. **`labels_list` flagged as mutation:** GET endpoint but no parameters defined. Fix: add empty parameters `{}`.

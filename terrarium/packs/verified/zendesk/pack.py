@@ -12,21 +12,21 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.tickets.handlers import (
-    handle_zendesk_groups_list,
-    handle_zendesk_groups_show,
-    handle_zendesk_ticket_comments_create,
-    handle_zendesk_ticket_comments_list,
-    handle_zendesk_tickets_create,
-    handle_zendesk_tickets_delete,
-    handle_zendesk_tickets_list,
-    handle_zendesk_tickets_search,
-    handle_zendesk_tickets_show,
-    handle_zendesk_tickets_update,
-    handle_zendesk_users_list,
-    handle_zendesk_users_show,
+from terrarium.packs.verified.zendesk.handlers import (
+    handle_groups_list,
+    handle_groups_show,
+    handle_ticket_comments_create,
+    handle_ticket_comments_list,
+    handle_tickets_create,
+    handle_tickets_delete,
+    handle_tickets_list,
+    handle_tickets_search,
+    handle_tickets_show,
+    handle_tickets_update,
+    handle_users_list,
+    handle_users_show,
 )
-from terrarium.packs.verified.tickets.schemas import (
+from terrarium.packs.verified.zendesk.schemas import (
     COMMENT_ENTITY_SCHEMA,
     GROUP_ENTITY_SCHEMA,
     ORGANIZATION_ENTITY_SCHEMA,
@@ -34,36 +34,36 @@ from terrarium.packs.verified.tickets.schemas import (
     TICKET_TOOL_DEFINITIONS,
     USER_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.tickets.state_machines import TICKET_TRANSITIONS
+from terrarium.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
 
 
 class TicketsPack(ServicePack):
     """Verified pack for Zendesk-style ticket / work-management services.
 
-    Tools: zendesk_tickets_list, zendesk_tickets_show, zendesk_tickets_create,
-    zendesk_tickets_update, zendesk_tickets_delete, zendesk_tickets_search,
-    zendesk_ticket_comments_list, zendesk_ticket_comments_create,
-    zendesk_users_list, zendesk_users_show, zendesk_groups_list,
-    zendesk_groups_show.
+    Tools: tickets_list, tickets_show, tickets_create,
+    tickets_update, tickets_delete, tickets_search,
+    ticket_comments_list, ticket_comments_create,
+    users_list, users_show, groups_list,
+    groups_show.
     """
 
-    pack_name: ClassVar[str] = "tickets"
+    pack_name: ClassVar[str] = "zendesk"
     category: ClassVar[str] = "work_management"
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "zendesk_tickets_list": handle_zendesk_tickets_list,
-        "zendesk_tickets_show": handle_zendesk_tickets_show,
-        "zendesk_tickets_create": handle_zendesk_tickets_create,
-        "zendesk_tickets_update": handle_zendesk_tickets_update,
-        "zendesk_tickets_delete": handle_zendesk_tickets_delete,
-        "zendesk_tickets_search": handle_zendesk_tickets_search,
-        "zendesk_ticket_comments_list": handle_zendesk_ticket_comments_list,
-        "zendesk_ticket_comments_create": handle_zendesk_ticket_comments_create,
-        "zendesk_users_list": handle_zendesk_users_list,
-        "zendesk_users_show": handle_zendesk_users_show,
-        "zendesk_groups_list": handle_zendesk_groups_list,
-        "zendesk_groups_show": handle_zendesk_groups_show,
+        "tickets_list": handle_tickets_list,
+        "tickets_show": handle_tickets_show,
+        "tickets_create": handle_tickets_create,
+        "tickets_update": handle_tickets_update,
+        "tickets_delete": handle_tickets_delete,
+        "tickets_search": handle_tickets_search,
+        "ticket_comments_list": handle_ticket_comments_list,
+        "ticket_comments_create": handle_ticket_comments_create,
+        "users_list": handle_users_list,
+        "users_show": handle_users_show,
+        "groups_list": handle_groups_list,
+        "groups_show": handle_groups_show,
     }
 
     def get_tools(self) -> list[dict]:

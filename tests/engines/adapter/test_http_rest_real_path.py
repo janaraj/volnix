@@ -126,7 +126,7 @@ async def test_http_websocket_stream_receives_real_world_event(app):
     # Fire an action — this publishes to the bus
     await app.handle_action(
         actor_id="http-agent",
-        service_id="email",
+        service_id="gmail",
         action="email_send",
         input_data=_email_send_payload(),
     )

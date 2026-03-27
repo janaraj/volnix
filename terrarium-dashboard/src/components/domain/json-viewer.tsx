@@ -37,7 +37,7 @@ function highlightJson(json: string): string {
 }
 
 export function JsonViewer({ data }: JsonViewerProps) {
-  const raw = JSON.stringify(data, null, 2);
+  const raw = JSON.stringify(data ?? null, null, 2) ?? 'null';
   const { copy, copied } = useCopyToClipboard();
 
   return (

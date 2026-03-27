@@ -137,17 +137,17 @@ class TestServiceResolution:
 
     def test_model(self):
         """ServiceResolution can be constructed with all fields."""
-        surface = _make_surface("email")
+        surface = _make_surface("gmail")
         res = ServiceResolution(
-            service_name="email",
-            spec_reference="verified/email",
+            service_name="gmail",
+            spec_reference="verified/gmail",
             surface=surface,
             resolution_source="tier1_pack",
         )
-        assert res.service_name == "email"
-        assert res.spec_reference == "verified/email"
+        assert res.service_name == "gmail"
+        assert res.spec_reference == "verified/gmail"
         assert res.resolution_source == "tier1_pack"
-        assert res.surface.service_name == "email"
+        assert res.surface.service_name == "gmail"
 
     def test_frozen(self):
         """ServiceResolution is frozen."""

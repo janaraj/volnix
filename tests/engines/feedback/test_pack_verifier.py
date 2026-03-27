@@ -65,7 +65,7 @@ async def test_verify_stub_handlers_warn(make_profile, tmp_path):
 
 
 async def test_verify_existing_email_pack():
-    """Verify the real email pack passes all checks."""
+    """Verify the real gmail pack passes all checks."""
     from pathlib import Path
 
     pack_dir = (
@@ -73,7 +73,7 @@ async def test_verify_existing_email_pack():
         / "terrarium"
         / "packs"
         / "verified"
-        / "email"
+        / "gmail"
     )
     if not pack_dir.exists():
         return  # Skip if not available
