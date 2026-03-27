@@ -448,24 +448,25 @@ class HTTPRestAdapter(ProtocolAdapter):
             try:
                 bus = gateway._app.bus
                 persistence = getattr(bus, "_persistence", None)
-                all_events = []
-                if persistence:
-                    rows = await persistence._log.query(from_sequence=0)
-                    for row in rows:
-                        try:
-                            all_events.append(_json.loads(row["payload"]))
-                        except Exception:
-                            pass
-                event_count = len(all_events)
-                external_actors = {
-                    e.get("actor_id", "")
-                    for e in all_events
-                    if e.get("actor_id", "")
-                    and e.get("actor_id", "") not in _INTERNAL_ACTORS
-                }
                 for r in runs:
-                    r.setdefault("event_count", event_count)
-                    r.setdefault("actor_count", len(external_actors))
+                    rid = r.get("run_id", "")
+                    run_events = []
+                    if persistence:
+                        rows = await persistence._log.query(
+                            from_sequence=0, filters={"run_id": rid},
+                        )
+                        for row in rows:
+                            try:
+                                run_events.append(_json.loads(row["payload"]))
+                            except Exception:
+                                pass
+                    r["event_count"] = len(run_events)
+                    r["actor_count"] = len({
+                        e.get("actor_id", "")
+                        for e in run_events
+                        if e.get("actor_id", "")
+                        and e.get("actor_id", "") not in _INTERNAL_ACTORS
+                    })
                     world_def = r.get("world_def", {})
                     services_raw = world_def.get("services", {})
                     if isinstance(services_raw, dict) and "services" not in r:
@@ -499,35 +500,35 @@ class HTTPRestAdapter(ProtocolAdapter):
                     content={"error": f"Run not found: {run_id}"},
                 )
 
-            # Enrich with live stats from bus (raw JSON payloads)
+            # Enrich with live stats from bus (filtered by run_id)
             try:
                 bus = gateway._app.bus
                 persistence = getattr(bus, "_persistence", None)
+                run_events = []
                 if persistence:
-                    rows = await persistence._log.query(from_sequence=0)
-                    all_events = []
+                    rows = await persistence._log.query(
+                        from_sequence=0, filters={"run_id": run_id},
+                    )
                     for row in rows:
                         try:
-                            all_events.append(_json.loads(row["payload"]))
+                            run_events.append(_json.loads(row["payload"]))
                         except Exception:
                             pass
-                else:
-                    all_events = []
 
                 # Actor count: distinct external actor_ids
                 external_actors = {
                     e.get("actor_id", "")
-                    for e in all_events
+                    for e in run_events
                     if e.get("actor_id", "")
                     and e.get("actor_id", "") not in _INTERNAL_ACTORS
                 }
                 result["actor_count"] = len(external_actors)
-                result["event_count"] = len(all_events)
+                result["event_count"] = len(run_events)
 
                 # Current tick
-                if all_events:
+                if run_events:
                     result["current_tick"] = max(
-                        (e.get("timestamp", {}).get("tick", 0) for e in all_events),
+                        (e.get("timestamp", {}).get("tick", 0) for e in run_events),
                         default=0,
                     )
 
@@ -645,12 +646,10 @@ class HTTPRestAdapter(ProtocolAdapter):
             if persistence is None:
                 return [], 0
 
-            # Get total count first
-            total_count = await persistence.get_count()
-
-            # Query with DB-level ORDER BY + LIMIT + OFFSET
+            # Query with DB-level run_id filter + ORDER BY + LIMIT
             rows = await persistence._log.query(
                 from_sequence=0,
+                filters={"run_id": run_id},
                 order=order,
                 limit=limit,
                 offset=offset if offset > 0 else None,
@@ -663,6 +662,10 @@ class HTTPRestAdapter(ProtocolAdapter):
                         events.append(evt)
                 except Exception:
                     pass
+            # Total count for this run
+            total_count = await persistence._log.count(
+                filters={"run_id": run_id}
+            )
             return events, total_count
 
         @app.get("/api/v1/runs/{run_id}/events")
@@ -982,12 +985,26 @@ class HTTPRestAdapter(ProtocolAdapter):
             actor_events = [e for e in events if e.get("actor_id") == actor_id]
             last_event = actor_events[-1] if actor_events else None
 
+            # Get budget from budget engine
+            budget_data = {}
+            try:
+                budget_eng = gateway._app.registry.get("budget")
+                if budget_eng:
+                    from terrarium.core.types import ActorId as _AId
+
+                    budget_state = await budget_eng.get_remaining(_AId(actor_id))
+                    if budget_state and hasattr(budget_state, "model_dump"):
+                        budget_data = budget_state.model_dump(mode="json")
+            except Exception:
+                pass
+
             return {
                 "actor_id": actor_id,
                 "definition": actor_def,
                 "scorecard": actor_score,
                 "action_count": len(actor_events),
                 "last_action_at": (last_event.get("timestamp") if last_event else None),
+                "budget": budget_data,
             }
 
         @app.get("/api/v1/compare")

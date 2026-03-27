@@ -54,7 +54,10 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-text-secondary">
           <span>
-            Tick: <span className="font-mono">{formatTick(run.current_tick ?? 0)}</span>
+            {(run.current_tick ?? 0) > 0
+              ? <>Tick: <span className="font-mono">{formatTick(run.current_tick!)}</span></>
+              : <span className="text-text-muted">Live</span>
+            }
           </span>
           <span>
             Agents: <span className="font-mono">{run.actor_count ?? 0}</span>

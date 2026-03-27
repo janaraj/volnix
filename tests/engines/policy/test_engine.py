@@ -314,6 +314,39 @@ class TestStringTrigger:
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
 
+    @pytest.mark.asyncio
+    async def test_string_trigger_no_substring_false_positive(self, engine):
+        """'ticket' in trigger must NOT match 'tickets.list' (substring)."""
+        engine._policies = [
+            {
+                "name": "SLA escalation",
+                "trigger": "ticket idle for 4+ hours",
+                "enforcement": "escalate",
+                "escalate_config": {"target_role": "supervisor"},
+            }
+        ]
+        for action in ("tickets.list", "tickets.read", "tickets.update"):
+            ctx = _make_ctx(action=action, service_id="zendesk")
+            result = await engine.execute(ctx)
+            assert result.verdict == StepVerdict.ALLOW, (
+                f"'{action}' should NOT be escalated by trigger 'ticket idle for 4+ hours'"
+            )
+
+    @pytest.mark.asyncio
+    async def test_string_trigger_exact_word_match(self, engine):
+        """Exact whole-word overlap between action parts and trigger words."""
+        engine._policies = [
+            {
+                "name": "Block list operations",
+                "trigger": "block all list operations on sensitive data",
+                "enforcement": "block",
+            }
+        ]
+        # "list" is both an action part AND a trigger word → should match
+        ctx = _make_ctx(action="tickets.list")
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+
 
 class TestActorContext:
     """Test that actor info is available in condition context."""

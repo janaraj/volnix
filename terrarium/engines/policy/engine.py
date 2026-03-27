@@ -183,7 +183,11 @@ class PolicyEngine(BaseEngine):
     # -- Internal helpers ------------------------------------------------------
 
     def _matches_action(self, policy: dict[str, Any], ctx: ActionContext) -> bool:
-        """Check if a policy's trigger matches the current action."""
+        """Check if a policy's trigger matches the current action.
+
+        String triggers use whole-word matching against action name parts.
+        Dict triggers use exact/prefix matching against the ``action`` field.
+        """
         trigger = policy.get("trigger")
 
         if trigger is None:
@@ -191,27 +195,35 @@ class PolicyEngine(BaseEngine):
             return False
 
         if isinstance(trigger, str):
-            # String trigger: keyword-based matching against action name
+            # String triggers are natural-language descriptions.  Use whole-word
+            # matching to prevent false positives like "ticket" ⊂ "tickets.list".
             trigger_lower = trigger.lower()
             action_lower = ctx.action.lower()
-            # Check if any word from the trigger appears in the action name
-            trigger_words = trigger_lower.split()
-            for word in trigger_words:
-                if word in action_lower:
-                    return True
-            # Also check if the action appears in the trigger description
+
+            # Check if full action name appears in trigger text
             if action_lower in trigger_lower:
                 return True
+
+            # Split action into semantic parts (e.g. "tickets.list" → {"tickets","list"})
+            action_parts = set(action_lower.replace(".", " ").replace("_", " ").split())
+            trigger_words = set(trigger_lower.split())
+
+            # Match only if an exact whole-word overlap exists
+            if action_parts & trigger_words:
+                return True
+
             return False
 
         if isinstance(trigger, dict):
             # Dict trigger with "action" and optional "condition"
             trigger_action = trigger.get("action", "")
             if trigger_action:
-                # Exact match or glob-style (action name contains the pattern)
+                # Exact match or prefix match
                 if trigger_action == ctx.action:
                     return True
-                if trigger_action in ctx.action or ctx.action in trigger_action:
+                if ctx.action.startswith(trigger_action + "."):
+                    return True
+                if ctx.action.startswith(trigger_action + "_"):
                     return True
                 return False
             # No action specified in trigger dict = matches all

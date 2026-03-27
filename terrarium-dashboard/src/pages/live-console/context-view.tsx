@@ -66,7 +66,7 @@ function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) 
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard title="Tick" value={run.current_tick ?? 0} />
+        <MetricCard title="Tick" value={(run.current_tick ?? 0) > 0 ? run.current_tick! : 'Live'} />
         <MetricCard title="Agents" value={`${run.actor_count ?? 0} active`} />
         <MetricCard title="Events" value={eventCount} />
         <MetricCard title="Services" value={(run.services ?? []).length} />
