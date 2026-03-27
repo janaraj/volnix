@@ -49,6 +49,7 @@ class TerrariumApp:
         self._scheduler: Any = None
         self._run_manager: Any = None
         self._artifact_store: Any = None
+        self._current_run_id: str | None = None
         self._actor_registry: Any = None
         self._started = False
 
@@ -437,6 +438,7 @@ class TerrariumApp:
                 input_data=input_data,
                 source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
                 outcome=outcome,
+                run_id=self._current_run_id,
             )
             try:
                 await self._bus.publish(event)
@@ -626,14 +628,27 @@ class TerrariumApp:
 
     # ── Run management ─────────────────────────────────────────
 
+    _GATEWAY_ACTORS = [
+        {"id": "http-agent", "role": "agent", "type": "external",
+         "permissions": {"read": "all", "write": "all"}},
+        {"id": "mcp-agent", "role": "agent", "type": "external",
+         "permissions": {"read": "all", "write": "all"}},
+    ]
+
     async def create_run(
         self, plan: Any, mode: str = "governed", tag: str | None = None,
     ) -> RunId:
         """Create a run record, compile the world, and start the run."""
+        world_def = plan.model_dump(mode="json") if hasattr(plan, "model_dump") else {}
+        # Register gateway actors so they appear in world_def lookups
+        actors = world_def.get("actor_specs", world_def.get("actors", []))
+        if isinstance(actors, list):
+            existing_ids = {a.get("id") for a in actors if isinstance(a, dict)}
+            for ga in self._GATEWAY_ACTORS:
+                if ga["id"] not in existing_ids:
+                    actors.append(ga)
         run_id = await self._run_manager.create_run(
-            world_def=(
-                plan.model_dump(mode="json") if hasattr(plan, "model_dump") else {}
-            ),
+            world_def=world_def,
             config_snapshot={
                 "seed": plan.seed,
                 "behavior": plan.behavior,
@@ -645,6 +660,7 @@ class TerrariumApp:
             tag=tag,
         )
 
+        self._current_run_id = str(run_id)
         result = await self.compile_and_run(plan)
         await self._run_manager.start_run(run_id)
         await self._artifact_store.save_config(run_id, result)

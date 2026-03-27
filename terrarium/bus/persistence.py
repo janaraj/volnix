@@ -32,6 +32,7 @@ class BusPersistence:
             columns=[
                 ("event_id", "TEXT NOT NULL"),
                 ("event_type", "TEXT NOT NULL"),
+                ("run_id", "TEXT"),
                 ("timestamp_json", "TEXT NOT NULL"),
                 ("payload", "TEXT NOT NULL"),
             ],
@@ -41,6 +42,7 @@ class BusPersistence:
         """Create the event_log table if it does not exist."""
         await self._log.initialize()
         await self._log.create_index("event_type")
+        await self._log.create_index("run_id")
         await self._log.create_index("created_at")
 
     async def shutdown(self) -> None:
@@ -60,6 +62,7 @@ class BusPersistence:
         return await self._log.append({
             "event_id": str(event.event_id),
             "event_type": event.event_type,
+            "run_id": getattr(event, "run_id", None),
             "timestamp_json": event.timestamp.model_dump_json(),
             "payload": payload,
         })

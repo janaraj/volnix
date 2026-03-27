@@ -143,11 +143,17 @@ def _make_dashboard_gateway():
 
     registry = MagicMock()
 
+    # Mock budget engine
+    budget_engine = AsyncMock()
+    budget_engine.get_remaining = AsyncMock(return_value=None)
+
     def _registry_get(name):
         if name == "permission":
             return permission_engine
         if name == "reporter":
             return reporter
+        if name == "budget":
+            return budget_engine
         return state
 
     registry.get = MagicMock(side_effect=_registry_get)
