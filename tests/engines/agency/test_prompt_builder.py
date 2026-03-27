@@ -204,12 +204,30 @@ def test_individual_prompt_no_trigger():
 
 def test_individual_prompt_with_interactions():
     """Individual prompt shows recent interactions."""
+    from terrarium.actors.state import InteractionRecord
+
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
     actor = _make_actor()
     actor.recent_interactions = [
-        "[t=1] reply_ticket by agent-external",
-        "[t=2] close_ticket by actor-alice",
+        InteractionRecord(
+            tick=1.0,
+            actor_id="agent-external",
+            actor_role="customer",
+            action="reply_ticket",
+            summary="reply_ticket by agent-external",
+            source="observed",
+            event_id="evt-1",
+        ),
+        InteractionRecord(
+            tick=2.0,
+            actor_id="actor-alice",
+            actor_role="support_agent",
+            action="close_ticket",
+            summary="close_ticket by actor-alice",
+            source="self",
+            event_id="evt-2",
+        ),
     ]
 
     prompt = builder.build_individual_prompt(
@@ -219,7 +237,7 @@ def test_individual_prompt_with_interactions():
         available_actions=[],
     )
 
-    assert "Recent interactions (2)" in prompt
+    assert "Recent activity you're aware of" in prompt
     assert "reply_ticket by agent-external" in prompt
 
 

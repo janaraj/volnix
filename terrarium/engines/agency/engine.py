@@ -13,7 +13,7 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from terrarium.actors.state import ActorState, ScheduledAction
+from terrarium.actors.state import ActorState, InteractionRecord, ScheduledAction, Subscription
 from terrarium.core.engine import BaseEngine
 from terrarium.core.envelope import ActionEnvelope
 from terrarium.core.events import Event, WorldEvent
@@ -98,6 +98,115 @@ class AgencyEngine(BaseEngine):
 
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
+
+        # Subscription-based activation (collaborative communication)
+        if self._typed_config.collaboration_enabled:
+            already_activated = {aid for aid, _ in activated}
+            for actor_id, actor in self._actor_states.items():
+                if str(actor_id) == str(committed_event.actor_id):
+                    continue  # don't notify yourself
+                if actor_id in already_activated:
+                    continue  # already activated by tier1
+
+                for sub in actor.subscriptions:
+                    if not self._matches_subscription(committed_event, sub):
+                        continue
+
+                    # Build structured interaction record
+                    record = self._build_interaction_record(
+                        committed_event, actor, source="notified"
+                    )
+                    actor.recent_interactions.append(record)
+                    if len(actor.recent_interactions) > actor.max_recent_interactions:
+                        actor.recent_interactions = actor.recent_interactions[
+                            -actor.max_recent_interactions :
+                        ]
+
+                    # Check intended_for tagging (token efficiency)
+                    collab_mode = self._typed_config.collaboration_mode
+                    intended_for = committed_event.input_data.get("intended_for", [])
+
+                    should_activate = False
+                    activation_reason = ""
+
+                    if collab_mode == "tagged" and intended_for:
+                        # Only activate if actor is tagged or "all"
+                        if (
+                            "all" in intended_for
+                            or actor.role in intended_for
+                            or str(actor_id) in intended_for
+                        ):
+                            if sub.sensitivity == "immediate":
+                                should_activate = True
+                                activation_reason = "subscription_immediate"
+                            elif sub.sensitivity == "batch":
+                                actor.batch_notification_count += 1
+                                if actor.batch_notification_count >= actor.batch_threshold:
+                                    should_activate = True
+                                    activation_reason = "subscription_batch"
+                                    actor.batch_notification_count = 0
+                            # passive: record stored, no activation
+                    elif collab_mode == "open":
+                        # All subscribed actors activate
+                        if sub.sensitivity == "immediate":
+                            should_activate = True
+                            activation_reason = "subscription_immediate"
+                        elif sub.sensitivity == "batch":
+                            actor.batch_notification_count += 1
+                            if actor.batch_notification_count >= actor.batch_threshold:
+                                should_activate = True
+                                activation_reason = "subscription_batch"
+                                actor.batch_notification_count = 0
+                    elif not intended_for:
+                        # No intended_for specified — treat as open for this event
+                        if sub.sensitivity == "immediate":
+                            should_activate = True
+                            activation_reason = "subscription_immediate"
+                        elif sub.sensitivity == "batch":
+                            actor.batch_notification_count += 1
+                            if actor.batch_notification_count >= actor.batch_threshold:
+                                should_activate = True
+                                activation_reason = "subscription_batch"
+                                actor.batch_notification_count = 0
+
+                    if should_activate:
+                        activated.append((actor_id, activation_reason))
+
+                    # Record subscription match to ledger
+                    ledger = self._config.get("_ledger")
+                    if ledger is not None:
+                        from terrarium.ledger.entries import (
+                            CollaborationNotificationEntry,
+                            SubscriptionMatchEntry,
+                        )
+
+                        match_entry = SubscriptionMatchEntry(
+                            actor_id=actor_id,
+                            event_id=committed_event.event_id,
+                            service_id=sub.service_id,
+                            sensitivity=sub.sensitivity,
+                            activated=should_activate,
+                            reason=activation_reason or "passive",
+                        )
+                        collab_entry = CollaborationNotificationEntry(
+                            recipient_actor_id=actor_id,
+                            source_actor_id=committed_event.actor_id,
+                            event_id=committed_event.event_id,
+                            channel=committed_event.input_data.get("channel"),
+                            intended_for=intended_for,
+                            sensitivity=sub.sensitivity,
+                        )
+                        # Use fire-and-forget pattern for ledger writes
+                        try:
+                            await ledger.append(match_entry)
+                            await ledger.append(collab_entry)
+                        except Exception:
+                            logger.debug(
+                                "Failed to record subscription match to ledger"
+                            )
+
+                    break  # one match per actor per event
+
         if not activated:
             return []
 
@@ -251,12 +360,104 @@ class AgencyEngine(BaseEngine):
                 activated.append((actor_id, "frustration_threshold"))
                 continue
 
-            # 4. Scheduled action due
+            # 4. Synthesis deadline (lead actor) — checked before generic
+            #    scheduled action so the more specific reason is recorded
+            if (
+                actor.goal_context
+                and "synthesis_deadline" in (actor.goal_context or "")
+                and actor.scheduled_action
+                and actor.scheduled_action.action_type == "produce_deliverable"
+                and actor.scheduled_action.logical_time <= event_time
+            ):
+                activated.append((actor_id, "synthesis_deadline"))
+                continue
+
+            # 5. Scheduled action due
             if actor.scheduled_action and actor.scheduled_action.logical_time <= event_time:
                 activated.append((actor_id, "scheduled"))
                 continue
 
         return activated
+
+    # -- Subscription matching --
+
+    def _matches_subscription(self, event: WorldEvent, sub: Subscription) -> bool:
+        """Check if a committed event matches an actor's subscription.
+
+        Compares event service_id against subscription service_id,
+        then checks all filter criteria against event input_data,
+        metadata, and response_body.
+        """
+        # Service must match
+        if str(event.service_id) != sub.service_id:
+            return False
+
+        # Match filter criteria against event payload and metadata
+        for key, value in sub.filter.items():
+            if value == "self":
+                continue  # resolved at activation time, not here
+
+            # Check event input_data
+            if key in event.input_data and event.input_data[key] == value:
+                continue
+
+            # Check event metadata
+            if key in event.metadata and event.metadata[key] == value:
+                continue
+
+            # Check response_body
+            if (
+                event.response_body
+                and key in event.response_body
+                and event.response_body[key] == value
+            ):
+                continue
+
+            # No match on this filter key
+            return False
+
+        return True
+
+    def _build_interaction_record(
+        self, event: WorldEvent, observer: ActorState, source: str
+    ) -> InteractionRecord:
+        """Build a structured interaction record from a WorldEvent."""
+        # Extract summary from event
+        content = event.input_data.get("content", "")
+        text = event.input_data.get("text", "")
+        body = event.input_data.get("body", "")
+        subject = event.input_data.get("subject", "")
+        summary_text = content or text or body or subject or event.action
+
+        # Truncate to reasonable length
+        if len(summary_text) > 200:
+            summary_text = summary_text[:197] + "..."
+
+        # Get actor role from actor states
+        actor_role = ""
+        actor_state = self._actor_states.get(event.actor_id)
+        if actor_state:
+            actor_role = actor_state.role
+
+        return InteractionRecord(
+            tick=event.timestamp.tick,
+            actor_id=str(event.actor_id),
+            actor_role=actor_role,
+            action=event.action,
+            summary=summary_text,
+            source=source,
+            event_id=str(event.event_id),
+            reply_to=event.input_data.get("reply_to_event_id"),
+            channel=event.input_data.get("channel"),
+            intended_for=event.input_data.get("intended_for", []),
+        )
+
+    def _get_actor_role(self, actor_id: ActorId) -> str:
+        """Get the role string for an actor by ID."""
+        actor_state = self._actor_states.get(actor_id)
+        if actor_state:
+            return actor_state.role
+        return ""
 
     # -- Tier classification --
 
@@ -511,12 +712,19 @@ class AgencyEngine(BaseEngine):
                     actor.frustration - config.frustration_decrease_per_positive,
                 )
 
-        # Recent interactions
-        summary = (
-            f"[t={committed_event.timestamp.tick}]"
-            f" {committed_event.action} by {committed_event.actor_id}"
+        # Recent interactions (structured InteractionRecord)
+        record = InteractionRecord(
+            tick=committed_event.timestamp.tick,
+            actor_id=str(committed_event.actor_id),
+            actor_role=self._get_actor_role(committed_event.actor_id),
+            action=committed_event.action,
+            summary=f"{committed_event.action} by {committed_event.actor_id}",
+            source="observed",
+            event_id=str(committed_event.event_id),
+            reply_to=committed_event.input_data.get("reply_to_event_id"),
+            channel=committed_event.input_data.get("channel"),
         )
-        actor.recent_interactions.append(summary)
+        actor.recent_interactions.append(record)
         max_interactions = config.max_recent_interactions
         if max_interactions <= 0:
             actor.recent_interactions.clear()
@@ -560,6 +768,20 @@ class AgencyEngine(BaseEngine):
                 )
         except (ValueError, TypeError, AttributeError):
             pass  # Skip invalid schedule_action
+
+        # Pending tasks from LLM
+        if "pending_tasks" in updates and isinstance(updates["pending_tasks"], list):
+            actor.pending_tasks = [str(t) for t in updates["pending_tasks"]]
+
+        # Goal context from LLM
+        if "goal_context" in updates and updates["goal_context"]:
+            actor.goal_context = str(updates["goal_context"])
+
+        # Deliverable flag from lead actor
+        if "deliverable" in updates and updates["deliverable"]:
+            actor.pending_notifications.append(
+                f"[DELIVERABLE] {str(updates.get('deliverable_content', ''))[:500]}"
+            )
 
     def _get_current_time(self) -> float:
         """Get current logical time from the event queue (or 0 if not wired)."""

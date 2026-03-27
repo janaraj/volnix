@@ -25,9 +25,11 @@ Routes:
   GET  /api/v1/runs/{run_id}/gaps             -- run-scoped capability gaps
   GET  /api/v1/runs/{run_id}/actors           -- list actors in a run
   GET  /api/v1/runs/{run_id}/actors/{aid}     -- actor detail with budgets
+  GET  /api/v1/runs/{run_id}/messages         -- communication messages (chat view)
+  GET  /api/v1/runs/{run_id}/deliverable      -- deliverable artifact
   GET  /api/v1/compare                        -- compare runs
   GET  /api/v1/diff                           -- compare runs (original)
-  WS   /ws/runs/{run_id}/live                 -- run-scoped live event stream
+  WS   /ws/runs/{run_id}/live                 -- run-scoped live event stream (+chat_message)
 
 Uses: FastAPI + Uvicorn
 Uses: Gateway.handle_request() for all tool calls
@@ -43,6 +45,22 @@ from terrarium.engines.adapter.protocols._response import unwrap_single_entity
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
 
 logger = logging.getLogger(__name__)
+
+# Communication actions across all packs — used by the messages
+# endpoint and WebSocket chat_message enrichment.
+COMMUNICATION_ACTIONS: frozenset[str] = frozenset({
+    # Slack / chat pack (Slack MCP naming convention)
+    "chat.postMessage",
+    "chat.replyToThread",
+    # Email pack (gmail)
+    "email_send",
+    # Reddit pack
+    "reddit_submit",
+    "reddit_comment",
+    # Twitter pack
+    "twitter_create_tweet",
+    "twitter_reply",
+})
 
 
 class HTTPRestAdapter(ProtocolAdapter):
@@ -1007,6 +1025,96 @@ class HTTPRestAdapter(ProtocolAdapter):
                 "budget": budget_data,
             }
 
+        # -- Collaborative communication endpoints ----------------------------
+
+        @app.get("/api/v1/runs/{run_id}/messages")
+        async def get_run_messages(
+            run_id: str,
+            channel: str | None = fastapi.Query(default=None),
+            limit: int = fastapi.Query(default=50, ge=1, le=1000),
+            offset: int = fastapi.Query(default=0, ge=0),
+        ):
+            """Get communication messages from a run, formatted for chat view.
+
+            Filters events to communication actions (chat, email, social)
+            and returns them as chat-style messages.
+            """
+            from terrarium.core.types import RunId as _RId
+
+            # Load all events for the run (ascending order for chat timeline)
+            events, total_all = await _load_run_events(
+                run_id, order="asc",
+            )
+
+            # Filter to communication actions only
+            comm_events = [
+                e for e in events
+                if e.get("action") in COMMUNICATION_ACTIONS
+            ]
+
+            # Apply channel filter if provided
+            if channel:
+                comm_events = [
+                    e for e in comm_events
+                    if (e.get("input_data") or {}).get("channel") == channel
+                ]
+
+            total = len(comm_events)
+            page = comm_events[offset: offset + limit]
+
+            # Build actor role lookup from world_def
+            run_data = await gateway._app.run_manager.get_run(_RId(run_id))
+            world_def = run_data.get("world_def", {}) if run_data else {}
+            actor_roles = {
+                a.get("id", ""): a.get("role", "")
+                for a in world_def.get("actors", [])
+                if isinstance(a, dict)
+            }
+
+            messages = []
+            for evt in page:
+                inp = evt.get("input_data") or {}
+                ts = evt.get("timestamp") or {}
+                content = (
+                    inp.get("content")
+                    or inp.get("text")
+                    or inp.get("body")
+                    or ""
+                )
+                messages.append({
+                    "id": evt.get("event_id", ""),
+                    "tick": ts.get("tick", 0),
+                    "actor_id": evt.get("actor_id", ""),
+                    "actor_role": actor_roles.get(evt.get("actor_id", ""), ""),
+                    "channel": inp.get("channel", ""),
+                    "content": content,
+                    "reply_to": inp.get("reply_to_event_id"),
+                    "intended_for": inp.get("intended_for", []),
+                    "timestamp": ts.get("wall_time", ""),
+                })
+
+            return {"messages": messages, "count": total}
+
+        @app.get("/api/v1/runs/{run_id}/deliverable")
+        async def get_run_deliverable(run_id: str):
+            """Get the deliverable artifact for a run, if one was produced."""
+            from starlette.responses import JSONResponse
+
+            from terrarium.core.types import RunId as _RId
+
+            result = await gateway._app.artifact_store.load_artifact(
+                _RId(run_id),
+                "deliverable",
+            )
+            if result is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "error": "No deliverable produced for this run",
+                    },
+                )
+            return result
+
         @app.get("/api/v1/compare")
         async def compare_runs_endpoint(
             runs: str = fastapi.Query(
@@ -1066,12 +1174,43 @@ class HTTPRestAdapter(ProtocolAdapter):
 
                 return {"type": msg_type, "data": data}
 
+            def _make_chat_message(event: Any) -> dict | None:
+                """Build a chat_message payload if the event is a communication action."""
+                action = getattr(event, "action", None)
+                if action not in COMMUNICATION_ACTIONS:
+                    return None
+                inp = getattr(event, "input_data", {}) or {}
+                ts = getattr(event, "timestamp", None)
+                content = (
+                    inp.get("content")
+                    or inp.get("text")
+                    or inp.get("body")
+                    or ""
+                )
+                return {
+                    "type": "chat_message",
+                    "data": {
+                        "id": str(getattr(event, "event_id", "")),
+                        "tick": ts.tick if ts and hasattr(ts, "tick") else 0,
+                        "actor_id": str(getattr(event, "actor_id", "")),
+                        "channel": inp.get("channel", ""),
+                        "content": content,
+                        "reply_to": inp.get("reply_to_event_id"),
+                        "intended_for": inp.get("intended_for", []),
+                    },
+                }
+
             async def _on_event(event: Any) -> None:
                 # Run-scoped: only forward events for this run
                 event_run = getattr(event, "run_id", None)
                 if event_run is not None and str(event_run) != run_id:
                     return
-                await queue.put(_classify(event))
+                classified = _classify(event)
+                await queue.put(classified)
+                # Also emit a chat_message for communication actions
+                chat_msg = _make_chat_message(event)
+                if chat_msg is not None:
+                    await queue.put(chat_msg)
 
             await bus.subscribe("*", _on_event)
             try:

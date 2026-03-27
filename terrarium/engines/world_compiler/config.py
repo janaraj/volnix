@@ -12,3 +12,6 @@ class WorldCompilerConfig(BaseModel):
     max_entities_per_type: int = 1000
     max_section_retries: int = 2
     collect_all_validation_errors: bool = True
+
+    # Collaborative communication
+    auto_include_chat: bool = True  # auto-add chat service when internal actors exist

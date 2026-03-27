@@ -3,15 +3,16 @@
 import pytest
 from pydantic import ValidationError
 
-from terrarium.core.types import ActorId, ActorType, EntityId
 from terrarium.actors.definition import ActorDefinition
 from terrarium.actors.registry import ActorRegistry
 from terrarium.actors.state import (
     ActorBehaviorTraits,
     ActorState,
+    InteractionRecord,
     ScheduledAction,
     WaitingFor,
 )
+from terrarium.core.types import ActorId, ActorType, EntityId
 
 
 class TestActorStateCreation:
@@ -70,7 +71,17 @@ class TestActorStateCreation:
             frustration=0.4,
             urgency=0.8,
             pending_notifications=["New leave request"],
-            recent_interactions=["Received request from Bob"],
+            recent_interactions=[
+                InteractionRecord(
+                    tick=1.0,
+                    actor_id="bob",
+                    actor_role="employee",
+                    action="submit_leave_request",
+                    summary="Received request from Bob",
+                    source="observed",
+                    event_id="evt-1",
+                ),
+            ],
             scheduled_action=scheduled,
             activation_tier=2,
             watched_entities=[EntityId("leave-req-001")],
@@ -343,7 +354,17 @@ class TestRegistryStateManagement:
             frustration=0.2,
             urgency=0.7,
             pending_notifications=["New message"],
-            recent_interactions=["Greeted customer"],
+            recent_interactions=[
+                InteractionRecord(
+                    tick=1.0,
+                    actor_id="alice",
+                    actor_role="support-agent",
+                    action="greet",
+                    summary="Greeted customer",
+                    source="self",
+                    event_id="evt-1",
+                ),
+            ],
             activation_tier=1,
             watched_entities=[EntityId("ticket-100")],
         )
@@ -364,7 +385,8 @@ class TestRegistryStateManagement:
         assert restored.frustration == 0.2
         assert restored.urgency == 0.7
         assert restored.pending_notifications == ["New message"]
-        assert restored.recent_interactions == ["Greeted customer"]
+        assert len(restored.recent_interactions) == 1
+        assert restored.recent_interactions[0].summary == "Greeted customer"
         assert restored.activation_tier == 1
         assert EntityId("ticket-100") in restored.watched_entities
 

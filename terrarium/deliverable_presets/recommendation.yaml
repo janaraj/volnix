@@ -1,0 +1,64 @@
+name: recommendation
+description: "Prioritized list of recommendations with rationale and risk assessment"
+
+schema:
+  type: object
+  required: [recommendations, priority_order, rationale]
+  properties:
+    recommendations:
+      type: array
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+            description: "Short title for the recommendation"
+          description:
+            type: string
+            description: "Detailed description"
+          priority:
+            type: string
+            enum: [critical, high, medium, low]
+            description: "Priority level"
+          effort:
+            type: string
+            enum: [low, medium, high]
+            description: "Estimated effort to implement"
+        required: [title, description, priority]
+      description: "The list of recommendations"
+    priority_order:
+      type: array
+      items:
+        type: string
+      description: "Recommendation titles in priority order"
+    rationale:
+      type: string
+      description: "Overall rationale for the recommendations and their ordering"
+    risks:
+      type: array
+      items:
+        type: object
+        properties:
+          recommendation:
+            type: string
+          risk:
+            type: string
+          mitigation:
+            type: string
+        required: [recommendation, risk]
+      description: "Risks associated with each recommendation"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. The team has
+  been discussing options and trade-offs. Based on ALL the interactions
+  you've observed, produce a final recommendation deliverable.
+
+  List all recommendations with clear priorities, provide an overall
+  rationale for the ordering, and identify risks for each recommendation
+  along with potential mitigations.
+
+  Structure your response as JSON with these fields:
+  - recommendations: Array of {title, description, priority, effort} objects
+  - priority_order: Array of recommendation titles in priority order
+  - rationale: Overall rationale for the recommendations (string)
+  - risks: Array of {recommendation, risk, mitigation} objects

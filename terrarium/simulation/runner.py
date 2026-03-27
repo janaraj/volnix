@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import Any
 
 from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.types import ActionSource, ActorId
+from terrarium.core.types import ActionSource, ActorId, EnvelopePriority, ServiceId
 from terrarium.simulation.config import SimulationRunnerConfig
 from terrarium.simulation.event_queue import EventQueue
 
@@ -41,6 +41,17 @@ class StopReason(StrEnum):
     QUEUE_EMPTY = "queue_empty"
     MAX_EVENTS_REACHED = "max_events_reached"
     LOOP_BREAKER = "loop_breaker"
+    IDLE_STOP = "idle_stop"
+    DELIVERABLE_PRODUCED = "deliverable_produced"
+    TICK_LIMIT = "tick_limit"
+
+
+class SimulationType(StrEnum):
+    """Classification of simulation based on actor composition."""
+
+    INTERNAL_ONLY = "internal_only"  # all actors are internal
+    EXTERNAL_DRIVEN = "external_driven"  # any external actor present
+    MIXED = "mixed"  # both internal and external actors
 
 
 class SimulationRunner:
@@ -64,6 +75,7 @@ class SimulationRunner:
         config: SimulationRunnerConfig | None = None,
         ledger: Any | None = None,
         replay_log: Any | None = None,
+        actor_specs: list[dict[str, Any]] | None = None,
     ) -> None:
         self._queue = event_queue
         self._execute_pipeline = pipeline_executor
@@ -87,6 +99,15 @@ class SimulationRunner:
         self._actor_action_counts: dict[str, list[float]] = {}  # actor_id -> [logical_times]
         self._env_reaction_times: list[float] = []
 
+        # Simulation type detection
+        self._simulation_type = self._detect_simulation_type(actor_specs or [])
+
+        # Internal-only world tracking
+        self._consecutive_idle_ticks: int = 0
+        self._deliverable_produced: bool = False
+        self._current_tick: int = 0
+        self._events_this_tick: int = 0
+
     @property
     def status(self) -> SimulationStatus:
         """Current simulation status."""
@@ -101,6 +122,21 @@ class SimulationRunner:
     def total_events_processed(self) -> int:
         """Total number of events that have been processed."""
         return self._total_events_processed
+
+    @property
+    def simulation_type(self) -> SimulationType:
+        """Classification of this simulation based on actor composition."""
+        return self._simulation_type
+
+    @property
+    def deliverable_produced(self) -> bool:
+        """Whether a deliverable has been produced."""
+        return self._deliverable_produced
+
+    @property
+    def consecutive_idle_ticks(self) -> int:
+        """Number of consecutive ticks where all actors did nothing."""
+        return self._consecutive_idle_ticks
 
     def set_mission(self, mission: str) -> None:
         """Set the mission text for mission-complete detection."""
@@ -118,6 +154,61 @@ class SimulationRunner:
     def mark_mission_completed(self) -> None:
         """Mark the mission as completed (external signal)."""
         self._mission_completed = True
+
+    def mark_deliverable_produced(self) -> None:
+        """Mark that a deliverable has been produced (e.g. by the lead actor)."""
+        self._deliverable_produced = True
+
+    @staticmethod
+    def _detect_simulation_type(
+        actor_specs: list[dict[str, Any]],
+    ) -> SimulationType:
+        """Detect simulation type from actor specs.
+
+        - internal_only: all actors are internal
+        - external_driven: at least one external actor, no internal
+        - mixed: both internal and external actors
+        """
+        has_internal = False
+        has_external = False
+        for spec in actor_specs:
+            actor_type = spec.get("type", "external")
+            if actor_type == "internal":
+                has_internal = True
+            else:
+                has_external = True
+
+        if has_internal and has_external:
+            return SimulationType.MIXED
+        if has_internal:
+            return SimulationType.INTERNAL_ONLY
+        return SimulationType.EXTERNAL_DRIVEN
+
+    def create_kickstart_envelope(self) -> ActionEnvelope | None:
+        """Create an initial envelope for internal-only worlds.
+
+        Posts the mission to the #team channel to kickstart collaboration.
+        Returns None if not applicable (not internal-only or no mission).
+        """
+        if self._simulation_type != SimulationType.INTERNAL_ONLY:
+            return None
+        if not self._mission:
+            return None
+
+        return ActionEnvelope(
+            actor_id=ActorId("world"),
+            source=ActionSource.ENVIRONMENT,
+            action_type="slack_chat_postMessage",
+            target_service=ServiceId("chat"),
+            payload={
+                "channel": "#team",
+                "text": f"[MISSION] {self._mission}",
+                "intended_for": ["all"],
+            },
+            logical_time=0.0,
+            priority=EnvelopePriority.ENVIRONMENT,
+            metadata={"activation_reason": "kickstart"},
+        )
 
     async def stop(self) -> None:
         """Manual stop."""
@@ -139,6 +230,11 @@ class SimulationRunner:
         """
         self._status = SimulationStatus.RUNNING
         self._stop_reason = None
+
+        # Kickstart for internal-only worlds: post mission to #team channel
+        kickstart = self.create_kickstart_envelope()
+        if kickstart is not None:
+            self._queue.submit(kickstart)
 
         while self._status == SimulationStatus.RUNNING:
             # Step 0: Async budget exhaustion check
@@ -249,6 +345,9 @@ class SimulationRunner:
                 )
                 await self._replay_log.record(entry)
 
+            # Step 9: Track idle ticks for internal-only worlds
+            self._track_idle_ticks(envelope)
+
         return self._stop_reason  # type: ignore[return-value]
 
     def _check_end_conditions(self) -> StopReason | None:
@@ -292,9 +391,26 @@ class SimulationRunner:
         ):
             return StopReason.ALL_AGENTS_DISCONNECTED
 
-        # 7. Loop breaker
-        if self._events_since_external >= self._config.loop_breaker_threshold:
+        # 7. Loop breaker (skip for internal-only worlds where no external is expected)
+        if (
+            self._simulation_type != SimulationType.INTERNAL_ONLY
+            and self._events_since_external >= self._config.loop_breaker_threshold
+        ):
             return StopReason.LOOP_BREAKER
+
+        # 8-10. Internal-only world end conditions
+        if self._simulation_type == SimulationType.INTERNAL_ONLY:
+            # 8. Deliverable produced
+            if self._deliverable_produced:
+                return StopReason.DELIVERABLE_PRODUCED
+
+            # 9. Idle stop (all actors did nothing for N consecutive ticks)
+            if self._consecutive_idle_ticks >= self._config.idle_stop_ticks:
+                return StopReason.IDLE_STOP
+
+            # 10. Hard tick limit
+            if self._current_tick >= self._config.max_ticks:
+                return StopReason.TICK_LIMIT
 
         return None
 
@@ -321,3 +437,30 @@ class SimulationRunner:
                 return False
 
         return True
+
+    def _track_idle_ticks(self, envelope: ActionEnvelope) -> None:
+        """Track idle ticks for internal-only world end conditions.
+
+        An "idle tick" is counted when an action_type is "do_nothing" or similar
+        no-op actions. If all processed actions in a logical time window are idle,
+        the consecutive idle counter increments. Any substantive action resets it.
+        """
+        if self._simulation_type != SimulationType.INTERNAL_ONLY:
+            return
+
+        # Detect tick transitions via logical time
+        tick_for_envelope = int(envelope.logical_time)
+        if tick_for_envelope > self._current_tick:
+            # Tick boundary crossed — evaluate whether previous tick was idle
+            if self._events_this_tick == 0 and self._current_tick > 0:
+                # No substantive events in the previous tick
+                self._consecutive_idle_ticks += 1
+            elif self._events_this_tick > 0:
+                self._consecutive_idle_ticks = 0
+            self._current_tick = tick_for_envelope
+            self._events_this_tick = 0
+
+        # Track whether this is a substantive action
+        idle_actions = {"do_nothing", "noop", "idle", "wait", "pass"}
+        if envelope.action_type not in idle_actions:
+            self._events_this_tick += 1

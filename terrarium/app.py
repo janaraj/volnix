@@ -409,7 +409,7 @@ class TerrariumApp:
         # so AgencyEngine + other subscribers can react to blocked/denied actions
         if self._bus:
             from terrarium.core.events import WorldEvent
-            from terrarium.core.types import ActionSource, EntityId, Timestamp
+            from terrarium.core.types import ActionSource, EntityId, EventId, Timestamp
 
             # Determine target_entity: prefer explicit, else from state deltas
             target = ctx.target_entity
@@ -423,6 +423,12 @@ class TerrariumApp:
             if ctx.short_circuited:
                 sc_step = getattr(ctx, "short_circuit_step", "")
                 outcome = f"blocked_at_{sc_step}" if sc_step else "blocked"
+
+            # Copy reply_to_event_id from payload to causes for causal linking
+            causes: list[EventId] = []
+            reply_to = input_data.get("reply_to_event_id")
+            if reply_to:
+                causes.append(EventId(str(reply_to)))
 
             event = WorldEvent(
                 event_type=f"world.{action}",
@@ -439,6 +445,7 @@ class TerrariumApp:
                 source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
                 outcome=outcome,
                 run_id=self._current_run_id,
+                causes=causes,
             )
             try:
                 await self._bus.publish(event)
@@ -605,6 +612,64 @@ class TerrariumApp:
                     ][:15]
 
                 actor_states.append(state)
+
+        # Set batch_threshold from config for each actor
+        batch_threshold = self._config.agency.batch_threshold_default
+        for state in actor_states:
+            state.batch_threshold = batch_threshold
+
+        # Generate subscriptions via LLM if available, otherwise skip gracefully
+        if self._llm_router and actor_states:
+            try:
+                from terrarium.engines.world_compiler.subscription_generator import (
+                    SubscriptionGenerator,
+                )
+
+                compiler = self._registry.get("world_compiler")
+                # Use subscriptions from compilation result if already generated (GAP 4)
+                pre_generated = result.get("subscriptions", {})
+
+                if pre_generated:
+                    # Apply pre-generated subscriptions from compiler
+                    for state in actor_states:
+                        actor_key = str(state.actor_id)
+                        if actor_key in pre_generated:
+                            state.subscriptions = pre_generated[actor_key]
+                else:
+                    # Generate subscriptions at configure_agency time
+                    sub_gen = SubscriptionGenerator(
+                        llm_router=self._llm_router,
+                        seed=getattr(plan, "seed", 42),
+                    )
+                    for state in actor_states:
+                        actor_spec = {
+                            "role": state.role,
+                            "personality": state.persona,
+                            "type": state.actor_type,
+                        }
+                        try:
+                            subs = await sub_gen.generate_subscriptions(
+                                actor_spec, plan,
+                            )
+                            state.subscriptions = subs
+                        except Exception as exc:
+                            logger.warning(
+                                "Subscription generation failed for actor %s: %s",
+                                state.actor_id,
+                                exc,
+                            )
+            except Exception as exc:
+                logger.warning(
+                    "Subscription generation unavailable: %s — "
+                    "actors will have empty subscriptions",
+                    exc,
+                )
+        else:
+            if not self._llm_router and actor_states:
+                logger.warning(
+                    "No LLM router available — skipping subscription generation. "
+                    "Actors will have empty subscriptions (functional but no collaboration)."
+                )
 
         await agency.configure(actor_states, world_context, available_actions)
 
