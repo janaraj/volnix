@@ -40,11 +40,11 @@ from terrarium.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
 class TicketsPack(ServicePack):
     """Verified pack for Zendesk-style ticket / work-management services.
 
-    Tools: tickets_list, tickets_show, tickets_create,
-    tickets_update, tickets_delete, tickets_search,
-    ticket_comments_list, ticket_comments_create,
-    users_list, users_show, groups_list,
-    groups_show.
+    Tools: tickets.list, tickets.read, tickets.create,
+    tickets.update, tickets.delete, tickets.search,
+    tickets.comments.list, tickets.comment_create,
+    customers.list, customers.read, groups.list,
+    groups.read.
     """
 
     pack_name: ClassVar[str] = "zendesk"
@@ -52,18 +52,18 @@ class TicketsPack(ServicePack):
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "tickets_list": handle_tickets_list,
-        "tickets_show": handle_tickets_show,
-        "tickets_create": handle_tickets_create,
-        "tickets_update": handle_tickets_update,
-        "tickets_delete": handle_tickets_delete,
-        "tickets_search": handle_tickets_search,
-        "ticket_comments_list": handle_ticket_comments_list,
-        "ticket_comments_create": handle_ticket_comments_create,
-        "users_list": handle_users_list,
-        "users_show": handle_users_show,
-        "groups_list": handle_groups_list,
-        "groups_show": handle_groups_show,
+        "tickets.list": handle_tickets_list,
+        "tickets.read": handle_tickets_show,
+        "tickets.create": handle_tickets_create,
+        "tickets.update": handle_tickets_update,
+        "tickets.delete": handle_tickets_delete,
+        "tickets.search": handle_tickets_search,
+        "tickets.comments.list": handle_ticket_comments_list,
+        "tickets.comment_create": handle_ticket_comments_create,
+        "customers.list": handle_users_list,
+        "customers.read": handle_users_show,
+        "groups.list": handle_groups_list,
+        "groups.read": handle_groups_show,
     }
 
     def get_tools(self) -> list[dict]:

@@ -70,6 +70,7 @@ class BusPersistence:
         to_sequence: int | None = None,
         event_types: list[str] | None = None,
         limit: int | None = None,
+        order: str = "asc",
     ) -> list[Event]:
         """Query persisted events with optional filters.
 
@@ -78,6 +79,7 @@ class BusPersistence:
             to_sequence: If provided, only return events with sequence ID <= this value.
             event_types: If provided, only return events matching these types.
             limit: Maximum number of events to return.
+            order: Sort direction — ``"asc"`` or ``"desc"``.
 
         Returns:
             Ordered list of matching events.
@@ -95,6 +97,7 @@ class BusPersistence:
             filters=filters,
             range_filters=range_filters,
             limit=limit,
+            order=order,
         )
         events: list[Event] = []
         for row in rows:

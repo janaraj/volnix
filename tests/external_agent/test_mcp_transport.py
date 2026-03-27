@@ -39,8 +39,8 @@ class TestMCPToolDiscovery:
         manifest = await adapter.get_tool_manifest()
         assert len(manifest) >= 6
         names = {t["name"] for t in manifest}
-        assert "tickets_show" in names
-        assert "messages_send" in names
+        assert "tickets.read" in names
+        assert "users.messages.send" in names
 
 
 class TestMCPToolExecution:
@@ -54,7 +54,7 @@ class TestMCPToolExecution:
         # The server registers handlers; we invoke via gateway mock
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_show",
+            tool_name="tickets.read",
             input_data={"id": "ticket-001"},
         )
 
@@ -85,7 +85,7 @@ class TestMCPToolExecution:
 
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_list",
+            tool_name="tickets.list",
             input_data={},
         )
 
@@ -108,7 +108,7 @@ class TestMCPToolExecution:
 
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_update",
+            tool_name="tickets.update",
             input_data={"id": "t-1", "status": "closed"},
         )
 
@@ -141,7 +141,7 @@ class TestMCPTriageWorkflow:
         }
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_list",
+            tool_name="tickets.list",
             input_data={},
         )
         data = unwrap_single_entity(result)
@@ -159,7 +159,7 @@ class TestMCPTriageWorkflow:
         }
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_show",
+            tool_name="tickets.read",
             input_data={"id": ticket_id},
         )
         ticket = unwrap_single_entity(result)
@@ -176,7 +176,7 @@ class TestMCPTriageWorkflow:
         }
         result = await gateway.handle_request(
             actor_id="mcp-agent",
-            tool_name="tickets_update",
+            tool_name="tickets.update",
             input_data={"id": ticket_id, "status": "open"},
         )
         updated = unwrap_single_entity(result)

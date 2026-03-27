@@ -247,19 +247,19 @@ class TestMultiServiceLiveWorld:
         action2 = await app.handle_action(
             agent_id,
             "chat",
-            "chat_postMessage",
+            "chat.postMessage",
             {
                 "channel_id": channel_id,
                 "text": "Working on Margaret Chen's $249 refund — needs supervisor approval",
             },
         )
-        print(f"  Action 2 (chat_postMessage): {json.dumps(action2, indent=4, default=str)[:300]}")
+        print(f"  Action 2 (chat.postMessage): {json.dumps(action2, indent=4, default=str)[:300]}")
 
         # Action 3: Agent creates a ticket
         action3 = await app.handle_action(
             agent_id,
             "tickets",
-            "tickets_create",
+            "tickets.create",
             {
                 "subject": "Margaret Chen - $249 Refund Request",
                 "description": "VIP customer waiting 7 days for refund. Needs supervisor approval.",
@@ -267,7 +267,7 @@ class TestMultiServiceLiveWorld:
                 "priority": "high",
             },
         )
-        print(f"  Action 3 (tickets_create): {json.dumps(action3, indent=4, default=str)[:300]}")
+        print(f"  Action 3 (tickets.create): {json.dumps(action3, indent=4, default=str)[:300]}")
 
         # Action 4: Agent updates ticket status
         ticket_id = action3.get("ticket", {}).get("id", "")
@@ -275,14 +275,14 @@ class TestMultiServiceLiveWorld:
             action4 = await app.handle_action(
                 agent_id,
                 "tickets",
-                "tickets_update",
+                "tickets.update",
                 {
                     "id": ticket_id,
                     "status": "open",
                     "assignee_id": "support-agent",
                 },
             )
-            print(f"  Action 4 (tickets_update): {json.dumps(action4, indent=4, default=str)[:200]}")
+            print(f"  Action 4 (tickets.update): {json.dumps(action4, indent=4, default=str)[:200]}")
 
         # ────────────────────────────────────────────────────
         # STEP 5: Tick the animator (dynamic mode events)

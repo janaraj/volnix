@@ -54,7 +54,7 @@ def test_openai_tools_format():
 
 def test_env_vars_format():
     """env-vars export produces shell export statements."""
-    tools = [{"name": "email_send"}, {"name": "tickets_update"}]
+    tools = [{"name": "email_send"}, {"name": "tickets.update"}]
     output = env_vars(url="http://localhost:8080", tools=tools)
     assert "export TERRARIUM_URL=http://localhost:8080" in output
     assert "export TERRARIUM_MCP_URL=" in output

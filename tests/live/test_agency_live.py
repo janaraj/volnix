@@ -248,7 +248,7 @@ class TestAgencyLiveSimulation:
 
         # Create a committed event that targets a watched entity
         test_event = WorldEvent(
-            event_type="world.tickets_update",
+            event_type="world.tickets.update",
             timestamp=Timestamp(
                 world_time=datetime.now(UTC),
                 wall_time=datetime.now(UTC),
@@ -256,7 +256,7 @@ class TestAgencyLiveSimulation:
             ),
             actor_id=ActorId(agent_id),
             service_id=ServiceId("zendesk"),
-            action="tickets_update",
+            action="tickets.update",
             target_entity=EntityId(watched_entity_id) if watched_entity_id else None,
             source=ActionSource.EXTERNAL,
         )

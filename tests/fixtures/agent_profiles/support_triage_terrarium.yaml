@@ -57,12 +57,12 @@ boundary_rules:
 stop_conditions:
   max_steps: 8
 target_mapping:
-  cases.list: tickets_list
-  cases.read: tickets_show
-  cases.update: tickets_update
-  comments.create: ticket_comments_create
-  messages.send: messages_send
-  customers.read: users_show
+  cases.list: tickets.list
+  cases.read: tickets.read
+  cases.update: tickets.update
+  comments.create: tickets.comment_create
+  messages.send: users.messages.send
+  customers.read: customers.read
 prompt_templates:
   system: prompts/system.j2
   decision: prompts/decision.j2

@@ -74,7 +74,7 @@ def _make_actor_state(
 
 def _make_world_event(
     actor_id: str = "external-agent",
-    action: str = "tickets_update",
+    action: str = "tickets.update",
     target_entity: str | None = None,
     source: ActionSource = ActionSource.EXTERNAL,
     tick: int = 1,
@@ -185,7 +185,7 @@ async def _create_agency_engine(
     ctx = world_context or _make_world_context()
     available_actions = [
         {"name": "email_send", "description": "Send email", "service": "email"},
-        {"name": "tickets_update", "description": "Update ticket", "service": "tickets"},
+        {"name": "tickets.update", "description": "Update ticket", "service": "tickets"},
     ]
     await engine.configure(actor_states, ctx, available_actions)
     return engine
@@ -260,7 +260,7 @@ class TestFullLoopWithMockLLM:
         router.route = AsyncMock(side_effect=[
             # Tier 3 individual call (supervisor first since Tier 3 processed first)
             type(router.route.return_value)(
-                content=json.dumps({"action_type": "tickets_update", "target_service": "tickets",
+                content=json.dumps({"action_type": "tickets.update", "target_service": "tickets",
                                     "payload": {"id": "tck_001", "status": "open"}, "reasoning": "Reviewing"}),
                 provider="mock", model="mock", latency_ms=5.0,
             ),
@@ -401,7 +401,7 @@ class TestSimulationRunnerLoop:
         event_queue.submit(ActionEnvelope(
             actor_id=ActorId("agent-001"),
             source=ActionSource.EXTERNAL,
-            action_type="tickets_update",
+            action_type="tickets.update",
             target_service=ServiceId("zendesk"),
             payload={"id": "tck_001"},
             logical_time=1.0,

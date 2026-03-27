@@ -529,7 +529,7 @@ async def test_http_call_tool_raw_arguments():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # Raw arguments — no "arguments" wrapper
         resp = await client.post(
-            "/api/v1/actions/tickets_show",
+            "/api/v1/actions/tickets.read",
             json={"id": "ticket-001"},
         )
 
@@ -538,7 +538,6 @@ async def test_http_call_tool_raw_arguments():
 
     # Raw-mode returns envelope response
     assert "structured_content" in data
-    assert "content" in data
     assert "is_error" in data
     assert data["is_error"] is False
 
@@ -563,7 +562,7 @@ async def test_http_call_tool_raw_mode_with_actor_header():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/tickets_show",
+            "/api/v1/actions/tickets.read",
             json={"id": "ticket-001"},
             headers={"x-actor-id": "my-agent"},
         )
@@ -584,14 +583,14 @@ async def test_http_call_tool_raw_mode_error_envelope():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/tickets_show",
+            "/api/v1/actions/tickets.read",
             json={"id": "ticket-001"},
         )
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["is_error"] is True
-    assert "Permission denied" in data["content"]
+    assert "Permission denied" in str(data["structured_content"])
 
 
 @pytest.mark.asyncio
@@ -605,7 +604,7 @@ async def test_http_call_tool_raw_mode_multi_key_not_unwrapped():
     transport = httpx.ASGITransport(app=adapter.fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/actions/tickets_list",
+            "/api/v1/actions/tickets.list",
             json={},
         )
 

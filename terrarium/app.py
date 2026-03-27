@@ -311,6 +311,7 @@ class TerrariumApp:
         reporter = self._registry.get("reporter")
         reporter._ledger = self._ledger
         reporter._config["_actor_registry"] = actor_registry
+        reporter._dependencies["bus"] = self._bus
 
         # Shared scheduler + animator wiring
         from terrarium.scheduling.scheduler import WorldScheduler

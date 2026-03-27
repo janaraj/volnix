@@ -178,7 +178,6 @@ class HTTPRestAdapter(ProtocolAdapter):
                     unwrapped = result
                 return {
                     "structured_content": unwrapped,
-                    "content": _json.dumps(unwrapped, default=str),
                     "is_error": is_error,
                 }
             return result
@@ -197,7 +196,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             """Return target mapping from capabilities to this world's tools.
 
             External agents call this to discover which tool name to use
-            for each semantic capability (e.g., cases.list → tickets_list).
+            for each semantic capability (e.g., cases.list → tickets.list).
             """
             from terrarium.kernel.mapping import generate_target_mapping
 
@@ -444,13 +443,51 @@ class HTTPRestAdapter(ProtocolAdapter):
                 runs = [r for r in runs if r.get("reality_preset") == preset]
             if tag:
                 runs = [r for r in runs if r.get("tag") == tag]
+
+            # Enrich each run with live stats from bus (raw JSON)
+            try:
+                bus = gateway._app.bus
+                persistence = getattr(bus, "_persistence", None)
+                all_events = []
+                if persistence:
+                    rows = await persistence._log.query(from_sequence=0)
+                    for row in rows:
+                        try:
+                            all_events.append(_json.loads(row["payload"]))
+                        except Exception:
+                            pass
+                event_count = len(all_events)
+                external_actors = {
+                    e.get("actor_id", "")
+                    for e in all_events
+                    if e.get("actor_id", "")
+                    and e.get("actor_id", "") not in _INTERNAL_ACTORS
+                }
+                for r in runs:
+                    r.setdefault("event_count", event_count)
+                    r.setdefault("actor_count", len(external_actors))
+                    world_def = r.get("world_def", {})
+                    services_raw = world_def.get("services", {})
+                    if isinstance(services_raw, dict) and "services" not in r:
+                        r["services"] = [
+                            {"service_id": k, "service_name": k}
+                            for k in services_raw.keys()
+                        ]
+            except Exception:
+                pass
+
             total = len(runs)
             paginated = runs[offset : offset + limit]
             return {"runs": paginated, "total": total}
 
+        _INTERNAL_ACTORS = frozenset({
+            "world_compiler", "animator", "system", "policy",
+            "budget", "state", "permission", "responder",
+        })
+
         @app.get("/api/v1/runs/{run_id}")
         async def get_run_endpoint(run_id: str):
-            """Get metadata for a specific run."""
+            """Get metadata for a specific run, enriched with live stats."""
             from terrarium.core.types import RunId as _RId
 
             result = await gateway._app.run_manager.get_run(_RId(run_id))
@@ -461,6 +498,50 @@ class HTTPRestAdapter(ProtocolAdapter):
                     status_code=404,
                     content={"error": f"Run not found: {run_id}"},
                 )
+
+            # Enrich with live stats from bus (raw JSON payloads)
+            try:
+                bus = gateway._app.bus
+                persistence = getattr(bus, "_persistence", None)
+                if persistence:
+                    rows = await persistence._log.query(from_sequence=0)
+                    all_events = []
+                    for row in rows:
+                        try:
+                            all_events.append(_json.loads(row["payload"]))
+                        except Exception:
+                            pass
+                else:
+                    all_events = []
+
+                # Actor count: distinct external actor_ids
+                external_actors = {
+                    e.get("actor_id", "")
+                    for e in all_events
+                    if e.get("actor_id", "")
+                    and e.get("actor_id", "") not in _INTERNAL_ACTORS
+                }
+                result["actor_count"] = len(external_actors)
+                result["event_count"] = len(all_events)
+
+                # Current tick
+                if all_events:
+                    result["current_tick"] = max(
+                        (e.get("timestamp", {}).get("tick", 0) for e in all_events),
+                        default=0,
+                    )
+
+                # Services from world_def
+                world_def = result.get("world_def", {})
+                services_raw = world_def.get("services", {})
+                if isinstance(services_raw, dict):
+                    result["services"] = [
+                        {"service_id": k, "service_name": k}
+                        for k in services_raw.keys()
+                    ]
+            except Exception:
+                pass  # Stats are best-effort; don't break the endpoint
+
             return result
 
         @app.post("/api/v1/runs/{run_id}/complete")
@@ -532,39 +613,81 @@ class HTTPRestAdapter(ProtocolAdapter):
 
         # -- Run-scoped endpoints (dashboard frontend) -------------------------
 
-        async def _load_run_events(run_id: str) -> list[dict]:
-            """Load events from artifact (completed) or live engine (active)."""
+        async def _load_run_events(
+            run_id: str,
+            order: str = "desc",
+            limit: int | None = None,
+            offset: int = 0,
+        ) -> tuple[list[dict], int]:
+            """Load events from artifact (completed) or live bus (active).
+
+            Returns (events_page, total_count). Sorting + pagination
+            happens at the DB level via SQL ORDER BY.
+            """
             from terrarium.core.types import RunId as _RId
 
-            events = await gateway._app.artifact_store.load_artifact(
+            # Completed run — read from saved artifact
+            saved = await gateway._app.artifact_store.load_artifact(
                 _RId(run_id),
                 "event_log",
             )
-            if events is not None:
-                return events
-            # Active run — query live state engine
-            state_eng = gateway._app.registry.get("state")
-            if state_eng:
-                raw = await state_eng.get_timeline()
-                return [e.model_dump(mode="json") if hasattr(e, "model_dump") else e for e in raw]
-            return []
+            if saved is not None:
+                if order == "desc":
+                    saved.reverse()
+                total = len(saved)
+                page = saved[offset : offset + limit] if limit else saved[offset:]
+                return page, total
+
+            # Active run — read raw JSON payloads from bus persistence.
+            # Use DB-level ordering + pagination for efficiency.
+            bus = gateway._app.bus
+            persistence = getattr(bus, "_persistence", None)
+            if persistence is None:
+                return [], 0
+
+            # Get total count first
+            total_count = await persistence.get_count()
+
+            # Query with DB-level ORDER BY + LIMIT + OFFSET
+            rows = await persistence._log.query(
+                from_sequence=0,
+                order=order,
+                limit=limit,
+                offset=offset if offset > 0 else None,
+            )
+            events = []
+            for row in rows:
+                try:
+                    evt = _json.loads(row["payload"])
+                    if "actor_id" in evt:
+                        events.append(evt)
+                except Exception:
+                    pass
+            return events, total_count
 
         @app.get("/api/v1/runs/{run_id}/events")
         async def get_run_events(
             run_id: str,
             limit: int = fastapi.Query(default=100, ge=1, le=1000),
             offset: int = fastapi.Query(default=0, ge=0),
+            sort: str = fastapi.Query(
+                default="desc",
+                description="Sort order: desc (newest first) or asc (oldest first)",
+            ),
             actor_id: str | None = fastapi.Query(default=None),
             service_id: str | None = fastapi.Query(default=None),
             event_type: str | None = fastapi.Query(default=None),
             outcome: str | None = fastapi.Query(default=None),
         ):
-            """Paginated events for a run, filterable by actor/service/type/outcome."""
+            """Paginated events for a run. Default: newest first."""
             from terrarium.core.types import RunId as _RId
 
-            events = await _load_run_events(run_id)
+            # DB-level sort + pagination
+            events, total = await _load_run_events(
+                run_id, order=sort, limit=limit, offset=offset,
+            )
 
-            # Enrich: causal_child_ids (backward refs — can't store at source)
+            # Enrich: causal_child_ids
             children: dict[str, list[str]] = {}
             for e in events:
                 caused_by = e.get("caused_by")
@@ -574,7 +697,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 for cause in e.get("causes", []):
                     children.setdefault(cause, []).append(eid)
 
-            # Enrich: actor_role (from world_def — not event data)
+            # Enrich: actor_role
             run_data = await gateway._app.run_manager.get_run(_RId(run_id))
             world_def = run_data.get("world_def", {}) if run_data else {}
             actor_roles = {
@@ -592,7 +715,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 for e in events
             ]
 
-            # Apply filters
+            # Apply in-memory filters (on the already-paginated page)
             if actor_id:
                 events = [e for e in events if e.get("actor_id") == actor_id]
             if service_id:
@@ -605,16 +728,17 @@ class HTTPRestAdapter(ProtocolAdapter):
                 events = [e for e in events if e.get("event_type") == event_type]
             if outcome:
                 events = [e for e in events if e.get("outcome") == outcome]
-            total = len(events)
-            paginated = events[offset : offset + limit]
-            return {"run_id": run_id, "events": paginated, "total": total}
+            # If filters were applied, total reflects filtered count
+            if any([actor_id, service_id, event_type, outcome]):
+                total = len(events)
+            return {"run_id": run_id, "events": events, "total": total}
 
         @app.get("/api/v1/runs/{run_id}/events/{event_id}")
         async def get_event_detail(run_id: str, event_id: str):
             """Single event with full causal chain."""
             from starlette.responses import JSONResponse
 
-            events = await _load_run_events(run_id)
+            events, _ = await _load_run_events(run_id, order="asc")
             event = next(
                 (e for e in events if e.get("event_id") == event_id),
                 None,
@@ -759,7 +883,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 )
 
             # Build state history from event log
-            events = await _load_run_events(run_id)
+            events, _ = await _load_run_events(run_id, order="asc")
             state_history: list[dict] = []
             for ev in events:
                 for delta in ev.get("state_deltas", []):
@@ -854,7 +978,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 actor_score = scorecard.get("per_actor", {}).get(actor_id, {})
 
             # Action count + last action from event log
-            events = await _load_run_events(run_id)
+            events, _ = await _load_run_events(run_id, order="asc")
             actor_events = [e for e in events if e.get("actor_id") == actor_id]
             last_event = actor_events[-1] if actor_events else None
 

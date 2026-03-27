@@ -63,7 +63,7 @@ async def handle_create_calendar_event(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``create_calendar_event`` action.
+    """Handle the ``events.insert`` action.
 
     Creates an event entity with status="confirmed", generates unique id.
     Also creates attendee entities for each attendee in input.attendees.
@@ -146,7 +146,7 @@ async def handle_list_calendar_events(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``list_calendar_events`` action.
+    """Handle the ``events.list`` action.
 
     Filters state["events"] by calendarId, optional timeMin/timeMax, and
     paginates via maxResults.  No state mutations.
@@ -182,7 +182,7 @@ async def handle_get_calendar_event(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``get_calendar_event`` action.
+    """Handle the ``events.get`` action.
 
     Finds event by id and attaches attendees from state["attendees"].
     No state mutations.
@@ -216,7 +216,7 @@ async def handle_update_calendar_event(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``update_calendar_event`` action.
+    """Handle the ``events.update`` action.
 
     Finds event by id and updates provided fields.  For status changes,
     includes previous_fields.  If attendees are provided, checks for
@@ -340,7 +340,7 @@ async def handle_delete_calendar_event(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``delete_calendar_event`` action.
+    """Handle the ``events.delete`` action.
 
     Sets event status to "cancelled" via update (Google Calendar keeps
     cancelled events rather than truly deleting them).
@@ -382,7 +382,7 @@ async def handle_search_calendar_events(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``search_calendar_events`` action.
+    """Handle the ``events.search`` action.
 
     Filters events where q appears in summary or description (case-insensitive).
     Paginates via maxResults.  No state mutations.
@@ -420,7 +420,7 @@ async def handle_list_calendars(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``list_calendars`` action.
+    """Handle the ``calendarList.list`` action.
 
     Returns all calendars from state.  No state mutations.
     """
@@ -438,7 +438,7 @@ async def handle_get_calendar(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``get_calendar`` action.
+    """Handle the ``calendarList.get`` action.
 
     Finds a single calendar by ID. No state mutations.
     """
@@ -458,7 +458,7 @@ async def handle_rsvp_calendar_event(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``rsvp_calendar_event`` action.
+    """Handle the ``events.patch`` action.
 
     Finds the attendee by event_id + email and updates their responseStatus.
     Valid statuses: accepted, declined, tentative.

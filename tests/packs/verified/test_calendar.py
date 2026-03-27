@@ -152,15 +152,15 @@ class TestCalendarPackMetadata:
         assert len(tools) == 9
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
-            "list_calendar_events",
-            "get_calendar_event",
-            "create_calendar_event",
-            "update_calendar_event",
-            "delete_calendar_event",
-            "search_calendar_events",
-            "list_calendars",
-            "get_calendar",
-            "rsvp_calendar_event",
+            "events.list",
+            "events.get",
+            "events.insert",
+            "events.update",
+            "events.delete",
+            "events.search",
+            "calendarList.list",
+            "calendarList.get",
+            "events.patch",
         }
 
     def test_entity_schemas(self, calendar_pack):
@@ -228,7 +228,7 @@ class TestListCalendarEvents:
     async def test_returns_events_for_calendar(self, calendar_pack, sample_state):
         """list_calendar_events returns events for the given calendarId."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendar_events"),
+            ToolName("events.list"),
             {"calendarId": "cal_primary"},
             sample_state,
         )
@@ -240,7 +240,7 @@ class TestListCalendarEvents:
     async def test_filters_by_time_range(self, calendar_pack, sample_state):
         """list_calendar_events filters by timeMin and timeMax."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendar_events"),
+            ToolName("events.list"),
             {
                 "calendarId": "cal_primary",
                 "timeMin": "2026-03-25T11:00:00-04:00",
@@ -254,7 +254,7 @@ class TestListCalendarEvents:
     async def test_respects_max_results(self, calendar_pack, sample_state):
         """list_calendar_events respects maxResults."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendar_events"),
+            ToolName("events.list"),
             {"calendarId": "cal_primary", "maxResults": 1},
             sample_state,
         )
@@ -263,7 +263,7 @@ class TestListCalendarEvents:
     async def test_empty_calendar(self, calendar_pack):
         """list_calendar_events returns empty list for unknown calendar."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendar_events"),
+            ToolName("events.list"),
             {"calendarId": "cal_nonexistent"},
             {"events": []},
         )
@@ -274,7 +274,7 @@ class TestGetCalendarEvent:
     async def test_returns_event_with_attendees(self, calendar_pack, sample_state):
         """get_calendar_event returns the event with embedded attendees."""
         proposal = await calendar_pack.handle_action(
-            ToolName("get_calendar_event"),
+            ToolName("events.get"),
             {"calendarId": "cal_primary", "eventId": "evt_001"},
             sample_state,
         )
@@ -287,7 +287,7 @@ class TestGetCalendarEvent:
     async def test_event_not_found(self, calendar_pack, sample_state):
         """get_calendar_event returns Google-format error for unknown eventId."""
         proposal = await calendar_pack.handle_action(
-            ToolName("get_calendar_event"),
+            ToolName("events.get"),
             {"calendarId": "cal_primary", "eventId": "evt_missing"},
             sample_state,
         )
@@ -300,7 +300,7 @@ class TestCreateCalendarEvent:
     async def test_creates_event_with_attendees(self, calendar_pack, sample_state):
         """create_calendar_event creates event + attendee entities."""
         proposal = await calendar_pack.handle_action(
-            ToolName("create_calendar_event"),
+            ToolName("events.insert"),
             {
                 "calendarId": "cal_primary",
                 "summary": "Design Review",
@@ -363,7 +363,7 @@ class TestCreateCalendarEvent:
     async def test_creates_event_without_attendees(self, calendar_pack, sample_state):
         """create_calendar_event works with no attendees."""
         proposal = await calendar_pack.handle_action(
-            ToolName("create_calendar_event"),
+            ToolName("events.insert"),
             {
                 "calendarId": "cal_primary",
                 "summary": "Solo Focus Time",
@@ -383,7 +383,7 @@ class TestUpdateCalendarEvent:
     async def test_updates_event_fields(self, calendar_pack, sample_state):
         """update_calendar_event updates specified fields."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -410,7 +410,7 @@ class TestUpdateCalendarEvent:
     async def test_updates_status_with_previous(self, calendar_pack, sample_state):
         """update_calendar_event records previous status on change."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_002",
@@ -425,7 +425,7 @@ class TestUpdateCalendarEvent:
     async def test_update_with_new_attendees(self, calendar_pack, sample_state):
         """update_calendar_event creates new attendee entities for new emails."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -443,7 +443,7 @@ class TestUpdateCalendarEvent:
     async def test_update_existing_attendee_no_duplicate(self, calendar_pack, sample_state):
         """P2 fix: update_calendar_event updates existing attendee instead of creating duplicate."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -463,7 +463,7 @@ class TestUpdateCalendarEvent:
     async def test_update_mixed_new_and_existing_attendees(self, calendar_pack, sample_state):
         """update_calendar_event handles mix of new and existing attendees correctly."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -485,7 +485,7 @@ class TestUpdateCalendarEvent:
     async def test_update_event_not_found(self, calendar_pack, sample_state):
         """update_calendar_event returns Google-format error for unknown eventId."""
         proposal = await calendar_pack.handle_action(
-            ToolName("update_calendar_event"),
+            ToolName("events.update"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_missing",
@@ -501,7 +501,7 @@ class TestDeleteCalendarEvent:
     async def test_sets_status_cancelled(self, calendar_pack, sample_state):
         """delete_calendar_event sets status to cancelled, not a real delete."""
         proposal = await calendar_pack.handle_action(
-            ToolName("delete_calendar_event"),
+            ToolName("events.delete"),
             {"calendarId": "cal_primary", "eventId": "evt_001"},
             sample_state,
         )
@@ -519,7 +519,7 @@ class TestDeleteCalendarEvent:
     async def test_delete_event_not_found(self, calendar_pack, sample_state):
         """delete_calendar_event returns Google-format error for unknown eventId."""
         proposal = await calendar_pack.handle_action(
-            ToolName("delete_calendar_event"),
+            ToolName("events.delete"),
             {"calendarId": "cal_primary", "eventId": "evt_gone"},
             sample_state,
         )
@@ -531,7 +531,7 @@ class TestSearchCalendarEvents:
     async def test_search_by_summary(self, calendar_pack, sample_state):
         """search_calendar_events finds events matching summary."""
         proposal = await calendar_pack.handle_action(
-            ToolName("search_calendar_events"),
+            ToolName("events.search"),
             {"calendarId": "cal_primary", "q": "sprint"},
             sample_state,
         )
@@ -543,7 +543,7 @@ class TestSearchCalendarEvents:
     async def test_search_by_description(self, calendar_pack, sample_state):
         """search_calendar_events finds events matching description."""
         proposal = await calendar_pack.handle_action(
-            ToolName("search_calendar_events"),
+            ToolName("events.search"),
             {"calendarId": "cal_primary", "q": "casual"},
             sample_state,
         )
@@ -554,7 +554,7 @@ class TestSearchCalendarEvents:
     async def test_search_case_insensitive(self, calendar_pack, sample_state):
         """search_calendar_events is case-insensitive."""
         proposal = await calendar_pack.handle_action(
-            ToolName("search_calendar_events"),
+            ToolName("events.search"),
             {"calendarId": "cal_primary", "q": "SPRINT"},
             sample_state,
         )
@@ -563,7 +563,7 @@ class TestSearchCalendarEvents:
     async def test_search_no_results(self, calendar_pack, sample_state):
         """search_calendar_events returns empty for non-matching query."""
         proposal = await calendar_pack.handle_action(
-            ToolName("search_calendar_events"),
+            ToolName("events.search"),
             {"calendarId": "cal_primary", "q": "nonexistent_xyz"},
             sample_state,
         )
@@ -574,7 +574,7 @@ class TestListCalendars:
     async def test_returns_all_calendars(self, calendar_pack, sample_state):
         """list_calendars returns all calendars from state."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendars"),
+            ToolName("calendarList.list"),
             {},
             sample_state,
         )
@@ -585,7 +585,7 @@ class TestListCalendars:
     async def test_empty_state(self, calendar_pack):
         """list_calendars returns empty list when no calendars exist."""
         proposal = await calendar_pack.handle_action(
-            ToolName("list_calendars"),
+            ToolName("calendarList.list"),
             {},
             {},
         )
@@ -596,7 +596,7 @@ class TestGetCalendar:
     async def test_returns_calendar_by_id(self, calendar_pack, sample_state):
         """get_calendar returns the correct calendar."""
         proposal = await calendar_pack.handle_action(
-            ToolName("get_calendar"),
+            ToolName("calendarList.get"),
             {"calendarId": "cal_primary"},
             sample_state,
         )
@@ -607,7 +607,7 @@ class TestGetCalendar:
     async def test_calendar_not_found(self, calendar_pack, sample_state):
         """get_calendar returns Google-format error for unknown calendarId."""
         proposal = await calendar_pack.handle_action(
-            ToolName("get_calendar"),
+            ToolName("calendarList.get"),
             {"calendarId": "cal_nonexistent"},
             sample_state,
         )
@@ -619,7 +619,7 @@ class TestRsvpCalendarEvent:
     async def test_accept_rsvp(self, calendar_pack, sample_state):
         """rsvp_calendar_event can accept an invitation."""
         proposal = await calendar_pack.handle_action(
-            ToolName("rsvp_calendar_event"),
+            ToolName("events.patch"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -642,7 +642,7 @@ class TestRsvpCalendarEvent:
     async def test_decline_rsvp(self, calendar_pack, sample_state):
         """rsvp_calendar_event can decline an invitation."""
         proposal = await calendar_pack.handle_action(
-            ToolName("rsvp_calendar_event"),
+            ToolName("events.patch"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -659,7 +659,7 @@ class TestRsvpCalendarEvent:
     async def test_tentative_rsvp(self, calendar_pack, sample_state):
         """rsvp_calendar_event can set tentative status."""
         proposal = await calendar_pack.handle_action(
-            ToolName("rsvp_calendar_event"),
+            ToolName("events.patch"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",
@@ -673,7 +673,7 @@ class TestRsvpCalendarEvent:
     async def test_rsvp_event_not_found(self, calendar_pack, sample_state):
         """rsvp_calendar_event returns error for unknown event."""
         proposal = await calendar_pack.handle_action(
-            ToolName("rsvp_calendar_event"),
+            ToolName("events.patch"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_missing",
@@ -688,7 +688,7 @@ class TestRsvpCalendarEvent:
     async def test_rsvp_attendee_not_found(self, calendar_pack, sample_state):
         """rsvp_calendar_event returns error for unknown attendee email."""
         proposal = await calendar_pack.handle_action(
-            ToolName("rsvp_calendar_event"),
+            ToolName("events.patch"),
             {
                 "calendarId": "cal_primary",
                 "eventId": "evt_001",

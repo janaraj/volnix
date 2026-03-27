@@ -76,6 +76,7 @@ export interface EventFilterParams {
   tick_to?: number;
   limit?: number;
   offset?: number;
+  sort?: 'asc' | 'desc';
 }
 
 export interface EntityFilterParams {

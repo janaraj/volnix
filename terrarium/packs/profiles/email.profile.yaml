@@ -1,0 +1,556 @@
+profile_name: email
+service_name: email
+category: communication
+version: 0.1.0
+fidelity_source: bootstrapped
+operations:
+- name: email_list_messages
+  service: email
+  description: List messages in a mailbox with optional filtering by folder, sender,
+    recipient, and unread state.
+  http_method: GET
+  http_path: /messages
+  parameters:
+    mailbox:
+      type: string
+    folder:
+      type: string
+    q:
+      type: string
+    from:
+      type: string
+    to:
+      type: string
+    unread:
+      type: string
+    limit:
+      type: string
+    cursor:
+      type: string
+  required_params:
+  - mailbox
+  response_schema:
+    type: object
+    properties:
+      messages:
+        type: string
+      next_cursor:
+        type: string
+  is_read_only: true
+- name: email_get_message
+  service: email
+  description: Retrieve a specific email message including headers, body, participants,
+    and delivery metadata.
+  http_method: GET
+  http_path: /messages/{message_id}
+  parameters:
+    message_id:
+      type: string
+  required_params:
+  - message_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      thread_id:
+        type: string
+      subject:
+        type: string
+      body_text:
+        type: string
+      body_html:
+        type: string
+      from:
+        type: string
+      to:
+        type: string
+      cc:
+        type: string
+      bcc:
+        type: string
+      folder:
+        type: string
+      status:
+        type: string
+  is_read_only: true
+- name: email_send_message
+  service: email
+  description: Send a new outbound email message.
+  http_method: POST
+  http_path: /messages/send
+  parameters:
+    from:
+      type: string
+    to:
+      type: string
+    cc:
+      type: string
+    bcc:
+      type: string
+    subject:
+      type: string
+    body_text:
+      type: string
+    body_html:
+      type: string
+    reply_to_message_id:
+      type: string
+  required_params:
+  - from
+  - to
+  - subject
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      thread_id:
+        type: string
+      status:
+        type: string
+      sent_at:
+        type: string
+  is_read_only: false
+  creates_entity: message
+  mutates_entity: thread
+- name: email_create_draft
+  service: email
+  description: Create a draft email without sending it.
+  http_method: POST
+  http_path: /drafts
+  parameters:
+    from:
+      type: string
+    to:
+      type: string
+    cc:
+      type: string
+    bcc:
+      type: string
+    subject:
+      type: string
+    body_text:
+      type: string
+    body_html:
+      type: string
+    thread_id:
+      type: string
+  required_params:
+  - from
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      thread_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+  is_read_only: false
+  creates_entity: draft
+  mutates_entity: thread
+- name: email_update_draft
+  service: email
+  description: Update fields of an existing email draft.
+  http_method: PUT
+  http_path: /drafts/{draft_id}
+  parameters:
+    draft_id:
+      type: string
+    to:
+      type: string
+    cc:
+      type: string
+    bcc:
+      type: string
+    subject:
+      type: string
+    body_text:
+      type: string
+    body_html:
+      type: string
+  required_params:
+  - draft_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+  is_read_only: false
+  mutates_entity: draft
+- name: email_send_draft
+  service: email
+  description: Send an existing draft email.
+  http_method: POST
+  http_path: /drafts/{draft_id}/send
+  parameters:
+    draft_id:
+      type: string
+  required_params:
+  - draft_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      message_id:
+        type: string
+      status:
+        type: string
+      sent_at:
+        type: string
+  is_read_only: false
+  creates_entity: message
+  mutates_entity: draft
+- name: email_delete_draft
+  service: email
+  description: Delete a draft email.
+  http_method: DELETE
+  http_path: /drafts/{draft_id}
+  parameters:
+    draft_id:
+      type: string
+  required_params:
+  - draft_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      deleted:
+        type: string
+  is_read_only: false
+  mutates_entity: draft
+- name: email_move_message
+  service: email
+  description: Move a message to another folder such as inbox, archive, trash, or
+    spam.
+  http_method: POST
+  http_path: /messages/{message_id}/move
+  parameters:
+    message_id:
+      type: string
+    folder:
+      type: string
+  required_params:
+  - message_id
+  - folder
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      folder:
+        type: string
+      status:
+        type: string
+  is_read_only: false
+  mutates_entity: message
+- name: email_mark_message
+  service: email
+  description: Update message flags such as read, unread, starred, or important.
+  http_method: POST
+  http_path: /messages/{message_id}/flags
+  parameters:
+    message_id:
+      type: string
+    is_read:
+      type: string
+    is_starred:
+      type: string
+    is_important:
+      type: string
+  required_params:
+  - message_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      is_read:
+        type: string
+      is_starred:
+        type: string
+      is_important:
+        type: string
+  is_read_only: false
+  mutates_entity: message
+- name: email_list_threads
+  service: email
+  description: List conversation threads in a mailbox.
+  http_method: GET
+  http_path: /threads
+  parameters:
+    mailbox:
+      type: string
+    folder:
+      type: string
+    q:
+      type: string
+    limit:
+      type: string
+    cursor:
+      type: string
+  required_params:
+  - mailbox
+  response_schema:
+    type: object
+    properties:
+      threads:
+        type: string
+      next_cursor:
+        type: string
+  is_read_only: true
+- name: email_get_thread
+  service: email
+  description: Retrieve a thread and its messages in chronological order.
+  http_method: GET
+  http_path: /threads/{thread_id}
+  parameters:
+    thread_id:
+      type: string
+  required_params:
+  - thread_id
+  response_schema:
+    type: object
+    properties:
+      id:
+        type: string
+      subject:
+        type: string
+      message_ids:
+        type: string
+      participants:
+        type: string
+      status:
+        type: string
+  is_read_only: true
+entities:
+- name: message
+  identity_field: id
+  fields:
+    id:
+      type: string
+    thread_id:
+      type: string
+    mailbox:
+      type: string
+    internet_message_id:
+      type: string
+    subject:
+      type: string
+    body_text:
+      type: string
+    body_html:
+      type: string
+    from:
+      type: string
+    to:
+      type: string
+    cc:
+      type: string
+    bcc:
+      type: string
+    folder:
+      type: string
+    status:
+      type: string
+    is_read:
+      type: string
+    is_starred:
+      type: string
+    is_important:
+      type: string
+    sent_at:
+      type: string
+    received_at:
+      type: string
+  required:
+  - id
+  - mailbox
+  - subject
+  - from
+  - to
+  - folder
+  - status
+- name: draft
+  identity_field: id
+  fields:
+    id:
+      type: string
+    thread_id:
+      type: string
+    mailbox:
+      type: string
+    subject:
+      type: string
+    body_text:
+      type: string
+    body_html:
+      type: string
+    from:
+      type: string
+    to:
+      type: string
+    cc:
+      type: string
+    bcc:
+      type: string
+    status:
+      type: string
+    updated_at:
+      type: string
+  required:
+  - id
+  - mailbox
+  - from
+  - status
+- name: thread
+  identity_field: id
+  fields:
+    id:
+      type: string
+    mailbox:
+      type: string
+    subject:
+      type: string
+    participants:
+      type: string
+    message_ids:
+      type: string
+    last_message_at:
+      type: string
+    status:
+      type: string
+  required:
+  - id
+  - mailbox
+  - subject
+  - status
+state_machines:
+- entity_type: message
+  field: status
+  transitions:
+    queued:
+    - sent
+    - failed
+    sent:
+    - delivered
+    - bounced
+    delivered:
+    - read
+    - archived
+    - trashed
+    - spam
+    read:
+    - archived
+    - trashed
+    - spam
+    bounced: []
+    failed: []
+    archived:
+    - read
+    - trashed
+    trashed:
+    - archived
+    spam:
+    - archived
+    - trashed
+- entity_type: draft
+  field: status
+  transitions:
+    draft:
+    - draft
+    - sent
+    - deleted
+    sent: []
+    deleted: []
+- entity_type: thread
+  field: status
+  transitions:
+    open:
+    - pending
+    - closed
+    - archived
+    pending:
+    - open
+    - closed
+    - archived
+    closed:
+    - open
+    - archived
+    archived:
+    - open
+error_modes:
+- code: INVALID_RECIPIENT
+  when: One or more recipient email addresses are malformed or rejected by validation.
+  http_status: 400
+  response_body: {}
+- code: MESSAGE_NOT_FOUND
+  when: The requested message_id does not exist or is not visible in the mailbox.
+  http_status: 404
+  response_body: {}
+- code: DRAFT_NOT_FOUND
+  when: The requested draft_id does not exist.
+  http_status: 404
+  response_body: {}
+- code: THREAD_NOT_FOUND
+  when: The requested thread_id does not exist.
+  http_status: 404
+  response_body: {}
+- code: FOLDER_FORBIDDEN
+  when: The caller attempts to move a message into a restricted or unknown folder.
+  http_status: 403
+  response_body: {}
+- code: SEND_CONFLICT
+  when: A draft has already been sent or deleted and cannot be sent again.
+  http_status: 409
+  response_body: {}
+- code: RATE_LIMITED
+  when: The mailbox or tenant has exceeded allowed request volume.
+  http_status: 403
+  response_body: {}
+behavioral_notes:
+- The service is thread-oriented even when single-message endpoints are used; replies
+  commonly attach to an existing thread.
+- Message list operations usually return summaries, while detail endpoints return
+  full bodies and participant metadata.
+- Sending may be asynchronous, so newly sent messages can appear first as queued before
+  reaching sent or delivered.
+- Folder and flag mutations do not alter message content, only mailbox state.
+- Drafts are mutable until sent or deleted.
+examples: []
+responder_prompt: 'You are simulating the email API.
+
+  Use the defined operations, entities, and error modes consistently.
+
+  Treat this as a generic modern email platform with REST-style endpoints.
+
+  Return realistic IDs, timestamps, thread relationships, and mailbox folder behavior.
+
+  Preserve state across calls: sent messages create or extend threads, drafts remain
+  editable until sent, and folder or flag changes mutate existing entities.
+
+  Enforce required parameters and state machine transitions.
+
+  Prefer plausible operational behavior over idealized behavior, including asynchronous
+  send states and occasional conflicts.
+
+  If a request references a missing entity, return the corresponding 404-style error
+  mode.
+
+  If recipients are invalid, return INVALID_RECIPIENT.
+
+  If a mutation violates entity state, return the appropriate conflict error.'
+confidence: 0.3
+source_chain:
+- llm_inference
+auth_pattern: ''
+base_url: ''

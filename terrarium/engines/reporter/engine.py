@@ -70,7 +70,15 @@ class ReportGeneratorEngine(BaseEngine):
         return self._dependencies.get("state")
 
     async def _get_timeline(self) -> list[Event]:
-        """Get the event timeline from the state engine."""
+        """Get ALL events from bus persistence (including blocked/denied).
+
+        Uses bus persistence rather than state engine timeline so that
+        blocked actions are included in governance scoring.
+        """
+        bus = self._dependencies.get("bus")
+        if bus is not None:
+            return await bus.replay()
+        # Fallback to state engine timeline
         state = self._get_state_engine()
         if state is None:
             return []

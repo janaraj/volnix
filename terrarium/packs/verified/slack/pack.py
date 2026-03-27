@@ -48,12 +48,12 @@ from terrarium.packs.verified.slack.state_machines import (
 class ChatPack(ServicePack):
     """Verified pack for chat communication services.
 
-    Tools: channels_list, chat_postMessage, chat_update,
-    chat_delete, chat_replyToThread, reactions_add,
-    reactions_remove, conversations_history, conversations_replies,
-    users_list, users_profile_get, conversations_create,
-    conversations_archive, conversations_join, conversations_setTopic,
-    conversations_info.
+    Tools: conversations.list, chat.postMessage, chat.update,
+    chat.delete, chat.replyToThread, reactions.add,
+    reactions.remove, conversations.history, conversations.replies,
+    users.list, users.info, conversations.create,
+    conversations.archive, conversations.join, conversations.setTopic,
+    conversations.info.
     """
 
     pack_name: ClassVar[str] = "slack"
@@ -61,22 +61,22 @@ class ChatPack(ServicePack):
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "channels_list": handle_channels_list,
-        "chat_postMessage": handle_chat_postMessage,
-        "chat_update": handle_chat_update,
-        "chat_delete": handle_chat_delete,
-        "chat_replyToThread": handle_chat_replyToThread,
-        "reactions_add": handle_reactions_add,
-        "reactions_remove": handle_reactions_remove,
-        "conversations_history": handle_conversations_history,
-        "conversations_replies": handle_conversations_replies,
-        "users_list": handle_users_list,
-        "users_profile_get": handle_users_profile_get,
-        "conversations_create": handle_conversations_create,
-        "conversations_archive": handle_conversations_archive,
-        "conversations_join": handle_conversations_join,
-        "conversations_setTopic": handle_conversations_setTopic,
-        "conversations_info": handle_conversations_info,
+        "conversations.list": handle_channels_list,
+        "chat.postMessage": handle_chat_postMessage,
+        "chat.update": handle_chat_update,
+        "chat.delete": handle_chat_delete,
+        "chat.replyToThread": handle_chat_replyToThread,
+        "reactions.add": handle_reactions_add,
+        "reactions.remove": handle_reactions_remove,
+        "conversations.history": handle_conversations_history,
+        "conversations.replies": handle_conversations_replies,
+        "users.list": handle_users_list,
+        "users.info": handle_users_profile_get,
+        "conversations.create": handle_conversations_create,
+        "conversations.archive": handle_conversations_archive,
+        "conversations.join": handle_conversations_join,
+        "conversations.setTopic": handle_conversations_setTopic,
+        "conversations.info": handle_conversations_info,
     }
 
     def get_tools(self) -> list[dict]:

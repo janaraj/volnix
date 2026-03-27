@@ -50,7 +50,7 @@ async def handle_messages_send(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_send`` action.
+    """Handle the ``users.messages.send`` action.
 
     Creates a message entity with Gmail-style fields and a corresponding
     thread entity.  Produces two StateDelta creates (message + thread).
@@ -107,7 +107,7 @@ async def handle_messages_search(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_search`` action.
+    """Handle the ``users.messages.list`` action.
 
     Filters state["messages"] by query string (substring in subject, body,
     from_addr, to_addr) and by labelIds intersection.  Paginates via
@@ -155,7 +155,7 @@ async def handle_messages_get(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_get`` action.
+    """Handle the ``users.messages.get`` action.
 
     Finds a message by ID and returns the full message object.
     No state mutations.
@@ -176,7 +176,7 @@ async def handle_messages_modify(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_modify`` action.
+    """Handle the ``users.messages.modify`` action.
 
     Adds/removes labels from a message.  Produces a StateDelta update on
     labelIds.
@@ -221,7 +221,7 @@ async def handle_messages_trash(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_trash`` action.
+    """Handle the ``users.messages.trash`` action.
 
     Adds "TRASH" label and removes "INBOX" if present.  Produces a
     StateDelta update on labelIds.
@@ -263,7 +263,7 @@ async def handle_messages_delete(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``messages_delete`` action.
+    """Handle the ``users.messages.delete`` action.
 
     Permanently deletes a message.  Produces a StateDelta delete.
     """
@@ -298,7 +298,7 @@ async def handle_drafts_create(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``drafts_create`` action.
+    """Handle the ``users.drafts.create`` action.
 
     Creates a draft entity.  Produces a StateDelta create on "draft" type.
     """
@@ -331,7 +331,7 @@ async def handle_labels_list(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``labels_list`` action.
+    """Handle the ``users.labels.list`` action.
 
     Returns labels from state.  No state mutations.
     """
