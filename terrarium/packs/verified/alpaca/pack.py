@@ -22,31 +22,31 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.trading.handlers import (
-    handle_alpaca_cancel_order,
-    handle_alpaca_close_position,
-    handle_alpaca_create_bar,
-    handle_alpaca_create_news,
-    handle_alpaca_create_order,
-    handle_alpaca_get_account,
-    handle_alpaca_get_bars,
-    handle_alpaca_get_clock,
-    handle_alpaca_get_latest_quote,
-    handle_alpaca_get_latest_trade,
-    handle_alpaca_get_news,
-    handle_alpaca_get_order,
-    handle_alpaca_get_position,
-    handle_alpaca_get_snapshot,
-    handle_alpaca_list_assets,
-    handle_alpaca_list_orders,
-    handle_alpaca_list_positions,
-    handle_alpaca_update_quote,
+from terrarium.packs.verified.alpaca.handlers import (
+    handle_cancel_order,
+    handle_close_position,
+    handle_create_bar,
+    handle_create_news,
+    handle_create_order,
+    handle_get_account,
+    handle_get_bars,
+    handle_get_clock,
+    handle_get_latest_quote,
+    handle_get_latest_trade,
+    handle_get_news,
+    handle_get_order,
+    handle_get_position,
+    handle_get_snapshot,
+    handle_list_assets,
+    handle_list_orders,
+    handle_list_positions,
+    handle_update_quote,
     handle_social_get_feed,
     handle_social_get_sentiment,
     handle_social_get_trending,
     handle_social_update_sentiment,
 )
-from terrarium.packs.verified.trading.schemas import (
+from terrarium.packs.verified.alpaca.schemas import (
     ACCOUNT_ENTITY_SCHEMA,
     ACTIVITY_ENTITY_SCHEMA,
     ASSET_ENTITY_SCHEMA,
@@ -59,7 +59,7 @@ from terrarium.packs.verified.trading.schemas import (
     SENTIMENT_ENTITY_SCHEMA,
     TRADING_TOOL_DEFINITIONS,
 )
-from terrarium.packs.verified.trading.state_machines import (
+from terrarium.packs.verified.alpaca.state_machines import (
     ASSET_TRANSITIONS,
     ORDER_TRANSITIONS,
 )
@@ -68,50 +68,50 @@ from terrarium.packs.verified.trading.state_machines import (
 class TradingPack(ServicePack):
     """Verified pack for Alpaca Markets-style trading services.
 
-    Tools: alpaca_get_account, alpaca_create_order, alpaca_list_orders,
-    alpaca_get_order, alpaca_cancel_order, alpaca_list_positions,
-    alpaca_get_position, alpaca_close_position, alpaca_get_bars,
-    alpaca_get_latest_quote, alpaca_get_latest_trade, alpaca_get_snapshot,
-    alpaca_get_clock, alpaca_list_assets, alpaca_get_news,
+    Tools: get_account, create_order, list_orders,
+    get_order, cancel_order, list_positions,
+    get_position, close_position, get_bars,
+    get_latest_quote, get_latest_trade, get_snapshot,
+    get_clock, list_assets, get_news,
     social_get_feed, social_get_sentiment, social_get_trending,
-    alpaca_update_quote, alpaca_create_bar, alpaca_create_news,
+    update_quote, create_bar, create_news,
     social_update_sentiment.
     """
 
-    pack_name: ClassVar[str] = "trading"
+    pack_name: ClassVar[str] = "alpaca"
     category: ClassVar[str] = "trading"
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
         # Broker: Account
-        "alpaca_get_account": handle_alpaca_get_account,
+        "get_account": handle_get_account,
         # Broker: Orders
-        "alpaca_create_order": handle_alpaca_create_order,
-        "alpaca_list_orders": handle_alpaca_list_orders,
-        "alpaca_get_order": handle_alpaca_get_order,
-        "alpaca_cancel_order": handle_alpaca_cancel_order,
+        "create_order": handle_create_order,
+        "list_orders": handle_list_orders,
+        "get_order": handle_get_order,
+        "cancel_order": handle_cancel_order,
         # Broker: Positions
-        "alpaca_list_positions": handle_alpaca_list_positions,
-        "alpaca_get_position": handle_alpaca_get_position,
-        "alpaca_close_position": handle_alpaca_close_position,
+        "list_positions": handle_list_positions,
+        "get_position": handle_get_position,
+        "close_position": handle_close_position,
         # Market Data
-        "alpaca_get_bars": handle_alpaca_get_bars,
-        "alpaca_get_latest_quote": handle_alpaca_get_latest_quote,
-        "alpaca_get_latest_trade": handle_alpaca_get_latest_trade,
-        "alpaca_get_snapshot": handle_alpaca_get_snapshot,
+        "get_bars": handle_get_bars,
+        "get_latest_quote": handle_get_latest_quote,
+        "get_latest_trade": handle_get_latest_trade,
+        "get_snapshot": handle_get_snapshot,
         # Reference
-        "alpaca_get_clock": handle_alpaca_get_clock,
-        "alpaca_list_assets": handle_alpaca_list_assets,
+        "get_clock": handle_get_clock,
+        "list_assets": handle_list_assets,
         # News
-        "alpaca_get_news": handle_alpaca_get_news,
+        "get_news": handle_get_news,
         # Social Sentiment
         "social_get_feed": handle_social_get_feed,
         "social_get_sentiment": handle_social_get_sentiment,
         "social_get_trending": handle_social_get_trending,
         # Animator/System: Market Evolution
-        "alpaca_update_quote": handle_alpaca_update_quote,
-        "alpaca_create_bar": handle_alpaca_create_bar,
-        "alpaca_create_news": handle_alpaca_create_news,
+        "update_quote": handle_update_quote,
+        "create_bar": handle_create_bar,
+        "create_news": handle_create_news,
         "social_update_sentiment": handle_social_update_sentiment,
     }
 

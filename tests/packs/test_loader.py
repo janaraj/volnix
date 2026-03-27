@@ -20,7 +20,7 @@ class TestDiscoverPacks:
         packs = discover_packs(verified_dir)
         assert len(packs) >= 1
         pack_names = [p.pack_name for p in packs]
-        assert "email" in pack_names
+        assert "gmail" in pack_names
         # Each discovered pack is a ServicePack instance
         for p in packs:
             assert isinstance(p, ServicePack)
@@ -58,9 +58,9 @@ class TestDiscoverPacks:
 class TestModulePathComputation:
     def test_module_path_from_filepath(self):
         """Converts filesystem path to correct dotted module path."""
-        p = Path("/Users/someone/workspace/terrarium/packs/verified/email/pack.py")
+        p = Path("/Users/someone/workspace/terrarium/packs/verified/gmail/pack.py")
         result = _module_path_from_filepath(p)
-        assert result == "terrarium.packs.verified.email.pack"
+        assert result == "terrarium.packs.verified.gmail.pack"
 
     def test_module_path_no_terrarium_root(self):
         """Returns None if 'terrarium' is not in the path parts."""

@@ -1,11 +1,11 @@
-"""Tests for terrarium.packs.verified.chat -- ChatPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.slack -- ChatPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.chat.pack import ChatPack
-from terrarium.packs.verified.chat.schemas import (
+from terrarium.packs.verified.slack.pack import ChatPack
+from terrarium.packs.verified.slack.schemas import (
     CHANNEL_ENTITY_SCHEMA,
     MESSAGE_ENTITY_SCHEMA,
     USER_ENTITY_SCHEMA,
@@ -239,7 +239,7 @@ def sample_state():
 class TestChatPackMetadata:
     def test_metadata(self, chat_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert chat_pack.pack_name == "chat"
+        assert chat_pack.pack_name == "slack"
         assert chat_pack.category == "communication"
         assert chat_pack.fidelity_tier == 1
 
@@ -249,22 +249,22 @@ class TestChatPackMetadata:
         assert len(tools) == 16
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
-            "slack_list_channels",
-            "slack_post_message",
-            "slack_update_message",
-            "slack_delete_message",
-            "slack_reply_to_thread",
-            "slack_add_reaction",
-            "slack_remove_reaction",
-            "slack_get_channel_history",
-            "slack_get_thread_replies",
-            "slack_get_users",
-            "slack_get_user_profile",
-            "slack_create_channel",
-            "slack_archive_channel",
-            "slack_join_channel",
-            "slack_set_channel_topic",
-            "slack_get_channel_info",
+            "channels_list",
+            "chat_postMessage",
+            "chat_update",
+            "chat_delete",
+            "chat_replyToThread",
+            "reactions_add",
+            "reactions_remove",
+            "conversations_history",
+            "conversations_replies",
+            "users_list",
+            "users_profile_get",
+            "conversations_create",
+            "conversations_archive",
+            "conversations_join",
+            "conversations_setTopic",
+            "conversations_info",
         }
 
     def test_entity_schemas(self, chat_pack):
@@ -345,9 +345,9 @@ class TestChatPackMetadata:
 
 class TestSlackListChannels:
     async def test_returns_all_channels(self, chat_pack, sample_state):
-        """slack_list_channels returns all channels within default limit."""
+        """channels_list returns all channels within default limit."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_list_channels"),
+            ToolName("channels_list"),
             {},
             sample_state,
         )
@@ -357,28 +357,28 @@ class TestSlackListChannels:
         assert proposal.proposed_state_deltas == []
 
     async def test_respects_limit(self, chat_pack, sample_state):
-        """slack_list_channels respects the limit parameter."""
+        """channels_list respects the limit parameter."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_list_channels"),
+            ToolName("channels_list"),
             {"limit": 1},
             sample_state,
         )
         assert len(proposal.response_body["channels"]) == 1
 
     async def test_empty_state(self, chat_pack):
-        """slack_list_channels returns empty list when no channels exist."""
+        """channels_list returns empty list when no channels exist."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_list_channels"),
+            ToolName("channels_list"),
             {},
             {},
         )
         assert proposal.response_body["channels"] == []
 
     async def test_cursor_pagination(self, chat_pack, sample_state):
-        """slack_list_channels supports cursor-based pagination."""
+        """channels_list supports cursor-based pagination."""
         # First page
         p1 = await chat_pack.handle_action(
-            ToolName("slack_list_channels"),
+            ToolName("channels_list"),
             {"limit": 2},
             sample_state,
         )
@@ -389,7 +389,7 @@ class TestSlackListChannels:
 
         # Second page
         p2 = await chat_pack.handle_action(
-            ToolName("slack_list_channels"),
+            ToolName("channels_list"),
             {"limit": 2, "cursor": next_cursor},
             sample_state,
         )
@@ -399,9 +399,9 @@ class TestSlackListChannels:
 
 class TestSlackPostMessage:
     async def test_creates_message(self, chat_pack, sample_state):
-        """slack_post_message creates a message entity and returns ts."""
+        """chat_postMessage creates a message entity and returns ts."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_post_message"),
+            ToolName("chat_postMessage"),
             {"channel_id": "C001", "text": "New message"},
             sample_state,
         )
@@ -423,7 +423,7 @@ class TestSlackPostMessage:
     async def test_message_ts_is_entity_id(self, chat_pack, sample_state):
         """The generated ts serves as the entity_id in the delta."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_post_message"),
+            ToolName("chat_postMessage"),
             {"channel_id": "C001", "text": "test"},
             sample_state,
         )
@@ -434,9 +434,9 @@ class TestSlackPostMessage:
 
 class TestSlackUpdateMessage:
     async def test_updates_message_text(self, chat_pack, sample_state):
-        """slack_update_message updates the text and sets edited metadata."""
+        """chat_update updates the text and sets edited metadata."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_update_message"),
+            ToolName("chat_update"),
             {
                 "channel_id": "C001",
                 "ts": "1700000001.000001",
@@ -463,7 +463,7 @@ class TestSlackUpdateMessage:
     async def test_update_nonexistent_message(self, chat_pack, sample_state):
         """Updating a nonexistent message returns an error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_update_message"),
+            ToolName("chat_update"),
             {
                 "channel_id": "C001",
                 "ts": "9999999999.000000",
@@ -478,9 +478,9 @@ class TestSlackUpdateMessage:
 
 class TestSlackDeleteMessage:
     async def test_deletes_message(self, chat_pack, sample_state):
-        """slack_delete_message deletes the target message."""
+        """chat_delete deletes the target message."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_delete_message"),
+            ToolName("chat_delete"),
             {
                 "channel_id": "C002",
                 "ts": "1700000004.000004",
@@ -501,7 +501,7 @@ class TestSlackDeleteMessage:
     async def test_delete_nonexistent_message(self, chat_pack, sample_state):
         """Deleting a nonexistent message returns an error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_delete_message"),
+            ToolName("chat_delete"),
             {
                 "channel_id": "C001",
                 "ts": "9999999999.000000",
@@ -515,9 +515,9 @@ class TestSlackDeleteMessage:
 
 class TestSlackReplyToThread:
     async def test_creates_reply_and_updates_parent(self, chat_pack, sample_state):
-        """slack_reply_to_thread creates a reply and bumps parent reply_count."""
+        """chat_replyToThread creates a reply and bumps parent reply_count."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_reply_to_thread"),
+            ToolName("chat_replyToThread"),
             {
                 "channel_id": "C001",
                 "thread_ts": "1700000001.000001",
@@ -545,7 +545,7 @@ class TestSlackReplyToThread:
     async def test_reply_to_nonexistent_thread(self, chat_pack):
         """Reply to a thread that doesn't exist still creates the reply message."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_reply_to_thread"),
+            ToolName("chat_replyToThread"),
             {
                 "channel_id": "C001",
                 "thread_ts": "9999999999.000000",
@@ -561,9 +561,9 @@ class TestSlackReplyToThread:
 
 class TestSlackAddReaction:
     async def test_adds_new_reaction(self, chat_pack, sample_state):
-        """slack_add_reaction adds a new emoji reaction to a message."""
+        """reactions_add adds a new emoji reaction to a message."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_add_reaction"),
+            ToolName("reactions_add"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -585,7 +585,7 @@ class TestSlackAddReaction:
     async def test_adds_user_to_existing_reaction(self, chat_pack, sample_state):
         """Adding same emoji from different user increments count."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_add_reaction"),
+            ToolName("reactions_add"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -604,7 +604,7 @@ class TestSlackAddReaction:
     async def test_already_reacted_error(self, chat_pack, sample_state):
         """Adding same reaction from same user returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_add_reaction"),
+            ToolName("reactions_add"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -620,7 +620,7 @@ class TestSlackAddReaction:
     async def test_message_not_found(self, chat_pack, sample_state):
         """Reacting to nonexistent message returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_add_reaction"),
+            ToolName("reactions_add"),
             {
                 "channel_id": "C001",
                 "timestamp": "9999999999.000000",
@@ -634,9 +634,9 @@ class TestSlackAddReaction:
 
 class TestSlackRemoveReaction:
     async def test_removes_reaction(self, chat_pack, sample_state):
-        """slack_remove_reaction removes a user's reaction from a message."""
+        """reactions_remove removes a user's reaction from a message."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_remove_reaction"),
+            ToolName("reactions_remove"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -668,7 +668,7 @@ class TestSlackRemoveReaction:
             ],
         }
         proposal = await chat_pack.handle_action(
-            ToolName("slack_remove_reaction"),
+            ToolName("reactions_remove"),
             {
                 "channel_id": "C001",
                 "timestamp": "100.001",
@@ -686,7 +686,7 @@ class TestSlackRemoveReaction:
     async def test_remove_nonexistent_reaction(self, chat_pack, sample_state):
         """Removing a reaction that doesn't exist returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_remove_reaction"),
+            ToolName("reactions_remove"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -701,7 +701,7 @@ class TestSlackRemoveReaction:
     async def test_remove_reaction_user_not_in_list(self, chat_pack, sample_state):
         """Removing a reaction the user didn't add returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_remove_reaction"),
+            ToolName("reactions_remove"),
             {
                 "channel_id": "C001",
                 "timestamp": "1700000001.000001",
@@ -716,7 +716,7 @@ class TestSlackRemoveReaction:
     async def test_remove_reaction_message_not_found(self, chat_pack, sample_state):
         """Removing a reaction from a nonexistent message returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_remove_reaction"),
+            ToolName("reactions_remove"),
             {
                 "channel_id": "C001",
                 "timestamp": "9999999999.000000",
@@ -731,9 +731,9 @@ class TestSlackRemoveReaction:
 
 class TestSlackGetChannelHistory:
     async def test_returns_channel_messages(self, chat_pack, sample_state):
-        """slack_get_channel_history returns messages for the given channel."""
+        """conversations_history returns messages for the given channel."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001"},
             sample_state,
         )
@@ -746,7 +746,7 @@ class TestSlackGetChannelHistory:
     async def test_sorted_descending(self, chat_pack, sample_state):
         """Messages are returned sorted by ts descending (newest first)."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001"},
             sample_state,
         )
@@ -757,7 +757,7 @@ class TestSlackGetChannelHistory:
     async def test_respects_limit(self, chat_pack, sample_state):
         """limit parameter caps the number of returned messages."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001", "limit": 1},
             sample_state,
         )
@@ -766,7 +766,7 @@ class TestSlackGetChannelHistory:
     async def test_has_more_flag(self, chat_pack, sample_state):
         """has_more is true when there are more messages beyond the limit."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001", "limit": 2},
             sample_state,
         )
@@ -776,7 +776,7 @@ class TestSlackGetChannelHistory:
     async def test_cursor_pagination(self, chat_pack, sample_state):
         """Channel history supports cursor-based pagination."""
         p1 = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001", "limit": 2},
             sample_state,
         )
@@ -784,7 +784,7 @@ class TestSlackGetChannelHistory:
         next_cursor = p1.response_body["response_metadata"]["next_cursor"]
 
         p2 = await chat_pack.handle_action(
-            ToolName("slack_get_channel_history"),
+            ToolName("conversations_history"),
             {"channel_id": "C001", "limit": 2, "cursor": next_cursor},
             sample_state,
         )
@@ -794,9 +794,9 @@ class TestSlackGetChannelHistory:
 
 class TestSlackGetThreadReplies:
     async def test_returns_thread_messages(self, chat_pack, sample_state):
-        """slack_get_thread_replies returns parent + replies for a thread."""
+        """conversations_replies returns parent + replies for a thread."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_thread_replies"),
+            ToolName("conversations_replies"),
             {"channel_id": "C001", "thread_ts": "1700000001.000001"},
             sample_state,
         )
@@ -809,7 +809,7 @@ class TestSlackGetThreadReplies:
     async def test_sorted_ascending(self, chat_pack, sample_state):
         """Thread replies are sorted by ts ascending (oldest first)."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_thread_replies"),
+            ToolName("conversations_replies"),
             {"channel_id": "C001", "thread_ts": "1700000001.000001"},
             sample_state,
         )
@@ -820,9 +820,9 @@ class TestSlackGetThreadReplies:
 
 class TestSlackGetUsers:
     async def test_returns_all_users(self, chat_pack, sample_state):
-        """slack_get_users returns all users within default limit."""
+        """users_list returns all users within default limit."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_users"),
+            ToolName("users_list"),
             {},
             sample_state,
         )
@@ -831,18 +831,18 @@ class TestSlackGetUsers:
         assert proposal.proposed_state_deltas == []
 
     async def test_respects_limit(self, chat_pack, sample_state):
-        """slack_get_users respects the limit parameter."""
+        """users_list respects the limit parameter."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_users"),
+            ToolName("users_list"),
             {"limit": 2},
             sample_state,
         )
         assert len(proposal.response_body["members"]) == 2
 
     async def test_cursor_pagination(self, chat_pack, sample_state):
-        """slack_get_users supports cursor-based pagination."""
+        """users_list supports cursor-based pagination."""
         p1 = await chat_pack.handle_action(
-            ToolName("slack_get_users"),
+            ToolName("users_list"),
             {"limit": 2},
             sample_state,
         )
@@ -851,7 +851,7 @@ class TestSlackGetUsers:
         assert next_cursor != ""
 
         p2 = await chat_pack.handle_action(
-            ToolName("slack_get_users"),
+            ToolName("users_list"),
             {"limit": 2, "cursor": next_cursor},
             sample_state,
         )
@@ -861,9 +861,9 @@ class TestSlackGetUsers:
 
 class TestSlackGetUserProfile:
     async def test_returns_user(self, chat_pack, sample_state):
-        """slack_get_user_profile returns the matching user."""
+        """users_profile_get returns the matching user."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_user_profile"),
+            ToolName("users_profile_get"),
             {"user_id": "U001"},
             sample_state,
         )
@@ -872,9 +872,9 @@ class TestSlackGetUserProfile:
         assert proposal.proposed_state_deltas == []
 
     async def test_user_not_found(self, chat_pack, sample_state):
-        """slack_get_user_profile returns error for unknown user_id."""
+        """users_profile_get returns error for unknown user_id."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_user_profile"),
+            ToolName("users_profile_get"),
             {"user_id": "UNOTEXIST"},
             sample_state,
         )
@@ -884,9 +884,9 @@ class TestSlackGetUserProfile:
 
 class TestSlackCreateChannel:
     async def test_creates_channel(self, chat_pack, sample_state):
-        """slack_create_channel creates a new channel entity."""
+        """conversations_create creates a new channel entity."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_create_channel"),
+            ToolName("conversations_create"),
             {"name": "new-channel", "user_id": "U001"},
             sample_state,
         )
@@ -909,9 +909,9 @@ class TestSlackCreateChannel:
         assert delta.fields["name"] == "new-channel"
 
     async def test_creates_private_channel(self, chat_pack, sample_state):
-        """slack_create_channel can create a private channel."""
+        """conversations_create can create a private channel."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_create_channel"),
+            ToolName("conversations_create"),
             {"name": "secret", "is_private": True, "user_id": "U001"},
             sample_state,
         )
@@ -921,7 +921,7 @@ class TestSlackCreateChannel:
     async def test_duplicate_name_error(self, chat_pack, sample_state):
         """Creating a channel with an existing name returns an error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_create_channel"),
+            ToolName("conversations_create"),
             {"name": "general", "user_id": "U001"},
             sample_state,
         )
@@ -932,9 +932,9 @@ class TestSlackCreateChannel:
 
 class TestSlackArchiveChannel:
     async def test_archives_channel(self, chat_pack, sample_state):
-        """slack_archive_channel sets is_archived to True."""
+        """conversations_archive sets is_archived to True."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_archive_channel"),
+            ToolName("conversations_archive"),
             {"channel_id": "C001"},
             sample_state,
         )
@@ -949,7 +949,7 @@ class TestSlackArchiveChannel:
     async def test_archive_nonexistent_channel(self, chat_pack, sample_state):
         """Archiving a nonexistent channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_archive_channel"),
+            ToolName("conversations_archive"),
             {"channel_id": "C999"},
             sample_state,
         )
@@ -959,7 +959,7 @@ class TestSlackArchiveChannel:
     async def test_archive_already_archived(self, chat_pack, sample_state):
         """Archiving an already-archived channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_archive_channel"),
+            ToolName("conversations_archive"),
             {"channel_id": "C003"},
             sample_state,
         )
@@ -969,9 +969,9 @@ class TestSlackArchiveChannel:
 
 class TestSlackJoinChannel:
     async def test_joins_channel(self, chat_pack, sample_state):
-        """slack_join_channel adds user to members and increments num_members."""
+        """conversations_join adds user to members and increments num_members."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_join_channel"),
+            ToolName("conversations_join"),
             {"channel_id": "C002", "user_id": "U003"},
             sample_state,
         )
@@ -990,7 +990,7 @@ class TestSlackJoinChannel:
     async def test_join_already_member(self, chat_pack, sample_state):
         """Joining a channel the user is already in returns success with no deltas."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_join_channel"),
+            ToolName("conversations_join"),
             {"channel_id": "C001", "user_id": "U001"},
             sample_state,
         )
@@ -1000,7 +1000,7 @@ class TestSlackJoinChannel:
     async def test_join_nonexistent_channel(self, chat_pack, sample_state):
         """Joining a nonexistent channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_join_channel"),
+            ToolName("conversations_join"),
             {"channel_id": "C999", "user_id": "U001"},
             sample_state,
         )
@@ -1010,7 +1010,7 @@ class TestSlackJoinChannel:
     async def test_join_archived_channel(self, chat_pack, sample_state):
         """Joining an archived channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_join_channel"),
+            ToolName("conversations_join"),
             {"channel_id": "C003", "user_id": "U001"},
             sample_state,
         )
@@ -1020,9 +1020,9 @@ class TestSlackJoinChannel:
 
 class TestSlackSetChannelTopic:
     async def test_sets_topic(self, chat_pack, sample_state):
-        """slack_set_channel_topic updates the topic on a channel."""
+        """conversations_setTopic updates the topic on a channel."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_set_channel_topic"),
+            ToolName("conversations_setTopic"),
             {
                 "channel_id": "C001",
                 "topic": "New topic value",
@@ -1047,7 +1047,7 @@ class TestSlackSetChannelTopic:
     async def test_set_topic_nonexistent_channel(self, chat_pack, sample_state):
         """Setting topic on a nonexistent channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_set_channel_topic"),
+            ToolName("conversations_setTopic"),
             {"channel_id": "C999", "topic": "whatever"},
             sample_state,
         )
@@ -1057,7 +1057,7 @@ class TestSlackSetChannelTopic:
     async def test_set_topic_archived_channel(self, chat_pack, sample_state):
         """Setting topic on an archived channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_set_channel_topic"),
+            ToolName("conversations_setTopic"),
             {"channel_id": "C003", "topic": "whatever"},
             sample_state,
         )
@@ -1067,9 +1067,9 @@ class TestSlackSetChannelTopic:
 
 class TestSlackGetChannelInfo:
     async def test_returns_channel(self, chat_pack, sample_state):
-        """slack_get_channel_info returns the matching channel."""
+        """conversations_info returns the matching channel."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_info"),
+            ToolName("conversations_info"),
             {"channel_id": "C001"},
             sample_state,
         )
@@ -1081,7 +1081,7 @@ class TestSlackGetChannelInfo:
     async def test_channel_not_found(self, chat_pack, sample_state):
         """Getting info for nonexistent channel returns error."""
         proposal = await chat_pack.handle_action(
-            ToolName("slack_get_channel_info"),
+            ToolName("conversations_info"),
             {"channel_id": "C999"},
             sample_state,
         )
@@ -1095,13 +1095,13 @@ class TestResponseFormatConsistency:
     async def test_all_success_responses_have_ok_true(self, chat_pack, sample_state):
         """All successful tool calls return ok: true."""
         success_calls = [
-            ("slack_list_channels", {}),
-            ("slack_get_channel_history", {"channel_id": "C001"}),
-            ("slack_get_thread_replies", {"channel_id": "C001", "thread_ts": "1700000001.000001"}),
-            ("slack_get_users", {}),
-            ("slack_get_user_profile", {"user_id": "U001"}),
-            ("slack_post_message", {"channel_id": "C001", "text": "hi"}),
-            ("slack_get_channel_info", {"channel_id": "C001"}),
+            ("channels_list", {}),
+            ("conversations_history", {"channel_id": "C001"}),
+            ("conversations_replies", {"channel_id": "C001", "thread_ts": "1700000001.000001"}),
+            ("users_list", {}),
+            ("users_profile_get", {"user_id": "U001"}),
+            ("chat_postMessage", {"channel_id": "C001", "text": "hi"}),
+            ("conversations_info", {"channel_id": "C001"}),
         ]
         for tool_name, params in success_calls:
             proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)
@@ -1110,15 +1110,15 @@ class TestResponseFormatConsistency:
     async def test_all_error_responses_have_ok_false_and_error(self, chat_pack, sample_state):
         """All error responses return ok: false and an error string."""
         error_calls = [
-            ("slack_add_reaction", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
-            ("slack_remove_reaction", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
-            ("slack_get_user_profile", {"user_id": "NOTEXIST"}),
-            ("slack_update_message", {"channel_id": "C001", "ts": "xxx", "text": "t"}),
-            ("slack_delete_message", {"channel_id": "C001", "ts": "xxx"}),
-            ("slack_archive_channel", {"channel_id": "C999"}),
-            ("slack_join_channel", {"channel_id": "C999"}),
-            ("slack_set_channel_topic", {"channel_id": "C999", "topic": "t"}),
-            ("slack_get_channel_info", {"channel_id": "C999"}),
+            ("reactions_add", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
+            ("reactions_remove", {"channel_id": "C001", "timestamp": "xxx", "reaction": "x"}),
+            ("users_profile_get", {"user_id": "NOTEXIST"}),
+            ("chat_update", {"channel_id": "C001", "ts": "xxx", "text": "t"}),
+            ("chat_delete", {"channel_id": "C001", "ts": "xxx"}),
+            ("conversations_archive", {"channel_id": "C999"}),
+            ("conversations_join", {"channel_id": "C999"}),
+            ("conversations_setTopic", {"channel_id": "C999", "topic": "t"}),
+            ("conversations_info", {"channel_id": "C999"}),
         ]
         for tool_name, params in error_calls:
             proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)
@@ -1131,9 +1131,9 @@ class TestResponseFormatConsistency:
     async def test_pagination_responses_have_response_metadata(self, chat_pack, sample_state):
         """Paginated endpoints include response_metadata with next_cursor."""
         paginated_calls = [
-            ("slack_list_channels", {"limit": 1}),
-            ("slack_get_channel_history", {"channel_id": "C001", "limit": 1}),
-            ("slack_get_users", {"limit": 1}),
+            ("channels_list", {"limit": 1}),
+            ("conversations_history", {"channel_id": "C001", "limit": 1}),
+            ("users_list", {"limit": 1}),
         ]
         for tool_name, params in paginated_calls:
             proposal = await chat_pack.handle_action(ToolName(tool_name), params, sample_state)

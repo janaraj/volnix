@@ -43,7 +43,7 @@ def test_response_proposal_accepts_concrete_events():
         event_type="world.synthetic",
         timestamp=_timestamp(),
         actor_id=ActorId("actor-test"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action="email_send",
         input_data={},
     )
@@ -58,7 +58,7 @@ async def test_commit_step_honors_proposed_events(app, make_action_context):
         event_type="world.synthetic",
         timestamp=_timestamp(),
         actor_id=ActorId("actor-test"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action="email_send",
         input_data={"source": "proposal"},
     )
@@ -70,7 +70,7 @@ async def test_commit_step_honors_proposed_events(app, make_action_context):
         fidelity=None,
         fidelity_warning=None,
     )
-    ctx = make_action_context(service_id=ServiceId("email"), action="email_send")
+    ctx = make_action_context(service_id=ServiceId("gmail"), action="email_send")
     ctx.response_proposal = proposal
 
     result = await state.execute(ctx)

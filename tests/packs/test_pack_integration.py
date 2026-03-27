@@ -21,7 +21,7 @@ from terrarium.core.types import (
 from terrarium.packs.base import ServicePack
 from terrarium.packs.registry import PackRegistry
 from terrarium.packs.runtime import PackRuntime
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------
@@ -117,9 +117,9 @@ def runtime_with_email(registry_with_email):
 class TestIntegrationDiscovery:
     def test_email_registers_via_discover(self, registry_with_email):
         """Filesystem discovery finds and registers the email pack."""
-        assert registry_with_email.has_pack("email")
-        pack = registry_with_email.get_pack("email")
-        assert pack.pack_name == "email"
+        assert registry_with_email.has_pack("gmail")
+        pack = registry_with_email.get_pack("gmail")
+        assert pack.pack_name == "gmail"
         assert registry_with_email.has_tool("email_send")
         assert registry_with_email.has_tool("email_list")
 
@@ -278,10 +278,10 @@ class TestImportBoundaries:
 
         Packs must NEVER import from persistence/, engines/, or bus/.
         """
-        from terrarium.packs.verified.email import pack as pack_mod
-        from terrarium.packs.verified.email import handlers as handlers_mod
-        from terrarium.packs.verified.email import schemas as schemas_mod
-        from terrarium.packs.verified.email import state_machines as sm_mod
+        from terrarium.packs.verified.gmail import pack as pack_mod
+        from terrarium.packs.verified.gmail import handlers as handlers_mod
+        from terrarium.packs.verified.gmail import schemas as schemas_mod
+        from terrarium.packs.verified.gmail import state_machines as sm_mod
 
         forbidden_prefixes = (
             "terrarium.persistence",

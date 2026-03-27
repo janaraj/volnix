@@ -3,13 +3,13 @@ name: simple-test-world
 description: A minimal world definition used by integration tests.
 
 services:
-  - name: email
+  - name: gmail
     category: communication
     primitives:
       - send_email
       - read_email
 
-  - name: tickets
+  - name: zendesk
     category: work_management
     primitives:
       - create_ticket
@@ -22,11 +22,11 @@ actors:
       name: support-bot
       role: customer_support
       permissions:
-        - email.send_email
-        - email.read_email
-        - tickets.create_ticket
-        - tickets.update_ticket
-        - tickets.close_ticket
+        - gmail.send_email
+        - gmail.read_email
+        - zendesk.create_ticket
+        - zendesk.update_ticket
+        - zendesk.close_ticket
 
   customers:
     - id: cust-001
@@ -43,7 +43,7 @@ actors:
 policies:
   - name: no-closing-without-response
     description: Agent must respond to the customer before closing a ticket.
-    trigger: tickets.close_ticket
+    trigger: zendesk.close_ticket
     enforcement: block
 
 budget:

@@ -12,7 +12,7 @@ from typing import ClassVar
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
-from terrarium.packs.verified.calendar.handlers import (
+from terrarium.packs.verified.google_calendar.handlers import (
     handle_create_calendar_event,
     handle_delete_calendar_event,
     handle_get_calendar,
@@ -23,13 +23,13 @@ from terrarium.packs.verified.calendar.handlers import (
     handle_search_calendar_events,
     handle_update_calendar_event,
 )
-from terrarium.packs.verified.calendar.schemas import (
+from terrarium.packs.verified.google_calendar.schemas import (
     ATTENDEE_ENTITY_SCHEMA,
     CALENDAR_ENTITY_SCHEMA,
     CALENDAR_TOOL_DEFINITIONS,
     EVENT_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.calendar.state_machines import (
+from terrarium.packs.verified.google_calendar.state_machines import (
     EVENT_TRANSITIONS,
     RESPONSE_TRANSITIONS,
 )
@@ -43,7 +43,7 @@ class CalendarPack(ServicePack):
     list_calendars, get_calendar, rsvp_calendar_event.
     """
 
-    pack_name: ClassVar[str] = "calendar"
+    pack_name: ClassVar[str] = "google_calendar"
     category: ClassVar[str] = "scheduling"
     fidelity_tier: ClassVar[int] = 1
 

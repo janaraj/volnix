@@ -193,7 +193,7 @@ class TestAgencyIntegrationExtended:
             event_type="world.email_send",
             timestamp=Timestamp(world_time=now, wall_time=now, tick=1),
             actor_id=ActorId("ext-agent"),
-            service_id=ServiceId("email"),
+            service_id=ServiceId("gmail"),
             action="email_send",
         )
 
@@ -227,7 +227,7 @@ class TestAgencyIntegrationExtended:
             actor_id=ActorId("ext-agent"),
             source=ActionSource.EXTERNAL,
             action_type="email_send",
-            target_service=ServiceId("email"),
+            target_service=ServiceId("gmail"),
             logical_time=1.0,
             priority=EnvelopePriority.EXTERNAL,
         )

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from terrarium.engines.world_compiler.service_resolution import CompilerServiceResolver
 from terrarium.kernel.surface import ServiceSurface, APIOperation
 from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------
@@ -35,14 +35,14 @@ class TestCompilerServiceResolver:
 
     @pytest.mark.asyncio
     async def test_resolve_verified_pack(self, pack_registry):
-        """Resolving 'verified/email' uses the email pack."""
+        """Resolving 'verified/gmail' uses the gmail pack."""
         resolver = CompilerServiceResolver(pack_registry=pack_registry)
-        result = await resolver.resolve_one("email", "verified/email")
+        result = await resolver.resolve_one("gmail", "verified/gmail")
 
         assert result is not None
-        assert result.service_name == "email"
+        assert result.service_name == "gmail"
         assert result.resolution_source == "tier1_pack"
-        assert result.surface.service_name == "email"
+        assert result.surface.service_name == "gmail"
         assert len(result.surface.operations) > 0
 
     @pytest.mark.asyncio
@@ -76,13 +76,13 @@ class TestCompilerServiceResolver:
         """resolve_all processes multiple services, returns resolutions + warnings."""
         resolver = CompilerServiceResolver(pack_registry=pack_registry)
         specs = {
-            "email": "verified/email",
+            "gmail": "verified/gmail",
             "unknown_service": "unknown_service",
         }
         resolutions, warnings = await resolver.resolve_all(specs)
 
-        assert "email" in resolutions
-        assert resolutions["email"].resolution_source == "tier1_pack"
+        assert "gmail" in resolutions
+        assert resolutions["gmail"].resolution_source == "tier1_pack"
         # unknown_service should produce a warning
         assert any("unknown_service" in w for w in warnings)
 
@@ -132,8 +132,8 @@ class TestCompilerServiceResolver:
         """Complex spec reference (dict with provider key) is parsed correctly."""
         resolver = CompilerServiceResolver(pack_registry=pack_registry)
         # The parser should extract "verified" tier and "email" name from dict
-        spec = {"provider": "verified/email", "extra_config": True}
-        result = await resolver.resolve_one("email", spec)
+        spec = {"provider": "verified/gmail", "extra_config": True}
+        result = await resolver.resolve_one("gmail", spec)
 
         assert result is not None
         assert result.resolution_source == "tier1_pack"
@@ -142,7 +142,7 @@ class TestCompilerServiceResolver:
         """_parse_spec_reference handles all formats."""
         resolver = CompilerServiceResolver()
 
-        assert resolver._parse_spec_reference("verified/email") == ("verified", "email")
+        assert resolver._parse_spec_reference("verified/gmail") == ("verified", "gmail")
         assert resolver._parse_spec_reference("profiled/stripe") == ("profiled", "stripe")
         assert resolver._parse_spec_reference("stripe") == ("auto", "stripe")
         assert resolver._parse_spec_reference({"provider": "verified/browser"}) == ("verified", "browser")

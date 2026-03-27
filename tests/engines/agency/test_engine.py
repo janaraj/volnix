@@ -36,7 +36,7 @@ def _make_world_event(
         event_type="world.action",
         timestamp=_make_timestamp(tick),
         actor_id=ActorId(actor_id),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action=action,
         target_entity=EntityId(target_entity) if target_entity else None,
         input_data={"subject": "test"},
@@ -457,7 +457,7 @@ async def test_parse_llm_action_valid():
     raw = json.dumps(
         {
             "action_type": "send_email",
-            "target_service": "email",
+            "target_service": "gmail",
             "payload": {"to": "user@test.com", "body": "Hello"},
             "reasoning": "Need to notify user",
         }
@@ -467,7 +467,7 @@ async def test_parse_llm_action_valid():
 
     assert result is not None
     assert result.action_type == "send_email"
-    assert result.target_service == ServiceId("email")
+    assert result.target_service == ServiceId("gmail")
     assert result.metadata["activation_tier"] == 3
 
 
@@ -494,7 +494,7 @@ async def test_parse_batch_response_valid():
                 {
                     "actor_id": "a1",
                     "action_type": "send_email",
-                    "target_service": "email",
+                    "target_service": "gmail",
                     "payload": {},
                     "reasoning": "Need to follow up",
                 },
@@ -683,7 +683,7 @@ class TestErrorPaths:
                     {
                         "actor_id": "unknown-actor",
                         "action_type": "send_email",
-                        "target_service": "email",
+                        "target_service": "gmail",
                         "payload": {},
                         "reasoning": "Unknown actor",
                     }
@@ -708,7 +708,7 @@ class TestErrorPaths:
                     {
                         "actor_id": "a1",
                         "action_type": "send_email",
-                        "target_service": "email",
+                        "target_service": "gmail",
                         "payload": {},
                         "reasoning": "First action",
                     },

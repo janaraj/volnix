@@ -8,7 +8,7 @@ from terrarium.kernel.registry import SemanticRegistry
 from terrarium.kernel.surface import ServiceSurface, APIOperation
 from terrarium.reality.expander import ConditionExpander
 from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 from terrarium.llm.types import LLMResponse
 
 
@@ -37,7 +37,7 @@ def mock_llm_router():
             "world": {
                 "name": "Test",
                 "description": "test world",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [{"role": "agent", "type": "external", "count": 1}],
                 "policies": [],
                 "seeds": [],
@@ -64,7 +64,7 @@ def sample_world_def():
         "world": {
             "name": "Test World",
             "description": "A test",
-            "services": {"email": "verified/email"},
+            "services": {"gmail": "verified/gmail"},
             "actors": [{"role": "agent", "type": "external", "count": 1}],
         }
     }

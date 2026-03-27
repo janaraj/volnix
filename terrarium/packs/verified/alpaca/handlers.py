@@ -242,7 +242,7 @@ def _build_position_delta(
 # Handler 1: GET /v2/account (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_account(
+async def handle_get_account(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -258,7 +258,7 @@ async def handle_alpaca_get_account(
 # Handler 2: POST /v2/orders (MUTATING -- up to 4 deltas)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_create_order(
+async def handle_create_order(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -443,7 +443,7 @@ async def handle_alpaca_create_order(
 # Handler 3: GET /v2/orders (READ with filters)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_list_orders(
+async def handle_list_orders(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -480,7 +480,7 @@ async def handle_alpaca_list_orders(
 # Handler 4: GET /v2/orders/{id} (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_order(
+async def handle_get_order(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -496,7 +496,7 @@ async def handle_alpaca_get_order(
 # Handler 5: DELETE /v2/orders/{id} (MUTATING)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_cancel_order(
+async def handle_cancel_order(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -530,7 +530,7 @@ async def handle_alpaca_cancel_order(
 # Handler 6: GET /v2/positions (READ -- enriches with live P&L from quotes)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_list_positions(
+async def handle_list_positions(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -561,7 +561,7 @@ async def handle_alpaca_list_positions(
 # Handler 7: GET /v2/positions/{symbol} (READ -- enriches with live P&L)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_position(
+async def handle_get_position(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -600,7 +600,7 @@ async def handle_alpaca_get_position(
 # Handler 8: DELETE /v2/positions/{symbol} (MUTATING)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_close_position(
+async def handle_close_position(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -726,7 +726,7 @@ async def handle_alpaca_close_position(
 # Handler 9: GET /v2/stocks/{symbol}/bars (READ with pagination)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_bars(
+async def handle_get_bars(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -776,7 +776,7 @@ async def handle_alpaca_get_bars(
 # Handler 10: GET /v2/stocks/{symbol}/quotes/latest (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_latest_quote(
+async def handle_get_latest_quote(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -811,7 +811,7 @@ async def handle_alpaca_get_latest_quote(
 # Handler 11: GET /v2/stocks/{symbol}/trades/latest (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_latest_trade(
+async def handle_get_latest_trade(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -852,7 +852,7 @@ async def handle_alpaca_get_latest_trade(
 # Handler 12: GET /v2/stocks/{symbol}/snapshot (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_snapshot(
+async def handle_get_snapshot(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -881,7 +881,7 @@ async def handle_alpaca_get_snapshot(
 # Handler 13: GET /v2/clock (READ)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_get_clock(
+async def handle_get_clock(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -902,7 +902,7 @@ async def handle_alpaca_get_clock(
 # Handler 14: GET /v2/assets (READ with filters)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_list_assets(
+async def handle_list_assets(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -929,7 +929,7 @@ INTERNAL_NEWS_FIELDS = {
 }
 
 
-async def handle_alpaca_get_news(
+async def handle_get_news(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1043,7 +1043,7 @@ async def handle_social_get_trending(
 # Handler 19: PUT /terrarium/market/quote (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_update_quote(
+async def handle_update_quote(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1087,7 +1087,7 @@ async def handle_alpaca_update_quote(
 # Handler 20: POST /terrarium/market/bar (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_create_bar(
+async def handle_create_bar(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1121,7 +1121,7 @@ async def handle_alpaca_create_bar(
 # Handler 21: POST /terrarium/news (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
 
-async def handle_alpaca_create_news(
+async def handle_create_news(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1138,7 +1138,7 @@ async def handle_alpaca_create_news(
         "symbols": input_data.get("symbols", []),
         "source": input_data.get("source", "terrarium"),
         "images": input_data.get("images", []),
-        # Internal fields (stripped by handle_alpaca_get_news before serving)
+        # Internal fields (stripped by handle_get_news before serving)
         "factual_accuracy": input_data.get("factual_accuracy", 1.0),
         "sentiment_bias": input_data.get("sentiment_bias", 0.0),
         "market_impact_expected": input_data.get(

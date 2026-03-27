@@ -23,7 +23,7 @@ class TestYAMLParserFromFile:
             "world": {
                 "name": "File World",
                 "description": "From file",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [{"role": "agent", "type": "external", "count": 1}],
             }
         }))
@@ -32,8 +32,8 @@ class TestYAMLParserFromFile:
 
         assert plan.name == "File World"
         assert plan.source == "yaml"
-        assert "email" in specs
-        assert specs["email"] == "verified/email"
+        assert "gmail" in specs
+        assert specs["gmail"] == "verified/gmail"
 
     @pytest.mark.asyncio
     async def test_parse_with_compiler_settings(self, tmp_path, condition_expander):
@@ -42,7 +42,7 @@ class TestYAMLParserFromFile:
         world_file.write_text(yaml.dump({
             "world": {
                 "name": "Dual File",
-                "services": {"email": "verified/email"},
+                "services": {"gmail": "verified/gmail"},
                 "actors": [],
             }
         }))
@@ -98,7 +98,7 @@ class TestYAMLParserFromDicts:
         assert plan.seed == 42
         assert plan.behavior == "dynamic"
         assert plan.services == {}  # empty — not resolved yet
-        assert "email" in specs
+        assert "gmail" in specs
 
     @pytest.mark.asyncio
     async def test_service_reference_formats(self, condition_expander):
@@ -107,7 +107,7 @@ class TestYAMLParserFromDicts:
             "world": {
                 "name": "Multi-Service",
                 "services": {
-                    "email": "verified/email",
+                    "gmail": "verified/gmail",
                     "stripe": "profiled/stripe",
                     "jira": "jira",  # bare name
                     "web": {"provider": "verified/browser", "sites": ["example.com"]},
@@ -118,7 +118,7 @@ class TestYAMLParserFromDicts:
         parser = YAMLParser(condition_expander)
         plan, specs = await parser.parse_from_dicts(world_def)
 
-        assert specs["email"] == "verified/email"
+        assert specs["gmail"] == "verified/gmail"
         assert specs["stripe"] == "profiled/stripe"
         assert specs["jira"] == "jira"
         assert isinstance(specs["web"], dict)

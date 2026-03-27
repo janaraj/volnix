@@ -986,7 +986,7 @@ Tick   Agent         Gap                           Response
 34     agent-alpha   crm_lookup_customer            HALLUCINATED
                      (CRM not in world)             fabricated data
 
-67     agent-beta    slack_create_channel            ESCALATED
+67     agent-beta    conversations_create            ESCALATED
                      (no create permission)          asked supervisor
 
 112    agent-alpha   analytics_query                 SKIPPED

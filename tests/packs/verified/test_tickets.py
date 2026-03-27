@@ -1,12 +1,12 @@
-"""Tests for terrarium.packs.verified.tickets -- TicketsPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.zendesk -- TicketsPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.tickets.pack import TicketsPack
-from terrarium.packs.verified.tickets.schemas import ORGANIZATION_ENTITY_SCHEMA
-from terrarium.packs.verified.tickets.state_machines import TICKET_STATES, TICKET_TRANSITIONS
+from terrarium.packs.verified.zendesk.pack import TicketsPack
+from terrarium.packs.verified.zendesk.schemas import ORGANIZATION_ENTITY_SCHEMA
+from terrarium.packs.verified.zendesk.state_machines import TICKET_STATES, TICKET_TRANSITIONS
 from terrarium.validation.schema import SchemaValidator
 from terrarium.validation.state_machine import StateMachineValidator
 
@@ -175,7 +175,7 @@ def sample_state():
 class TestTicketsPackMetadata:
     def test_metadata(self, tickets_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert tickets_pack.pack_name == "tickets"
+        assert tickets_pack.pack_name == "zendesk"
         assert tickets_pack.category == "work_management"
         assert tickets_pack.fidelity_tier == 1
 
@@ -185,18 +185,18 @@ class TestTicketsPackMetadata:
         assert len(tools) == 12
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
-            "zendesk_tickets_list",
-            "zendesk_tickets_show",
-            "zendesk_tickets_create",
-            "zendesk_tickets_update",
-            "zendesk_tickets_delete",
-            "zendesk_tickets_search",
-            "zendesk_ticket_comments_list",
-            "zendesk_ticket_comments_create",
-            "zendesk_users_list",
-            "zendesk_users_show",
-            "zendesk_groups_list",
-            "zendesk_groups_show",
+            "tickets_list",
+            "tickets_show",
+            "tickets_create",
+            "tickets_update",
+            "tickets_delete",
+            "tickets_search",
+            "ticket_comments_list",
+            "ticket_comments_create",
+            "users_list",
+            "users_show",
+            "groups_list",
+            "groups_show",
         }
 
     def test_entity_schemas(self, tickets_pack):
@@ -221,11 +221,11 @@ class TestTicketsPackMetadata:
         """get_tool_names() returns list of name strings."""
         names = tickets_pack.get_tool_names()
         assert len(names) == 12
-        assert "zendesk_tickets_create" in names
-        assert "zendesk_tickets_delete" in names
-        assert "zendesk_tickets_search" in names
-        assert "zendesk_groups_list" in names
-        assert "zendesk_groups_show" in names
+        assert "tickets_create" in names
+        assert "tickets_delete" in names
+        assert "tickets_search" in names
+        assert "groups_list" in names
+        assert "groups_show" in names
 
     def test_ticket_schema_has_new_fields(self, tickets_pack):
         """Ticket schema includes P1 audit fields."""
@@ -271,9 +271,9 @@ class TestTicketsPackMetadata:
 
 class TestTicketsPackActions:
     async def test_tickets_create(self, tickets_pack):
-        """zendesk_tickets_create creates ticket with status='new' and initial comment."""
+        """tickets_create creates ticket with status='new' and initial comment."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_create"),
+            ToolName("tickets_create"),
             {
                 "subject": "My printer is on fire",
                 "description": "Literally flames coming out.",
@@ -312,9 +312,9 @@ class TestTicketsPackActions:
         assert comment_delta.fields["attachments"] == []
 
     async def test_tickets_create_minimal(self, tickets_pack):
-        """zendesk_tickets_create works with only required fields."""
+        """tickets_create works with only required fields."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_create"),
+            ToolName("tickets_create"),
             {
                 "subject": "Simple question",
                 "description": "How do I reset my password?",
@@ -329,9 +329,9 @@ class TestTicketsPackActions:
         assert len(proposal.proposed_state_deltas) == 2
 
     async def test_tickets_update_status(self, tickets_pack, sample_state):
-        """zendesk_tickets_update changes status and records previous_fields."""
+        """tickets_update changes status and records previous_fields."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_update"),
+            ToolName("tickets_update"),
             {"id": "ticket-001", "status": "open"},
             sample_state,
         )
@@ -348,9 +348,9 @@ class TestTicketsPackActions:
         assert "updated_at" in delta.fields
 
     async def test_tickets_update_not_found(self, tickets_pack, sample_state):
-        """zendesk_tickets_update returns Zendesk-format error for nonexistent ticket."""
+        """tickets_update returns Zendesk-format error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_update"),
+            ToolName("tickets_update"),
             {"id": "ticket-nonexistent", "status": "open"},
             sample_state,
         )
@@ -358,9 +358,9 @@ class TestTicketsPackActions:
         assert "description" in proposal.response_body
 
     async def test_tickets_delete(self, tickets_pack, sample_state):
-        """zendesk_tickets_delete soft-deletes a ticket."""
+        """tickets_delete soft-deletes a ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_delete"),
+            ToolName("tickets_delete"),
             {"id": "ticket-001"},
             sample_state,
         )
@@ -373,18 +373,18 @@ class TestTicketsPackActions:
         assert delta.previous_fields["status"] == "new"
 
     async def test_tickets_delete_not_found(self, tickets_pack, sample_state):
-        """zendesk_tickets_delete returns Zendesk error for nonexistent ticket."""
+        """tickets_delete returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_delete"),
+            ToolName("tickets_delete"),
             {"id": "ticket-nonexistent"},
             sample_state,
         )
         assert proposal.response_body["error"] == "RecordNotFound"
 
     async def test_tickets_search_free_text(self, tickets_pack, sample_state):
-        """zendesk_tickets_search finds tickets by free text."""
+        """tickets_search finds tickets by free text."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_search"),
+            ToolName("tickets_search"),
             {"query": "login"},
             sample_state,
         )
@@ -394,9 +394,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_tickets_search_structured_filter(self, tickets_pack, sample_state):
-        """zendesk_tickets_search supports structured filters like status:open."""
+        """tickets_search supports structured filters like status:open."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_search"),
+            ToolName("tickets_search"),
             {"query": "status:open"},
             sample_state,
         )
@@ -405,9 +405,9 @@ class TestTicketsPackActions:
         assert results[0]["id"] == "ticket-002"
 
     async def test_tickets_search_mixed(self, tickets_pack, sample_state):
-        """zendesk_tickets_search supports mixed structured + free text."""
+        """tickets_search supports mixed structured + free text."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_search"),
+            ToolName("tickets_search"),
             {"query": "type:problem billing"},
             sample_state,
         )
@@ -416,9 +416,9 @@ class TestTicketsPackActions:
         assert results[0]["id"] == "ticket-003"
 
     async def test_tickets_search_no_results(self, tickets_pack, sample_state):
-        """zendesk_tickets_search returns empty for non-matching query."""
+        """tickets_search returns empty for non-matching query."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_search"),
+            ToolName("tickets_search"),
             {"query": "nonexistent_xyz"},
             sample_state,
         )
@@ -426,9 +426,9 @@ class TestTicketsPackActions:
         assert proposal.response_body["count"] == 0
 
     async def test_tickets_list_all(self, tickets_pack, sample_state):
-        """zendesk_tickets_list returns all tickets when no filters given."""
+        """tickets_list returns all tickets when no filters given."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {},
             sample_state,
         )
@@ -438,9 +438,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_tickets_list_by_status(self, tickets_pack, sample_state):
-        """zendesk_tickets_list filters by status."""
+        """tickets_list filters by status."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {"status": "open"},
             sample_state,
         )
@@ -449,9 +449,9 @@ class TestTicketsPackActions:
         assert body["tickets"][0]["id"] == "ticket-002"
 
     async def test_tickets_list_by_assignee(self, tickets_pack, sample_state):
-        """zendesk_tickets_list filters by assignee_id."""
+        """tickets_list filters by assignee_id."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {"assignee_id": "user-200"},
             sample_state,
         )
@@ -461,9 +461,9 @@ class TestTicketsPackActions:
         assert ids == {"ticket-001", "ticket-002"}
 
     async def test_tickets_list_by_requester(self, tickets_pack, sample_state):
-        """zendesk_tickets_list filters by requester_id."""
+        """tickets_list filters by requester_id."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {"requester_id": "user-100"},
             sample_state,
         )
@@ -473,9 +473,9 @@ class TestTicketsPackActions:
         assert ids == {"ticket-001", "ticket-003"}
 
     async def test_tickets_list_pagination(self, tickets_pack, sample_state):
-        """zendesk_tickets_list supports per_page and page parameters."""
+        """tickets_list supports per_page and page parameters."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {"per_page": 2, "page": 1},
             sample_state,
         )
@@ -484,7 +484,7 @@ class TestTicketsPackActions:
         assert body["next_page"] == 2
 
         proposal2 = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_list"),
+            ToolName("tickets_list"),
             {"per_page": 2, "page": 2},
             sample_state,
         )
@@ -493,9 +493,9 @@ class TestTicketsPackActions:
         assert body2["next_page"] is None
 
     async def test_tickets_show(self, tickets_pack, sample_state):
-        """zendesk_tickets_show returns ticket by ID."""
+        """tickets_show returns ticket by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_show"),
+            ToolName("tickets_show"),
             {"id": "ticket-002"},
             sample_state,
         )
@@ -504,9 +504,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_tickets_show_not_found(self, tickets_pack, sample_state):
-        """zendesk_tickets_show returns Zendesk error for nonexistent ticket."""
+        """tickets_show returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_tickets_show"),
+            ToolName("tickets_show"),
             {"id": "ticket-nonexistent"},
             sample_state,
         )
@@ -514,9 +514,9 @@ class TestTicketsPackActions:
         assert "description" in proposal.response_body
 
     async def test_ticket_comments_create(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_create creates comment and updates ticket."""
+        """ticket_comments_create creates comment and updates ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_ticket_comments_create"),
+            ToolName("ticket_comments_create"),
             {
                 "id": "ticket-001",
                 "body": "I tried clearing my cache but it still fails.",
@@ -548,9 +548,9 @@ class TestTicketsPackActions:
         assert "updated_at" in ticket_delta.fields
 
     async def test_ticket_comments_create_private(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_create supports private (internal) comments."""
+        """ticket_comments_create supports private (internal) comments."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_ticket_comments_create"),
+            ToolName("ticket_comments_create"),
             {
                 "id": "ticket-001",
                 "body": "Internal note: escalate to tier 2.",
@@ -563,9 +563,9 @@ class TestTicketsPackActions:
         assert comment["public"] is False
 
     async def test_ticket_comments_create_not_found(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_create returns Zendesk error for nonexistent ticket."""
+        """ticket_comments_create returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_ticket_comments_create"),
+            ToolName("ticket_comments_create"),
             {
                 "id": "ticket-nonexistent",
                 "body": "Hello",
@@ -576,9 +576,9 @@ class TestTicketsPackActions:
         assert proposal.response_body["error"] == "RecordNotFound"
 
     async def test_ticket_comments_list(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_list returns comments for a specific ticket."""
+        """ticket_comments_list returns comments for a specific ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_ticket_comments_list"),
+            ToolName("ticket_comments_list"),
             {"id": "ticket-001"},
             sample_state,
         )
@@ -589,9 +589,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_ticket_comments_list_empty(self, tickets_pack, sample_state):
-        """zendesk_ticket_comments_list returns empty for ticket with no comments."""
+        """ticket_comments_list returns empty for ticket with no comments."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_ticket_comments_list"),
+            ToolName("ticket_comments_list"),
             {"id": "ticket-003"},
             sample_state,
         )
@@ -599,9 +599,9 @@ class TestTicketsPackActions:
         assert proposal.response_body["comments"] == []
 
     async def test_users_list_all(self, tickets_pack, sample_state):
-        """zendesk_users_list returns all users when no filter given."""
+        """users_list returns all users when no filter given."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_users_list"),
+            ToolName("users_list"),
             {},
             sample_state,
         )
@@ -611,9 +611,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_users_list_by_role(self, tickets_pack, sample_state):
-        """zendesk_users_list filters by role."""
+        """users_list filters by role."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_users_list"),
+            ToolName("users_list"),
             {"role": "agent"},
             sample_state,
         )
@@ -622,9 +622,9 @@ class TestTicketsPackActions:
         assert all(u["role"] == "agent" for u in body["users"])
 
     async def test_users_show(self, tickets_pack, sample_state):
-        """zendesk_users_show returns user by ID."""
+        """users_show returns user by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_users_show"),
+            ToolName("users_show"),
             {"id": "user-200"},
             sample_state,
         )
@@ -634,18 +634,18 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_users_show_not_found(self, tickets_pack, sample_state):
-        """zendesk_users_show returns Zendesk error for nonexistent user."""
+        """users_show returns Zendesk error for nonexistent user."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_users_show"),
+            ToolName("users_show"),
             {"id": "user-nonexistent"},
             sample_state,
         )
         assert proposal.response_body["error"] == "RecordNotFound"
 
     async def test_groups_list(self, tickets_pack, sample_state):
-        """zendesk_groups_list returns all groups."""
+        """groups_list returns all groups."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_groups_list"),
+            ToolName("groups_list"),
             {},
             sample_state,
         )
@@ -655,9 +655,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_groups_list_empty(self, tickets_pack):
-        """zendesk_groups_list returns empty from empty state."""
+        """groups_list returns empty from empty state."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_groups_list"),
+            ToolName("groups_list"),
             {},
             {},
         )
@@ -665,9 +665,9 @@ class TestTicketsPackActions:
         assert proposal.response_body["count"] == 0
 
     async def test_groups_show(self, tickets_pack, sample_state):
-        """zendesk_groups_show returns group by ID."""
+        """groups_show returns group by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_groups_show"),
+            ToolName("groups_show"),
             {"id": "group-001"},
             sample_state,
         )
@@ -677,9 +677,9 @@ class TestTicketsPackActions:
         assert proposal.proposed_state_deltas == []
 
     async def test_groups_show_not_found(self, tickets_pack, sample_state):
-        """zendesk_groups_show returns Zendesk error for nonexistent group."""
+        """groups_show returns Zendesk error for nonexistent group."""
         proposal = await tickets_pack.handle_action(
-            ToolName("zendesk_groups_show"),
+            ToolName("groups_show"),
             {"id": "group-nonexistent"},
             sample_state,
         )

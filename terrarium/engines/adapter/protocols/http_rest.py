@@ -187,6 +187,28 @@ class HTTPRestAdapter(ProtocolAdapter):
         async def health():
             return {"status": "ok"}
 
+        @app.get("/api/v1/agent-profile")
+        async def agent_profile(
+            capabilities: str = fastapi.Query(
+                default="",
+                description="Comma-separated semantic capabilities to map",
+            ),
+        ):
+            """Return target mapping from capabilities to this world's tools.
+
+            External agents call this to discover which tool name to use
+            for each semantic capability (e.g., cases.list → tickets_list).
+            """
+            from terrarium.kernel.mapping import generate_target_mapping
+
+            tools = await gateway.get_tool_manifest(protocol="mcp")
+            caps = [c.strip() for c in capabilities.split(",") if c.strip()]
+            mapping = generate_target_mapping(caps, tools)
+            return {
+                "target_mapping": mapping,
+                "available_tools": [t.get("name", "") for t in tools],
+            }
+
         @app.get("/api/v1/entities/{entity_type}")
         async def query_entities(
             entity_type: str,
@@ -814,10 +836,13 @@ class HTTPRestAdapter(ProtocolAdapter):
                 None,
             )
             if actor_def is None:
-                return JSONResponse(
-                    status_code=404,
-                    content={"error": f"Actor not found: {actor_id}"},
-                )
+                # Internal engines (world_compiler, etc.) aren't actors
+                # but appear in events — return stub data instead of 404
+                actor_def = {
+                    "id": actor_id,
+                    "role": "system",
+                    "type": "internal",
+                }
 
             # Per-actor scorecard
             scorecard = await gateway._app.artifact_store.load_artifact(

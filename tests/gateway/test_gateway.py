@@ -18,16 +18,16 @@ def _make_mock_app(tools=None, handle_result=None):
     # Mock pack registry on responder
     pack_registry = MagicMock()
     tool_list = tools or [
-        {"name": "email_send", "pack_name": "email", "category": "communication",
+        {"name": "email_send", "pack_name": "gmail", "category": "communication",
          "description": "Send an email", "parameters": {}},
-        {"name": "email_read", "pack_name": "email", "category": "communication",
+        {"name": "email_read", "pack_name": "gmail", "category": "communication",
          "description": "Read an email", "parameters": {}},
     ]
     pack_registry.list_tools.return_value = tool_list
 
     # Mock pack for manifest generation
     mock_pack = MagicMock()
-    mock_pack.pack_name = "email"
+    mock_pack.pack_name = "gmail"
     mock_pack.category = "communication"
     mock_pack.fidelity_tier = 1
     mock_pack.get_tools.return_value = [
@@ -40,7 +40,7 @@ def _make_mock_app(tools=None, handle_result=None):
     mock_pack.get_state_machines.return_value = {}
 
     pack_registry.list_packs.return_value = [
-        {"pack_name": "email", "category": "communication", "fidelity_tier": 1, "tools": ["email_send", "email_read"]},
+        {"pack_name": "gmail", "category": "communication", "fidelity_tier": 1, "tools": ["email_send", "email_read"]},
     ]
     pack_registry.get_pack.return_value = mock_pack
 
@@ -74,7 +74,7 @@ async def test_gateway_initialize_discovers_tools():
     assert gw._started is True
     assert "email_send" in gw._tool_map
     assert "email_read" in gw._tool_map
-    assert gw._tool_map["email_send"] == ("email", "email_send")
+    assert gw._tool_map["email_send"] == ("gmail", "email_send")
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,7 @@ async def test_gateway_handle_request_success():
     app.handle_action.assert_awaited_once()
     call_kwargs = app.handle_action.call_args.kwargs
     assert call_kwargs["actor_id"] == "agent-1"
-    assert call_kwargs["service_id"] == "email"
+    assert call_kwargs["service_id"] == "gmail"
     assert call_kwargs["action"] == "email_send"
 
 
@@ -284,7 +284,7 @@ async def test_new_pack_tools_appear_in_manifest_dynamically():
     pack_registry._packs["calendar"] = calendar_pack
     # Update list_packs to return both
     pack_registry.list_packs.return_value = [
-        {"pack_name": "email", "category": "communication", "fidelity_tier": 1,
+        {"pack_name": "gmail", "category": "communication", "fidelity_tier": 1,
          "tools": ["email_send", "email_read"]},
         {"pack_name": "calendar", "category": "productivity", "fidelity_tier": 1,
          "tools": ["calendar_create", "calendar_list"]},

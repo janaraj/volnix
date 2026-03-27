@@ -7,20 +7,20 @@ world:
     Use this for exploration, testing, and prototyping.
 
   services:
-    email: verified/email
-    chat: verified/chat
-    tickets: verified/tickets
-    payments: profiled/stripe
-    repos: verified/repos
-    calendar: verified/calendar
+    gmail: verified/gmail
+    slack: verified/slack
+    zendesk: verified/zendesk
+    stripe: profiled/stripe
+    github: verified/github
+    google_calendar: verified/google_calendar
 
   actors:
     - role: agent
       type: external
       count: 1
       permissions:
-        read: [email, chat, tickets, payments, repos, calendar]
-        write: [email, chat, tickets, payments, repos, calendar]
+        read: [gmail, slack, zendesk, stripe, github, google_calendar]
+        write: [gmail, slack, zendesk, stripe, github, google_calendar]
       budget:
         api_calls: 1000
 

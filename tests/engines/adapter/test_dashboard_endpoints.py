@@ -20,9 +20,9 @@ from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
 SAMPLE_EVENTS = [
     {
         "event_id": "evt-001",
-        "event_type": "world.zendesk_tickets_create",
+        "event_type": "world.tickets_create",
         "actor_id": "agent-1",
-        "service_id": "tickets",
+        "service_id": "zendesk",
         "target_service": "tickets",
         "outcome": "success",
         "timestamp": "2025-01-01T00:00:00Z",
@@ -39,9 +39,9 @@ SAMPLE_EVENTS = [
     },
     {
         "event_id": "evt-002",
-        "event_type": "world.zendesk_tickets_update",
+        "event_type": "world.tickets_update",
         "actor_id": "agent-1",
-        "service_id": "tickets",
+        "service_id": "zendesk",
         "target_service": "tickets",
         "outcome": "success",
         "timestamp": "2025-01-01T00:01:00Z",
@@ -58,9 +58,9 @@ SAMPLE_EVENTS = [
     },
     {
         "event_id": "evt-003",
-        "event_type": "world.zendesk_ticket_comments_create",
+        "event_type": "world.ticket_comments_create",
         "actor_id": "agent-2",
-        "service_id": "tickets",
+        "service_id": "zendesk",
         "target_service": "tickets",
         "outcome": "success",
         "timestamp": "2025-01-01T00:02:00Z",
@@ -313,7 +313,7 @@ async def test_get_run_events_filter_event_type():
     client, gw = await _make_client()
     async with client:
         resp = await client.get(
-            "/api/v1/runs/run_abc123/events?event_type=world.zendesk_tickets_create"
+            "/api/v1/runs/run_abc123/events?event_type=world.tickets_create"
         )
     body = resp.json()
     assert body["total"] == 1
@@ -511,11 +511,15 @@ async def test_get_actor_detail():
     assert body["scorecard"]["overall_score"] == 0.85
 
 
-async def test_get_actor_detail_not_found():
+async def test_get_actor_detail_unknown_returns_stub():
+    """Unknown actor (e.g., engine name) returns 200 with stub data."""
     client, gw = await _make_client()
     async with client:
-        resp = await client.get("/api/v1/runs/run_abc123/actors/nonexistent")
-    assert resp.status_code == 404
+        resp = await client.get("/api/v1/runs/run_abc123/actors/world_compiler")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["actor_id"] == "world_compiler"
+    assert data["definition"]["type"] == "internal"
 
 
 async def test_get_actor_detail_run_not_found():

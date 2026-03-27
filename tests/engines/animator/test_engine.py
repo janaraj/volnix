@@ -113,7 +113,7 @@ async def test_dynamic_mode_scheduled_events():
     t = _utc()
     scheduler.register_event(t, {
         "actor_id": "npc1",
-        "service_id": "email",
+        "service_id": "gmail",
         "action": "send_email",
         "input_data": {"subject": "test"},
     }, source="test")
@@ -198,7 +198,7 @@ async def test_reactive_mode_events_with_actions():
         event_type="world.email_send",
         timestamp=Timestamp(world_time=_utc(), wall_time=_utc(), tick=1),
         actor_id=ActorId("agent-1"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action="email_send",
     )
     await engine._handle_event(event)
@@ -225,7 +225,7 @@ async def test_execute_event_calls_app_handle_action():
 
     event_def = {
         "actor_id": "npc1",
-        "service_id": "email",
+        "service_id": "gmail",
         "action": "send_reminder",
         "input_data": {"to": "agent@test.com"},
     }
@@ -233,7 +233,7 @@ async def test_execute_event_calls_app_handle_action():
 
     mock_app.handle_action.assert_called_once_with(
         actor_id="npc1",
-        service_id="email",
+        service_id="gmail",
         action="send_reminder",
         input_data={"to": "agent@test.com"},
         world_time=_utc(),

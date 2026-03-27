@@ -8,18 +8,18 @@ world:
     including refund approval thresholds and SLA-based escalation.
 
   services:
-    email: verified/email
-    chat: verified/chat
-    tickets: verified/tickets
-    payments: profiled/stripe
+    gmail: verified/gmail
+    slack: verified/slack
+    zendesk: verified/zendesk
+    stripe: profiled/stripe
 
   actors:
     - role: support-agent
       type: external
       count: 2
       permissions:
-        read: [email, chat, tickets, payments]
-        write: [email, chat, tickets]
+        read: [gmail, slack, zendesk, stripe]
+        write: [gmail, slack, zendesk]
       budget:
         api_calls: 500
         llm_spend: 10.00
@@ -28,8 +28,8 @@ world:
       type: internal
       count: 1
       permissions:
-        read: [email, chat, tickets, payments]
-        write: [email, chat, tickets, payments]
+        read: [gmail, slack, zendesk, stripe]
+        write: [gmail, slack, zendesk, stripe]
 
     - role: customer
       type: internal

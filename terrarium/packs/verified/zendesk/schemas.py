@@ -169,7 +169,7 @@ ORGANIZATION_ENTITY_SCHEMA: dict = {
 
 TICKET_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "zendesk_tickets_list",
+        "name": "tickets_list",
         "description": "List tickets, optionally filtered by status, assignee, or requester.",
         "http_path": "/api/v2/tickets",
         "http_method": "GET",
@@ -210,7 +210,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_tickets_show",
+        "name": "tickets_show",
         "description": "Show details of a specific ticket by ID.",
         "http_path": "/api/v2/tickets/{id}",
         "http_method": "GET",
@@ -232,7 +232,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_tickets_create",
+        "name": "tickets_create",
         "description": "Create a new support ticket.",
         "http_path": "/api/v2/tickets",
         "http_method": "POST",
@@ -281,7 +281,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_tickets_update",
+        "name": "tickets_update",
         "description": "Update an existing ticket.",
         "http_path": "/api/v2/tickets/{id}",
         "http_method": "PUT",
@@ -322,7 +322,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_tickets_delete",
+        "name": "tickets_delete",
         "description": "Soft-delete a ticket (marks as deleted, does not destroy).",
         "http_path": "/api/v2/tickets/{id}",
         "http_method": "DELETE",
@@ -339,7 +339,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "zendesk_tickets_search",
+        "name": "tickets_search",
         "description": "Search tickets using Zendesk search query syntax.",
         "http_path": "/api/v2/search",
         "http_method": "GET",
@@ -372,7 +372,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_ticket_comments_list",
+        "name": "ticket_comments_list",
         "description": "List all comments on a ticket.",
         "http_path": "/api/v2/tickets/{id}/comments",
         "http_method": "GET",
@@ -395,7 +395,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_ticket_comments_create",
+        "name": "ticket_comments_create",
         "description": "Add a comment to a ticket.",
         "http_path": "/api/v2/tickets/{id}/comments",
         "http_method": "POST",
@@ -430,7 +430,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_users_list",
+        "name": "users_list",
         "description": "List users, optionally filtered by role.",
         "http_path": "/api/v2/users",
         "http_method": "GET",
@@ -459,7 +459,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_users_show",
+        "name": "users_show",
         "description": "Show details of a specific user by ID.",
         "http_path": "/api/v2/users/{id}",
         "http_method": "GET",
@@ -481,7 +481,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_groups_list",
+        "name": "groups_list",
         "description": "List all groups.",
         "http_path": "/api/v2/groups",
         "http_method": "GET",
@@ -510,7 +510,7 @@ TICKET_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "zendesk_groups_show",
+        "name": "groups_show",
         "description": "Show details of a specific group by ID.",
         "http_path": "/api/v2/groups/{id}",
         "http_method": "GET",

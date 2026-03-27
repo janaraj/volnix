@@ -1,18 +1,18 @@
-"""Tests for terrarium.packs.verified.repos -- ReposPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.github -- ReposPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.repos.pack import ReposPack
-from terrarium.packs.verified.repos.schemas import (
+from terrarium.packs.verified.github.pack import ReposPack
+from terrarium.packs.verified.github.schemas import (
     COMMIT_ENTITY_SCHEMA,
     ISSUE_ENTITY_SCHEMA,
     PULL_REQUEST_ENTITY_SCHEMA,
     REPOSITORY_ENTITY_SCHEMA,
     REVIEW_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.repos.state_machines import (
+from terrarium.packs.verified.github.state_machines import (
     ISSUE_TRANSITIONS,
     PULL_REQUEST_TRANSITIONS,
     REVIEW_TRANSITIONS,
@@ -265,7 +265,7 @@ def sample_state():
 class TestReposPackMetadata:
     def test_metadata(self, repos_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert repos_pack.pack_name == "repos"
+        assert repos_pack.pack_name == "github"
         assert repos_pack.category == "code"
         assert repos_pack.fidelity_tier == 1
 

@@ -75,9 +75,9 @@ class TestMultiServiceLiveWorld:
             WorldPlan,
         )
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.email.pack import EmailPack
-        from terrarium.packs.verified.chat.pack import ChatPack
-        from terrarium.packs.verified.tickets.pack import TicketsPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
+        from terrarium.packs.verified.slack.pack import ChatPack
+        from terrarium.packs.verified.zendesk.pack import TicketsPack
         from terrarium.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -96,21 +96,21 @@ class TestMultiServiceLiveWorld:
             behavior="dynamic",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email",
-                    spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
                     surface=email_surface,
                     resolution_source="tier1_pack",
                 ),
-                "chat": ServiceResolution(
-                    service_name="chat",
-                    spec_reference="verified/chat",
+                "slack": ServiceResolution(
+                    service_name="slack",
+                    spec_reference="verified/slack",
                     surface=chat_surface,
                     resolution_source="tier1_pack",
                 ),
-                "tickets": ServiceResolution(
-                    service_name="tickets",
-                    spec_reference="verified/tickets",
+                "zendesk": ServiceResolution(
+                    service_name="zendesk",
+                    spec_reference="verified/zendesk",
                     surface=tickets_surface,
                     resolution_source="tier1_pack",
                 ),
@@ -247,19 +247,19 @@ class TestMultiServiceLiveWorld:
         action2 = await app.handle_action(
             agent_id,
             "chat",
-            "slack_post_message",
+            "chat_postMessage",
             {
                 "channel_id": channel_id,
                 "text": "Working on Margaret Chen's $249 refund — needs supervisor approval",
             },
         )
-        print(f"  Action 2 (slack_post_message): {json.dumps(action2, indent=4, default=str)[:300]}")
+        print(f"  Action 2 (chat_postMessage): {json.dumps(action2, indent=4, default=str)[:300]}")
 
         # Action 3: Agent creates a ticket
         action3 = await app.handle_action(
             agent_id,
             "tickets",
-            "zendesk_tickets_create",
+            "tickets_create",
             {
                 "subject": "Margaret Chen - $249 Refund Request",
                 "description": "VIP customer waiting 7 days for refund. Needs supervisor approval.",
@@ -267,7 +267,7 @@ class TestMultiServiceLiveWorld:
                 "priority": "high",
             },
         )
-        print(f"  Action 3 (zendesk_tickets_create): {json.dumps(action3, indent=4, default=str)[:300]}")
+        print(f"  Action 3 (tickets_create): {json.dumps(action3, indent=4, default=str)[:300]}")
 
         # Action 4: Agent updates ticket status
         ticket_id = action3.get("ticket", {}).get("id", "")
@@ -275,14 +275,14 @@ class TestMultiServiceLiveWorld:
             action4 = await app.handle_action(
                 agent_id,
                 "tickets",
-                "zendesk_tickets_update",
+                "tickets_update",
                 {
                     "id": ticket_id,
                     "status": "open",
                     "assignee_id": "support-agent",
                 },
             )
-            print(f"  Action 4 (zendesk_tickets_update): {json.dumps(action4, indent=4, default=str)[:200]}")
+            print(f"  Action 4 (tickets_update): {json.dumps(action4, indent=4, default=str)[:200]}")
 
         # ────────────────────────────────────────────────────
         # STEP 5: Tick the animator (dynamic mode events)

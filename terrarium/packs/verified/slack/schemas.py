@@ -163,7 +163,7 @@ USER_ENTITY_SCHEMA: dict = {
 
 CHAT_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "slack_list_channels",
+        "name": "channels_list",
         "description": "List public and private channels in the workspace.",
         "http_path": "/slack/v1/conversations.list",
         "http_method": "GET",
@@ -192,7 +192,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_post_message",
+        "name": "chat_postMessage",
         "description": "Post a new message to a channel.",
         "http_path": "/slack/v1/chat.postMessage",
         "http_method": "POST",
@@ -215,7 +215,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_update_message",
+        "name": "chat_update",
         "description": "Update an existing message in a channel.",
         "http_path": "/slack/v1/chat.update",
         "http_method": "POST",
@@ -245,7 +245,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_delete_message",
+        "name": "chat_delete",
         "description": "Delete a message from a channel.",
         "http_path": "/slack/v1/chat.delete",
         "http_method": "POST",
@@ -273,7 +273,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_reply_to_thread",
+        "name": "chat_replyToThread",
         "description": "Reply to a message thread in a channel.",
         "http_path": "/slack/v1/chat.postMessage",
         "http_method": "POST",
@@ -303,7 +303,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_add_reaction",
+        "name": "reactions_add",
         "description": "Add an emoji reaction to a message.",
         "http_path": "/slack/v1/reactions.add",
         "http_method": "POST",
@@ -333,7 +333,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_remove_reaction",
+        "name": "reactions_remove",
         "description": "Remove an emoji reaction from a message.",
         "http_path": "/slack/v1/reactions.remove",
         "http_method": "POST",
@@ -363,7 +363,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_get_channel_history",
+        "name": "conversations_history",
         "description": "Retrieve recent messages from a channel.",
         "http_path": "/slack/v1/conversations.history",
         "http_method": "GET",
@@ -397,7 +397,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_get_thread_replies",
+        "name": "conversations_replies",
         "description": "Retrieve all replies in a message thread.",
         "http_path": "/slack/v1/conversations.replies",
         "http_method": "GET",
@@ -424,7 +424,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_get_users",
+        "name": "users_list",
         "description": "List users in the workspace.",
         "http_path": "/slack/v1/users.list",
         "http_method": "GET",
@@ -453,7 +453,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_get_user_profile",
+        "name": "users_profile_get",
         "description": "Get profile information for a specific user.",
         "http_path": "/slack/v1/users.info",
         "http_method": "GET",
@@ -476,7 +476,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_create_channel",
+        "name": "conversations_create",
         "description": "Create a new channel in the workspace.",
         "http_path": "/slack/v1/conversations.create",
         "http_method": "POST",
@@ -504,7 +504,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_archive_channel",
+        "name": "conversations_archive",
         "description": "Archive a channel.",
         "http_path": "/slack/v1/conversations.archive",
         "http_method": "POST",
@@ -526,7 +526,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_join_channel",
+        "name": "conversations_join",
         "description": "Join a channel.",
         "http_path": "/slack/v1/conversations.join",
         "http_method": "POST",
@@ -549,7 +549,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_set_channel_topic",
+        "name": "conversations_setTopic",
         "description": "Set the topic for a channel.",
         "http_path": "/slack/v1/conversations.setTopic",
         "http_method": "POST",
@@ -576,7 +576,7 @@ CHAT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "slack_get_channel_info",
+        "name": "conversations_info",
         "description": "Get detailed information about a channel.",
         "http_path": "/slack/v1/conversations.info",
         "http_method": "GET",

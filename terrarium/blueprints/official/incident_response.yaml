@@ -8,17 +8,17 @@ world:
     under commander approval for production deployments.
 
   services:
-    chat: verified/chat
-    repos: verified/repos
-    calendar: verified/calendar
+    slack: verified/slack
+    github: verified/github
+    google_calendar: verified/google_calendar
 
   actors:
     - role: oncall-engineer
       type: external
       count: 1
       permissions:
-        read: [chat, repos, calendar]
-        write: [chat, repos]
+        read: [slack, github, google_calendar]
+        write: [slack, github]
       budget:
         api_calls: 200
         llm_spend: 5.00
@@ -27,8 +27,8 @@ world:
       type: internal
       count: 1
       permissions:
-        read: [chat, repos, calendar]
-        write: [chat, repos, calendar]
+        read: [slack, github, google_calendar]
+        write: [slack, github, google_calendar]
 
     - role: sre-lead
       type: internal

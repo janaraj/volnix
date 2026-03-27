@@ -22,14 +22,14 @@ def _make_context(
                 "run_id": "run-001",
                 "world_def": {
                     "name": "Support Team",
-                    "services": {"email": "verified/email", "twilio": "profiled/twilio"},
+                    "services": {"gmail": "verified/gmail", "twilio": "profiled/twilio"},
                 },
             },
             {
                 "run_id": "run-002",
                 "world_def": {
                     "name": "Support Team",
-                    "services": {"email": "verified/email", "jira": "profiled/jira"},
+                    "services": {"gmail": "verified/gmail", "jira": "profiled/jira"},
                 },
             },
             {
@@ -43,11 +43,11 @@ def _make_context(
         event_logs=event_logs or {
             "run-001": [
                 {"event_type": "world.twilio_send", "service_id": "twilio"},
-                {"event_type": "world.email_send", "service_id": "email"},
+                {"event_type": "world.email_send", "service_id": "gmail"},
                 {"event_type": "capability.gap", "requested_tool": "slack_post"},
             ],
             "run-002": [
-                {"event_type": "world.email_send", "service_id": "email"},
+                {"event_type": "world.email_send", "service_id": "gmail"},
                 {"event_type": "capability.gap", "requested_tool": "slack_post"},
                 {"event_type": "world.jira_create", "service_id": "jira", "error": "timeout"},
             ],
@@ -70,13 +70,13 @@ async def test_service_usage_signal():
     assert result.signal_name == "service_usage"
     assert len(result.entries) > 0
 
-    # email appears in 2 runs
-    email_entry = next(
-        (e for e in result.entries if e["service_name"] == "email"),
+    # gmail appears in 2 runs
+    gmail_entry = next(
+        (e for e in result.entries if e["service_name"] == "gmail"),
         None,
     )
-    assert email_entry is not None
-    assert email_entry["run_count"] == 2
+    assert gmail_entry is not None
+    assert gmail_entry["run_count"] == 2
 
 
 async def test_capability_gap_signal():

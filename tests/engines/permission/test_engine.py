@@ -12,7 +12,7 @@ from terrarium.engines.permission.engine import PermissionEngine
 def _make_ctx(
     action: str = "email_send",
     actor_id: str = "agent-1",
-    service_id: str = "email",
+    service_id: str = "gmail",
     input_data: dict | None = None,
 ) -> ActionContext:
     """Create a minimal ActionContext for testing."""
@@ -62,25 +62,25 @@ class TestWriteAccess:
     @pytest.mark.asyncio
     async def test_write_access_allowed(self, engine):
         reg = _make_registry(
-            _make_agent(permissions={"write": ["email", "chat"], "read": ["email", "chat"]})
+            _make_agent(permissions={"write": ["gmail", "slack"], "read": ["gmail", "slack"]})
         )
         engine._actor_registry = reg
-        ctx = _make_ctx(action="email_send", service_id="email")
+        ctx = _make_ctx(action="email_send", service_id="gmail")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
     async def test_write_access_denied(self, engine):
         reg = _make_registry(
-            _make_agent(permissions={"write": ["email", "chat"], "read": ["email", "chat", "payments"]})
+            _make_agent(permissions={"write": ["gmail", "slack"], "read": ["gmail", "slack", "stripe"]})
         )
         engine._actor_registry = reg
-        ctx = _make_ctx(action="stripe_refunds_create", service_id="payments")
+        ctx = _make_ctx(action="stripe_refunds_create", service_id="stripe")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.DENY
         assert len(result.events) == 1
         assert isinstance(result.events[0], PermissionDeniedEvent)
-        assert "payments" in result.events[0].reason
+        assert "stripe" in result.events[0].reason
 
     @pytest.mark.asyncio
     async def test_write_all_access(self, engine):
@@ -95,10 +95,10 @@ class TestWriteAccess:
     @pytest.mark.asyncio
     async def test_empty_write_list_denies(self, engine):
         reg = _make_registry(
-            _make_agent(permissions={"write": [], "read": ["email"]})
+            _make_agent(permissions={"write": [], "read": ["gmail"]})
         )
         engine._actor_registry = reg
-        ctx = _make_ctx(action="email_send", service_id="email")
+        ctx = _make_ctx(action="email_send", service_id="gmail")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.DENY
 
@@ -155,8 +155,8 @@ class TestActionConstraints:
         reg = _make_registry(
             _make_agent(
                 permissions={
-                    "read": ["payments"],
-                    "write": ["payments"],
+                    "read": ["stripe"],
+                    "write": ["stripe"],
                     "actions": {"refund_create": {"max_amount": 5000}},
                 }
             )
@@ -164,7 +164,7 @@ class TestActionConstraints:
         engine._actor_registry = reg
         ctx = _make_ctx(
             action="refund_create",
-            service_id="payments",
+            service_id="stripe",
             input_data={"amount": 3000},
         )
         result = await engine.execute(ctx)
@@ -175,8 +175,8 @@ class TestActionConstraints:
         reg = _make_registry(
             _make_agent(
                 permissions={
-                    "read": ["payments"],
-                    "write": ["payments"],
+                    "read": ["stripe"],
+                    "write": ["stripe"],
                     "actions": {"refund_create": {"max_amount": 5000}},
                 }
             )
@@ -184,7 +184,7 @@ class TestActionConstraints:
         engine._actor_registry = reg
         ctx = _make_ctx(
             action="refund_create",
-            service_id="payments",
+            service_id="stripe",
             input_data={"amount": 10000},
         )
         result = await engine.execute(ctx)
@@ -202,10 +202,10 @@ class TestReadAccess:
         """Actor with read access to service → ALLOW."""
         actor = ActorDefinition(
             id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
-            permissions={"read": ["email", "payments"], "write": ["email"]},
+            permissions={"read": ["gmail", "stripe"], "write": ["gmail"]},
         )
         engine._actor_registry = _make_registry(actor)
-        result = await engine.execute(_make_ctx(service_id="email"))
+        result = await engine.execute(_make_ctx(service_id="gmail"))
         assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
@@ -213,11 +213,11 @@ class TestReadAccess:
         """Actor without read access to service → DENY."""
         actor = ActorDefinition(
             id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
-            permissions={"read": ["email"], "write": ["email", "payments"]},
+            permissions={"read": ["gmail"], "write": ["gmail", "stripe"]},
         )
         engine._actor_registry = _make_registry(actor)
         # Agent has WRITE to payments but NOT READ
-        result = await engine.execute(_make_ctx(service_id="payments"))
+        result = await engine.execute(_make_ctx(service_id="stripe"))
         assert result.verdict == StepVerdict.DENY
         assert any(isinstance(e, PermissionDeniedEvent) for e in result.events)
         assert "read" in result.message.lower()
@@ -230,7 +230,7 @@ class TestReadAccess:
             permissions={"read": "all", "write": "all"},
         )
         engine._actor_registry = _make_registry(actor)
-        result = await engine.execute(_make_ctx(service_id="payments"))
+        result = await engine.execute(_make_ctx(service_id="stripe"))
         assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
@@ -241,7 +241,7 @@ class TestReadAccess:
             permissions={"write": "supervisor", "read": "all"},
         )
         engine._actor_registry = _make_registry(actor)
-        result = await engine.execute(_make_ctx(service_id="email"))
+        result = await engine.execute(_make_ctx(service_id="gmail"))
         # "supervisor" is not "all" and not a list → _has_access returns False → DENY
         assert result.verdict == StepVerdict.DENY
 
@@ -253,10 +253,10 @@ class TestUngovernedMode:
     async def test_ungoverned_denied_but_allowed(self, engine):
         engine._world_mode = "ungoverned"
         reg = _make_registry(
-            _make_agent(permissions={"write": ["email"], "read": ["email"]})
+            _make_agent(permissions={"write": ["gmail"], "read": ["gmail"]})
         )
         engine._actor_registry = reg
-        ctx = _make_ctx(action="stripe_refunds_create", service_id="payments")
+        ctx = _make_ctx(action="stripe_refunds_create", service_id="stripe")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
         assert len(result.events) == 1
@@ -269,7 +269,7 @@ class TestUngovernedMode:
         reg = _make_registry(
             _make_agent(
                 permissions={
-                    "write": ["payments"],
+                    "write": ["stripe"],
                     "actions": {"refund_create": {"max_amount": 5000}},
                 }
             )
@@ -277,7 +277,7 @@ class TestUngovernedMode:
         engine._actor_registry = reg
         ctx = _make_ctx(
             action="refund_create",
-            service_id="payments",
+            service_id="stripe",
             input_data={"amount": 10000},
         )
         result = await engine.execute(ctx)

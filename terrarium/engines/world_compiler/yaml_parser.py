@@ -97,7 +97,7 @@ class YAMLParser:
         """Extract service_name → spec_reference mapping.
 
         Handles all formats from the spec:
-        - Simple: email: verified/email
+        - Simple: gmail: verified/gmail
         - Complex: web: {provider: verified/browser, sites: [...]}
         - Bare: stripe (no prefix)
         """

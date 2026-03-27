@@ -1,10 +1,10 @@
-"""Tests for terrarium.packs.verified.email — EmailPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.gmail — EmailPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.email.pack import EmailPack
+from terrarium.packs.verified.gmail.pack import EmailPack
 from terrarium.validation.schema import SchemaValidator
 from terrarium.validation.state_machine import StateMachineValidator
 
@@ -56,7 +56,7 @@ def sample_state():
 class TestEmailPackMetadata:
     def test_metadata(self, email_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert email_pack.pack_name == "email"
+        assert email_pack.pack_name == "gmail"
         assert email_pack.category == "communication"
         assert email_pack.fidelity_tier == 1
 
@@ -67,14 +67,14 @@ class TestEmailPackMetadata:
         tool_names = {t["name"] for t in tools}
         # Gmail-aligned
         assert tool_names >= {
-            "search_gmail_messages",
-            "get_gmail_message",
-            "send_gmail_message",
-            "create_gmail_draft",
-            "modify_gmail_message",
-            "trash_gmail_message",
-            "delete_gmail_message",
-            "list_gmail_labels",
+            "messages_search",
+            "messages_get",
+            "messages_send",
+            "drafts_create",
+            "messages_modify",
+            "messages_trash",
+            "messages_delete",
+            "labels_list",
         }
         # Legacy (backward compat)
         assert tool_names >= {

@@ -24,7 +24,7 @@ def _make_ctx(action="email_send"):
     return ActionContext(
         request_id="req-test-001",
         actor_id=ActorId("actor-test"),
-        service_id=ServiceId("email"),
+        service_id=ServiceId("gmail"),
         action=action,
         input_data={},
         world_time=now,

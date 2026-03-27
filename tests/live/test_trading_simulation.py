@@ -71,7 +71,7 @@ class TestTradingSimulation:
             WorldPlan,
         )
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.trading.pack import TradingPack
+        from terrarium.packs.verified.alpaca.pack import TradingPack
         from terrarium.reality.presets import load_preset
 
         trading_surface = ServiceSurface.from_pack(TradingPack())
@@ -90,9 +90,9 @@ class TestTradingSimulation:
             behavior="dynamic",
             mode="governed",
             services={
-                "trading": ServiceResolution(
-                    service_name="trading",
-                    spec_reference="verified/trading",
+                "alpaca": ServiceResolution(
+                    service_name="alpaca",
+                    spec_reference="verified/alpaca",
                     surface=trading_surface,
                     resolution_source="tier1_pack",
                 ),
@@ -223,14 +223,14 @@ class TestTradingSimulation:
         # 4a: Check account
         print("\n  4a. Checking account...")
         r_account = await app.handle_action(
-            agent_id, "trading", "alpaca_get_account", {},
+            agent_id, "alpaca", "get_account", {},
         )
         print(f"      Account: {json.dumps(r_account, default=str)[:300]}")
 
         # 4b: List available assets
         print("\n  4b. Listing assets...")
         r_assets = await app.handle_action(
-            agent_id, "trading", "alpaca_list_assets", {},
+            agent_id, "alpaca", "list_assets", {},
         )
         assets_data = r_assets.get("assets", r_assets)
         asset_count = len(assets_data) if isinstance(assets_data, list) else 0
@@ -242,7 +242,7 @@ class TestTradingSimulation:
             first_symbol = quotes[0].get("symbol", "AAPL")
             print(f"\n  4c. Getting latest quote for {first_symbol}...")
             r_quote = await app.handle_action(
-                agent_id, "trading", "alpaca_get_latest_quote",
+                agent_id, "alpaca", "get_latest_quote",
                 {"symbol": first_symbol},
             )
             print(f"      Quote: {json.dumps(r_quote, default=str)[:200]}")
@@ -251,7 +251,7 @@ class TestTradingSimulation:
         if quotes:
             print(f"\n  4d. Getting bars for {first_symbol}...")
             r_bars = await app.handle_action(
-                agent_id, "trading", "alpaca_get_bars",
+                agent_id, "alpaca", "get_bars",
                 {"symbol": first_symbol, "limit": 5},
             )
             bar_count = len(r_bars.get("bars", []))
@@ -261,7 +261,7 @@ class TestTradingSimulation:
         if quotes:
             print(f"\n  4e. Placing market buy for {first_symbol}...")
             r_order = await app.handle_action(
-                agent_id, "trading", "alpaca_create_order",
+                agent_id, "alpaca", "create_order",
                 {
                     "symbol": first_symbol,
                     "qty": "10",
@@ -277,7 +277,7 @@ class TestTradingSimulation:
         # 4f: Check positions
         print("\n  4f. Checking positions...")
         r_positions = await app.handle_action(
-            agent_id, "trading", "alpaca_list_positions", {},
+            agent_id, "alpaca", "list_positions", {},
         )
         positions_data = r_positions.get("positions", r_positions)
         pos_count = len(positions_data) if isinstance(positions_data, list) else 0
@@ -293,14 +293,14 @@ class TestTradingSimulation:
         # 4g: Get market clock
         print("\n  4g. Market clock...")
         r_clock = await app.handle_action(
-            agent_id, "trading", "alpaca_get_clock", {},
+            agent_id, "alpaca", "get_clock", {},
         )
         print(f"      Clock: {json.dumps(r_clock, default=str)[:150]}")
 
         # 4h: Read news
         print("\n  4h. Reading news...")
         r_news = await app.handle_action(
-            agent_id, "trading", "alpaca_get_news", {"limit": 3},
+            agent_id, "alpaca", "get_news", {"limit": 3},
         )
         news_items = r_news.get("news", [])
         print(f"      News articles: {len(news_items)}")
@@ -315,7 +315,7 @@ class TestTradingSimulation:
         if sentiments:
             sym = sentiments[0].get("symbol", "NVDA")
             r_sent = await app.handle_action(
-                agent_id, "trading", "social_get_sentiment",
+                agent_id, "alpaca", "social_get_sentiment",
                 {"symbol": sym},
             )
             print(f"      {sym} sentiment: {r_sent.get('score', 'N/A')}")
@@ -323,7 +323,7 @@ class TestTradingSimulation:
         # 4j: Check trending
         print("\n  4j. Trending symbols...")
         r_trending = await app.handle_action(
-            agent_id, "trading", "social_get_trending", {"limit": 5},
+            agent_id, "alpaca", "social_get_trending", {"limit": 5},
         )
         trending = r_trending.get("trending", [])
         print(f"      Trending: {[t.get('symbol') for t in trending[:5]]}")
@@ -357,7 +357,7 @@ class TestTradingSimulation:
             close_symbol = positions[0].get("symbol", "")
             print(f"  Closing position: {close_symbol}...")
             r_close = await app.handle_action(
-                agent_id, "trading", "alpaca_close_position",
+                agent_id, "alpaca", "close_position",
                 {"symbol": close_symbol},
             )
             close_status = r_close.get("status", "unknown")

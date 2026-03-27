@@ -13,7 +13,7 @@ async def start_http_adapter(app: Any) -> Any:
     adapter = app.gateway._adapters["http"]
     original_get_tool_manifest = app.gateway.get_tool_manifest
     responder = app.registry.get("responder")
-    email_pack = responder._pack_registry.get_pack("email")
+    email_pack = responder._pack_registry.get_pack("gmail")
 
     async def _stable_manifest(actor_id: str | None = None, protocol: str = "http"):
         if protocol == "http":

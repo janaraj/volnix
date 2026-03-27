@@ -242,7 +242,7 @@ class TestFullLifecycle:
 
         from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.email.pack import EmailPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
         from terrarium.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -254,8 +254,8 @@ class TestFullLifecycle:
             behavior="static",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email", spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail", spec_reference="verified/gmail",
                     surface=email_surface, resolution_source="tier1_pack",
                 ),
                 "jira": ServiceResolution(
@@ -423,7 +423,7 @@ class TestContextHubSource:
 
         from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.email.pack import EmailPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
         from terrarium.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -435,8 +435,8 @@ class TestContextHubSource:
             behavior="static",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email", spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail", spec_reference="verified/gmail",
                     surface=email_surface, resolution_source="tier1_pack",
                 ),
                 "twilio": ServiceResolution(

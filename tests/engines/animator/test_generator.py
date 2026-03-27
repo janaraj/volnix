@@ -113,7 +113,7 @@ async def test_generate_parses_json_array():
     """Generator correctly parses a JSON array response from LLM."""
     mock_router = AsyncMock()
     events = [
-        {"actor_id": "npc1", "service_id": "email", "action": "send_msg",
+        {"actor_id": "npc1", "service_id": "gmail", "action": "send_msg",
          "input_data": {"to": "agent@test.com"}, "sub_type": "organic"},
         {"actor_id": "npc2", "service_id": "world", "action": "status_update",
          "input_data": {}, "sub_type": "organic"},

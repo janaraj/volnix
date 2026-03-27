@@ -79,9 +79,9 @@ class TestAgencyLiveSimulation:
 
         from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
         from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.email.pack import EmailPack
-        from terrarium.packs.verified.chat.pack import ChatPack
-        from terrarium.packs.verified.tickets.pack import TicketsPack
+        from terrarium.packs.verified.gmail.pack import EmailPack
+        from terrarium.packs.verified.slack.pack import ChatPack
+        from terrarium.packs.verified.zendesk.pack import TicketsPack
         from terrarium.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -99,16 +99,16 @@ class TestAgencyLiveSimulation:
             behavior="dynamic",
             mode="governed",
             services={
-                "email": ServiceResolution(
-                    service_name="email", spec_reference="verified/email",
+                "gmail": ServiceResolution(
+                    service_name="gmail", spec_reference="verified/gmail",
                     surface=email_surface, resolution_source="tier1_pack",
                 ),
-                "chat": ServiceResolution(
-                    service_name="chat", spec_reference="verified/chat",
+                "slack": ServiceResolution(
+                    service_name="slack", spec_reference="verified/slack",
                     surface=chat_surface, resolution_source="tier1_pack",
                 ),
-                "tickets": ServiceResolution(
-                    service_name="tickets", spec_reference="verified/tickets",
+                "zendesk": ServiceResolution(
+                    service_name="zendesk", spec_reference="verified/zendesk",
                     surface=tickets_surface, resolution_source="tier1_pack",
                 ),
             },
@@ -248,15 +248,15 @@ class TestAgencyLiveSimulation:
 
         # Create a committed event that targets a watched entity
         test_event = WorldEvent(
-            event_type="world.zendesk_tickets_update",
+            event_type="world.tickets_update",
             timestamp=Timestamp(
                 world_time=datetime.now(UTC),
                 wall_time=datetime.now(UTC),
                 tick=1,
             ),
             actor_id=ActorId(agent_id),
-            service_id=ServiceId("tickets"),
-            action="zendesk_tickets_update",
+            service_id=ServiceId("zendesk"),
+            action="tickets_update",
             target_entity=EntityId(watched_entity_id) if watched_entity_id else None,
             source=ActionSource.EXTERNAL,
         )

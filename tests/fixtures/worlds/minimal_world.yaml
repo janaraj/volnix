@@ -2,7 +2,7 @@ world:
   name: "Minimal Test World"
   description: "A simple test world"
   services:
-    email: verified/email
+    gmail: verified/gmail
   actors:
     - role: agent
       type: external

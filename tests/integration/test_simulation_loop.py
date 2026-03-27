@@ -99,7 +99,7 @@ async def test_dynamic_mode_scheduled_events_executed():
     t = _utc()
     scheduler.register_event(t, {
         "actor_id": "npc_support",
-        "service_id": "email",
+        "service_id": "gmail",
         "action": "send_reminder",
         "input_data": {"subject": "Follow up"},
         "sub_type": "scheduled",
@@ -111,7 +111,7 @@ async def test_dynamic_mode_scheduled_events_executed():
     # App pipeline was called
     mock_app.handle_action.assert_called_once_with(
         actor_id="npc_support",
-        service_id="email",
+        service_id="gmail",
         action="send_reminder",
         input_data={"subject": "Follow up"},
         world_time=t,

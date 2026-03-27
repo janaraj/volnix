@@ -16,7 +16,7 @@ from terrarium.engines.budget.engine import BudgetEngine
 def _make_ctx(
     action: str = "email_send",
     actor_id: str = "agent-1",
-    service_id: str = "email",
+    service_id: str = "gmail",
     input_data: dict | None = None,
 ) -> ActionContext:
     """Create a minimal ActionContext for testing."""

@@ -1,11 +1,11 @@
-"""Tests for terrarium.packs.verified.calendar -- CalendarPack through pack's own handle_action."""
+"""Tests for terrarium.packs.verified.google_calendar -- CalendarPack through pack's own handle_action."""
 
 import pytest
 
 from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
-from terrarium.packs.verified.calendar.pack import CalendarPack
-from terrarium.packs.verified.calendar.schemas import (
+from terrarium.packs.verified.google_calendar.pack import CalendarPack
+from terrarium.packs.verified.google_calendar.schemas import (
     ATTENDEE_ENTITY_SCHEMA,
     CALENDAR_ENTITY_SCHEMA,
     EVENT_ENTITY_SCHEMA,
@@ -142,7 +142,7 @@ def sample_state():
 class TestCalendarPackMetadata:
     def test_metadata(self, calendar_pack):
         """pack_name, category, fidelity_tier are correct."""
-        assert calendar_pack.pack_name == "calendar"
+        assert calendar_pack.pack_name == "google_calendar"
         assert calendar_pack.category == "scheduling"
         assert calendar_pack.fidelity_tier == 1
 

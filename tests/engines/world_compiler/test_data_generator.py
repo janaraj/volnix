@@ -45,9 +45,9 @@ def _make_plan(
         description="test world",
         seed=42,
         services={
-            "email": ServiceResolution(
-                service_name="email",
-                spec_reference="verified/email",
+            "gmail": ServiceResolution(
+                service_name="gmail",
+                spec_reference="verified/gmail",
                 surface=surface,
                 resolution_source="tier1_pack",
             )
