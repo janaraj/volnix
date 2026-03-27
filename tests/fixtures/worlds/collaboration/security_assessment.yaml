@@ -1,0 +1,67 @@
+# ===================================================================
+# WORLD DEFINITION -- Security Posture Assessment
+# ===================================================================
+
+world:
+  name: "Security Posture Assessment"
+  description: >
+    A security team conducting a quarterly assessment of the
+    company's security posture. Recent incidents and audit findings
+    need to be reviewed, risks ranked, and an action plan produced.
+    The team has different areas of expertise and sometimes
+    disagrees on risk severity.
+
+  # --- Services: what systems exist in this world ---
+  services:
+    slack: verified/slack
+
+  # --- Actors: who lives in this world ---
+  actors:
+    - role: security-lead
+      type: internal
+      lead: true
+      personality: >
+        Strategic security thinker. Balances risk mitigation with
+        business enablement. Prioritizes by actual exploitability
+        rather than theoretical severity. Good at communicating
+        risk to non-technical stakeholders.
+
+    - role: network-engineer
+      type: internal
+      personality: >
+        Deep infrastructure expertise. Focused on network
+        segmentation, firewall rules, and traffic analysis.
+        Tends to see everything as a network problem. Thorough
+        in documenting findings but sometimes overestimates
+        network-layer risks.
+
+    - role: compliance-officer
+      type: internal
+      personality: >
+        Regulatory-focused. Tracks SOC 2, GDPR, and industry
+        standards. Insists on documented controls and evidence
+        of compliance. Sometimes at odds with engineering on
+        implementation timelines. Risk-averse.
+
+  # --- Collaboration settings ---
+  collaboration:
+    mode: tagged
+
+  # --- Seeds: specific situations guaranteed ---
+  seeds:
+    - "Last quarter's penetration test found 3 critical and 7 high vulnerabilities"
+    - "Two critical patches are 30 days overdue on production servers"
+    - "SOC 2 audit is in 6 weeks and 4 controls have gaps"
+    - "A phishing attempt last month compromised one employee's credentials"
+    - "The new microservices deployment has no network segmentation yet"
+
+  # --- Mission: what success looks like ---
+  mission: >
+    Assess the company's current security posture. Identify all
+    risks with severity ratings, note compliance gaps, highlight
+    strengths, and produce a prioritized action plan with owners
+    and deadlines.
+
+  # --- Deliverable ---
+  deliverable:
+    preset: assessment

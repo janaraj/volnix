@@ -1,0 +1,62 @@
+# ===================================================================
+# WORLD DEFINITION -- Market Prediction Analysis
+# ===================================================================
+
+world:
+  name: "Market Prediction Analysis"
+  description: >
+    A team of financial analysts tasked with predicting S&P 500
+    direction over the next quarter. Each analyst brings a different
+    lens -- macro fundamentals, technical patterns, and risk metrics.
+    They must reconcile their views into a unified outlook.
+
+  # --- Services: what systems exist in this world ---
+  services:
+    slack: verified/slack
+
+  # --- Actors: who lives in this world ---
+  actors:
+    - role: macro-economist
+      type: internal
+      lead: true
+      personality: >
+        Focuses on GDP, employment, and Fed policy signals.
+        Tends toward cautious, fundamentals-based predictions.
+        Weighs leading indicators heavily and distrusts purely
+        technical signals.
+
+    - role: technical-analyst
+      type: internal
+      personality: >
+        Chart pattern expert. Relies on moving averages, RSI,
+        and volume analysis. Confident in trend continuation
+        signals. Dismissive of macro noise in short timeframes.
+
+    - role: risk-analyst
+      type: internal
+      personality: >
+        Focused on tail risks and black swan events. Tracks
+        volatility indices, credit spreads, and geopolitical
+        factors. Tends to be bearish and highlights downside
+        scenarios others overlook.
+
+  # --- Collaboration settings ---
+  collaboration:
+    mode: tagged
+
+  # --- Seeds: specific situations guaranteed ---
+  seeds:
+    - "Fed signaled a possible rate pause at the next meeting"
+    - "S&P 500 has been in a 3-month uptrend with weakening volume"
+    - "VIX is at historically low levels despite rising geopolitical tensions"
+    - "Corporate earnings season starts in 2 weeks with mixed guidance"
+
+  # --- Mission: what success looks like ---
+  mission: >
+    Predict the S&P 500 direction over the next quarter.
+    Provide a confidence level, identify key risk factors,
+    and outline bull/bear/base case scenarios with probabilities.
+
+  # --- Deliverable ---
+  deliverable:
+    preset: prediction

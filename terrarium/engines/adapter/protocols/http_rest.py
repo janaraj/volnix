@@ -723,7 +723,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             world_def = run_data.get("world_def", {}) if run_data else {}
             actor_roles = {
                 a.get("id", ""): a.get("role", "")
-                for a in world_def.get("actors", [])
+                for a in world_def.get("actor_specs", world_def.get("actors", []))
                 if isinstance(a, dict)
             }
 
@@ -845,22 +845,29 @@ class HTTPRestAdapter(ProtocolAdapter):
             """Paginated entities for a run, filterable by type."""
             from terrarium.core.types import RunId as _RId
 
-            report = await gateway._app.artifact_store.load_artifact(
+            config = await gateway._app.artifact_store.load_artifact(
                 _RId(run_id),
-                "report",
+                "config",
             )
-            entities_by_type = report.get("entities", {}) if report else {}
+            entities_by_type = config.get("entities", {}) if config else {}
 
             all_entities: list[dict] = []
             for etype, elist in entities_by_type.items():
                 if entity_type and etype != entity_type:
                     continue
                 items = elist if isinstance(elist, list) else [elist]
-                for e in items:
+                for idx, e in enumerate(items):
+                    if not isinstance(e, dict):
+                        continue
+                    # Config entities are raw service data (e.g. Zendesk
+                    # tickets, Gmail messages) keyed by "id".  Wrap them
+                    # into the Entity API shape the frontend expects.
+                    eid = e.get("id", "") or f"{etype}_{idx}"
                     all_entities.append(
                         {
+                            "entity_id": eid,
                             "entity_type": etype,
-                            **(e if isinstance(e, dict) else {}),
+                            "current_state": e,
                         }
                     )
 
@@ -879,15 +886,15 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             from terrarium.core.types import RunId as _RId
 
-            # Find entity in report
-            report = await gateway._app.artifact_store.load_artifact(
+            # Find entity in compilation config
+            config = await gateway._app.artifact_store.load_artifact(
                 _RId(run_id),
-                "report",
+                "config",
             )
             entity = None
             entity_type = None
-            if report:
-                for etype, elist in report.get("entities", {}).items():
+            if config:
+                for etype, elist in config.get("entities", {}).items():
                     items = elist if isinstance(elist, list) else [elist]
                     for e in items:
                         if isinstance(e, dict) and e.get("id") == entity_id:
@@ -957,7 +964,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                     status_code=404,
                     content={"error": f"Run not found: {run_id}"},
                 )
-            actors = run.get("world_def", {}).get("actors", [])
+            wd = run.get("world_def", {})
+            actors = wd.get("actor_specs", wd.get("actors", []))
             return {"run_id": run_id, "actors": actors, "count": len(actors)}
 
         @app.get("/api/v1/runs/{run_id}/actors/{actor_id}")
@@ -975,7 +983,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                 )
 
             # Actor definition from world_def
-            actors = run.get("world_def", {}).get("actors", [])
+            wd = run.get("world_def", {})
+            actors = wd.get("actor_specs", wd.get("actors", []))
             actor_def = next(
                 (a for a in actors if a.get("id") == actor_id),
                 None,
@@ -1067,7 +1076,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             world_def = run_data.get("world_def", {}) if run_data else {}
             actor_roles = {
                 a.get("id", ""): a.get("role", "")
-                for a in world_def.get("actors", [])
+                for a in world_def.get("actor_specs", world_def.get("actors", []))
                 if isinstance(a, dict)
             }
 

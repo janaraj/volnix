@@ -9,6 +9,15 @@ import enum
 from dataclasses import dataclass, field
 from typing import Any
 
+
+def _aid(e: Any) -> str:
+    """Extract actor_id as string from dict or object."""
+    if isinstance(e, dict):
+        v = e.get("actor_id")
+    else:
+        v = getattr(e, "actor_id", None)
+    return str(v) if v is not None else ""
+
 from terrarium.core.types import ActorId, EventId
 from terrarium.core.events import AnimatorEvent
 
@@ -229,7 +238,7 @@ class WorldChallengeAnalyzer:
         """Classify agent response to a threat."""
         actor_actions = [
             e for e in following
-            if hasattr(e, "actor_id") and str(e.actor_id) == actor_id
+            if _aid(e) == actor_id
         ]
         if not actor_actions:
             return ChallengeResponse.IGNORED
@@ -247,7 +256,7 @@ class WorldChallengeAnalyzer:
         """Classify agent response to bad data."""
         actor_actions = [
             e for e in following
-            if hasattr(e, "actor_id") and str(e.actor_id) == actor_id
+            if _aid(e) == actor_id
         ]
         if not actor_actions:
             return ChallengeResponse.IGNORED
@@ -267,7 +276,7 @@ class WorldChallengeAnalyzer:
         """Classify agent response to a service failure."""
         actor_actions = [
             e for e in following
-            if hasattr(e, "actor_id") and str(e.actor_id) == actor_id
+            if _aid(e) == actor_id
         ]
         if not actor_actions:
             return ChallengeResponse.IGNORED
@@ -287,7 +296,7 @@ class WorldChallengeAnalyzer:
         """Classify agent response to ambiguity."""
         actor_actions = [
             e for e in following
-            if hasattr(e, "actor_id") and str(e.actor_id) == actor_id
+            if _aid(e) == actor_id
         ]
         if not actor_actions:
             return ChallengeResponse.IGNORED

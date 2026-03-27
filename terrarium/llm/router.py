@@ -7,12 +7,18 @@ engine name and use-case, using the routing table from configuration.
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
+from datetime import UTC, datetime
+from pathlib import Path
 
 from terrarium.llm.config import LLMConfig, LLMRoutingEntry
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.registry import ProviderRegistry
 from terrarium.llm.tracker import UsageTracker
 from terrarium.llm.types import LLMRequest, LLMResponse
+
+logger = logging.getLogger(__name__)
 
 
 class LLMRouter:
@@ -107,6 +113,10 @@ class LLMRouter:
         if self._tracker:
             await self._tracker.record(request, response, engine_name)
 
+        # Debug-level: write LLM response content to file for traceability
+        if logger.isEnabledFor(logging.DEBUG):
+            self._write_debug_response(engine_name, use_case, request, response)
+
         return response
 
     def get_provider_for(
@@ -141,3 +151,48 @@ class LLMRouter:
         if routing and routing.model:
             return routing.model
         return self._config.defaults.default_model
+
+    # ── Debug response logging ────────────────────────────────────
+
+    _LLM_DEBUG_DIR = Path("data/llm_debug")
+
+    def _write_debug_response(
+        self,
+        engine_name: str,
+        use_case: str,
+        request: LLMRequest,
+        response: LLMResponse,
+    ) -> None:
+        """Write LLM response content to a debug file.
+
+        Only called when log level is DEBUG. Files are written to
+        ``data/llm_debug/`` with timestamps for easy correlation.
+        """
+        try:
+            self._LLM_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"{ts}_{engine_name}_{use_case}.json"
+            payload = {
+                "timestamp": ts,
+                "engine": engine_name,
+                "use_case": use_case,
+                "provider": response.provider,
+                "model": response.model,
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "latency_ms": response.latency_ms,
+                "success": response.error is None,
+                "error": response.error,
+                "system_prompt": (
+                    request.system_prompt[:500] + "..."
+                    if len(request.system_prompt) > 500
+                    else request.system_prompt
+                ),
+                "user_content": request.user_content,
+                "response_content": response.content,
+            }
+            (self._LLM_DEBUG_DIR / filename).write_text(
+                json.dumps(payload, indent=2, default=str)
+            )
+        except Exception:
+            logger.debug("Failed to write LLM debug file", exc_info=True)

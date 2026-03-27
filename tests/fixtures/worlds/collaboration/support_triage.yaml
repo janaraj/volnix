@@ -1,0 +1,63 @@
+# ===================================================================
+# WORLD DEFINITION -- Support Ticket Triage
+# ===================================================================
+
+world:
+  name: "Support Ticket Triage"
+  description: >
+    A support team reviewing and prioritizing a backlog of open
+    tickets after a weekend outage. Some tickets are past SLA,
+    some are duplicates, and VIP customers need immediate attention.
+    The team coordinates via Slack and manages tickets in Zendesk.
+
+  # --- Services: what systems exist in this world ---
+  services:
+    slack: verified/slack
+    zendesk: verified/zendesk
+
+  # --- Actors: who lives in this world ---
+  actors:
+    - role: support-lead
+      type: internal
+      lead: true
+      personality: >
+        Experienced team lead. Prioritizes by business impact
+        and SLA urgency. Delegates effectively and keeps the team
+        focused on highest-value tickets first. Calm under pressure.
+
+    - role: senior-agent
+      type: internal
+      personality: >
+        Thorough and knowledgeable. Handles complex escalations
+        and VIP customers. Takes initiative to identify duplicate
+        tickets and consolidate them. Mentors junior agents.
+
+    - role: junior-agent
+      type: internal
+      personality: >
+        Eager but sometimes overwhelmed by volume. Asks good
+        questions when unsure. Fast at routine tickets but needs
+        guidance on edge cases. Occasionally misses context.
+
+  # --- Collaboration settings ---
+  collaboration:
+    mode: tagged
+
+  # --- Seeds: specific situations guaranteed ---
+  seeds:
+    - "Weekend outage caused 47 new tickets, 12 are past SLA"
+    - "VIP customer Acme Corp has 3 open tickets about the same API issue"
+    - "Several tickets are duplicates from customers who submitted via email and web form"
+    - "One ticket from a churning enterprise customer mentions legal action"
+    - "Junior agent handled a refund request incorrectly yesterday and it needs review"
+
+  # --- Mission: what success looks like ---
+  mission: >
+    Review and prioritize all open support tickets. Identify
+    duplicates, flag SLA breaches, and assign tickets by priority.
+    Produce a prioritized recommendation list with rationale
+    for the ordering.
+
+  # --- Deliverable ---
+  deliverable:
+    preset: recommendation

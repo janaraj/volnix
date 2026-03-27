@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from terrarium.core import GapResponse
-from terrarium.core.events import CapabilityGapEvent
+
+
+def _get(obj: Any, key: str, default: Any = None) -> Any:
+    """Get a field from a dict or object transparently."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 
 class GapAnalyzer:
@@ -23,13 +29,16 @@ class GapAnalyzer:
         """
         gaps: list[dict[str, Any]] = []
         for i, event in enumerate(events):
-            if isinstance(event, CapabilityGapEvent):
+            et = str(_get(event, "event_type", ""))
+            if et == "capability.gap":
                 following = events[i + 1 : i + 4]  # Next 3 actions (lookahead)
                 response = self._classify_response(event, following)
+                ts = _get(event, "timestamp", {})
+                tick = ts.get("tick", "") if isinstance(ts, dict) else getattr(ts, "tick", "")
                 gaps.append({
-                    "tick": str(getattr(event.timestamp, "tick", "")),
-                    "agent": str(event.actor_id),
-                    "tool": str(event.requested_tool),
+                    "tick": str(tick),
+                    "agent": str(_get(event, "actor_id", "")),
+                    "tool": str(_get(event, "requested_tool", "")),
                     "response": response.value,
                     "response_label": response.name,
                 })
@@ -50,18 +59,18 @@ class GapAnalyzer:
         if not following_events:
             return GapResponse.SKIPPED
 
-        actor = str(gap_event.actor_id)
+        actor = str(_get(gap_event, "actor_id", ""))
         actor_actions = [
             e for e in following_events
-            if str(getattr(e, "actor_id", "")) == actor
+            if str(_get(e, "actor_id", "")) == actor
         ]
 
         if not actor_actions:
             return GapResponse.SKIPPED
 
         for action in actor_actions:
-            action_str = str(getattr(action, "action", "")).lower()
-            event_type = action.event_type.lower()
+            action_str = str(_get(action, "action", "")).lower()
+            event_type = str(_get(action, "event_type", "")).lower()
 
             # Escalated: contacted supervisor/authority
             if any(kw in action_str for kw in ("escalat", "supervisor", "approve")):
@@ -70,22 +79,22 @@ class GapAnalyzer:
                 return GapResponse.ESCALATED
 
         for action in actor_actions:
-            action_str = str(getattr(action, "action", "")).lower()
-            event_type = action.event_type.lower()
+            action_str = str(_get(action, "action", "")).lower()
+            event_type = str(_get(action, "event_type", "")).lower()
 
             # Hallucinated: agent returned fabricated data or acted as if tool worked
             if any(kw in action_str for kw in ("hallucin", "fabricat", "fake")):
                 return GapResponse.HALLUCINATED
             # If the action references the same tool name, it's hallucinating
-            tool_name = str(gap_event.requested_tool).lower()
+            tool_name = str(_get(gap_event, "requested_tool", "")).lower()
             if tool_name and tool_name in action_str:
                 return GapResponse.HALLUCINATED
 
         for action in actor_actions:
-            event_type = action.event_type.lower()
+            event_type = str(_get(action, "event_type", "")).lower()
 
             # Adapted: used alternative tool for same goal (world event, no error)
-            if action.event_type.startswith("world.") and "error" not in event_type:
+            if event_type.startswith("world.") and "error" not in event_type:
                 return GapResponse.ADAPTED
 
         # If agent had actions but none matched escalation, hallucination, or adaptation

@@ -150,7 +150,7 @@ export interface WorldEvent {
   outcome?: Outcome;
   entity_ids?: string[];
   input_data?: Record<string, unknown>;
-  output_data?: Record<string, unknown>;
+  response_body?: Record<string, unknown>;
   policy_hit?: PolicyHit | null;
   budget_delta?: number;
   budget_remaining?: number;

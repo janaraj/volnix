@@ -259,10 +259,24 @@ async def app_context(env: str = "development") -> AsyncIterator[Any]:
             compiler = terrarium.registry.get("world_compiler")
             ...
     """
+    import logging as _logging
+
     from terrarium.app import TerrariumApp
     from terrarium.config.loader import ConfigLoader
 
     config = ConfigLoader(env=env).load()
+
+    # Configure Python logging from config
+    log_level = getattr(_logging, config.logging.level.upper(), _logging.WARNING)
+    _logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    # If llm_debug enabled, force LLM router to DEBUG so _write_debug_response fires
+    if config.logging.llm_debug:
+        _logging.getLogger("terrarium.llm.router").setLevel(_logging.DEBUG)
+
     terrarium_app = TerrariumApp(config)
     try:
         await terrarium_app.start()

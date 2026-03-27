@@ -738,26 +738,40 @@ class TerrariumApp:
             raise ValueError(
                 f"Cannot end run {run_id}: run is not in 'running' state"
             )
+
+        world_def = run.get("world_def", {}) if run else {}
+        actors_raw = world_def.get("actor_specs", world_def.get("actors", []))
+
+        # Build actors list for reporter (explicit — not from global registry)
+        actors_for_report = [
+            {"id": a.get("id", ""), "type": a.get("type", ""), "role": a.get("role", "")}
+            for a in actors_raw if isinstance(a, dict) and a.get("id")
+        ]
+
         reporter = self._registry.get("reporter")
-        report = await reporter.generate_full_report()
-        scorecard = await reporter.generate_scorecard()
+        report = await reporter.generate_full_report(actors=actors_for_report)
+        scorecard = await reporter.generate_scorecard(actors=actors_for_report)
 
         await self._artifact_store.save_report(run_id, report)
         await self._artifact_store.save_scorecard(run_id, scorecard)
 
-        state = self._registry.get("state")
-        events = await state.get_timeline()
-        await self._artifact_store.save_event_log(run_id, events)
+        # Save event log from bus (includes blocked/denied events)
+        raw_events: list[dict] = []
+        persistence = getattr(self._bus, "_persistence", None)
+        if persistence:
+            raw_events = await persistence.query_raw(
+                filters={"run_id": str(run_id)},
+            )
+        await self._artifact_store.save_event_log(run_id, raw_events)
 
+        state = self._registry.get("state")
         if self._config.runs.snapshot_on_complete:
             try:
                 await state.snapshot(f"run_complete_{run_id}")
             except Exception as exc:
                 logger.warning("Auto-snapshot failed for run %s: %s", run_id, exc)
 
-        # Compute run summary from data already in scope
-        world_def = run.get("world_def", {}) if run else {}
-        actors_raw = world_def.get("actors", [])
+        # Compute run summary
         services_raw = world_def.get("services", {})
 
         services_list: list[dict] = []
@@ -771,9 +785,9 @@ class TerrariumApp:
                 services_list.append(entry)
 
         ticks = [
-            e.timestamp.tick
-            for e in events
-            if hasattr(e, "timestamp") and hasattr(e.timestamp, "tick")
+            e.get("timestamp", {}).get("tick", 0)
+            for e in raw_events
+            if isinstance(e.get("timestamp"), dict)
         ]
 
         def _actor_to_dict(a: Any) -> dict:
@@ -785,13 +799,13 @@ class TerrariumApp:
 
         summary = {
             "current_tick": max(ticks) if ticks else 0,
-            "event_count": len(events),
+            "event_count": len(raw_events),
             "actor_count": len(actors_summary),
             "governance_score": scorecard.get("collective", {}).get("overall_score")
             if isinstance(scorecard, dict)
             else None,
             "services": services_list,
-            "conditions": world_def.get("reality_dimensions", {}),
+            "conditions": world_def.get("conditions", world_def.get("reality_dimensions", {})),
             "description": world_def.get("description", world_def.get("name", "")),
             "actors": actors_summary,
         }
