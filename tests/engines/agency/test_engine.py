@@ -11,6 +11,7 @@ import pytest
 from terrarium.actors.state import (
     ActorBehaviorTraits,
     ActorState,
+    InteractionRecord,
     ScheduledAction,
     WaitingFor,
 )
@@ -309,7 +310,18 @@ async def test_update_actor_state_waiting_cleared():
 async def test_update_actor_state_recent_interactions_capped():
     """Recent interactions list is capped to max_recent_interactions."""
     actor = _make_actor()
-    actor.recent_interactions = [f"interaction-{i}" for i in range(25)]
+    actor.recent_interactions = [
+        InteractionRecord(
+            tick=float(i),
+            actor_id="agent-external",
+            actor_role="customer",
+            action="some_action",
+            summary=f"interaction-{i}",
+            source="observed",
+            event_id=f"evt-{i}",
+        )
+        for i in range(25)
+    ]
     engine = await _create_engine([actor])
     event = _make_world_event()
 
@@ -1013,12 +1025,14 @@ class TestEdgeCases:
 
         await engine.update_states_for_event(event)
 
-        # Both actors should have a recent_interactions entry
+        # Both actors should have a recent_interactions entry (InteractionRecord)
         for actor_id_str in ["actor-a", "actor-b"]:
             actor = engine.get_actor_state(ActorId(actor_id_str))
             assert actor is not None
             assert len(actor.recent_interactions) == 1
-            assert "[t=5]" in actor.recent_interactions[0]
+            record = actor.recent_interactions[0]
+            assert record.tick == 5.0
+            assert record.source == "observed"
 
     # GAP 2.12: Escalation action triggered on patience expiry
     async def test_escalation_action_scheduled_on_patience_expiry(self):

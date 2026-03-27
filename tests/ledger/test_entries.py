@@ -173,6 +173,8 @@ def test_entry_registry_all_types():
         WorldCompilationEntry,
         ServiceResolutionEntry,
         ProfileInferenceEntry,
+        SubscriptionMatchEntry,
+        CollaborationNotificationEntry,
     )
 
     expected = {
@@ -193,6 +195,8 @@ def test_entry_registry_all_types():
         "world_compilation": WorldCompilationEntry,
         "service_resolution": ServiceResolutionEntry,
         "profile_inference": ProfileInferenceEntry,
+        "subscription_match": SubscriptionMatchEntry,
+        "collaboration_notification": CollaborationNotificationEntry,
     }
     assert ENTRY_REGISTRY == expected
 

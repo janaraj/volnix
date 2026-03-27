@@ -35,3 +35,11 @@ class AgencyConfig(BaseModel):
     # Engine name is "agency", so "individual" → routing key "agency_individual"
     llm_use_case_individual: str = "individual"
     llm_use_case_batch: str = "batch"
+
+    # Collaborative communication
+    collaboration_mode: str = "tagged"  # "tagged" | "open"
+    collaboration_enabled: bool = True
+    batch_threshold_default: int = 3  # batch notifications before activation
+    synthesis_buffer_pct: float = 0.1  # % of max_ticks reserved for synthesis
+    idle_stop_ticks: int = 5  # stop if all actors do_nothing for N ticks
+    auto_include_chat: bool = True  # auto-add chat service for internal actors

@@ -173,6 +173,12 @@ frustration_threshold_tier3 = 0.7
 batch_size = 5
 max_concurrent_actor_calls = 20
 max_recent_interactions = 20
+collaboration_mode = "tagged"
+collaboration_enabled = true
+batch_threshold_default = 3
+synthesis_buffer_pct = 0.10
+idle_stop_ticks = 5
+auto_include_chat = true
 
 # ── Simulation Runner ──────────────────────────────────────
 [simulation_runner]

@@ -366,6 +366,48 @@ class ActionGenerationEntry(LedgerEntry):
     llm_latency_ms: float = 0.0
 
 
+class SubscriptionMatchEntry(LedgerEntry):
+    """Records when a subscription matched a committed event.
+
+    Attributes:
+        actor_id: The actor whose subscription matched.
+        event_id: The event that matched the subscription.
+        service_id: The service the subscription is for.
+        sensitivity: The subscription sensitivity level.
+        activated: Whether the actor was activated as a result.
+        reason: How the match was resolved (e.g. "tagged", "open_mode", "passive").
+    """
+
+    entry_type: str = "subscription_match"
+    actor_id: ActorId
+    event_id: EventId
+    service_id: str
+    sensitivity: str
+    activated: bool
+    reason: str = ""
+
+
+class CollaborationNotificationEntry(LedgerEntry):
+    """Records a collaboration notification delivery.
+
+    Attributes:
+        recipient_actor_id: The actor who received the notification.
+        source_actor_id: The actor who produced the event.
+        event_id: The event that triggered the notification.
+        channel: Communication channel (e.g. "#research").
+        intended_for: Tagged recipient roles.
+        sensitivity: The subscription sensitivity level.
+    """
+
+    entry_type: str = "collaboration_notification"
+    recipient_actor_id: ActorId
+    source_actor_id: ActorId
+    event_id: EventId
+    channel: str | None = None
+    intended_for: list[str] = Field(default_factory=list)
+    sensitivity: str = "immediate"
+
+
 # ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
@@ -388,6 +430,8 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "world_compilation": WorldCompilationEntry,
     "service_resolution": ServiceResolutionEntry,
     "profile_inference": ProfileInferenceEntry,
+    "subscription_match": SubscriptionMatchEntry,
+    "collaboration_notification": CollaborationNotificationEntry,
 }
 
 

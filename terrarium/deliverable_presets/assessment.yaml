@@ -1,0 +1,96 @@
+name: assessment
+description: "Status assessment with risks, gaps, strengths, and action items"
+
+schema:
+  type: object
+  required: [status, risks, gaps, strengths, action_items]
+  properties:
+    status:
+      type: string
+      enum: [healthy, at_risk, critical]
+      description: "Overall status assessment"
+    summary:
+      type: string
+      description: "Brief narrative summary of the assessment"
+    risks:
+      type: array
+      items:
+        type: object
+        properties:
+          risk:
+            type: string
+            description: "Description of the risk"
+          severity:
+            type: string
+            enum: [low, medium, high, critical]
+          likelihood:
+            type: string
+            enum: [low, medium, high]
+          mitigation:
+            type: string
+            description: "Suggested mitigation"
+        required: [risk, severity]
+      description: "Identified risks"
+    gaps:
+      type: array
+      items:
+        type: object
+        properties:
+          area:
+            type: string
+            description: "Area where a gap exists"
+          description:
+            type: string
+          impact:
+            type: string
+            enum: [low, medium, high]
+        required: [area, description]
+      description: "Identified gaps or deficiencies"
+    strengths:
+      type: array
+      items:
+        type: object
+        properties:
+          area:
+            type: string
+          description:
+            type: string
+        required: [area, description]
+      description: "Areas of strength"
+    action_items:
+      type: array
+      items:
+        type: object
+        properties:
+          action:
+            type: string
+            description: "What needs to be done"
+          owner:
+            type: string
+            description: "Who should own this action"
+          priority:
+            type: string
+            enum: [critical, high, medium, low]
+          deadline:
+            type: string
+            description: "Suggested deadline or timeframe"
+        required: [action, priority]
+      description: "Concrete next steps"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. The team has
+  been evaluating the current situation. Based on ALL the interactions
+  you've observed, produce a final assessment deliverable.
+
+  Provide an overall status rating, identify all risks with their
+  severity and likelihood, note gaps and deficiencies, highlight
+  strengths, and create a prioritized list of action items with
+  suggested owners.
+
+  Structure your response as JSON with these fields:
+  - status: "healthy", "at_risk", or "critical"
+  - summary: Brief narrative summary (string)
+  - risks: Array of {risk, severity, likelihood, mitigation} objects
+  - gaps: Array of {area, description, impact} objects
+  - strengths: Array of {area, description} objects
+  - action_items: Array of {action, owner, priority, deadline} objects

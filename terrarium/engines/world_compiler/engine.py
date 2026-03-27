@@ -124,14 +124,72 @@ class WorldCompilerEngine(BaseEngine):
                 "warnings": list(partial.warnings) + ["No service resolver available"],
             })
 
+        # Auto-include chat service when internal actors exist
+        chat_auto_included = False
+        if self._typed_config.auto_include_chat:
+            original_specs = service_specs
+            service_specs = self._maybe_auto_include_chat(
+                partial, service_specs,
+            )
+            chat_auto_included = service_specs is not original_specs
+
         resolutions, warnings = await self._compiler_resolver.resolve_all(
             service_specs, partial.fidelity,
         )
 
-        return partial.model_copy(update={
+        updates: dict[str, Any] = {
             "services": resolutions,
             "warnings": list(partial.warnings) + warnings,
-        })
+        }
+
+        # Add team channel seed when chat was auto-included
+        if chat_auto_included and "chat" in resolutions:
+            team_seed = self._build_team_channel_seed(partial)
+            updates["seeds"] = list(partial.seeds) + [team_seed]
+
+        return partial.model_copy(update=updates)
+
+    def _maybe_auto_include_chat(
+        self,
+        partial: WorldPlan,
+        service_specs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Auto-include chat service when internal actors exist and chat is not already defined.
+
+        Returns the (possibly augmented) service_specs dict.
+        """
+        # Check if world has internal actors
+        has_internal = any(
+            spec.get("type", "external") == "internal"
+            for spec in partial.actor_specs
+        )
+        if not has_internal:
+            return service_specs
+
+        # Check if chat service is already defined (by name or category)
+        chat_names = {"chat", "slack", "teams", "discord", "messaging"}
+        existing_names = {name.lower() for name in service_specs}
+        if existing_names & chat_names:
+            return service_specs
+
+        # Add chat service via verified/slack pack
+        logger.info(
+            "Auto-including chat service for world with internal actors"
+        )
+        updated_specs = dict(service_specs)
+        updated_specs["chat"] = "verified/slack"
+        return updated_specs
+
+    def _build_team_channel_seed(self, partial: WorldPlan) -> str:
+        """Build a seed description for the auto-included team channel."""
+        roles = [spec.get("role", "actor") for spec in partial.actor_specs]
+        role_list = ", ".join(roles[:5])
+        mission_snippet = (partial.mission or "team collaboration")[:100]
+        return (
+            f"A #team channel exists in the chat service where all actors "
+            f"({role_list}) coordinate. The channel topic is related to: "
+            f"{mission_snippet}"
+        )
 
     async def compile_from_dicts(
         self,
@@ -353,11 +411,52 @@ class WorldCompilerEngine(BaseEngine):
                 len(actors),
             )
 
+        # Step 9: GENERATE subscriptions for internal actors (if LLM available)
+        actor_subscriptions: dict[str, list[Any]] = {}
+        if self._llm_router and actors:
+            try:
+                from terrarium.engines.world_compiler.subscription_generator import (
+                    SubscriptionGenerator,
+                )
+
+                sub_gen = SubscriptionGenerator(
+                    llm_router=self._llm_router,
+                    seed=plan.seed,
+                )
+                for actor in actors:
+                    if str(actor.type) in ("human", "system"):
+                        actor_spec = {
+                            "role": actor.role,
+                            "personality": (
+                                actor.personality.model_dump()
+                                if actor.personality
+                                else ""
+                            ),
+                            "type": str(actor.type),
+                        }
+                        try:
+                            subs = await sub_gen.generate_subscriptions(
+                                actor_spec, plan,
+                            )
+                            actor_subscriptions[str(actor.id)] = subs
+                        except Exception as exc:
+                            logger.warning(
+                                "Subscription generation failed for actor %s: %s",
+                                actor.id,
+                                exc,
+                            )
+            except Exception as exc:
+                logger.warning(
+                    "Subscription generation unavailable during compilation: %s",
+                    exc,
+                )
+
         # Build result
         warnings = list(final_validation.warnings)
         result: dict[str, Any] = {
             "entities": all_entities,
             "actors": actors,
+            "subscriptions": actor_subscriptions,
             "warnings": warnings,
             "seeds_processed": len(plan.seeds),
             "snapshot_id": str(snapshot_id) if snapshot_id else None,

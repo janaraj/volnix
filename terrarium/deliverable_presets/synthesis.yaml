@@ -1,0 +1,46 @@
+name: synthesis
+description: "Research findings, methodology, conclusion, and confidence level"
+
+schema:
+  type: object
+  required: [title, findings, conclusion, confidence]
+  properties:
+    title:
+      type: string
+      description: "Title of the synthesis"
+    findings:
+      type: array
+      items:
+        type: string
+      description: "Key findings from the collaboration"
+    conclusion:
+      type: string
+      description: "Final conclusion drawn from the findings"
+    confidence:
+      type: string
+      enum: [low, medium, high]
+      description: "Confidence level in the conclusion"
+    methodology:
+      type: string
+      description: "How findings were derived"
+    dissenting_views:
+      type: array
+      items:
+        type: string
+      description: "Any disagreements or alternative viewpoints within the team"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. Your team has
+  been discussing the mission. Based on ALL the interactions you've
+  observed, produce a final synthesis deliverable.
+
+  Include ALL key findings, note any disagreements, and state your
+  confidence level. Your output must match the schema exactly.
+
+  Structure your response as JSON with these fields:
+  - title: A concise title summarizing the synthesis
+  - findings: An array of key findings (strings)
+  - conclusion: Your final conclusion
+  - confidence: "low", "medium", or "high"
+  - methodology: How you and the team arrived at these findings
+  - dissenting_views: Any disagreements (array of strings, can be empty)

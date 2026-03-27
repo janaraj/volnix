@@ -27,3 +27,7 @@ class SimulationRunnerConfig(BaseModel):
     # Agent slot binding
     max_external_agents: int = 10
     slot_claim_timeout_seconds: float = 300.0
+
+    # Internal-only world end conditions
+    idle_stop_ticks: int = 5  # stop if all actors do_nothing for N consecutive ticks
+    max_ticks: int = 200  # hard tick limit for internal-only worlds

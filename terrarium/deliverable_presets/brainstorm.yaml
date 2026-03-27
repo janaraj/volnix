@@ -1,0 +1,60 @@
+name: brainstorm
+description: "Collection of ideas with titles, descriptions, endorsements, authors, and categories"
+
+schema:
+  type: object
+  required: [ideas, categories]
+  properties:
+    ideas:
+      type: array
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+            description: "Short title for the idea"
+          description:
+            type: string
+            description: "Detailed description of the idea"
+          author:
+            type: string
+            description: "Actor who originally proposed this idea"
+          endorsements:
+            type: array
+            items:
+              type: string
+            description: "Actors who endorsed or supported this idea"
+          category:
+            type: string
+            description: "Category this idea belongs to"
+          feasibility:
+            type: string
+            enum: [proven, likely, uncertain, speculative]
+            description: "How feasible this idea is"
+        required: [title, description]
+      description: "All ideas generated during the brainstorm"
+    categories:
+      type: array
+      items:
+        type: string
+      description: "Categories that emerged from the brainstorm"
+    top_picks:
+      type: array
+      items:
+        type: string
+      description: "Titles of the most endorsed or promising ideas"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. The team has
+  been brainstorming ideas. Based on ALL the interactions you've
+  observed, compile a final brainstorm deliverable.
+
+  Collect ALL ideas that were proposed, noting who proposed each one
+  and who endorsed it. Group them into categories that emerged
+  naturally from the discussion. Identify the top picks based on
+  endorsement count and feasibility.
+
+  Structure your response as JSON with these fields:
+  - ideas: Array of {title, description, author, endorsements, category, feasibility} objects
+  - categories: Array of category names that emerged (strings)
+  - top_picks: Array of idea titles that are most promising (strings)

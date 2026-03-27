@@ -1,0 +1,82 @@
+name: prediction
+description: "A prediction with confidence, timeframe, supporting evidence, risk factors, and scenarios"
+
+schema:
+  type: object
+  required: [prediction, confidence, timeframe, supporting_evidence]
+  properties:
+    prediction:
+      type: string
+      description: "The core prediction statement"
+    confidence:
+      type: number
+      minimum: 0
+      maximum: 1
+      description: "Confidence level as a probability (0.0 to 1.0)"
+    timeframe:
+      type: string
+      description: "When the prediction is expected to materialize"
+    supporting_evidence:
+      type: array
+      items:
+        type: object
+        properties:
+          evidence:
+            type: string
+            description: "Description of the evidence"
+          source:
+            type: string
+            description: "Which actor or data source provided this"
+          weight:
+            type: string
+            enum: [strong, moderate, weak]
+        required: [evidence]
+      description: "Evidence supporting the prediction"
+    risk_factors:
+      type: array
+      items:
+        type: object
+        properties:
+          factor:
+            type: string
+          likelihood:
+            type: string
+            enum: [low, medium, high]
+          impact:
+            type: string
+            enum: [low, medium, high]
+        required: [factor]
+      description: "Factors that could invalidate the prediction"
+    scenarios:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Scenario name (e.g., best case, worst case)"
+          description:
+            type: string
+          probability:
+            type: number
+            minimum: 0
+            maximum: 1
+        required: [name, description]
+      description: "Alternative scenarios and their probabilities"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. The team has
+  been analyzing data and trends. Based on ALL the interactions you've
+  observed, produce a final prediction deliverable.
+
+  State the prediction clearly with a numeric confidence level,
+  specify the timeframe, list all supporting evidence with sources
+  and weights, identify risk factors, and outline alternative scenarios.
+
+  Structure your response as JSON with these fields:
+  - prediction: The core prediction (string)
+  - confidence: Probability from 0.0 to 1.0 (number)
+  - timeframe: When this is expected to happen (string)
+  - supporting_evidence: Array of {evidence, source, weight} objects
+  - risk_factors: Array of {factor, likelihood, impact} objects
+  - scenarios: Array of {name, description, probability} objects

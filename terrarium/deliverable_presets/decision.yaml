@@ -1,0 +1,71 @@
+name: decision
+description: "A group decision with alternatives considered, rationale, dissent, and vote tally"
+
+schema:
+  type: object
+  required: [decision, alternatives, rationale]
+  properties:
+    decision:
+      type: string
+      description: "The final decision reached by the group"
+    alternatives:
+      type: array
+      items:
+        type: object
+        properties:
+          option:
+            type: string
+            description: "Description of the alternative"
+          pros:
+            type: array
+            items:
+              type: string
+          cons:
+            type: array
+            items:
+              type: string
+        required: [option]
+      description: "Alternatives that were considered"
+    rationale:
+      type: string
+      description: "Why this decision was chosen over the alternatives"
+    dissent:
+      type: array
+      items:
+        type: object
+        properties:
+          actor:
+            type: string
+          position:
+            type: string
+        required: [actor, position]
+      description: "Actors who disagreed and their positions"
+    vote_tally:
+      type: object
+      properties:
+        for:
+          type: integer
+          description: "Number of actors in favor"
+        against:
+          type: integer
+          description: "Number of actors against"
+        abstain:
+          type: integer
+          description: "Number of actors who abstained"
+      description: "Summary of the vote"
+
+prompt_instructions: |
+  You are the designated lead for this collaboration. The team has
+  been deliberating on a decision. Based on ALL the interactions
+  you've observed, produce a final decision deliverable.
+
+  Clearly state the chosen decision, list all alternatives that were
+  considered with their pros and cons, explain the rationale, note
+  any dissent, and provide a vote tally if applicable.
+
+  Structure your response as JSON with these fields:
+  - decision: The final decision (string)
+  - alternatives: Array of {option, pros, cons} objects
+  - rationale: Why this option was chosen (string)
+  - dissent: Array of {actor, position} for dissenters (can be empty)
+  - vote_tally: {for, against, abstain} counts (optional)
