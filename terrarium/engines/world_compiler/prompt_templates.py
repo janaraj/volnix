@@ -267,6 +267,8 @@ appear as real entities with proper cross-references.
 ## Rules
 - Generate exactly {count} {entity_type} entities as a valid JSON array
 - Each entity MUST conform to the schema above (required fields, valid types, enum values)
+- Keep text fields concise: descriptions 1-2 sentences, subjects under 80 chars
+- Focus on facts an agent needs (who, what, status, urgency), not prose
 - Output ONLY a valid JSON array. No markdown, no explanation.""",
     user="Generate {count} {entity_type} entities for this world.",
     engine_name="data_generator",

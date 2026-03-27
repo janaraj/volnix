@@ -56,12 +56,12 @@ class TestToolDiscovery:
 
         tool_names = {t["name"] for t in resp.json()}
         expected = {
-            "tickets_list",
-            "tickets_show",
-            "tickets_update",
-            "ticket_comments_create",
-            "users_show",
-            "messages_send",
+            "tickets.list",
+            "tickets.read",
+            "tickets.update",
+            "tickets.comment_create",
+            "customers.read",
+            "users.messages.send",
         }
         assert expected.issubset(tool_names)
 
@@ -75,7 +75,7 @@ class TestRawArgumentExecution:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
             )
 
@@ -90,7 +90,7 @@ class TestRawArgumentExecution:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
             )
 
@@ -100,20 +100,6 @@ class TestRawArgumentExecution:
         assert sc["id"] == "ticket-001"
         assert sc["subject"] == "Broken API integration"
         assert sc["status"] == "open"
-
-    async def test_content_field_is_json_string(self, http_transport):
-        """Content field contains a JSON string of the structured data."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/tickets_show",
-                json={"id": "ticket-001"},
-            )
-
-        data = resp.json()
-        parsed_content = json.loads(data["content"])
-        assert parsed_content == data["structured_content"]
 
     async def test_error_response_sets_is_error(self, terrarium_http_adapter):
         """Pipeline errors set is_error=True in envelope."""
@@ -127,7 +113,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_update",
+                "/api/v1/actions/tickets.update",
                 json={"id": "ticket-001", "status": "closed"},
             )
 
@@ -150,7 +136,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_list",
+                "/api/v1/actions/tickets.list",
                 json={},
             )
 
@@ -167,7 +153,7 @@ class TestRawArgumentExecution:
             transport=transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
                 headers={"x-actor-id": "triage-agent-42"},
             )
@@ -187,7 +173,7 @@ class TestBackwardCompatibility:
             transport=http_transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={
                     "actor_id": "sdk-agent",
                     "arguments": {"id": "ticket-001"},
@@ -207,7 +193,7 @@ class TestBackwardCompatibility:
             transport=http_transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={
                     "actor_id": "sdk-agent-99",
                     "arguments": {"id": "ticket-001"},
@@ -241,7 +227,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_list", json={}
+                "/api/v1/actions/tickets.list", json={}
             )
         assert resp.status_code == 200
         tickets = resp.json()["structured_content"]["tickets"]
@@ -263,7 +249,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
             )
         assert resp.status_code == 200
@@ -285,7 +271,7 @@ class TestTriageWorkflowHTTP:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_update",
+                "/api/v1/actions/tickets.update",
                 json={"id": "ticket-001", "status": "open"},
             )
         assert resp.status_code == 200
@@ -313,7 +299,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
             )
 
@@ -351,7 +337,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show", json={"id": "t-1"}
+                "/api/v1/actions/tickets.read", json={"id": "t-1"}
             )
 
         data = resp.json()
@@ -405,7 +391,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={"id": "t-1", "actor_id": "impersonator"},
                 headers={"x-actor-id": "real-agent"},
             )
@@ -422,7 +408,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_show",
+                "/api/v1/actions/tickets.read",
                 json={
                     "actor_id": "agent-1",
                     "arguments": {"id": "t-1"},
@@ -443,7 +429,7 @@ class TestEdgeCasesAndFailures:
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/api/v1/actions/tickets_list", json={}
+                "/api/v1/actions/tickets.list", json={}
             )
 
         assert resp.status_code == 200

@@ -19,7 +19,7 @@ export function LiveConsolePage() {
 
   const connectionStatus = useLiveEvents(runId);
   const runQuery = useRun(runId);
-  const eventsQuery = useRunEvents(runId);
+  const eventsQuery = useRunEvents(runId, { sort: 'desc', limit: 500 });
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function LiveConsolePage() {
   return (
     <QueryGuard query={runQuery}>
       {(run) => {
-        const eventCount = events.length;
+        const eventCount = eventsQuery.data?.total ?? events.length;
 
         return (
           <div className="flex h-full flex-col">

@@ -90,6 +90,7 @@ class AppendOnlyLog:
         range_filters: list[tuple[str, str, Any]] | None = None,
         limit: int | None = None,
         offset: int | None = None,
+        order: str = "asc",
     ) -> list[dict[str, Any]]:
         """Query rows from the log.
 
@@ -99,9 +100,9 @@ class AppendOnlyLog:
                      or lists (``IN``).
             range_filters: Optional range filters as ``(column, operator, value)``
                           tuples. Supported operators: ``>=``, ``<=``, ``>``, ``<``.
-                          Example: ``[("timestamp", ">=", "2026-01-01"), ("timestamp", "<=", "2026-12-31")]``
             limit: Maximum number of rows to return.
             offset: Number of rows to skip (SQL OFFSET).
+            order: Sort direction — ``"asc"`` (oldest first) or ``"desc"`` (newest first).
 
         Returns:
             Ordered list of matching rows as dicts.
@@ -130,7 +131,8 @@ class AppendOnlyLog:
                     raise ValueError(f"Invalid range operator '{op}'. Must be one of {_VALID_OPS}")
                 sql += f" AND {col} {op} ?"
                 params.append(val)
-        sql += " ORDER BY sequence_id ASC"
+        direction = "DESC" if order == "desc" else "ASC"
+        sql += f" ORDER BY sequence_id {direction}"
         if limit is not None:
             sql += " LIMIT ?"
             params.append(limit)

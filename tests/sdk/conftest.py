@@ -25,7 +25,7 @@ SAMPLE_TOOLS_MCP = [
         },
     },
     {
-        "name": "tickets_update",
+        "name": "tickets.update",
         "description": "Update a ticket status",
         "inputSchema": {
             "type": "object",

@@ -20,7 +20,7 @@ from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
 SAMPLE_EVENTS = [
     {
         "event_id": "evt-001",
-        "event_type": "world.tickets_create",
+        "event_type": "world.tickets.create",
         "actor_id": "agent-1",
         "service_id": "zendesk",
         "target_service": "tickets",
@@ -39,7 +39,7 @@ SAMPLE_EVENTS = [
     },
     {
         "event_id": "evt-002",
-        "event_type": "world.tickets_update",
+        "event_type": "world.tickets.update",
         "actor_id": "agent-1",
         "service_id": "zendesk",
         "target_service": "tickets",
@@ -58,7 +58,7 @@ SAMPLE_EVENTS = [
     },
     {
         "event_id": "evt-003",
-        "event_type": "world.ticket_comments_create",
+        "event_type": "world.tickets.comment_create",
         "actor_id": "agent-2",
         "service_id": "zendesk",
         "target_service": "tickets",
@@ -156,6 +156,9 @@ def _make_dashboard_gateway():
     bus = MagicMock()
     bus.subscribe = AsyncMock()
     bus.unsubscribe = AsyncMock()
+    bus.replay = AsyncMock(return_value=[])
+    bus.get_event_count = AsyncMock(return_value=0)
+    bus._persistence = None  # No persistence in tests — events come from artifacts
 
     # Mock run_manager
     run_manager = AsyncMock()
@@ -313,7 +316,7 @@ async def test_get_run_events_filter_event_type():
     client, gw = await _make_client()
     async with client:
         resp = await client.get(
-            "/api/v1/runs/run_abc123/events?event_type=world.tickets_create"
+            "/api/v1/runs/run_abc123/events?event_type=world.tickets.create"
         )
     body = resp.json()
     assert body["total"] == 1

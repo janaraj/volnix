@@ -67,14 +67,14 @@ class TestEmailPackMetadata:
         tool_names = {t["name"] for t in tools}
         # Gmail-aligned
         assert tool_names >= {
-            "messages_search",
-            "messages_get",
-            "messages_send",
-            "drafts_create",
-            "messages_modify",
-            "messages_trash",
-            "messages_delete",
-            "labels_list",
+            "users.messages.list",
+            "users.messages.get",
+            "users.messages.send",
+            "users.drafts.create",
+            "users.messages.modify",
+            "users.messages.trash",
+            "users.messages.delete",
+            "users.labels.list",
         }
         # Legacy (backward compat)
         assert tool_names >= {

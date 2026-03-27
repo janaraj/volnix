@@ -29,7 +29,7 @@ def _make_gateway_with_tools(
 
     mcp_tools = tools or [
         {
-            "name": "tickets_list",
+            "name": "tickets.list",
             "description": "List tickets with optional filters",
             "inputSchema": {
                 "type": "object",
@@ -40,7 +40,7 @@ def _make_gateway_with_tools(
             },
         },
         {
-            "name": "tickets_show",
+            "name": "tickets.read",
             "description": "Show a single ticket by ID",
             "inputSchema": {
                 "type": "object",
@@ -49,7 +49,7 @@ def _make_gateway_with_tools(
             },
         },
         {
-            "name": "tickets_update",
+            "name": "tickets.update",
             "description": "Update ticket fields",
             "inputSchema": {
                 "type": "object",
@@ -61,7 +61,7 @@ def _make_gateway_with_tools(
             },
         },
         {
-            "name": "ticket_comments_create",
+            "name": "tickets.comment_create",
             "description": "Add a comment to a ticket",
             "inputSchema": {
                 "type": "object",
@@ -74,7 +74,7 @@ def _make_gateway_with_tools(
             },
         },
         {
-            "name": "users_show",
+            "name": "customers.read",
             "description": "Show a user by ID",
             "inputSchema": {
                 "type": "object",
@@ -83,7 +83,7 @@ def _make_gateway_with_tools(
             },
         },
         {
-            "name": "messages_send",
+            "name": "users.messages.send",
             "description": "Send an email message",
             "inputSchema": {
                 "type": "object",

@@ -498,6 +498,7 @@ async def _serve_impl(
                         new_run_id = await terrarium.create_run(
                             compiled_plan, mode=compiled_plan.mode
                         )
+                        _active_run_id[0] = str(new_run_id)
                         console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
 
                         tools = await terrarium.gateway.get_tool_manifest()
@@ -505,14 +506,29 @@ async def _serve_impl(
                     except Exception as exc:
                         console.print(f"[red]Compilation failed: {exc}[/red]")
 
+                _active_run_id = [None]  # mutable container for nonlocal access
                 asyncio.create_task(_compile_world())
 
             # Run uvicorn — blocks until Ctrl+C
             http_adapter = terrarium.gateway._adapters.get("http")
             if http_adapter:
-                await http_adapter.run_server(host=host, port=port)
+                try:
+                    await http_adapter.run_server(host=host, port=port)
+                finally:
+                    # Complete the active run on shutdown
+                    active = run_id or (
+                        _active_run_id[0] if "_active_run_id" in dir() else None
+                    )
+                    if active:
+                        try:
+                            await terrarium.end_run(active)
+                            console.print(
+                                f"  Run completed: [cyan]{active}[/cyan]"
+                            )
+                        except Exception:
+                            pass
     except KeyboardInterrupt:
-        console.print("\n[yellow]Shutting down servers...[/yellow]")
+        console.print("\n[yellow]Shutting down...[/yellow]")
     except TerrariumError as exc:
         print_error(str(exc))
         raise typer.Exit(1) from None

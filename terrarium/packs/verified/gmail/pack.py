@@ -2,9 +2,9 @@
 
 Provides the canonical tool surface for email-category services.
 
-Gmail-aligned tools: messages_search, messages_get,
-messages_send, drafts_create, messages_modify,
-messages_trash, messages_delete, labels_list.
+Gmail-aligned tools: users.messages.list, users.messages.get,
+users.messages.send, users.drafts.create, users.messages.modify,
+users.messages.trash, users.messages.delete, users.labels.list.
 
 Legacy tools (backward compatible): email_send, email_list, email_read,
 email_search, email_reply, email_mark_read.
@@ -49,9 +49,9 @@ from terrarium.packs.verified.gmail.state_machines import EMAIL_TRANSITIONS
 class EmailPack(ServicePack):
     """Verified pack for email communication services.
 
-    Gmail-aligned tools: messages_search, messages_get,
-    messages_send, drafts_create, messages_modify,
-    messages_trash, messages_delete, labels_list.
+    Gmail-aligned tools: users.messages.list, users.messages.get,
+    users.messages.send, users.drafts.create, users.messages.modify,
+    users.messages.trash, users.messages.delete, users.labels.list.
 
     Legacy tools: email_send, email_list, email_read, email_search,
     email_reply, email_mark_read.
@@ -63,14 +63,14 @@ class EmailPack(ServicePack):
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
         # Gmail-aligned handlers
-        "messages_send": handle_messages_send,
-        "messages_search": handle_messages_search,
-        "messages_get": handle_messages_get,
-        "messages_modify": handle_messages_modify,
-        "messages_trash": handle_messages_trash,
-        "messages_delete": handle_messages_delete,
-        "drafts_create": handle_drafts_create,
-        "labels_list": handle_labels_list,
+        "users.messages.send": handle_messages_send,
+        "users.messages.list": handle_messages_search,
+        "users.messages.get": handle_messages_get,
+        "users.messages.modify": handle_messages_modify,
+        "users.messages.trash": handle_messages_trash,
+        "users.messages.delete": handle_messages_delete,
+        "users.drafts.create": handle_drafts_create,
+        "users.labels.list": handle_labels_list,
         # Legacy handlers (backward compatibility)
         "email_send": handle_email_send,
         "email_list": handle_email_list,

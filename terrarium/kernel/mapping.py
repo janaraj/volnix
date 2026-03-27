@@ -2,7 +2,7 @@
 
 Maps semantic capability names (e.g., ``cases.list``, ``messages.send``)
 to the actual tool names available in a running Terrarium world
-(e.g., ``tickets_list``, ``messages_send``).
+(e.g., ``tickets.list``, ``users.messages.send``).
 
 Uses keyword matching against tool names and descriptions — no LLM needed.
 The mapping is deterministic and computed at connection time.

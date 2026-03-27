@@ -237,7 +237,7 @@ class TestFullAgencyLoop:
         external_envelope = ActionEnvelope(
             actor_id=ActorId(agent_id),
             source=ActionSource.EXTERNAL,
-            action_type="tickets_update",
+            action_type="tickets.update",
             target_service=ServiceId("tickets"),
             payload={
                 "id": watched_entity_id,

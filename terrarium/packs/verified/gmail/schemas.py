@@ -111,7 +111,7 @@ MAILBOX_ENTITY_SCHEMA: dict = {
 
 EMAIL_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "messages_search",
+        "name": "users.messages.list",
         "description": "Search Gmail messages by query",
         "http_path": "/gmail/v1/messages",
         "http_method": "GET",
@@ -143,7 +143,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "messages_get",
+        "name": "users.messages.get",
         "description": "Get a Gmail message by ID",
         "http_path": "/gmail/v1/messages/{id}",
         "http_method": "GET",
@@ -157,7 +157,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "messages_send",
+        "name": "users.messages.send",
         "description": "Send a Gmail message",
         "http_path": "/gmail/v1/messages/send",
         "http_method": "POST",
@@ -181,7 +181,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "drafts_create",
+        "name": "users.drafts.create",
         "description": "Create a Gmail draft",
         "http_path": "/gmail/v1/drafts",
         "http_method": "POST",
@@ -203,7 +203,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "messages_modify",
+        "name": "users.messages.modify",
         "description": "Modify Gmail message labels",
         "http_path": "/gmail/v1/messages/{id}/modify",
         "http_method": "POST",
@@ -225,7 +225,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "messages_trash",
+        "name": "users.messages.trash",
         "description": "Move a Gmail message to trash",
         "http_path": "/gmail/v1/messages/{id}/trash",
         "http_method": "POST",
@@ -239,7 +239,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "messages_delete",
+        "name": "users.messages.delete",
         "description": "Permanently delete a Gmail message",
         "http_path": "/gmail/v1/messages/{id}",
         "http_method": "DELETE",
@@ -258,7 +258,7 @@ EMAIL_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "labels_list",
+        "name": "users.labels.list",
         "description": "List all Gmail labels",
         "http_path": "/gmail/v1/labels",
         "http_method": "GET",

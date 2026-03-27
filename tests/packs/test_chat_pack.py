@@ -27,7 +27,7 @@ async def test_chat_post_message():
 
     pack = ChatPack()
     proposal = await pack.handle_action(
-        ToolName("chat_postMessage"),
+        ToolName("chat.postMessage"),
         {"channel_id": "C001", "text": "Hello world"},
         {"channels": [{"id": "C001", "name": "general"}], "messages": []},
     )

@@ -38,9 +38,9 @@ from terrarium.packs.verified.google_calendar.state_machines import (
 class CalendarPack(ServicePack):
     """Verified pack for calendar / scheduling services.
 
-    Tools: list_calendar_events, get_calendar_event, create_calendar_event,
-    update_calendar_event, delete_calendar_event, search_calendar_events,
-    list_calendars, get_calendar, rsvp_calendar_event.
+    Tools: events.list, events.get, events.insert, events.update,
+    events.delete, events.search, calendarList.list, calendarList.get,
+    events.patch.
     """
 
     pack_name: ClassVar[str] = "google_calendar"
@@ -48,15 +48,15 @@ class CalendarPack(ServicePack):
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "list_calendar_events": handle_list_calendar_events,
-        "get_calendar_event": handle_get_calendar_event,
-        "create_calendar_event": handle_create_calendar_event,
-        "update_calendar_event": handle_update_calendar_event,
-        "delete_calendar_event": handle_delete_calendar_event,
-        "search_calendar_events": handle_search_calendar_events,
-        "list_calendars": handle_list_calendars,
-        "get_calendar": handle_get_calendar,
-        "rsvp_calendar_event": handle_rsvp_calendar_event,
+        "events.list": handle_list_calendar_events,
+        "events.get": handle_get_calendar_event,
+        "events.insert": handle_create_calendar_event,
+        "events.update": handle_update_calendar_event,
+        "events.delete": handle_delete_calendar_event,
+        "events.search": handle_search_calendar_events,
+        "calendarList.list": handle_list_calendars,
+        "calendarList.get": handle_get_calendar,
+        "events.patch": handle_rsvp_calendar_event,
     }
 
     def get_tools(self) -> list[dict]:

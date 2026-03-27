@@ -163,7 +163,7 @@ ATTENDEE_ENTITY_SCHEMA: dict = {
 
 CALENDAR_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "list_calendar_events",
+        "name": "events.list",
         "description": "List events on a specified calendar.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events",
         "http_method": "GET",
@@ -203,7 +203,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "get_calendar_event",
+        "name": "events.get",
         "description": "Get a specific calendar event by ID.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events/{eventId}",
         "http_method": "GET",
@@ -224,7 +224,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "create_calendar_event",
+        "name": "events.insert",
         "description": "Create a new calendar event.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events",
         "http_method": "POST",
@@ -278,7 +278,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "update_calendar_event",
+        "name": "events.update",
         "description": "Update an existing calendar event.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events/{eventId}",
         "http_method": "PUT",
@@ -340,7 +340,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "delete_calendar_event",
+        "name": "events.delete",
         "description": "Delete (cancel) a calendar event.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events/{eventId}",
         "http_method": "DELETE",
@@ -361,7 +361,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "search_calendar_events",
+        "name": "events.search",
         "description": "Search for calendar events matching a query string.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events",
         "http_method": "GET",
@@ -392,7 +392,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "list_calendars",
+        "name": "calendarList.list",
         "description": "List all calendars for the current user.",
         "http_path": "/calendar/v3/users/me/calendarList",
         "http_method": "GET",
@@ -410,7 +410,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "get_calendar",
+        "name": "calendarList.get",
         "description": "Get a specific calendar by ID.",
         "http_path": "/calendar/v3/calendars/{calendarId}",
         "http_method": "GET",
@@ -427,7 +427,7 @@ CALENDAR_TOOL_DEFINITIONS: list[dict] = [
         "response_schema": {"type": "object"},
     },
     {
-        "name": "rsvp_calendar_event",
+        "name": "events.patch",
         "description": "Update an attendee's RSVP response status for a calendar event.",
         "http_path": "/calendar/v3/calendars/{calendarId}/events/{eventId}/attendees/{email}",
         "http_method": "PATCH",

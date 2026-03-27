@@ -185,18 +185,18 @@ class TestTicketsPackMetadata:
         assert len(tools) == 12
         tool_names = {t["name"] for t in tools}
         assert tool_names == {
-            "tickets_list",
-            "tickets_show",
-            "tickets_create",
-            "tickets_update",
-            "tickets_delete",
-            "tickets_search",
-            "ticket_comments_list",
-            "ticket_comments_create",
-            "users_list",
-            "users_show",
-            "groups_list",
-            "groups_show",
+            "tickets.list",
+            "tickets.read",
+            "tickets.create",
+            "tickets.update",
+            "tickets.delete",
+            "tickets.search",
+            "tickets.comments.list",
+            "tickets.comment_create",
+            "customers.list",
+            "customers.read",
+            "groups.list",
+            "groups.read",
         }
 
     def test_entity_schemas(self, tickets_pack):
@@ -221,11 +221,11 @@ class TestTicketsPackMetadata:
         """get_tool_names() returns list of name strings."""
         names = tickets_pack.get_tool_names()
         assert len(names) == 12
-        assert "tickets_create" in names
-        assert "tickets_delete" in names
-        assert "tickets_search" in names
-        assert "groups_list" in names
-        assert "groups_show" in names
+        assert "tickets.create" in names
+        assert "tickets.delete" in names
+        assert "tickets.search" in names
+        assert "groups.list" in names
+        assert "groups.read" in names
 
     def test_ticket_schema_has_new_fields(self, tickets_pack):
         """Ticket schema includes P1 audit fields."""
@@ -273,7 +273,7 @@ class TestTicketsPackActions:
     async def test_tickets_create(self, tickets_pack):
         """tickets_create creates ticket with status='new' and initial comment."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_create"),
+            ToolName("tickets.create"),
             {
                 "subject": "My printer is on fire",
                 "description": "Literally flames coming out.",
@@ -314,7 +314,7 @@ class TestTicketsPackActions:
     async def test_tickets_create_minimal(self, tickets_pack):
         """tickets_create works with only required fields."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_create"),
+            ToolName("tickets.create"),
             {
                 "subject": "Simple question",
                 "description": "How do I reset my password?",
@@ -331,7 +331,7 @@ class TestTicketsPackActions:
     async def test_tickets_update_status(self, tickets_pack, sample_state):
         """tickets_update changes status and records previous_fields."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_update"),
+            ToolName("tickets.update"),
             {"id": "ticket-001", "status": "open"},
             sample_state,
         )
@@ -350,7 +350,7 @@ class TestTicketsPackActions:
     async def test_tickets_update_not_found(self, tickets_pack, sample_state):
         """tickets_update returns Zendesk-format error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_update"),
+            ToolName("tickets.update"),
             {"id": "ticket-nonexistent", "status": "open"},
             sample_state,
         )
@@ -360,7 +360,7 @@ class TestTicketsPackActions:
     async def test_tickets_delete(self, tickets_pack, sample_state):
         """tickets_delete soft-deletes a ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_delete"),
+            ToolName("tickets.delete"),
             {"id": "ticket-001"},
             sample_state,
         )
@@ -375,7 +375,7 @@ class TestTicketsPackActions:
     async def test_tickets_delete_not_found(self, tickets_pack, sample_state):
         """tickets_delete returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_delete"),
+            ToolName("tickets.delete"),
             {"id": "ticket-nonexistent"},
             sample_state,
         )
@@ -384,7 +384,7 @@ class TestTicketsPackActions:
     async def test_tickets_search_free_text(self, tickets_pack, sample_state):
         """tickets_search finds tickets by free text."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_search"),
+            ToolName("tickets.search"),
             {"query": "login"},
             sample_state,
         )
@@ -396,7 +396,7 @@ class TestTicketsPackActions:
     async def test_tickets_search_structured_filter(self, tickets_pack, sample_state):
         """tickets_search supports structured filters like status:open."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_search"),
+            ToolName("tickets.search"),
             {"query": "status:open"},
             sample_state,
         )
@@ -407,7 +407,7 @@ class TestTicketsPackActions:
     async def test_tickets_search_mixed(self, tickets_pack, sample_state):
         """tickets_search supports mixed structured + free text."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_search"),
+            ToolName("tickets.search"),
             {"query": "type:problem billing"},
             sample_state,
         )
@@ -418,7 +418,7 @@ class TestTicketsPackActions:
     async def test_tickets_search_no_results(self, tickets_pack, sample_state):
         """tickets_search returns empty for non-matching query."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_search"),
+            ToolName("tickets.search"),
             {"query": "nonexistent_xyz"},
             sample_state,
         )
@@ -428,7 +428,7 @@ class TestTicketsPackActions:
     async def test_tickets_list_all(self, tickets_pack, sample_state):
         """tickets_list returns all tickets when no filters given."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {},
             sample_state,
         )
@@ -440,7 +440,7 @@ class TestTicketsPackActions:
     async def test_tickets_list_by_status(self, tickets_pack, sample_state):
         """tickets_list filters by status."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {"status": "open"},
             sample_state,
         )
@@ -451,7 +451,7 @@ class TestTicketsPackActions:
     async def test_tickets_list_by_assignee(self, tickets_pack, sample_state):
         """tickets_list filters by assignee_id."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {"assignee_id": "user-200"},
             sample_state,
         )
@@ -463,7 +463,7 @@ class TestTicketsPackActions:
     async def test_tickets_list_by_requester(self, tickets_pack, sample_state):
         """tickets_list filters by requester_id."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {"requester_id": "user-100"},
             sample_state,
         )
@@ -475,7 +475,7 @@ class TestTicketsPackActions:
     async def test_tickets_list_pagination(self, tickets_pack, sample_state):
         """tickets_list supports per_page and page parameters."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {"per_page": 2, "page": 1},
             sample_state,
         )
@@ -484,7 +484,7 @@ class TestTicketsPackActions:
         assert body["next_page"] == 2
 
         proposal2 = await tickets_pack.handle_action(
-            ToolName("tickets_list"),
+            ToolName("tickets.list"),
             {"per_page": 2, "page": 2},
             sample_state,
         )
@@ -495,7 +495,7 @@ class TestTicketsPackActions:
     async def test_tickets_show(self, tickets_pack, sample_state):
         """tickets_show returns ticket by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_show"),
+            ToolName("tickets.read"),
             {"id": "ticket-002"},
             sample_state,
         )
@@ -506,7 +506,7 @@ class TestTicketsPackActions:
     async def test_tickets_show_not_found(self, tickets_pack, sample_state):
         """tickets_show returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("tickets_show"),
+            ToolName("tickets.read"),
             {"id": "ticket-nonexistent"},
             sample_state,
         )
@@ -516,7 +516,7 @@ class TestTicketsPackActions:
     async def test_ticket_comments_create(self, tickets_pack, sample_state):
         """ticket_comments_create creates comment and updates ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("ticket_comments_create"),
+            ToolName("tickets.comment_create"),
             {
                 "id": "ticket-001",
                 "body": "I tried clearing my cache but it still fails.",
@@ -550,7 +550,7 @@ class TestTicketsPackActions:
     async def test_ticket_comments_create_private(self, tickets_pack, sample_state):
         """ticket_comments_create supports private (internal) comments."""
         proposal = await tickets_pack.handle_action(
-            ToolName("ticket_comments_create"),
+            ToolName("tickets.comment_create"),
             {
                 "id": "ticket-001",
                 "body": "Internal note: escalate to tier 2.",
@@ -565,7 +565,7 @@ class TestTicketsPackActions:
     async def test_ticket_comments_create_not_found(self, tickets_pack, sample_state):
         """ticket_comments_create returns Zendesk error for nonexistent ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("ticket_comments_create"),
+            ToolName("tickets.comment_create"),
             {
                 "id": "ticket-nonexistent",
                 "body": "Hello",
@@ -578,7 +578,7 @@ class TestTicketsPackActions:
     async def test_ticket_comments_list(self, tickets_pack, sample_state):
         """ticket_comments_list returns comments for a specific ticket."""
         proposal = await tickets_pack.handle_action(
-            ToolName("ticket_comments_list"),
+            ToolName("tickets.comments.list"),
             {"id": "ticket-001"},
             sample_state,
         )
@@ -591,7 +591,7 @@ class TestTicketsPackActions:
     async def test_ticket_comments_list_empty(self, tickets_pack, sample_state):
         """ticket_comments_list returns empty for ticket with no comments."""
         proposal = await tickets_pack.handle_action(
-            ToolName("ticket_comments_list"),
+            ToolName("tickets.comments.list"),
             {"id": "ticket-003"},
             sample_state,
         )
@@ -601,7 +601,7 @@ class TestTicketsPackActions:
     async def test_users_list_all(self, tickets_pack, sample_state):
         """users_list returns all users when no filter given."""
         proposal = await tickets_pack.handle_action(
-            ToolName("users_list"),
+            ToolName("customers.list"),
             {},
             sample_state,
         )
@@ -613,7 +613,7 @@ class TestTicketsPackActions:
     async def test_users_list_by_role(self, tickets_pack, sample_state):
         """users_list filters by role."""
         proposal = await tickets_pack.handle_action(
-            ToolName("users_list"),
+            ToolName("customers.list"),
             {"role": "agent"},
             sample_state,
         )
@@ -624,7 +624,7 @@ class TestTicketsPackActions:
     async def test_users_show(self, tickets_pack, sample_state):
         """users_show returns user by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("users_show"),
+            ToolName("customers.read"),
             {"id": "user-200"},
             sample_state,
         )
@@ -636,7 +636,7 @@ class TestTicketsPackActions:
     async def test_users_show_not_found(self, tickets_pack, sample_state):
         """users_show returns Zendesk error for nonexistent user."""
         proposal = await tickets_pack.handle_action(
-            ToolName("users_show"),
+            ToolName("customers.read"),
             {"id": "user-nonexistent"},
             sample_state,
         )
@@ -645,7 +645,7 @@ class TestTicketsPackActions:
     async def test_groups_list(self, tickets_pack, sample_state):
         """groups_list returns all groups."""
         proposal = await tickets_pack.handle_action(
-            ToolName("groups_list"),
+            ToolName("groups.list"),
             {},
             sample_state,
         )
@@ -657,7 +657,7 @@ class TestTicketsPackActions:
     async def test_groups_list_empty(self, tickets_pack):
         """groups_list returns empty from empty state."""
         proposal = await tickets_pack.handle_action(
-            ToolName("groups_list"),
+            ToolName("groups.list"),
             {},
             {},
         )
@@ -667,7 +667,7 @@ class TestTicketsPackActions:
     async def test_groups_show(self, tickets_pack, sample_state):
         """groups_show returns group by ID."""
         proposal = await tickets_pack.handle_action(
-            ToolName("groups_show"),
+            ToolName("groups.read"),
             {"id": "group-001"},
             sample_state,
         )
@@ -679,7 +679,7 @@ class TestTicketsPackActions:
     async def test_groups_show_not_found(self, tickets_pack, sample_state):
         """groups_show returns Zendesk error for nonexistent group."""
         proposal = await tickets_pack.handle_action(
-            ToolName("groups_show"),
+            ToolName("groups.read"),
             {"id": "group-nonexistent"},
             sample_state,
         )

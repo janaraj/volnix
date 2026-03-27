@@ -115,8 +115,8 @@ class TestRunWithServe:
             # Plan should have resolved services
             assert len(plan.services) >= 2
             service_names = set(plan.services.keys())
-            assert "email" in service_names or any(
-                "email" in s for s in service_names
+            assert "gmail" in service_names or "email" in service_names or any(
+                "mail" in s for s in service_names
             )
 
 

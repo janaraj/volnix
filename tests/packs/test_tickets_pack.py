@@ -43,7 +43,7 @@ async def test_ticket_sla_tracking():
 
     pack = TicketsPack()
     proposal = await pack.handle_action(
-        ToolName("tickets_create"),
+        ToolName("tickets.create"),
         {
             "subject": "SLA test",
             "description": "Testing SLA",

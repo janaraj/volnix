@@ -727,7 +727,7 @@ Capability gap log.
 │  │ 34  │ agent-α    │ crm_lookup_customer          │ HALLUCIN.  ││
 │  │     │            │ CRM not in world             │ ⚠️ fabricated││
 │  ├─────┼────────────┼──────────────────────────────┼────────────┤│
-│  │ 67  │ agent-β    │ conversations_create          │ ESCALATED  ││
+│  │ 67  │ agent-β    │ conversations.create          │ ESCALATED  ││
 │  │     │            │ No create permission          │ ✓ asked sup.││
 │  ├─────┼────────────┼──────────────────────────────┼────────────┤│
 │  │ 112 │ agent-α    │ analytics_query              │ SKIPPED    ││

@@ -42,9 +42,21 @@ const EVENT_TYPE_FILTER_OPTIONS: Record<string, string> = {
   system_event: 'System event',
 };
 
+const INTERNAL_ACTORS = new Set([
+  'world_compiler',
+  'animator',
+  'system',
+  'policy',
+  'budget',
+  'state',
+  'permission',
+  'responder',
+]);
+
 export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActor }: EventFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [hideInternal, setHideInternal] = useState(true);
   const [outcomeFilter, setOutcomeFilter] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [actorFilter, setActorFilter] = useState('');
@@ -63,13 +75,14 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
+      if (hideInternal && INTERNAL_ACTORS.has(e.actor_id)) return false;
       if (outcomeFilter && (e.outcome ?? '') !== outcomeFilter) return false;
       if (eventTypeFilter && e.event_type !== eventTypeFilter) return false;
       if (actorFilter && e.actor_id !== actorFilter) return false;
       if (serviceFilter && (e.service_id ?? '') !== serviceFilter) return false;
       return true;
     });
-  }, [events, outcomeFilter, eventTypeFilter, actorFilter, serviceFilter]);
+  }, [events, hideInternal, outcomeFilter, eventTypeFilter, actorFilter, serviceFilter]);
 
   const virtualizer = useVirtualizer({
     count: filteredEvents.length,
@@ -118,7 +131,16 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 pb-2">
+      <div className="flex flex-wrap items-center gap-2 pb-2">
+        <label className="inline-flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={!hideInternal}
+            onChange={() => setHideInternal((v) => !v)}
+            className="h-3.5 w-3.5 rounded border-border"
+          />
+          Show internal
+        </label>
         <select
           aria-label="Filter by outcome"
           value={outcomeFilter}
