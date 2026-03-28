@@ -15,6 +15,7 @@ from terrarium.app import TerrariumApp
 from terrarium.config.loader import ConfigLoader
 from terrarium.persistence.config import PersistenceConfig
 from terrarium.engines.state.config import StateConfig
+from terrarium.worlds.config import WorldsConfig
 
 
 def _has_llm_provider() -> bool:
@@ -53,6 +54,7 @@ async def live_app(tmp_path):
             db_path=str(tmp_path / "state.db"),
             snapshot_dir=str(tmp_path / "snapshots"),
         ),
+        "worlds": WorldsConfig(data_dir=str(tmp_path / "worlds")),
     })
 
     app = TerrariumApp(config)

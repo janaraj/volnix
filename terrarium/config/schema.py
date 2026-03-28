@@ -32,6 +32,7 @@ from terrarium.engines.reporter.config import ReporterConfig
 from terrarium.engines.feedback.config import FeedbackConfig
 from terrarium.engines.agency.config import AgencyConfig
 from terrarium.engines.world_compiler.config import WorldCompilerConfig
+from terrarium.worlds.config import WorldsConfig
 from terrarium.simulation.config import SimulationRunnerConfig
 from terrarium.middleware.config import MiddlewareConfig
 from terrarium.webhook.config import WebhookConfig
@@ -110,3 +111,4 @@ class TerrariumConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
+    worlds: WorldsConfig = Field(default_factory=WorldsConfig)

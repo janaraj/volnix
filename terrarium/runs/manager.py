@@ -45,11 +45,13 @@ class RunManager:
         reality_preset: str = "messy",
         fidelity_mode: str = "auto",
         tag: str | None = None,
+        world_id: str | None = None,
     ) -> RunId:
         """Create a new run record and return its identifier."""
         run_id = RunId(f"run_{uuid4().hex[:12]}")
         self._runs[str(run_id)] = {
             "run_id": str(run_id),
+            "world_id": world_id,
             "status": "created",
             "mode": mode,
             "reality_preset": reality_preset,
@@ -112,13 +114,17 @@ class RunManager:
         rid = self._resolve_id(run_id)
         return self._runs.get(rid)
 
-    async def list_runs(self, limit: int = 50) -> list[dict]:
-        """List recent runs, newest first."""
+    async def list_runs(
+        self, limit: int = 50, world_id: str | None = None,
+    ) -> list[dict]:
+        """List recent runs, newest first. Optionally filter by world_id."""
         runs = sorted(
             self._runs.values(),
             key=lambda r: r["created_at"],
             reverse=True,
         )
+        if world_id:
+            runs = [r for r in runs if r.get("world_id") == world_id]
         return runs[:limit]
 
     async def get_active_run(self) -> RunId | None:
