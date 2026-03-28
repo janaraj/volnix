@@ -422,6 +422,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     content={"error": "Request body must be a JSON object"},
                 )
             allowed_keys = {
+                "world_id",
                 "world_def",
                 "config_snapshot",
                 "mode",
@@ -452,9 +453,10 @@ class HTTPRestAdapter(ProtocolAdapter):
             status: str | None = fastapi.Query(default=None),
             preset: str | None = fastapi.Query(default=None),
             tag: str | None = fastapi.Query(default=None),
+            world_id: str | None = fastapi.Query(default=None),
         ):
             """List runs, newest first. Supports pagination and filtering."""
-            runs = await gateway._app.run_manager.list_runs()
+            runs = await gateway._app.run_manager.list_runs(world_id=world_id)
             if status:
                 runs = [r for r in runs if r.get("status") == status]
             if preset:
@@ -498,6 +500,36 @@ class HTTPRestAdapter(ProtocolAdapter):
             total = len(runs)
             paginated = runs[offset : offset + limit]
             return {"runs": paginated, "total": total}
+
+        # ── World endpoints ────────────────────────────────────
+
+        @app.get("/api/v1/worlds")
+        async def list_worlds_endpoint(
+            limit: int = fastapi.Query(default=50, ge=1, le=1000),
+        ):
+            """List all created worlds, newest first."""
+            worlds = await gateway._app.world_manager.list_worlds(limit=limit)
+            return {"worlds": worlds, "total": len(worlds)}
+
+        @app.get("/api/v1/worlds/{world_id}")
+        async def get_world_endpoint(world_id: str):
+            """Get metadata for a specific world."""
+            from terrarium.core.types import WorldId as _WId
+            world = await gateway._app.world_manager.get_world(_WId(world_id))
+            if not world:
+                return fastapi.responses.JSONResponse(
+                    status_code=404,
+                    content={"error": f"World '{world_id}' not found"},
+                )
+            return world
+
+        @app.get("/api/v1/worlds/{world_id}/runs")
+        async def list_world_runs_endpoint(world_id: str):
+            """List all runs that used this world."""
+            runs = await gateway._app.run_manager.list_runs(world_id=world_id)
+            return {"runs": runs, "total": len(runs)}
+
+        # ── Run endpoints ──────────────────────────────────────
 
         _INTERNAL_ACTORS = frozenset({
             "world_compiler", "animator", "system", "policy",

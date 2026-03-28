@@ -106,6 +106,61 @@ class StateEngine(BaseEngine):
             await self._db.close()
             self._db = None
 
+    async def reconfigure(self, db_path: str) -> None:
+        """Switch the backing database to a new file path.
+
+        Closes the current connection, opens a fresh DB at *db_path*,
+        runs migrations, and reinitialises all sub-components including
+        the snapshot store.
+
+        Used by ``TerrariumApp`` to switch between a world's state.db
+        and a run's state.db during the world/run lifecycle.
+        """
+        from terrarium.engines.state.migrations import STATE_MIGRATIONS
+        from terrarium.engines.state.store import EntityStore
+        from terrarium.engines.state.event_log import EventLog
+        from terrarium.engines.state.causal_graph import CausalGraph
+        from terrarium.persistence.migrations import MigrationRunner
+        from terrarium.persistence.manager import create_database
+        from terrarium.persistence.config import PersistenceConfig
+        from terrarium.persistence.snapshot import SnapshotStore
+
+        # Close current DB
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
+
+        # Open new DB at the requested path
+        db_dir = Path(db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self._db = await create_database(db_path)
+
+            # Apply migrations on the new DB
+            runner = MigrationRunner(self._db)
+            for migration in STATE_MIGRATIONS:
+                runner.register(migration)
+            await runner.migrate_up()
+
+            # Reinitialise sub-components on the new DB
+            self._store = EntityStore(self._db)
+            self._event_log = EventLog(self._db)
+            self._causal_graph = CausalGraph(self._db)
+
+            # Reinitialise snapshot store to use the same directory as the DB
+            snapshot_dir = str(db_dir / "snapshots")
+            self._snapshot_store = SnapshotStore(
+                PersistenceConfig(base_dir=snapshot_dir)
+            )
+        except Exception:
+            if self._db is not None:
+                await self._db.close()
+                self._db = None
+            raise
+
+        logger.info("StateEngine reconfigured to %s", db_path)
+
     async def _handle_event(self, event: Event) -> None:
         """Handle an inbound event from the bus."""
         logger.debug("StateEngine received event %s (%s)", event.event_id, event.event_type)

@@ -336,10 +336,14 @@ async def _run_impl(
             if behavior:
                 compiled_plan = compiled_plan.model_copy(update={"behavior": behavior})
 
-            # Step 2: Create run + generate world
+            # Step 2: Create world + run
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")
-            run_id = await terrarium.create_run(compiled_plan, mode=compiled_plan.mode, tag=tag)
+            run_id = await terrarium.create_run(
+                compiled_plan, mode=compiled_plan.mode, tag=tag,
+            )
             console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
+            if hasattr(terrarium, '_current_world_id'):
+                console.print(f"  World: [cyan]{terrarium._current_world_id}[/cyan]")
 
             # Step 3: Optionally start servers
             if serve:
@@ -453,8 +457,9 @@ async def _serve_impl(
 
             if run_id:
                 # Re-serve existing run — instant, no compilation
+                from terrarium.core.types import RunId as _RId
                 console.print(f"  Loading run: [cyan]{run_id}[/cyan]")
-                run = await terrarium.run_manager.get_run(run_id)
+                run = await terrarium.run_manager.get_run(_RId(run_id))
                 if run is None:
                     console.print(f"[red]Run {run_id} not found[/red]")
                     raise typer.Exit(1)
@@ -521,7 +526,8 @@ async def _serve_impl(
                     )
                     if active:
                         try:
-                            await terrarium.end_run(active)
+                            from terrarium.core.types import RunId as _RId
+                            await terrarium.end_run(_RId(active))
                             console.print(
                                 f"  Run completed: [cyan]{active}[/cyan]"
                             )

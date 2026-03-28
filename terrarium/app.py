@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 from terrarium.bus.bus import EventBus
 from terrarium.config.schema import TerrariumConfig
 from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, RunId, ServiceId
+from terrarium.core.errors import TerrariumError
+from terrarium.core.types import ActorId, RunId, ServiceId, WorldId
 from terrarium.ledger.ledger import Ledger
 from terrarium.persistence.manager import ConnectionManager
 from terrarium.pipeline.builder import build_pipeline_from_config
@@ -50,6 +51,8 @@ class TerrariumApp:
         self._run_manager: Any = None
         self._artifact_store: Any = None
         self._current_run_id: str | None = None
+        self._current_world_id: str | None = None
+        self._world_manager: Any = None
         self._actor_registry: Any = None
         self._started = False
 
@@ -81,6 +84,11 @@ class TerrariumApp:
                 config=self._config.runs, persistence=self._conn_mgr,
             )
             self._artifact_store = RunArtifactStore(config=self._config.runs)
+
+            from terrarium.worlds.manager import WorldManager
+            self._world_manager = WorldManager(
+                data_dir=self._config.worlds.data_dir,
+            )
 
             # 6. Engine registry + wiring
             # Fix #8: inject state DB via ConnectionManager instead of
@@ -361,6 +369,8 @@ class TerrariumApp:
         self._run_manager = None
         self._artifact_store = None
         self._scheduler = None
+        self._world_manager = None
+        self._current_world_id = None
         self._started = False
 
     async def read_entities(
@@ -676,20 +686,18 @@ class TerrariumApp:
     async def compile_and_run(self, plan: Any) -> dict:
         """Compile world + configure all runtime engines in one call.
 
-        Convenience wrapper that does:
-        1. generate_world(plan) — LLM generation + validation + snapshot
-        2. configure_governance(plan) — policies + permissions + budgets
-        3. configure_animator(plan) — behavior mode + dimensions + scheduler
-        4. configure_agency(plan, result) — internal actor lifecycle
+        Routes through the proper world/run separation:
+        1. create_world(plan) — generate entities into world's own state.db
+        2. create_run() — copy world state to run, configure runtime engines
 
-        This is the recommended single entry point for users.
+        Returns the generation result dict for backward compatibility.
         """
-        compiler = self._registry.get("world_compiler")
-        result = await compiler.generate_world(plan)
-        self.configure_governance(plan)
-        await self.configure_animator(plan)
-        await self.configure_agency(plan, result)
-        return result
+        world_id = await self.create_world(plan)
+        run_id = await self.create_run(plan, world_id=world_id)
+        # Load from disk (not instance state)
+        import json as _json
+        gen_path = self._world_manager.get_world_dir(world_id) / "generation.json"
+        return _json.loads(gen_path.read_text()) if gen_path.exists() else {}
 
     # ── Run management ─────────────────────────────────────────
 
@@ -700,19 +708,81 @@ class TerrariumApp:
          "permissions": {"read": "all", "write": "all"}},
     ]
 
+    # ── World lifecycle ───────────────────────────────────────
+
+    async def create_world(self, plan: Any) -> WorldId:
+        """Create a world — generate entities into the world's own state.db.
+
+        This is the "stage setup." No agent has acted yet.
+        The world's ``state.db`` is the pristine initial state.
+        """
+        plan_data = plan.model_dump(mode="json") if hasattr(plan, "model_dump") else {}
+        world_id = await self._world_manager.create_world(
+            name=getattr(plan, "name", "unnamed"),
+            plan_data=plan_data,
+            seed=getattr(plan, "seed", 42),
+            services=list(plan.services.keys()) if hasattr(plan, "services") else [],
+        )
+
+        # Point state engine at the world's isolated DB
+        state_engine = self._registry.get("state")
+        world_db_path = self._world_manager.get_state_db_path(world_id)
+        await state_engine.reconfigure(world_db_path)
+
+        # Generate world (LLM → entities → populate_entities → world's state.db)
+        compiler = self._registry.get("world_compiler")
+        result = await compiler.generate_world(plan)
+
+        # Save generation result alongside the world
+        import json as _json
+        world_dir = self._world_manager.get_world_dir(world_id)
+        (world_dir / "generation.json").write_text(
+            _json.dumps(result, indent=2, default=str)
+        )
+
+        # Update world metadata with counts
+        total_entities = sum(len(v) for v in result.get("entities", {}).values())
+        actor_count = len(result.get("actors", []))
+        await self._world_manager.mark_generated(world_id, total_entities, actor_count)
+
+        self._current_world_id = str(world_id)
+
+        return world_id
+
     async def create_run(
         self, plan: Any, mode: str = "governed", tag: str | None = None,
+        world_id: WorldId | None = None,
     ) -> RunId:
-        """Create a run record, compile the world, and start the run."""
+        """Create a run against an existing world.
+
+        Copies the world's pristine ``state.db`` into the run's
+        directory, then configures governance + animator + agency.
+        If *world_id* is ``None``, creates a new world first
+        (backward-compatible with the old single-call flow).
+        """
+        import shutil
+
+        # Create world if not provided
+        if world_id is None:
+            world_id = await self.create_world(plan)
+
+        # Validate world exists
+        world = await self._world_manager.get_world(world_id)
+        if world is None:
+            raise TerrariumError(f"World '{world_id}' not found")
+
+        # Serialize plan + inject gateway actors
         world_def = plan.model_dump(mode="json") if hasattr(plan, "model_dump") else {}
-        # Register gateway actors so they appear in world_def lookups
         actors = world_def.get("actor_specs", world_def.get("actors", []))
         if isinstance(actors, list):
             existing_ids = {a.get("id") for a in actors if isinstance(a, dict)}
             for ga in self._GATEWAY_ACTORS:
                 if ga["id"] not in existing_ids:
                     actors.append(ga)
+
+        # Create run record (now includes world_id)
         run_id = await self._run_manager.create_run(
+            world_id=str(world_id),
             world_def=world_def,
             config_snapshot={
                 "seed": plan.seed,
@@ -725,10 +795,42 @@ class TerrariumApp:
             tag=tag,
         )
 
+        # Copy world's pristine state.db → run's own state.db
+        world_db = self._world_manager.get_state_db_path(world_id)
+        if not Path(world_db).exists():
+            raise TerrariumError(
+                f"World '{world_id}' has no state.db — generation may have failed"
+            )
+        run_dir = Path(self._run_manager._data_dir) / str(run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        run_db = str(run_dir / "state.db")
+
+        # Close current state connection before copying the file
+        state_engine = self._registry.get("state")
+        if state_engine._db is not None:
+            await state_engine._db.close()
+            state_engine._db = None
+
+        shutil.copy2(world_db, run_db)
+
+        # Point state engine at the run's DB
+        await state_engine.reconfigure(run_db)
+
+        # Load generation result from the world's saved data (not instance state)
+        import json as _json
+        gen_path = self._world_manager.get_world_dir(world_id) / "generation.json"
+        result = _json.loads(gen_path.read_text()) if gen_path.exists() else {}
+        self.configure_governance(plan)
+        await self.configure_animator(plan)
+        await self.configure_agency(plan, result)
+
+        # Track active run
         self._current_run_id = str(run_id)
-        result = await self.compile_and_run(plan)
         await self._run_manager.start_run(run_id)
+
+        # Save compilation result as run artifact
         await self._artifact_store.save_config(run_id, result)
+
         return run_id
 
     async def end_run(self, run_id: RunId) -> dict:
@@ -883,3 +985,7 @@ class TerrariumApp:
     @property
     def actor_registry(self) -> Any:
         return self._actor_registry
+
+    @property
+    def world_manager(self) -> Any:
+        return self._world_manager
