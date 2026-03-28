@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Play, GitCompareArrows, Hexagon } from 'lucide-react';
+import { Play, Globe, GitCompareArrows, Hexagon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useLayoutStore } from '@/stores/layout-store';
 import type { LucideIcon } from 'lucide-react';
@@ -12,6 +12,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Runs', icon: Play },
+  { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/compare', label: 'Compare', icon: GitCompareArrows },
 ];
 

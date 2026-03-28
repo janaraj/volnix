@@ -2,7 +2,7 @@
 // API request / response types
 // ---------------------------------------------------------------------------
 
-import type { Run, WorldEvent, Entity, CapabilityGap } from '@/types/domain';
+import type { Run, WorldEvent, Entity, CapabilityGap, World } from '@/types/domain';
 
 // -- Endpoint-specific response types (match backend shapes) ----------------
 
@@ -52,6 +52,11 @@ export interface CompareResponse {
     by_type: Record<string, Record<string, number>>;
   };
   entity_states: Record<string, unknown>;
+}
+
+export interface WorldsListResponse {
+  worlds: World[];
+  total: number;
 }
 
 // -- Request params ---------------------------------------------------------

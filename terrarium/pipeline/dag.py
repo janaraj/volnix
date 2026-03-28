@@ -7,8 +7,11 @@ results to the event bus and ledger.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from terrarium.core.context import ActionContext, StepResult
 from terrarium.core.events import Event
@@ -72,6 +75,9 @@ class PipelineDAG:
                 result = await step.execute(ctx)
             except Exception as exc:
                 elapsed_ms = (time.monotonic() - t0) * 1000.0
+                logger.error(
+                    "Pipeline step '%s' raised: %s", step.step_name, exc, exc_info=True,
+                )
                 result = StepResult(
                     step_name=step.step_name,
                     verdict=StepVerdict.ERROR,

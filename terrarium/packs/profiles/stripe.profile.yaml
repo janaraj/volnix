@@ -32,7 +32,7 @@ operations:
       description:
         type: string
       created:
-        type: string
+        type: integer
   is_read_only: false
   creates_entity: customer
 - name: stripe_get_customer
@@ -67,7 +67,7 @@ operations:
   http_path: /v1/payment_intents
   parameters:
     amount:
-      type: string
+      type: integer
     currency:
       type: string
     customer:
@@ -295,7 +295,7 @@ operations:
       status:
         type: string
       current_period_end:
-        type: string
+        type: integer
   is_read_only: false
   creates_entity: subscription
 - name: stripe_cancel_subscription
@@ -332,7 +332,7 @@ operations:
     payment_intent:
       type: string
     amount:
-      type: string
+      type: integer
     reason:
       type: string
   required_params: []
@@ -386,7 +386,7 @@ entities:
     description:
       type: string
     created:
-      type: string
+      type: integer
   required:
   - id
 - name: payment_intent
@@ -395,7 +395,7 @@ entities:
     id:
       type: string
     amount:
-      type: string
+      type: integer
     currency:
       type: string
     customer:
@@ -406,6 +406,8 @@ entities:
       type: string
     client_secret:
       type: string
+    created:
+      type: integer
   required:
   - id
   - amount
@@ -440,9 +442,9 @@ entities:
     status:
       type: string
     current_period_end:
-      type: string
+      type: integer
     cancel_at_period_end:
-      type: string
+      type: boolean
   required:
   - id
   - customer
@@ -453,7 +455,7 @@ entities:
     id:
       type: string
     amount:
-      type: string
+      type: integer
     currency:
       type: string
     status:
@@ -473,7 +475,7 @@ entities:
     payment_intent:
       type: string
     amount:
-      type: string
+      type: integer
     status:
       type: string
   required:
@@ -489,7 +491,7 @@ entities:
     payment_intent:
       type: string
     amount:
-      type: string
+      type: integer
     status:
       type: string
   required:
@@ -503,7 +505,7 @@ entities:
     id:
       type: string
     amount:
-      type: string
+      type: integer
     status:
       type: string
     charge:
@@ -520,9 +522,9 @@ entities:
     id:
       type: string
     available:
-      type: string
+      type: integer
     pending:
-      type: string
+      type: integer
     currency:
       type: string
   required:

@@ -4,6 +4,7 @@
 
 export const ROUTES = {
   RUN_LIST: '/',
+  WORLDS: '/worlds',
   LIVE_CONSOLE: '/runs/:id/live',
   RUN_REPORT: '/runs/:id',
   COMPARE: '/compare',

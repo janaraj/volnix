@@ -6,6 +6,7 @@ export { useEntities, useEntity } from './queries/use-entities';
 export { useCapabilityGaps } from './queries/use-gaps';
 export { useActor } from './queries/use-actors';
 export { useComparison } from './queries/use-compare';
+export { useWorlds } from './queries/use-worlds';
 
 // WebSocket hooks
 export { useWebSocket } from './use-websocket';

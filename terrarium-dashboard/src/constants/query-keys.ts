@@ -18,6 +18,11 @@ export const queryKeys = {
     gaps: (id: string) => ['runs', id, 'gaps'] as const,
     actor: (runId: string, actorId: string) => ['runs', runId, 'actors', actorId] as const,
   },
+  worlds: {
+    all: ['worlds'] as const,
+    list: () => ['worlds', 'list'] as const,
+    detail: (id: string) => ['worlds', id] as const,
+  },
   compare: {
     // Lexicographic sort ensures same cache key regardless of selection order.
     // slice() prevents mutation of caller's array.

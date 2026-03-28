@@ -67,6 +67,10 @@ class PermissionEngine(BaseEngine):
         Unknown actors (not in registry) are allowed through.
         """
         actor = self._get_actor(ctx.actor_id)
+        logger.debug(
+            "Permission check: actor_id=%s, found=%s",
+            ctx.actor_id, actor is not None,
+        )
         if actor is None:
             if self._is_ungoverned() or self._actor_registry is None:
                 # Ungoverned mode or no registry injected: allow unknown actors

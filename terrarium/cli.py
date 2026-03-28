@@ -264,10 +264,14 @@ async def _plan_impl(description: str, output: Path | None, fmt: str) -> None:
 
 @app.command()
 def run(
-    world: Annotated[str, typer.Argument(help="Path to YAML world definition or NL description")],
+    world: Annotated[str, typer.Argument(help="YAML path, blueprint name, or NL description")] = "",
     settings: Annotated[
         str | None,
         typer.Option("--settings", "-s", help="Path to compiler settings YAML"),
+    ] = None,
+    world_id: Annotated[
+        str | None,
+        typer.Option("--world", "-w", help="Run on existing world (skip compilation)"),
     ] = None,
     agent: Annotated[
         str | None,
@@ -294,8 +298,17 @@ def run(
         typer.Option("--serve", help="Start MCP/HTTP servers for agent connection"),
     ] = False,
 ) -> None:
-    """Run a full simulation on a world definition."""
-    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve))
+    """Run a full simulation on a world definition.
+
+    Examples:
+      terrarium run customer_support                  # compile + run
+      terrarium run --world world_a6b03d8a8f29        # run on existing world (instant)
+      terrarium run customer_support --serve          # compile + run + HTTP server
+    """
+    if not world and not world_id:
+        print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
+        raise typer.Exit(1)
+    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id))
 
 
 async def _run_impl(
@@ -307,29 +320,37 @@ async def _run_impl(
     tag: str | None,
     behavior: str,
     serve: bool,
+    world_id: str | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
-            compiler = terrarium.registry.get("world_compiler")
-
-            # Step 1: Compile
-            console.print("[bold]Step 1/4: Compiling world...[/bold]")
-            from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
-
-            resolved = resolve_blueprint(world)
-            if resolved:
-                console.print(f"  Using: [cyan]{resolved}[/cyan]")
-                compiled_plan = await compiler.compile_from_yaml(str(resolved), settings)
+            # Step 1: Load plan — from existing world or compile fresh
+            if world_id:
+                from terrarium.core.types import WorldId as _WId
+                console.print("[bold]Step 1/4: Loading existing world...[/bold]")
+                compiled_plan = await terrarium.world_manager.load_plan(_WId(world_id))
+                if compiled_plan is None:
+                    console.print(f"[red]World {world_id} not found or has no plan[/red]")
+                    raise typer.Exit(1)
+                console.print(f"  World: [cyan]{world_id}[/cyan]")
             else:
-                compiled_plan = await compiler.compile_from_nl(world)
-                # Auto-save to ~/.terrarium/blueprints/
-                from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+                compiler = terrarium.registry.get("world_compiler")
+                console.print("[bold]Step 1/4: Compiling world...[/bold]")
+                from terrarium.paths import resolve_blueprint, sanitize_filename, user_blueprints_dir
 
-                reviewer = PlanReviewer()
-                name = sanitize_filename(compiled_plan.name)
-                saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
-                saved.write_text(reviewer.to_yaml(compiled_plan))
-                console.print(f"  Saved: [cyan]{saved}[/cyan]")
+                resolved = resolve_blueprint(world)
+                if resolved:
+                    console.print(f"  Using: [cyan]{resolved}[/cyan]")
+                    compiled_plan = await compiler.compile_from_yaml(str(resolved), settings)
+                else:
+                    compiled_plan = await compiler.compile_from_nl(world)
+                    from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+
+                    reviewer = PlanReviewer()
+                    name = sanitize_filename(compiled_plan.name)
+                    saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
+                    saved.write_text(reviewer.to_yaml(compiled_plan))
+                    console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
             if mode:
                 compiled_plan = compiled_plan.model_copy(update={"mode": mode})
@@ -338,8 +359,10 @@ async def _run_impl(
 
             # Step 2: Create world + run
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")
+            from terrarium.core.types import WorldId as _WId
             run_id = await terrarium.create_run(
                 compiled_plan, mode=compiled_plan.mode, tag=tag,
+                world_id=_WId(world_id) if world_id else None,
             )
             console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
             if hasattr(terrarium, '_current_world_id'):
@@ -359,14 +382,36 @@ async def _run_impl(
 
                 event_queue = EventQueue()
 
-                async def pipeline_executor(envelope: object) -> dict | None:
-                    result = await terrarium.handle_action(
-                        actor_id=str(envelope.actor_id),  # type: ignore[attr-defined]
-                        service_id=str(envelope.service_id),  # type: ignore[attr-defined]
-                        action=envelope.action,  # type: ignore[attr-defined]
-                        input_data=envelope.input_data,  # type: ignore[attr-defined]
-                    )
-                    return result if "error" not in result else None
+                # Wire queue to agency engine for bus-triggered activations
+                agency_eng = terrarium.registry.get("agency")
+                agency_eng._config["_event_queue"] = event_queue
+
+                async def pipeline_executor(envelope: object) -> object | None:
+                    """Execute an envelope through the governance pipeline.
+
+                    Returns the committed WorldEvent for agency.notify(),
+                    or None if the pipeline rejected the action.
+                    """
+                    try:
+                        result = await terrarium.handle_action(
+                            actor_id=str(envelope.actor_id),
+                            service_id=str(envelope.target_service),
+                            action=envelope.action_type,
+                            input_data=envelope.payload,
+                        )
+                    except Exception:
+                        return None
+                    # Extract the committed WorldEvent (used by agency.notify)
+                    event = result.pop("_event", None) if isinstance(result, dict) else None
+                    if isinstance(result, dict) and "error" in result:
+                        return None
+                    return event
+
+                # Build actor_specs for simulation type detection
+                plan_actors = getattr(compiled_plan, "actor_specs", [])
+                if not plan_actors:
+                    plan_data = compiled_plan.model_dump(mode="json") if hasattr(compiled_plan, "model_dump") else {}
+                    plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
 
                 runner = SimulationRunner(
                     event_queue=event_queue,
@@ -375,11 +420,17 @@ async def _run_impl(
                     animator=terrarium.registry.get("animator"),
                     config=terrarium.config.simulation_runner,
                     ledger=terrarium.ledger,
+                    actor_specs=plan_actors,
                 )
 
                 mission = getattr(compiled_plan, "mission", None)
                 if mission:
                     runner.set_mission(mission)
+
+                # Build kickstart in app layer (has state engine, registry, packs)
+                kickstart = await terrarium.build_kickstart_envelope(compiled_plan)
+                if kickstart is not None:
+                    event_queue.submit(kickstart)
 
                 console.print("[bold]Step 4/4: Running simulation...[/bold]")
                 stop_reason = await runner.run()
@@ -426,6 +477,10 @@ def serve(
         str | None,
         typer.Option("--run", "-r", help="Re-serve existing run (skip compilation)"),
     ] = None,
+    world_id: Annotated[
+        str | None,
+        typer.Option("--world", "-w", help="Create new run on existing world (skip compilation)"),
+    ] = None,
     host: Annotated[str, typer.Option("--host", help="HTTP server bind host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", "-p", help="HTTP server bind port")] = 8080,
 ) -> None:
@@ -433,17 +488,19 @@ def serve(
 
     Examples:
       terrarium serve customer_support              # compile + serve blueprint
+      terrarium serve --world world_a6b03d8a8f29    # new run on existing world (instant)
       terrarium serve --run run_64ca8171df83        # re-serve existing run (instant)
       terrarium serve "Support team with email"     # compile from NL + serve
     """
-    if not world and not run:
-        print_error("Provide a world (blueprint name, YAML, or NL) or --run <run_id>")
+    if not world and not run and not world_id:
+        print_error("Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>")
         raise typer.Exit(1)
-    asyncio.run(_serve_impl(world, settings, run, host, port))
+    asyncio.run(_serve_impl(world, settings, run, world_id, host, port))
 
 
 async def _serve_impl(
-    world: str, settings: str | None, run_id: str | None, host: str, port: int,
+    world: str, settings: str | None, run_id: str | None,
+    world_id: str | None, host: str, port: int,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -455,6 +512,8 @@ async def _serve_impl(
 
             console.print(f"[green]HTTP server: http://{host}:{port}[/green]")
 
+            _active_run_id = [None]  # mutable container for shutdown handler
+
             if run_id:
                 # Re-serve existing run — instant, no compilation
                 from terrarium.core.types import RunId as _RId
@@ -465,6 +524,23 @@ async def _serve_impl(
                     raise typer.Exit(1)
                 tools = await terrarium.gateway.get_tool_manifest()
                 console.print(f"  [green]{len(tools)} tools available[/green]")
+
+            elif world_id:
+                # New run on existing world — instant, no compilation
+                from terrarium.core.types import WorldId as _WId
+                console.print(f"  Loading world: [cyan]{world_id}[/cyan]")
+                plan = await terrarium.world_manager.load_plan(_WId(world_id))
+                if plan is None:
+                    console.print(f"[red]World {world_id} not found or has no plan[/red]")
+                    raise typer.Exit(1)
+                new_run_id = await terrarium.create_run(
+                    plan, mode=plan.mode, world_id=_WId(world_id),
+                )
+                _active_run_id[0] = str(new_run_id)
+                console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
+                tools = await terrarium.gateway.get_tool_manifest()
+                console.print(f"  [green]{len(tools)} tools available[/green]")
+
             else:
                 # Compile + generate in background (concurrent with uvicorn)
                 console.print("[dim]Compiling world in background...[/dim]")
@@ -511,7 +587,6 @@ async def _serve_impl(
                     except Exception as exc:
                         console.print(f"[red]Compilation failed: {exc}[/red]")
 
-                _active_run_id = [None]  # mutable container for nonlocal access
                 asyncio.create_task(_compile_world())
 
             # Run uvicorn — blocks until Ctrl+C
@@ -521,9 +596,7 @@ async def _serve_impl(
                     await http_adapter.run_server(host=host, port=port)
                 finally:
                     # Complete the active run on shutdown
-                    active = run_id or (
-                        _active_run_id[0] if "_active_run_id" in dir() else None
-                    )
+                    active = run_id or _active_run_id[0]
                     if active:
                         try:
                             from terrarium.core.types import RunId as _RId

@@ -260,3 +260,16 @@ export interface EntityUpdate {
   changed_fields: string[];
   caused_by_event: string;
 }
+
+// -- World (the "stage") ----------------------------------------------------
+
+export interface World {
+  world_id: string;
+  name: string;
+  seed: number;
+  services: string[];
+  status: 'created' | 'generated';
+  created_at: string;
+  entity_count: number;
+  actor_count: number;
+}

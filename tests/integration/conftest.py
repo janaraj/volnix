@@ -379,6 +379,58 @@ def _generate_generic_entities(
             "charge": f"ch_{idx:03d}", "currency": "usd",
             "status": "succeeded", "created": 1700000000 + idx,
         },
+        "checkout_session": lambda idx: {
+            "id": f"cs_{idx:03d}", "mode": "payment",
+            "status": "complete", "payment_status": "paid",
+            "url": f"https://checkout.stripe.com/c/pay/cs_{idx:03d}",
+            "customer": f"cus_{(idx % 5) + 1:03d}",
+        },
+        "subscription": lambda idx: {
+            "id": f"sub_{idx:03d}", "customer": f"cus_{(idx % 5) + 1:03d}",
+            "status": "active", "current_period_end": 1800000000 + idx,
+            "cancel_at_period_end": False,
+        },
+        "transaction": lambda idx: {
+            "id": f"txn_{idx:03d}", "amount": (idx + 1) * 100,
+            "currency": "usd", "status": "available",
+            "payment_intent": f"pi_{(idx % 5) + 1:03d}",
+        },
+        "authorization": lambda idx: {
+            "id": f"auth_{idx:03d}", "payment_intent": f"pi_{(idx % 5) + 1:03d}",
+            "amount": (idx + 1) * 1000, "status": "closed",
+        },
+        "settlement": lambda idx: {
+            "id": f"sett_{idx:03d}", "payment_intent": f"pi_{(idx % 5) + 1:03d}",
+            "amount": (idx + 1) * 1000, "status": "settled",
+        },
+        "reversal": lambda idx: {
+            "id": f"rev_{idx:03d}", "amount": 500,
+            "status": "succeeded", "charge": f"ch_{(idx % 5) + 1:03d}",
+            "payment_intent": f"pi_{(idx % 5) + 1:03d}",
+        },
+        "balance": lambda idx: {
+            "id": f"bal_{idx:03d}", "available": (idx + 1) * 10000,
+            "pending": idx * 500, "currency": "usd",
+        },
+        "web_site": lambda idx: {
+            "id": f"site_{idx:03d}", "domain": f"site{idx}.acme.com",
+            "name": f"Site {idx}", "site_type": "internal_dashboard",
+            "created_at": f"2026-01-{idx + 1:02d}T00:00:00Z",
+        },
+        "web_session": lambda idx: {
+            "id": f"sess_{idx:03d}", "actor_id": f"agent-{idx}",
+            "status": "active",
+            "created_at": f"2026-03-{10 + idx:02d}T09:00:00Z",
+        },
+        "web_page": lambda idx: {
+            "id": f"page_{idx:03d}", "site_id": f"site_{(idx % 3) + 1:03d}",
+            "domain": f"site{(idx % 3) + 1}.acme.com",
+            "path": f"/page-{idx}", "title": f"Page {idx}",
+            "page_type": ["entity_view", "article", "landing"][idx % 3],
+            "status": "published",
+            "content_source": "compiled",
+            "created_at": f"2026-01-{idx + 1:02d}T00:00:00Z",
+        },
         "repository": lambda idx: {
             "id": f"repo_{idx:03d}", "name": f"repo-{idx}",
             "full_name": f"org/repo-{idx}", "owner": {"login": "org", "type": "Organization"},

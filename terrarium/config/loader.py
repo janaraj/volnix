@@ -94,6 +94,7 @@ class ConfigLoader:
             ("state", "db_path"): str(data_dir / "state.db"),
             ("state", "snapshot_dir"): str(data_dir / "snapshots"),
             ("runs", "data_dir"): str(data_dir / "runs"),
+            ("worlds", "data_dir"): str(data_dir / "worlds"),
             ("bus", "db_path"): str(data_dir / "bus.db"),
             ("ledger", "db_path"): str(data_dir / "ledger.db"),
         }

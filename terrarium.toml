@@ -171,7 +171,7 @@ middleware = ["auth", "rate_limit", "audit_log"]
 # ── Worlds ───────────────────────────────────────────────────
 
 [worlds]
-data_dir = "data/worlds"
+# data_dir: defaults to ~/.terrarium/data/worlds/ (set by paths.py)
 
 # ── Runs ─────────────────────────────────────────────────────
 
