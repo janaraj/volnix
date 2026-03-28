@@ -189,6 +189,25 @@ class ActorPromptBuilder:
                 "action": trigger_event.action,
                 "service": str(trigger_event.service_id),
             }
+            # Include key payload fields so the LLM can construct valid responses
+            # (e.g. channel_id for posting, thread_ts for replying)
+            if trigger_event.input_data:
+                payload_summary = {
+                    k: v for k, v in trigger_event.input_data.items()
+                    if k in ("channel_id", "channel", "text", "thread_ts", "ts",
+                             "subject", "body", "id", "status", "intended_for")
+                }
+                if payload_summary:
+                    trigger_info["payload"] = payload_summary
+            # Include response data (contains ts for replies, entity IDs, etc.)
+            if trigger_event.response_body:
+                resp_summary = {
+                    k: v for k, v in trigger_event.response_body.items()
+                    if k in ("ts", "channel", "ok", "id", "status", "message")
+                    and k != "_event"
+                }
+                if resp_summary:
+                    trigger_info["response"] = resp_summary
             if trigger_event.post_state:
                 trigger_info["result"] = trigger_event.post_state
             sections.append(f"### Trigger Event\n{json.dumps(trigger_info, indent=2)}")
@@ -200,10 +219,13 @@ class ActorPromptBuilder:
                 name = action.get("name", "?")
                 service = action.get("service", "")
                 desc = action.get("description", "")
-                action_lines.append(f"- {name} (service: {service}): {desc}")
+                required = action.get("required_params", [])
+                params_str = f" — required: {', '.join(required)}" if required else ""
+                action_lines.append(f"- {name} (service: {service}): {desc}{params_str}")
             sections.append(
                 "### Available Actions\n"
                 "Use `action_type` = the action name, `target_service` = the service name.\n"
+                "Include ALL required parameters in `payload`.\n"
                 + "\n".join(action_lines)
             )
 
@@ -253,13 +275,18 @@ class ActorPromptBuilder:
             sections.append("\n".join(actor_section))
 
         if available_actions:
-            action_lines = [
-                f"- {a.get('name', '?')} (service: {a.get('service', '')}): {a.get('description', '')}"
-                for a in available_actions
-            ]
+            action_lines = []
+            for a in available_actions:
+                required = a.get("required_params", [])
+                params_str = f" — required: {', '.join(required)}" if required else ""
+                action_lines.append(
+                    f"- {a.get('name', '?')} (service: {a.get('service', '')}): "
+                    f"{a.get('description', '')}{params_str}"
+                )
             sections.append(
                 "### Available Actions\n"
                 "Use `action_type` = the action name, `target_service` = the service name.\n"
+                "Include ALL required parameters in `payload`.\n"
                 + "\n".join(action_lines)
             )
 
