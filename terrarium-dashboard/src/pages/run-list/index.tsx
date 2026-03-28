@@ -20,6 +20,7 @@ function buildParams(filters: typeof FILTER_DEFAULTS): RunListParams {
   if (filters.status) params.status = filters.status;
   if (filters.preset) params.preset = filters.preset;
   if (filters.tag) params.tag = filters.tag;
+  if (filters.world_id) (params as Record<string, unknown>).world_id = filters.world_id;
   return params;
 }
 
@@ -54,15 +55,29 @@ export function RunListPage() {
       hasRunningRun(query.state.data as RunsListResponse | undefined) ? 10_000 : false,
   });
 
-  const isFiltered = filters.status !== '' || filters.preset !== '' || filters.tag !== '';
+  const isFiltered = filters.status !== '' || filters.preset !== '' || filters.tag !== '' || filters.world_id !== '';
 
   return (
     <div>
       <PageHeader
         title="Runs"
-        subtitle="All simulation runs"
+        subtitle={filters.world_id ? `Runs for world ${filters.world_id}` : 'All simulation runs'}
         actions={<NewRunHint />}
       />
+
+      {filters.world_id && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-4 py-2 text-sm text-text-secondary">
+          <span>Filtered by world:</span>
+          <span className="font-mono text-accent">{filters.world_id}</span>
+          <button
+            type="button"
+            onClick={() => setFilters({ world_id: '' })}
+            className="ml-auto text-xs text-text-muted hover:text-text-primary"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       <RunFilters filters={filters} onChange={setFilters} />
 

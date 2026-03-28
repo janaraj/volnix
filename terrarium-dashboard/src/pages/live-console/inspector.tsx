@@ -68,6 +68,8 @@ function AgentInspector({ runId, actorId }: { runId: string; actorId: string }) 
 }
 
 function RunInspector({ run }: { run: Run }) {
+  const actorSpecs = run.world_def?.actor_specs ?? run.world_def?.actors ?? [];
+
   return (
     <div className="space-y-4">
       <p className="text-xs uppercase text-text-muted">Inspector</p>
@@ -77,23 +79,38 @@ function RunInspector({ run }: { run: Run }) {
         <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
           {capitalize(run.mode)}
         </span>
-        <span className="rounded-md border border-info/20 bg-info/10 px-2 py-0.5 text-xs font-medium text-info">
-          {capitalize(run.reality_preset)}
-        </span>
         <span className="rounded-md border border-warning/20 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
           {capitalize(run.config_snapshot?.behavior ?? 'static')}
         </span>
       </div>
 
-      {/* Counts */}
-      <div className="flex items-center gap-4 text-sm">
-        <span className="text-text-muted">
-          Actors: <span className="font-mono text-text-primary">{run.actor_count ?? 0}</span>
-        </span>
-        <span className="text-text-muted">
-          Services: <span className="font-mono text-text-primary">{(run.services ?? []).length}</span>
-        </span>
-      </div>
+      {/* Actors */}
+      {actorSpecs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase text-text-muted">Actors</p>
+          <div className="space-y-1">
+            {actorSpecs.map((a: Record<string, unknown>, i: number) => (
+              <div key={a.id as string ?? i} className="flex items-center justify-between text-xs">
+                <span className="text-text-primary">
+                  {a.id as string ?? capitalize(a.role as string ?? '')}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {(a.count as number) > 1 && (
+                    <span className="font-mono text-text-muted">&times;{a.count as number}</span>
+                  )}
+                  <span className={
+                    (a.type as string) === 'external'
+                      ? 'rounded bg-info/10 px-1.5 py-0.5 text-info'
+                      : 'rounded bg-bg-elevated px-1.5 py-0.5 text-text-muted'
+                  }>
+                    {a.type as string}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Services list */}
       {(run.services ?? []).length > 0 && (

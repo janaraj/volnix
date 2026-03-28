@@ -9,6 +9,7 @@ export const STALE_TIME_EVENTS = 60_000;
 export const STALE_TIME_SCORECARD = Infinity; // completed run scorecard never changes
 export const STALE_TIME_ENTITIES = 60_000;
 export const STALE_TIME_COMPARISON = Infinity;
+export const STALE_TIME_WORLDS = 10_000;
 
 // Pagination
 export const PAGE_SIZE_RUNS = 20;

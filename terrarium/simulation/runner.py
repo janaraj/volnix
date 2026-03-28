@@ -184,32 +184,6 @@ class SimulationRunner:
             return SimulationType.INTERNAL_ONLY
         return SimulationType.EXTERNAL_DRIVEN
 
-    def create_kickstart_envelope(self) -> ActionEnvelope | None:
-        """Create an initial envelope for internal-only worlds.
-
-        Posts the mission to the #team channel to kickstart collaboration.
-        Returns None if not applicable (not internal-only or no mission).
-        """
-        if self._simulation_type != SimulationType.INTERNAL_ONLY:
-            return None
-        if not self._mission:
-            return None
-
-        return ActionEnvelope(
-            actor_id=ActorId("world"),
-            source=ActionSource.ENVIRONMENT,
-            action_type="slack_chat_postMessage",
-            target_service=ServiceId("chat"),
-            payload={
-                "channel": "#team",
-                "text": f"[MISSION] {self._mission}",
-                "intended_for": ["all"],
-            },
-            logical_time=0.0,
-            priority=EnvelopePriority.ENVIRONMENT,
-            metadata={"activation_reason": "kickstart"},
-        )
-
     async def stop(self) -> None:
         """Manual stop."""
         self._stop_reason = StopReason.MANUAL_STOP
@@ -231,10 +205,10 @@ class SimulationRunner:
         self._status = SimulationStatus.RUNNING
         self._stop_reason = None
 
-        # Kickstart for internal-only worlds: post mission to #team channel
-        kickstart = self.create_kickstart_envelope()
-        if kickstart is not None:
-            self._queue.submit(kickstart)
+        logger.info(
+            "SimulationRunner starting: type=%s, mission=%s, queue_pending=%s",
+            self._simulation_type, bool(self._mission), self._queue.has_pending(),
+        )
 
         while self._status == SimulationStatus.RUNNING:
             # Step 0: Async budget exhaustion check

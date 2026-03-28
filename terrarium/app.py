@@ -5,6 +5,7 @@ import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from terrarium.bus.bus import EventBus
@@ -373,6 +374,78 @@ class TerrariumApp:
         self._current_world_id = None
         self._started = False
 
+    async def build_kickstart_envelope(self, plan: Any) -> Any:
+        """Build the initial mission envelope for internal-only simulations.
+
+        Uses the state engine, actor registry, and pack registry to build
+        a valid envelope with real entity IDs and correct tool names.
+        Returns None if no communication service or no internal actors.
+        """
+        from terrarium.core.envelope import ActionEnvelope
+        from terrarium.core.types import ActionSource, EnvelopePriority, ServiceId
+
+        mission = getattr(plan, "mission", "")
+        if not mission:
+            return None
+
+        # Find lead actor from registry
+        lead_id = None
+        if self._actor_registry:
+            for actor in self._actor_registry.list_actors():
+                if str(actor.type) in ("human", "system") and actor.role:
+                    lead_id = actor.id
+                    if actor.metadata.get("lead"):
+                        break
+        if lead_id is None:
+            return None
+
+        # Find postMessage tool from pack registry
+        responder = self._registry.get("responder")
+        service_id, action = None, None
+        if hasattr(responder, "_pack_registry"):
+            for tool in responder._pack_registry.list_tools():
+                name = tool.get("name", "").lower()
+                if "postmessage" in name:
+                    service_id = tool.get("pack_name", "")
+                    action = tool.get("name", "")
+                    break
+        if not service_id or not action:
+            return None
+
+        # Find a general/team channel from state engine
+        state = self._registry.get("state")
+        channels = await state.query_entities("channel")
+        channel_id = None
+        for ch in channels:
+            name = ch.get("name", "").lower()
+            if name in ("general", "team"):
+                channel_id = ch.get("id")
+                break
+        if channel_id is None and channels:
+            channel_id = channels[0].get("id")
+        if channel_id is None:
+            return None
+
+        logger.info(
+            "Kickstart: actor=%s, action=%s, service=%s, channel=%s",
+            lead_id, action, service_id, channel_id,
+        )
+
+        return ActionEnvelope(
+            actor_id=lead_id,
+            source=ActionSource.ENVIRONMENT,
+            action_type=action,
+            target_service=ServiceId(service_id),
+            payload={
+                "channel_id": channel_id,
+                "text": f"[MISSION] {mission}",
+                "intended_for": ["all"],
+            },
+            logical_time=0.0,
+            priority=EnvelopePriority.ENVIRONMENT,
+            metadata={"activation_reason": "kickstart"},
+        )
+
     async def read_entities(
         self, actor_id: str, entity_type: str
     ) -> dict[str, Any]:
@@ -468,16 +541,25 @@ class TerrariumApp:
                 await self._side_effects.enqueue(se, ctx)
             await self._side_effects.process_all()
 
+        # Include the committed WorldEvent in the return so callers
+        # (e.g. SimulationRunner) can pass it to agency.notify().
+        # External callers (HTTP gateway) use only the response body.
+        committed_event = event if self._bus else None
+
         if ctx.short_circuited:
             step = ctx.short_circuit_step
             return {
                 "error": f"Pipeline short-circuited at step '{step}'",
                 "step": step,
+                "_event": committed_event,
             }
 
         if ctx.response_proposal:
-            return ctx.response_proposal.response_body
-        return {"error": "No response produced"}
+            result = ctx.response_proposal.response_body
+            if isinstance(result, dict):
+                result["_event"] = committed_event
+            return result
+        return {"error": "No response produced", "_event": committed_event}
 
     def configure_governance(self, plan: Any) -> None:
         """Inject governance state from a WorldPlan after world compilation.
@@ -735,9 +817,16 @@ class TerrariumApp:
 
         # Save generation result alongside the world
         import json as _json
+
+        def _serialize_result(obj: Any) -> Any:
+            """Serialize Pydantic models and other objects for JSON storage."""
+            if hasattr(obj, "model_dump"):
+                return obj.model_dump(mode="json")
+            return str(obj)
+
         world_dir = self._world_manager.get_world_dir(world_id)
         (world_dir / "generation.json").write_text(
-            _json.dumps(result, indent=2, default=str)
+            _json.dumps(result, indent=2, default=_serialize_result)
         )
 
         # Update world metadata with counts
@@ -820,6 +909,21 @@ class TerrariumApp:
         import json as _json
         gen_path = self._world_manager.get_world_dir(world_id) / "generation.json"
         result = _json.loads(gen_path.read_text()) if gen_path.exists() else {}
+
+        # Deserialize actors back to ActorDefinition objects (JSON loses types)
+        # and register them in the actor registry (same as compiler does at
+        # engine.py:374 during fresh generation — needed for permission checks)
+        from terrarium.actors.definition import ActorDefinition
+        if "actors" in result:
+            result["actors"] = [
+                ActorDefinition.model_validate(a) if isinstance(a, dict) else a
+                for a in result["actors"]
+            ]
+            if self._actor_registry is not None:
+                for actor_def in result["actors"]:
+                    if not self._actor_registry.has_actor(actor_def.id):
+                        self._actor_registry.register(actor_def)
+
         self.configure_governance(plan)
         await self.configure_animator(plan)
         await self.configure_agency(plan, result)

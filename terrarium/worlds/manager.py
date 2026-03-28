@@ -119,6 +119,18 @@ class WorldManager:
         """Get the filesystem directory for this world."""
         return self._data_dir / str(world_id)
 
+    async def load_plan(self, world_id: WorldId) -> Any:
+        """Load the saved WorldPlan for a world.
+
+        Returns ``None`` if the world or ``plan.json`` doesn't exist.
+        """
+        plan_path = self.get_world_dir(world_id) / "plan.json"
+        if not plan_path.exists():
+            return None
+        plan_data = json.loads(plan_path.read_text())
+        from terrarium.engines.world_compiler.plan import WorldPlan
+        return WorldPlan.model_validate(plan_data)
+
     async def delete_world(self, world_id: WorldId) -> bool:
         """Delete a world and all its data from disk."""
         wid = str(world_id)

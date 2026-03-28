@@ -31,12 +31,14 @@ export type FilterValues = {
   status: string;
   preset: string;
   tag: string;
+  world_id: string;
 };
 
 export const FILTER_DEFAULTS: FilterValues = {
   status: '',
   preset: '',
   tag: '',
+  world_id: '',
 };
 
 interface RunFiltersProps {

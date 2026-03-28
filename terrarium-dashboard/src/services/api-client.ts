@@ -1,7 +1,7 @@
-import type { Run, Entity, AgentSummary } from '@/types/domain';
+import type { Run, Entity, AgentSummary, World } from '@/types/domain';
 import type {
   RunsListResponse, EventsListResponse, EventDetailResponse, EntitiesListResponse,
-  GapsResponse, ScorecardResponse, CompareResponse,
+  GapsResponse, ScorecardResponse, CompareResponse, WorldsListResponse,
   RunListParams, EventFilterParams, EntityFilterParams,
 } from '@/types/api';
 import { ApiError } from '@/types/api';
@@ -86,6 +86,15 @@ export class ApiClient {
   // ── Actors ───────────────────────────────────
   async getActor(runId: string, actorId: string): Promise<AgentSummary> {
     return this.request('GET', `/api/v1/runs/${runId}/actors/${actorId}`);
+  }
+
+  // ── World endpoints ────────────────────────────
+  async getWorlds(): Promise<WorldsListResponse> {
+    return this.request('GET', '/api/v1/worlds');
+  }
+
+  async getWorld(worldId: string): Promise<World> {
+    return this.request('GET', `/api/v1/worlds/${worldId}`);
   }
 
   // ── Comparison ───────────────────────────────

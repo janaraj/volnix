@@ -4,6 +4,7 @@ import { RunListPage } from '@/pages/run-list';
 import { LiveConsolePage } from '@/pages/live-console';
 import { RunReportPage } from '@/pages/run-report';
 import { ComparePage } from '@/pages/compare';
+import { WorldsListPage } from '@/pages/worlds';
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<RunListPage />} />
+          <Route path="/worlds" element={<WorldsListPage />} />
           <Route path="/runs/:id/live" element={<LiveConsolePage />} />
           <Route path="/runs/:id" element={<RunReportPage />} />
           <Route path="/compare" element={<ComparePage />} />
