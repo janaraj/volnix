@@ -748,30 +748,32 @@ class TerrariumApp:
         for state in actor_states:
             state.batch_threshold = batch_threshold
 
-        # Generate subscriptions via LLM if available, otherwise skip gracefully
-        if self._llm_router and actor_states:
-            try:
-                from terrarium.engines.world_compiler.subscription_generator import (
-                    SubscriptionGenerator,
+        # Apply subscriptions: use pre-generated from compilation result,
+        # or generate via LLM if available
+        if actor_states:
+            pre_generated = result.get("subscriptions", {})
+
+            if pre_generated:
+                # Apply pre-generated subscriptions (no LLM needed).
+                # Deserialize dicts to Subscription objects (JSON loses types).
+                from terrarium.actors.state import Subscription as _Sub
+                for state in actor_states:
+                    actor_key = str(state.actor_id)
+                    if actor_key in pre_generated:
+                        state.subscriptions = [
+                            _Sub.model_validate(s) if isinstance(s, dict) else s
+                            for s in pre_generated[actor_key]
+                        ]
+                logger.info(
+                    "Applied pre-generated subscriptions for %d actors",
+                    sum(1 for s in actor_states if s.subscriptions),
                 )
+            elif self._llm_router:
+                try:
+                    from terrarium.engines.world_compiler.subscription_generator import (
+                        SubscriptionGenerator,
+                    )
 
-                compiler = self._registry.get("world_compiler")
-                # Use subscriptions from compilation result if already generated (GAP 4)
-                pre_generated = result.get("subscriptions", {})
-
-                if pre_generated:
-                    # Apply pre-generated subscriptions from compiler.
-                    # Deserialize dicts to Subscription objects (JSON loses types).
-                    from terrarium.actors.state import Subscription as _Sub
-                    for state in actor_states:
-                        actor_key = str(state.actor_id)
-                        if actor_key in pre_generated:
-                            state.subscriptions = [
-                                _Sub.model_validate(s) if isinstance(s, dict) else s
-                                for s in pre_generated[actor_key]
-                            ]
-                else:
-                    # Generate subscriptions at configure_agency time
                     sub_gen = SubscriptionGenerator(
                         llm_router=self._llm_router,
                         seed=getattr(plan, "seed", 42),
@@ -793,17 +795,14 @@ class TerrariumApp:
                                 state.actor_id,
                                 exc,
                             )
-            except Exception as exc:
-                logger.warning(
-                    "Subscription generation unavailable: %s — "
-                    "actors will have empty subscriptions",
-                    exc,
-                )
-        else:
-            if not self._llm_router and actor_states:
-                logger.warning(
-                    "No LLM router available — skipping subscription generation. "
-                    "Actors will have empty subscriptions (functional but no collaboration)."
+                except Exception as exc:
+                    logger.warning(
+                        "Subscription generation unavailable: %s", exc,
+                    )
+            else:
+                logger.info(
+                    "No pre-generated subscriptions and no LLM router — "
+                    "actors will have empty subscriptions"
                 )
 
         await agency.configure(actor_states, world_context, available_actions)

@@ -6,7 +6,7 @@ import asyncio
 import json
 import shutil
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Any
 
 import typer
 from rich.panel import Panel
@@ -297,18 +297,85 @@ def run(
         bool,
         typer.Option("--serve", help="Start MCP/HTTP servers for agent connection"),
     ] = False,
+    host: Annotated[str, typer.Option("--host", help="HTTP server bind host")] = "127.0.0.1",
+    port: Annotated[int | None, typer.Option("--port", "-p", help="HTTP server bind port")] = None,
 ) -> None:
     """Run a full simulation on a world definition.
 
     Examples:
       terrarium run customer_support                  # compile + run
       terrarium run --world world_a6b03d8a8f29        # run on existing world (instant)
-      terrarium run customer_support --serve          # compile + run + HTTP server
+      terrarium run customer_support --serve --port 8080  # compile + run + HTTP server
     """
     if not world and not world_id:
         print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
         raise typer.Exit(1)
-    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id))
+    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id, host, port))
+
+
+async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
+    """Set up the SimulationRunner for a world with internal actors.
+
+    Returns (runner, event_queue, kickstart) if the world has internal
+    actors, or None if no simulation is needed (external-only world).
+
+    Shared between ``serve`` and ``run --serve`` to avoid duplication.
+    """
+    from terrarium.simulation.event_queue import EventQueue
+    from terrarium.simulation.runner import SimulationRunner
+
+    # Build kickstart — returns None if no internal actors or no comm service
+    kickstart = await terrarium.build_kickstart_envelope(compiled_plan)
+    if kickstart is None:
+        return None
+
+    event_queue = EventQueue()
+
+    # Wire queue to agency engine for bus-triggered activations
+    agency = terrarium.registry.get("agency")
+    agency._config["_event_queue"] = event_queue
+
+    async def pipeline_executor(envelope: object) -> object | None:
+        """Execute an envelope through the governance pipeline."""
+        try:
+            result = await terrarium.handle_action(
+                actor_id=str(envelope.actor_id),
+                service_id=str(envelope.target_service),
+                action=envelope.action_type,
+                input_data=envelope.payload,
+            )
+        except Exception:
+            return None
+        event = result.pop("_event", None) if isinstance(result, dict) else None
+        if isinstance(result, dict) and "error" in result:
+            return None
+        return event
+
+    plan_actors = getattr(compiled_plan, "actor_specs", [])
+    if not plan_actors:
+        plan_data = (
+            compiled_plan.model_dump(mode="json")
+            if hasattr(compiled_plan, "model_dump") else {}
+        )
+        plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
+
+    runner = SimulationRunner(
+        event_queue=event_queue,
+        pipeline_executor=pipeline_executor,
+        agency_engine=agency,
+        animator=terrarium.registry.get("animator"),
+        config=terrarium.config.simulation_runner,
+        ledger=terrarium.ledger,
+        actor_specs=plan_actors,
+    )
+
+    mission = getattr(compiled_plan, "mission", None)
+    if mission:
+        runner.set_mission(mission)
+
+    event_queue.submit(kickstart)
+
+    return runner, event_queue, kickstart
 
 
 async def _run_impl(
@@ -321,6 +388,8 @@ async def _run_impl(
     behavior: str,
     serve: bool,
     world_id: str | None = None,
+    host: str = "127.0.0.1",
+    port: int | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -371,83 +440,24 @@ async def _run_impl(
             # Step 3: Optionally start servers
             if serve:
                 console.print("[bold]Step 3/4: Starting protocol servers...[/bold]")
+                if port:
+                    gw_config = terrarium.gateway.config
+                    gw_config.host = host or gw_config.host
+                    gw_config.port = port
                 await terrarium.gateway.start_adapters()
                 gw_cfg = terrarium.config.gateway
-                console.print(f"  HTTP: http://{gw_cfg.host}:{gw_cfg.port}")
+                console.print(f"  HTTP: http://{gw_cfg.host}:{port or gw_cfg.port}")
                 console.print("  MCP:  stdio (connect via mcp client)")
                 console.print("[dim]Press Ctrl+C to stop[/dim]")
 
-                from terrarium.simulation.event_queue import EventQueue
-                from terrarium.simulation.runner import SimulationRunner
-
-                event_queue = EventQueue()
-
-                # Wire queue to agency engine for bus-triggered activations
-                agency_eng = terrarium.registry.get("agency")
-                agency_eng._config["_event_queue"] = event_queue
-
-                async def pipeline_executor(envelope: object) -> object | None:
-                    """Execute an envelope through the governance pipeline.
-
-                    Returns the committed WorldEvent for agency.notify(),
-                    or None if the pipeline rejected the action.
-                    """
-                    import logging as _log
-                    _pe_log = _log.getLogger("terrarium.simulation.executor")
-                    _pe_log.info(
-                        "[EXECUTOR] in: actor=%s action=%s service=%s",
-                        envelope.actor_id, envelope.action_type, envelope.target_service,
-                    )
-                    try:
-                        result = await terrarium.handle_action(
-                            actor_id=str(envelope.actor_id),
-                            service_id=str(envelope.target_service),
-                            action=envelope.action_type,
-                            input_data=envelope.payload,
-                        )
-                    except Exception as exc:
-                        _pe_log.error("[EXECUTOR] exception: %s", exc, exc_info=True)
-                        return None
-                    # Extract the committed WorldEvent (used by agency.notify)
-                    event = result.pop("_event", None) if isinstance(result, dict) else None
-                    has_error = isinstance(result, dict) and "error" in result
-                    _pe_log.info(
-                        "[EXECUTOR] out: event_type=%s, has_error=%s, error=%s",
-                        type(event).__name__, has_error,
-                        result.get("error", "") if isinstance(result, dict) else "",
-                    )
-                    if has_error:
-                        return None
-                    return event
-
-                # Build actor_specs for simulation type detection
-                plan_actors = getattr(compiled_plan, "actor_specs", [])
-                if not plan_actors:
-                    plan_data = compiled_plan.model_dump(mode="json") if hasattr(compiled_plan, "model_dump") else {}
-                    plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
-
-                runner = SimulationRunner(
-                    event_queue=event_queue,
-                    pipeline_executor=pipeline_executor,
-                    agency_engine=terrarium.registry.get("agency"),
-                    animator=terrarium.registry.get("animator"),
-                    config=terrarium.config.simulation_runner,
-                    ledger=terrarium.ledger,
-                    actor_specs=plan_actors,
-                )
-
-                mission = getattr(compiled_plan, "mission", None)
-                if mission:
-                    runner.set_mission(mission)
-
-                # Build kickstart in app layer (has state engine, registry, packs)
-                kickstart = await terrarium.build_kickstart_envelope(compiled_plan)
-                if kickstart is not None:
-                    event_queue.submit(kickstart)
-
-                console.print("[bold]Step 4/4: Running simulation...[/bold]")
-                stop_reason = await runner.run()
-                console.print(f"  Simulation stopped: [yellow]{stop_reason}[/yellow]")
+                sim = await _setup_simulation(terrarium, compiled_plan)
+                if sim is not None:
+                    runner, _, _ = sim
+                    console.print("[bold]Step 4/4: Running simulation...[/bold]")
+                    stop_reason = await runner.run()
+                    console.print(f"  Simulation stopped: [yellow]{stop_reason}[/yellow]")
+                else:
+                    console.print("[bold]Step 4/4: Waiting for external agents...[/bold]")
             else:
                 console.print(
                     "[bold]Step 3/4: Skipping server start (use --serve to enable)[/bold]"
@@ -554,6 +564,15 @@ async def _serve_impl(
                 tools = await terrarium.gateway.get_tool_manifest()
                 console.print(f"  [green]{len(tools)} tools available[/green]")
 
+                # Start simulation for internal-only worlds
+                sim = await _setup_simulation(terrarium, plan)
+                if sim is not None:
+                    runner, _, _ = sim
+                    async def _run_sim() -> None:
+                        stop = await runner.run()
+                        console.print(f"  Simulation stopped: [yellow]{stop}[/yellow]")
+                    asyncio.create_task(_run_sim())
+
             else:
                 # Compile + generate in background (concurrent with uvicorn)
                 console.print("[dim]Compiling world in background...[/dim]")
@@ -597,6 +616,13 @@ async def _serve_impl(
 
                         tools = await terrarium.gateway.get_tool_manifest()
                         console.print(f"  [green]{len(tools)} tools available[/green]")
+
+                        # Start simulation for internal-only worlds
+                        sim = await _setup_simulation(terrarium, compiled_plan)
+                        if sim is not None:
+                            runner, _, _ = sim
+                            stop = await runner.run()
+                            console.print(f"  Simulation stopped: [yellow]{stop}[/yellow]")
                     except Exception as exc:
                         console.print(f"[red]Compilation failed: {exc}[/red]")
 
