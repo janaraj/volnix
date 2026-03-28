@@ -54,6 +54,10 @@ class WorldPlan(BaseModel, frozen=True):
     seeds: list[str] = Field(default_factory=list)
     mission: str = ""
 
+    # ── Collaboration + deliverable ──
+    deliverable_config: dict[str, Any] = Field(default_factory=dict)
+    collaboration_config: dict[str, Any] = Field(default_factory=dict)
+
     # ── Runtime settings (carried to engines) ──
     animator_settings: dict[str, Any] = Field(default_factory=dict)
 

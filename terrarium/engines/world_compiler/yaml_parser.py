@@ -55,6 +55,8 @@ class YAMLParser:
         policies = world.get("policies", [])
         seeds = world.get("seeds", [])
         mission = world.get("mission", "")
+        deliverable_config = world.get("deliverable", {})
+        collaboration_config = world.get("collaboration", {})
 
         # Process reality via D1 ConditionExpander
         conditions, reality_ctx = self._extract_reality(compiler)
@@ -76,6 +78,8 @@ class YAMLParser:
             policies=policies,
             seeds=seeds,
             mission=mission,
+            deliverable_config=deliverable_config,
+            collaboration_config=collaboration_config,
             animator_settings=compiler.get("animator", {}),
             source="yaml",
         )

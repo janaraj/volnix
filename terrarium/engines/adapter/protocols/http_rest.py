@@ -966,6 +966,22 @@ class HTTPRestAdapter(ProtocolAdapter):
                 "state_history": state_history,
             }
 
+        @app.get("/api/v1/runs/{run_id}/deliverable")
+        async def get_run_deliverable(run_id: str):
+            """Get the deliverable artifact from a completed run."""
+            from starlette.responses import JSONResponse
+            from terrarium.core.types import RunId as _RId
+
+            deliverable = await gateway._app.artifact_store.load_artifact(
+                _RId(run_id), "deliverable",
+            )
+            if deliverable is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "No deliverable produced for this run"},
+                )
+            return deliverable
+
         @app.get("/api/v1/runs/{run_id}/gaps")
         async def get_run_gaps(run_id: str):
             """Capability gap log for a specific run."""

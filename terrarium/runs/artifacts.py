@@ -16,7 +16,7 @@ from terrarium.runs.config import RunConfig
 
 _ALLOWED_ARTIFACT_TYPES = frozenset({
     "report", "scorecard", "event_log", "config", "metadata",
-    "captured_surface",
+    "captured_surface", "deliverable",
 })
 
 
@@ -48,6 +48,10 @@ class ArtifactStore:
         """Save an event log and return its storage path."""
         serialized = [self._serialize_event(e) for e in events]
         return await self._write_artifact(run_id, "event_log", serialized)
+
+    async def save_deliverable(self, run_id: RunId, deliverable: dict) -> str:
+        """Save a deliverable artifact and return its storage path."""
+        return await self._write_artifact(run_id, "deliverable", deliverable)
 
     async def save_config(self, run_id: RunId, config: dict) -> str:
         """Save a configuration snapshot and return its storage path."""

@@ -32,15 +32,24 @@ schema:
 prompt_instructions: |
   You are the designated lead for this collaboration. Your team has
   been discussing the mission. Based on ALL the interactions you've
-  observed, produce a final synthesis deliverable.
+  observed, produce a comprehensive final synthesis deliverable.
 
-  Include ALL key findings, note any disagreements, and state your
-  confidence level. Your output must match the schema exactly.
+  REQUIREMENTS:
+  - Reference EVERY team member who contributed, by role name
+  - For each finding, explain the evidence and reasoning (2-3 sentences minimum)
+  - Quote specific data points mentioned in the discussion
+  - Your conclusion must reference the supporting evidence
+  - For dissenting views, explain BOTH sides with the reasoning each member gave
+  - Methodology must explain the team's approach step by step
+  - Confidence level must be justified with an explanation
+
+  Your output must be thorough — a reader who didn't see the discussion
+  should understand exactly what was found, how, and why.
 
   Structure your response as JSON with these fields:
   - title: A concise title summarizing the synthesis
-  - findings: An array of key findings (strings)
-  - conclusion: Your final conclusion
-  - confidence: "low", "medium", or "high"
-  - methodology: How you and the team arrived at these findings
-  - dissenting_views: Any disagreements (array of strings, can be empty)
+  - findings: An array of key findings (each 2-3 sentences with evidence)
+  - conclusion: Your final conclusion with supporting reasoning
+  - confidence: "low", "medium", or "high" (with justification in conclusion)
+  - methodology: Step-by-step explanation of the team's approach
+  - dissenting_views: Any disagreements with both sides explained (array)
