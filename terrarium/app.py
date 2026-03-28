@@ -530,6 +530,14 @@ class TerrariumApp:
             if reply_to:
                 causes.append(EventId(str(reply_to)))
 
+            # Include response body on the event so downstream consumers
+            # (agency notify, reporter) can see the service response
+            response = (
+                ctx.response_proposal.response_body
+                if ctx.response_proposal and not ctx.short_circuited
+                else None
+            )
+
             event = WorldEvent(
                 event_type=f"world.{action}",
                 timestamp=Timestamp(
@@ -542,6 +550,7 @@ class TerrariumApp:
                 action=action,
                 target_entity=target,
                 input_data=input_data,
+                response_body=response,
                 source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
                 outcome=outcome,
                 run_id=self._current_run_id,
@@ -651,17 +660,25 @@ class TerrariumApp:
         gen_ctx = WorldGenerationContext(plan)
         ctx_vars = gen_ctx.for_entity_generation()
 
-        # Gather available actions from service packs
+        # Gather available actions from service packs — only for
+        # services defined in this world (not all registered packs)
+        world_services = set(plan.services.keys()) if hasattr(plan, "services") else set()
         available_actions: list[dict[str, Any]] = []
         try:
             responder = self._registry.get("responder")
             if hasattr(responder, "_pack_registry"):
                 for tool_info in responder._pack_registry.list_tools():
+                    pack_name = tool_info.get("pack_name", "")
+                    # Only include tools from services in this world
+                    if world_services and pack_name not in world_services:
+                        continue
+                    params = tool_info.get("parameters", {})
                     available_actions.append(
                         {
                             "name": tool_info.get("name", ""),
                             "description": tool_info.get("description", ""),
-                            "service": tool_info.get("pack_name", ""),
+                            "service": pack_name,
+                            "required_params": params.get("required", []),
                         }
                     )
         except KeyError:

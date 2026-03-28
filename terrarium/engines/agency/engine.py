@@ -127,7 +127,13 @@ class AgencyEngine(BaseEngine):
                     continue  # already activated by tier1
 
                 for sub in actor.subscriptions:
-                    if not self._matches_subscription(committed_event, sub):
+                    # When intended_for includes "all", only require service match
+                    # (not specific channel/filter) — broadcast to all listeners
+                    intended_for = committed_event.input_data.get("intended_for", [])
+                    if "all" in intended_for:
+                        if str(committed_event.service_id) != sub.service_id:
+                            continue
+                    elif not self._matches_subscription(committed_event, sub):
                         continue
 
                     # Build structured interaction record
