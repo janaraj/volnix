@@ -180,37 +180,39 @@ class ActorPromptBuilder:
         if actor.goal_context:
             sections.append(f"### Goal context\n{actor.goal_context}")
 
-        # Trigger
+        # Trigger — human-readable summary, not raw JSON
         sections.append(f"### Activation Reason: {activation_reason}")
         if trigger_event:
-            trigger_info: dict[str, Any] = {
-                "event_type": trigger_event.event_type,
-                "actor_id": str(trigger_event.actor_id),
-                "action": trigger_event.action,
-                "service": str(trigger_event.service_id),
-            }
-            # Include key payload fields so the LLM can construct valid responses
-            # (e.g. channel_id for posting, thread_ts for replying)
-            if trigger_event.input_data:
-                payload_summary = {
-                    k: v for k, v in trigger_event.input_data.items()
-                    if k in ("channel_id", "channel", "text", "thread_ts", "ts",
-                             "subject", "body", "id", "status", "intended_for")
-                }
-                if payload_summary:
-                    trigger_info["payload"] = payload_summary
-            # Include response data (contains ts for replies, entity IDs, etc.)
-            if trigger_event.response_body:
-                resp_summary = {
-                    k: v for k, v in trigger_event.response_body.items()
-                    if k in ("ts", "channel", "ok", "id", "status", "message")
-                    and k != "_event"
-                }
-                if resp_summary:
-                    trigger_info["response"] = resp_summary
-            if trigger_event.post_state:
-                trigger_info["result"] = trigger_event.post_state
-            sections.append(f"### Trigger Event\n{json.dumps(trigger_info, indent=2)}")
+            # Extract readable content from the trigger
+            actor_role = ""
+            actor_state = None
+            # Try to get the trigger actor's role from actor_states on the world context
+            text = (
+                trigger_event.input_data.get("text")
+                or trigger_event.input_data.get("body")
+                or trigger_event.input_data.get("content")
+                or trigger_event.action
+            )
+            channel = (
+                trigger_event.input_data.get("channel_id")
+                or trigger_event.input_data.get("channel")
+                or ""
+            )
+
+            trigger_lines = [
+                f"**{trigger_event.actor_id}** performed `{trigger_event.action}`"
+                f" on service `{trigger_event.service_id}`"
+            ]
+            if channel:
+                trigger_lines[0] += f" in channel `{channel}`"
+            if text and len(text) > 10:
+                preview = text[:300] + ("..." if len(text) > 300 else "")
+                trigger_lines.append(f'> {preview}')
+            intended = trigger_event.input_data.get("intended_for", [])
+            if intended:
+                trigger_lines.append(f"Addressed to: **{', '.join(intended)}**")
+
+            sections.append("### Trigger\n" + "\n".join(trigger_lines))
 
         # Available actions
         if available_actions:
@@ -232,11 +234,11 @@ class ActorPromptBuilder:
         # Output instruction
         sections.append(
             "### Instructions\n"
-            "Choose ONE action or 'do_nothing'. Respond with JSON matching"
-            " the output schema.\n"
-            "When posting a message, include 'intended_for' in your payload with"
-            " a list of actor roles you're addressing"
-            " (e.g. ['oceanographer'] or ['all']).\n"
+            "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
+            "For messages: only provide `text` in payload — the system auto-fills "
+            "`channel_id` and `thread_ts` from the conversation context.\n"
+            "Include `intended_for` with actor roles you're addressing "
+            "(e.g. [\"lead-researcher\"] or [\"all\"]).\n"
             f"Output schema: {json.dumps(ACTION_OUTPUT_SCHEMA, indent=2)}"
         )
 

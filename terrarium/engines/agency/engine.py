@@ -527,6 +527,10 @@ class AgencyEngine(BaseEngine):
             return 3
         if reason in ("frustration_threshold", "wait_threshold"):
             return 3
+        # Subscription-triggered actors need full individual context
+        # for meaningful collaborative responses
+        if reason in ("subscription_immediate", "subscription_batch"):
+            return 3
         return 2
 
     # -- Tier 3: Individual LLM --
@@ -562,6 +566,11 @@ class AgencyEngine(BaseEngine):
                 self._typed_config.llm_use_case_individual,
             )
 
+        logger.info(
+            "[AGENCY.individual] actor=%s, LLM response length=%d, preview=%s",
+            actor.actor_id, len(response.content or ""),
+            (response.content or "")[:200],
+        )
         return self._parse_llm_action(actor, response.content, reason, trigger_event)
 
     # -- Tier 2: Batch LLM --
@@ -605,6 +614,11 @@ class AgencyEngine(BaseEngine):
                     self._typed_config.llm_use_case_batch,
                 )
 
+            logger.info(
+                "[AGENCY.batch] LLM response length=%d, preview=%s",
+                len(response.content or ""),
+                (response.content or "")[:200],
+            )
             batch_envs = self._parse_batch_response(batch, response.content, trigger_event)
             envelopes.extend(batch_envs)
 
@@ -642,12 +656,17 @@ class AgencyEngine(BaseEngine):
         raw_service = data.get("target_service", "")
         resolved_service = self._resolve_service_name(raw_service, action_type)
 
+        # Build payload — auto-fill communication context from trigger event
+        # so the LLM only needs to provide text + intent, not API details
+        payload = data.get("payload", {})
+        self._autofill_comm_context(payload, action_type, trigger_event, data)
+
         return ActionEnvelope(
             actor_id=actor.actor_id,
             source=ActionSource.INTERNAL,
             action_type=action_type,
             target_service=ServiceId(resolved_service) if resolved_service else None,
-            payload=data.get("payload", {}),
+            payload=payload,
             logical_time=self._get_current_time(),
             priority=EnvelopePriority.INTERNAL,
             parent_event_ids=[trigger_event.event_id],
@@ -657,6 +676,49 @@ class AgencyEngine(BaseEngine):
                 "reasoning": data.get("reasoning", ""),
             },
         )
+
+    @staticmethod
+    def _autofill_comm_context(
+        payload: dict,
+        action_type: str,
+        trigger_event: WorldEvent,
+        llm_data: dict,
+    ) -> None:
+        """Auto-fill communication fields from trigger event.
+
+        The LLM provides text + intent. The system fills channel_id,
+        thread_ts, and intended_for from the conversation context.
+        """
+        comm_actions = {
+            "chat.postMessage", "chat.replyToThread", "chat.update",
+            "users.messages.send", "email_send",
+        }
+        if action_type not in comm_actions:
+            return
+
+        # channel_id: from trigger event if missing or placeholder
+        ch = payload.get("channel_id", "")
+        if not ch or ch.startswith("trigger.") or ch.startswith("{"):
+            payload["channel_id"] = (
+                trigger_event.input_data.get("channel_id")
+                or trigger_event.input_data.get("channel")
+                or (trigger_event.response_body or {}).get("channel", "")
+            )
+
+        # channel: for subscription matching
+        if "channel" not in payload and payload.get("channel_id"):
+            payload["channel"] = payload["channel_id"]
+
+        # thread_ts: for replyToThread, use trigger message's ts
+        if action_type == "chat.replyToThread" and "thread_ts" not in payload:
+            resp = trigger_event.response_body or {}
+            payload["thread_ts"] = resp.get("ts", "")
+
+        # intended_for: from LLM top-level field
+        if "intended_for" not in payload:
+            intended = llm_data.get("intended_for", [])
+            if intended:
+                payload["intended_for"] = intended
 
     def _resolve_service_name(self, raw_service: str, action_type: str) -> str:
         """Resolve a service name from LLM output.
@@ -713,6 +775,9 @@ class AgencyEngine(BaseEngine):
             state_updates = action_data.get("state_updates", {})
             self._apply_state_updates(actor, state_updates)
 
+            batch_payload = action_data.get("payload", {})
+            self._autofill_comm_context(batch_payload, action_type, trigger_event, action_data)
+
             envelopes.append(
                 ActionEnvelope(
                     actor_id=actor.actor_id,
@@ -725,7 +790,7 @@ class AgencyEngine(BaseEngine):
                         if action_data.get("target_service")
                         else None
                     ),
-                    payload=action_data.get("payload", {}),
+                    payload=batch_payload,
                     logical_time=self._get_current_time(),
                     priority=EnvelopePriority.INTERNAL,
                     parent_event_ids=[trigger_event.event_id],
