@@ -392,6 +392,12 @@ async def _run_impl(
                     Returns the committed WorldEvent for agency.notify(),
                     or None if the pipeline rejected the action.
                     """
+                    import logging as _log
+                    _pe_log = _log.getLogger("terrarium.simulation.executor")
+                    _pe_log.info(
+                        "[EXECUTOR] in: actor=%s action=%s service=%s",
+                        envelope.actor_id, envelope.action_type, envelope.target_service,
+                    )
                     try:
                         result = await terrarium.handle_action(
                             actor_id=str(envelope.actor_id),
@@ -399,11 +405,18 @@ async def _run_impl(
                             action=envelope.action_type,
                             input_data=envelope.payload,
                         )
-                    except Exception:
+                    except Exception as exc:
+                        _pe_log.error("[EXECUTOR] exception: %s", exc, exc_info=True)
                         return None
                     # Extract the committed WorldEvent (used by agency.notify)
                     event = result.pop("_event", None) if isinstance(result, dict) else None
-                    if isinstance(result, dict) and "error" in result:
+                    has_error = isinstance(result, dict) and "error" in result
+                    _pe_log.info(
+                        "[EXECUTOR] out: event_type=%s, has_error=%s, error=%s",
+                        type(event).__name__, has_error,
+                        result.get("error", "") if isinstance(result, dict) else "",
+                    )
+                    if has_error:
                         return None
                     return event
 
