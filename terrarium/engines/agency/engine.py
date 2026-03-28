@@ -413,8 +413,9 @@ class AgencyEngine(BaseEngine):
         metadata, and response_body.
         """
         logger.info(
-            "[AGENCY._matches_sub] event type=%s, has service_id=%s, sub=%s",
-            type(event).__name__, hasattr(event, "service_id"), sub.service_id,
+            "[AGENCY._matches_sub] service=%s, filter=%s, input_channel=%s",
+            sub.service_id, dict(sub.filter),
+            event.input_data.get("channel", event.input_data.get("channel_id", "?")),
         )
         # Service must match
         if str(event.service_id) != sub.service_id:
@@ -425,8 +426,18 @@ class AgencyEngine(BaseEngine):
             if value == "self":
                 continue  # resolved at activation time, not here
 
-            # Check event input_data
+            # "entity" filter matches against event's entity context
+            # (e.g. filter={"entity": "message"} matches chat.postMessage)
+            if key == "entity":
+                action_lower = (event.action or "").lower()
+                if value.lower() in action_lower or value.lower() in event.event_type.lower():
+                    continue
+
+            # Check event input_data (also check common aliases like channel/channel_id)
             if key in event.input_data and event.input_data[key] == value:
+                continue
+            # Check alias: "channel" filter matches "channel_id" in input
+            if key == "channel" and event.input_data.get("channel_id") == value:
                 continue
 
             # Check event metadata

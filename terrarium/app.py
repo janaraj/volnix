@@ -412,17 +412,33 @@ class TerrariumApp:
         if not service_id or not action:
             return None
 
-        # Find a general/team channel from state engine
-        state = self._registry.get("state")
-        channels = await state.query_entities("channel")
-        channel_id = None
-        for ch in channels:
-            name = ch.get("name", "").lower()
-            if name in ("general", "team"):
-                channel_id = ch.get("id")
-                break
-        if channel_id is None and channels:
-            channel_id = channels[0].get("id")
+        # Find the best channel for kickstart — prefer channels actors
+        # are subscribed to (so the message triggers activations)
+        from collections import Counter
+        channel_counts: Counter = Counter()
+        agency = self._registry.get("agency")
+        if agency:
+            for actor_state in getattr(agency, "_actor_states", {}).values():
+                for sub in actor_state.subscriptions:
+                    ch = sub.filter.get("channel") if hasattr(sub, "filter") else (sub.get("filter", {}).get("channel") if isinstance(sub, dict) else None)
+                    if ch:
+                        channel_counts[ch] += 1
+
+        if channel_counts:
+            channel_id = channel_counts.most_common(1)[0][0]
+        else:
+            # Fallback: query state engine for a general/team channel
+            state = self._registry.get("state")
+            channels = await state.query_entities("channel")
+            channel_id = None
+            for ch in channels:
+                name = ch.get("name", "").lower()
+                if name in ("general", "team"):
+                    channel_id = ch.get("id")
+                    break
+            if channel_id is None and channels:
+                channel_id = channels[0].get("id")
+
         if channel_id is None:
             return None
 
@@ -438,6 +454,7 @@ class TerrariumApp:
             target_service=ServiceId(service_id),
             payload={
                 "channel_id": channel_id,
+                "channel": channel_id,  # subscription filters match on "channel"
                 "text": f"[MISSION] {mission}",
                 "intended_for": ["all"],
             },
@@ -726,11 +743,16 @@ class TerrariumApp:
                 pre_generated = result.get("subscriptions", {})
 
                 if pre_generated:
-                    # Apply pre-generated subscriptions from compiler
+                    # Apply pre-generated subscriptions from compiler.
+                    # Deserialize dicts to Subscription objects (JSON loses types).
+                    from terrarium.actors.state import Subscription as _Sub
                     for state in actor_states:
                         actor_key = str(state.actor_id)
                         if actor_key in pre_generated:
-                            state.subscriptions = pre_generated[actor_key]
+                            state.subscriptions = [
+                                _Sub.model_validate(s) if isinstance(s, dict) else s
+                                for s in pre_generated[actor_key]
+                            ]
                 else:
                     # Generate subscriptions at configure_agency time
                     sub_gen = SubscriptionGenerator(
