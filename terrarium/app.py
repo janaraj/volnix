@@ -545,6 +545,10 @@ class TerrariumApp:
         # (e.g. SimulationRunner) can pass it to agency.notify().
         # External callers (HTTP gateway) use only the response body.
         committed_event = event if self._bus else None
+        logger.debug(
+            "[handle_action] _event attached: type=%s, short_circuited=%s",
+            type(committed_event).__name__, ctx.short_circuited,
+        )
 
         if ctx.short_circuited:
             step = ctx.short_circuit_step

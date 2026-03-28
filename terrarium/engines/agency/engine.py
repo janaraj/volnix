@@ -75,10 +75,19 @@ class AgencyEngine(BaseEngine):
 
     async def _handle_event(self, event: Event) -> None:
         """Handle bus events. WorldEvents trigger notify()."""
+        logger.info(
+            "[AGENCY._handle_event] type=%s, is_WorldEvent=%s, event_type=%s",
+            type(event).__name__, isinstance(event, WorldEvent),
+            getattr(event, "event_type", "?"),
+        )
         if isinstance(event, WorldEvent):
             envelopes = await self.notify(event)
             # Submit envelopes to the event queue if wired
             event_queue = self._config.get("_event_queue")
+            logger.info(
+                "[AGENCY._handle_event] envelopes=%d, queue_wired=%s",
+                len(envelopes), event_queue is not None,
+            )
             if event_queue is not None:
                 for env in envelopes:
                     event_queue.submit(env)
@@ -93,11 +102,20 @@ class AgencyEngine(BaseEngine):
         Generate actions via LLM
         Return ActionEnvelopes for EventQueue
         """
+        logger.info(
+            "[AGENCY.notify] event_type=%s, actor=%s, type=%s, actor_states=%d",
+            type(committed_event).__name__,
+            getattr(committed_event, "actor_id", "?"),
+            getattr(committed_event, "event_type", "?"),
+            len(self._actor_states),
+        )
         if not self._actor_states:
+            logger.info("[AGENCY.notify] no actor_states — returning empty")
             return []
 
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
+        logger.info("[AGENCY.notify] tier1 activated: %d", len(activated))
 
         # Subscription-based activation (collaborative communication)
         if self._typed_config.collaboration_enabled:
@@ -209,6 +227,12 @@ class AgencyEngine(BaseEngine):
 
         if not activated:
             return []
+
+        logger.info(
+            "[AGENCY.notify] total activated (tier1+subs): %d — %s",
+            len(activated),
+            [(str(a), r) for a, r in activated[:5]],
+        )
 
         # Respect max activations per event
         activated = activated[: self._typed_config.max_activations_per_event]
@@ -388,6 +412,10 @@ class AgencyEngine(BaseEngine):
         then checks all filter criteria against event input_data,
         metadata, and response_body.
         """
+        logger.info(
+            "[AGENCY._matches_sub] event type=%s, has service_id=%s, sub=%s",
+            type(event).__name__, hasattr(event, "service_id"), sub.service_id,
+        )
         # Service must match
         if str(event.service_id) != sub.service_id:
             return False

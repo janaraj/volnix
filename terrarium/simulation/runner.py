@@ -248,25 +248,38 @@ class SimulationRunner:
             # Step 4: Process next envelope
             envelope = self._queue.pop_next()
             if envelope is None:
-                # Queue is empty -- yield control briefly, then re-check
                 await asyncio.sleep(0.01)
                 continue
+
+            logger.info(
+                "[RUNNER] dequeued: actor=%s action=%s service=%s source=%s",
+                envelope.actor_id, envelope.action_type,
+                envelope.target_service, envelope.source,
+            )
 
             # Runaway protection
             if not self._check_runaway_limits(envelope):
                 logger.warning(
-                    "Runaway protection: dropping envelope %s from %s",
-                    envelope.envelope_id,
-                    envelope.actor_id,
+                    "[RUNNER] runaway protection: dropping %s from %s",
+                    envelope.envelope_id, envelope.actor_id,
                 )
                 continue
 
             # Execute through pipeline
             committed_event = await self._execute_pipeline(envelope)
+            logger.info(
+                "[RUNNER] pipeline result: type=%s",
+                type(committed_event).__name__,
+            )
             if committed_event is None:
-                continue  # Pipeline rejected (short-circuited)
+                logger.info("[RUNNER] pipeline returned None — skipping notify")
+                continue
 
             self._total_events_processed += 1
+            logger.info(
+                "[RUNNER] event #%d processed, queue_pending=%s",
+                self._total_events_processed, self._queue.has_pending(),
+            )
 
             # Track external vs internal for loop breaker
             if envelope.source == ActionSource.EXTERNAL:
@@ -283,6 +296,10 @@ class SimulationRunner:
                         break
                     self._queue.submit(env)
                     count += 1
+                logger.info(
+                    "[RUNNER] agency.notify returned %d envelopes, submitted %d",
+                    len(response_envelopes or []), count,
+                )
 
             # Step 6: Notify Animator
             if self._animator is not None:
