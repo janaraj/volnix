@@ -632,13 +632,15 @@ class AgencyEngine(BaseEngine):
         state_updates = data.get("state_updates", {})
         self._apply_state_updates(actor, state_updates)
 
+        # Resolve target_service: LLM may return tool name instead of service name
+        raw_service = data.get("target_service", "")
+        resolved_service = self._resolve_service_name(raw_service, action_type)
+
         return ActionEnvelope(
             actor_id=actor.actor_id,
             source=ActionSource.INTERNAL,
             action_type=action_type,
-            target_service=(
-                ServiceId(data["target_service"]) if data.get("target_service") else None
-            ),
+            target_service=ServiceId(resolved_service) if resolved_service else None,
             payload=data.get("payload", {}),
             logical_time=self._get_current_time(),
             priority=EnvelopePriority.INTERNAL,
@@ -649,6 +651,32 @@ class AgencyEngine(BaseEngine):
                 "reasoning": data.get("reasoning", ""),
             },
         )
+
+    def _resolve_service_name(self, raw_service: str, action_type: str) -> str:
+        """Resolve a service name from LLM output.
+
+        The LLM sometimes returns the tool name (e.g. "chat.replyToThread")
+        instead of the service name (e.g. "slack"). Look up the correct
+        service from available_actions.
+        """
+        if not raw_service:
+            # No service provided — look up by action_type
+            for tool in self._available_actions:
+                if tool.get("name") == action_type:
+                    return tool.get("service", "")
+            return ""
+
+        # Check if raw_service is already a valid service name
+        service_names = {t.get("service", "") for t in self._available_actions}
+        if raw_service in service_names:
+            return raw_service
+
+        # raw_service might be a tool name — look up its service
+        for tool in self._available_actions:
+            if tool.get("name") == raw_service:
+                return tool.get("service", "")
+
+        return raw_service  # pass through as-is
 
     def _parse_batch_response(
         self,
@@ -685,7 +713,9 @@ class AgencyEngine(BaseEngine):
                     source=ActionSource.INTERNAL,
                     action_type=action_type,
                     target_service=(
-                        ServiceId(action_data["target_service"])
+                        ServiceId(self._resolve_service_name(
+                            action_data.get("target_service", ""), action_type,
+                        ))
                         if action_data.get("target_service")
                         else None
                     ),

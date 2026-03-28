@@ -198,9 +198,14 @@ class ActorPromptBuilder:
             action_lines = []
             for action in available_actions:
                 name = action.get("name", "?")
+                service = action.get("service", "")
                 desc = action.get("description", "")
-                action_lines.append(f"- {name}: {desc}")
-            sections.append("### Available Actions\n" + "\n".join(action_lines))
+                action_lines.append(f"- {name} (service: {service}): {desc}")
+            sections.append(
+                "### Available Actions\n"
+                "Use `action_type` = the action name, `target_service` = the service name.\n"
+                + "\n".join(action_lines)
+            )
 
         # Output instruction
         sections.append(
@@ -249,9 +254,14 @@ class ActorPromptBuilder:
 
         if available_actions:
             action_lines = [
-                f"- {a.get('name', '?')}: {a.get('description', '')}" for a in available_actions
+                f"- {a.get('name', '?')} (service: {a.get('service', '')}): {a.get('description', '')}"
+                for a in available_actions
             ]
-            sections.append("### Available Actions\n" + "\n".join(action_lines))
+            sections.append(
+                "### Available Actions\n"
+                "Use `action_type` = the action name, `target_service` = the service name.\n"
+                + "\n".join(action_lines)
+            )
 
         sections.append(f"### Output Schema\n{json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}")
 
