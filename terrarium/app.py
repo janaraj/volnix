@@ -805,6 +805,56 @@ class TerrariumApp:
                     "actors will have empty subscriptions"
                 )
 
+        # Schedule deliverable production for lead actor
+        deliverable_cfg = getattr(plan, "deliverable_config", {})
+        if deliverable_cfg and actor_states:
+            from terrarium.deliverable_presets.loader import load_preset
+            from terrarium.actors.state import ScheduledAction
+
+            preset_name = deliverable_cfg.get("preset", "")
+            preset = load_preset(preset_name) if preset_name else None
+
+            if preset:
+                # Find lead actor from actor_specs
+                lead_state = None
+                for state in actor_states:
+                    spec = next(
+                        (s for s in plan.actor_specs if s.get("role") == state.role),
+                        {},
+                    )
+                    if spec.get("lead", False):
+                        lead_state = state
+                        break
+                if lead_state is None:
+                    lead_state = actor_states[0]
+
+                # Calculate synthesis deadline
+                max_ticks = self._config.simulation_runner.max_ticks
+                buffer_pct = self._config.agency.synthesis_buffer_pct
+                deadline_tick = int(max_ticks * (1 - buffer_pct))
+                tick_interval = self._config.simulation_runner.tick_interval_seconds
+
+                lead_state.goal_context = (
+                    f"You are the designated lead for this collaboration. "
+                    f"After the team has discussed sufficiently (around tick {deadline_tick}), "
+                    f"you must produce a '{preset_name}' deliverable.\n\n"
+                    f"{preset.get('prompt_instructions', '')}"
+                )
+                lead_state.scheduled_action = ScheduledAction(
+                    logical_time=float(deadline_tick * tick_interval),
+                    action_type="produce_deliverable",
+                    description=f"Produce {preset_name} deliverable",
+                    target_service=None,
+                    payload={
+                        "preset": preset_name,
+                        "schema": preset.get("schema", {}),
+                    },
+                )
+                logger.info(
+                    "Scheduled %s deliverable for %s at tick %d",
+                    preset_name, lead_state.actor_id, deadline_tick,
+                )
+
         await agency.configure(actor_states, world_context, available_actions)
 
     async def compile_and_run(self, plan: Any) -> dict:

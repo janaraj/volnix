@@ -456,6 +456,11 @@ async def _run_impl(
                     console.print("[bold]Step 4/4: Running simulation...[/bold]")
                     stop_reason = await runner.run()
                     console.print(f"  Simulation stopped: [yellow]{stop_reason}[/yellow]")
+                    if runner.deliverable_produced and runner.deliverable_content:
+                        await terrarium.artifact_store.save_deliverable(
+                            run_id, runner.deliverable_content,
+                        )
+                        console.print("  [green]Deliverable saved[/green]")
                 else:
                     console.print("[bold]Step 4/4: Waiting for external agents...[/bold]")
             else:
@@ -571,6 +576,14 @@ async def _serve_impl(
                     async def _run_sim() -> None:
                         stop = await runner.run()
                         console.print(f"  Simulation stopped: [yellow]{stop}[/yellow]")
+                        # Save deliverable artifact if produced
+                        if runner.deliverable_produced and runner.deliverable_content:
+                            from terrarium.core.types import RunId as _DRId
+                            await terrarium.artifact_store.save_deliverable(
+                                _DRId(_active_run_id[0]),
+                                runner.deliverable_content,
+                            )
+                            console.print("  [green]Deliverable saved[/green]")
                     asyncio.create_task(_run_sim())
 
             else:

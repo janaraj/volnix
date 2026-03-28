@@ -105,6 +105,7 @@ class SimulationRunner:
         # Internal-only world tracking
         self._consecutive_idle_ticks: int = 0
         self._deliverable_produced: bool = False
+        self._deliverable_content: dict | None = None
         self._current_tick: int = 0
         self._events_this_tick: int = 0
 
@@ -132,6 +133,11 @@ class SimulationRunner:
     def deliverable_produced(self) -> bool:
         """Whether a deliverable has been produced."""
         return self._deliverable_produced
+
+    @property
+    def deliverable_content(self) -> dict | None:
+        """The deliverable JSON content, if produced."""
+        return self._deliverable_content
 
     @property
     def consecutive_idle_ticks(self) -> int:
@@ -262,6 +268,18 @@ class SimulationRunner:
                 logger.warning(
                     "[RUNNER] runaway protection: dropping %s from %s",
                     envelope.envelope_id, envelope.actor_id,
+                )
+                continue
+
+            # Meta-action: produce_deliverable skips governance pipeline
+            if envelope.action_type == "produce_deliverable":
+                self._deliverable_content = envelope.payload
+                self._deliverable_produced = True
+                self._total_events_processed += 1
+                logger.info(
+                    "[RUNNER] Deliverable produced by %s: %d bytes",
+                    envelope.actor_id,
+                    len(str(envelope.payload)),
                 )
                 continue
 
