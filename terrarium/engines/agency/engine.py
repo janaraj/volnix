@@ -340,6 +340,16 @@ class AgencyEngine(BaseEngine):
         """Return True if any actor has a scheduled action."""
         return any(a.scheduled_action is not None for a in self._actor_states.values())
 
+    def next_scheduled_time(self) -> float | None:
+        """Earliest logical_time of any actor's scheduled action, or None."""
+        earliest: float | None = None
+        for actor in self._actor_states.values():
+            if actor.scheduled_action is not None:
+                t = actor.scheduled_action.logical_time
+                if earliest is None or t < earliest:
+                    earliest = t
+        return earliest
+
     async def generate_deliverable(
         self, actor_id: ActorId, payload: dict,
     ) -> dict:
