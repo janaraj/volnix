@@ -347,7 +347,6 @@ class SimulationRunner:
                 self._events_since_external += 1
 
             # Step 5: Notify AgencyEngine
-            print(f"[DBG] runner: calling notify for event #{self._total_events_processed}", flush=True)
             if self._agency is not None:
                 response_envelopes = await self._agency.notify(committed_event)
                 count = 0
@@ -356,7 +355,6 @@ class SimulationRunner:
                         break
                     self._queue.submit(env)
                     count += 1
-                print(f"[DBG] runner: notify returned {len(response_envelopes or [])} envelopes", flush=True)
 
             # Step 6: Notify Animator
             if self._animator is not None:
