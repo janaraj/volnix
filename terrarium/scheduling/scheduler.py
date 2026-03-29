@@ -256,6 +256,19 @@ class WorldScheduler:
         """Total number of pending events across all types."""
         return len(self._one_shot) + len(self._recurring) + len(self._triggers)
 
+    @property
+    def next_fire_time(self) -> datetime | None:
+        """Earliest fire time across one-shot and recurring events, or None.
+
+        Triggers are condition-based (no known fire time) and are excluded.
+        """
+        candidates: list[datetime] = []
+        if self._one_shot:
+            candidates.append(self._one_shot[0].fire_time)  # already sorted
+        for r in self._recurring:
+            candidates.append(r.next_fire)
+        return min(candidates) if candidates else None
+
     async def _build_trigger_context(self, state_engine: Any) -> dict[str, Any]:
         """Build a context dict for ConditionEvaluator from the state engine.
 

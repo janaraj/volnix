@@ -412,17 +412,33 @@ class TerrariumApp:
         if not service_id or not action:
             return None
 
-        # Find a general/team channel from state engine
-        state = self._registry.get("state")
-        channels = await state.query_entities("channel")
-        channel_id = None
-        for ch in channels:
-            name = ch.get("name", "").lower()
-            if name in ("general", "team"):
-                channel_id = ch.get("id")
-                break
-        if channel_id is None and channels:
-            channel_id = channels[0].get("id")
+        # Find the best channel for kickstart — prefer channels actors
+        # are subscribed to (so the message triggers activations)
+        from collections import Counter
+        channel_counts: Counter = Counter()
+        agency = self._registry.get("agency")
+        if agency:
+            for actor_state in getattr(agency, "_actor_states", {}).values():
+                for sub in actor_state.subscriptions:
+                    ch = sub.filter.get("channel") if hasattr(sub, "filter") else (sub.get("filter", {}).get("channel") if isinstance(sub, dict) else None)
+                    if ch:
+                        channel_counts[ch] += 1
+
+        if channel_counts:
+            channel_id = channel_counts.most_common(1)[0][0]
+        else:
+            # Fallback: query state engine for a general/team channel
+            state = self._registry.get("state")
+            channels = await state.query_entities("channel")
+            channel_id = None
+            for ch in channels:
+                name = ch.get("name", "").lower()
+                if name in ("general", "team"):
+                    channel_id = ch.get("id")
+                    break
+            if channel_id is None and channels:
+                channel_id = channels[0].get("id")
+
         if channel_id is None:
             return None
 
@@ -438,6 +454,7 @@ class TerrariumApp:
             target_service=ServiceId(service_id),
             payload={
                 "channel_id": channel_id,
+                "channel": channel_id,  # subscription filters match on "channel"
                 "text": f"[MISSION] {mission}",
                 "intended_for": ["all"],
             },
@@ -513,6 +530,14 @@ class TerrariumApp:
             if reply_to:
                 causes.append(EventId(str(reply_to)))
 
+            # Include response body on the event so downstream consumers
+            # (agency notify, reporter) can see the service response
+            response = (
+                ctx.response_proposal.response_body
+                if ctx.response_proposal and not ctx.short_circuited
+                else None
+            )
+
             event = WorldEvent(
                 event_type=f"world.{action}",
                 timestamp=Timestamp(
@@ -525,6 +550,7 @@ class TerrariumApp:
                 action=action,
                 target_entity=target,
                 input_data=input_data,
+                response_body=response,
                 source=ActionSource(ctx.source) if ctx.source else ActionSource.EXTERNAL,
                 outcome=outcome,
                 run_id=self._current_run_id,
@@ -545,6 +571,10 @@ class TerrariumApp:
         # (e.g. SimulationRunner) can pass it to agency.notify().
         # External callers (HTTP gateway) use only the response body.
         committed_event = event if self._bus else None
+        logger.debug(
+            "[handle_action] _event attached: type=%s, short_circuited=%s",
+            type(committed_event).__name__, ctx.short_circuited,
+        )
 
         if ctx.short_circuited:
             step = ctx.short_circuit_step
@@ -630,17 +660,25 @@ class TerrariumApp:
         gen_ctx = WorldGenerationContext(plan)
         ctx_vars = gen_ctx.for_entity_generation()
 
-        # Gather available actions from service packs
+        # Gather available actions from service packs — only for
+        # services defined in this world (not all registered packs)
+        world_services = set(plan.services.keys()) if hasattr(plan, "services") else set()
         available_actions: list[dict[str, Any]] = []
         try:
             responder = self._registry.get("responder")
             if hasattr(responder, "_pack_registry"):
                 for tool_info in responder._pack_registry.list_tools():
+                    pack_name = tool_info.get("pack_name", "")
+                    # Only include tools from services in this world
+                    if world_services and pack_name not in world_services:
+                        continue
+                    params = tool_info.get("parameters", {})
                     available_actions.append(
                         {
                             "name": tool_info.get("name", ""),
                             "description": tool_info.get("description", ""),
-                            "service": tool_info.get("pack_name", ""),
+                            "service": pack_name,
+                            "required_params": params.get("required", []),
                         }
                     )
         except KeyError:
@@ -710,25 +748,32 @@ class TerrariumApp:
         for state in actor_states:
             state.batch_threshold = batch_threshold
 
-        # Generate subscriptions via LLM if available, otherwise skip gracefully
-        if self._llm_router and actor_states:
-            try:
-                from terrarium.engines.world_compiler.subscription_generator import (
-                    SubscriptionGenerator,
+        # Apply subscriptions: use pre-generated from compilation result,
+        # or generate via LLM if available
+        if actor_states:
+            pre_generated = result.get("subscriptions", {})
+
+            if pre_generated:
+                # Apply pre-generated subscriptions (no LLM needed).
+                # Deserialize dicts to Subscription objects (JSON loses types).
+                from terrarium.actors.state import Subscription as _Sub
+                for state in actor_states:
+                    actor_key = str(state.actor_id)
+                    if actor_key in pre_generated:
+                        state.subscriptions = [
+                            _Sub.model_validate(s) if isinstance(s, dict) else s
+                            for s in pre_generated[actor_key]
+                        ]
+                logger.info(
+                    "Applied pre-generated subscriptions for %d actors",
+                    sum(1 for s in actor_states if s.subscriptions),
                 )
+            elif self._llm_router:
+                try:
+                    from terrarium.engines.world_compiler.subscription_generator import (
+                        SubscriptionGenerator,
+                    )
 
-                compiler = self._registry.get("world_compiler")
-                # Use subscriptions from compilation result if already generated (GAP 4)
-                pre_generated = result.get("subscriptions", {})
-
-                if pre_generated:
-                    # Apply pre-generated subscriptions from compiler
-                    for state in actor_states:
-                        actor_key = str(state.actor_id)
-                        if actor_key in pre_generated:
-                            state.subscriptions = pre_generated[actor_key]
-                else:
-                    # Generate subscriptions at configure_agency time
                     sub_gen = SubscriptionGenerator(
                         llm_router=self._llm_router,
                         seed=getattr(plan, "seed", 42),
@@ -750,17 +795,64 @@ class TerrariumApp:
                                 state.actor_id,
                                 exc,
                             )
-            except Exception as exc:
-                logger.warning(
-                    "Subscription generation unavailable: %s — "
-                    "actors will have empty subscriptions",
-                    exc,
+                except Exception as exc:
+                    logger.warning(
+                        "Subscription generation unavailable: %s", exc,
+                    )
+            else:
+                logger.info(
+                    "No pre-generated subscriptions and no LLM router — "
+                    "actors will have empty subscriptions"
                 )
-        else:
-            if not self._llm_router and actor_states:
-                logger.warning(
-                    "No LLM router available — skipping subscription generation. "
-                    "Actors will have empty subscriptions (functional but no collaboration)."
+
+        # Schedule deliverable production for lead actor
+        deliverable_cfg = getattr(plan, "deliverable_config", {})
+        if deliverable_cfg and actor_states:
+            from terrarium.deliverable_presets.loader import load_preset
+            from terrarium.actors.state import ScheduledAction
+
+            preset_name = deliverable_cfg.get("preset", "")
+            preset = load_preset(preset_name) if preset_name else None
+
+            if preset:
+                # Find lead actor from actor_specs
+                lead_state = None
+                for state in actor_states:
+                    spec = next(
+                        (s for s in plan.actor_specs if s.get("role") == state.role),
+                        {},
+                    )
+                    if spec.get("lead", False):
+                        lead_state = state
+                        break
+                if lead_state is None:
+                    lead_state = actor_states[0]
+
+                # Calculate synthesis deadline
+                max_ticks = self._config.simulation_runner.max_ticks
+                buffer_pct = self._config.agency.synthesis_buffer_pct
+                deadline_tick = int(max_ticks * (1 - buffer_pct))
+                tick_interval = self._config.simulation_runner.tick_interval_seconds
+
+                lead_state.goal_context = (
+                    f"You are the designated lead for this collaboration. "
+                    f"After the team has discussed sufficiently (around tick {deadline_tick}), "
+                    f"you must produce a '{preset_name}' deliverable.\n\n"
+                    f"{preset.get('prompt_instructions', '')}"
+                )
+                lead_state.scheduled_action = ScheduledAction(
+                    logical_time=float(deadline_tick * tick_interval),
+                    action_type="produce_deliverable",
+                    description=f"Produce {preset_name} deliverable",
+                    target_service=None,
+                    payload={
+                        "preset": preset_name,
+                        "schema": preset.get("schema", {}),
+                    },
+                )
+                logger.info(
+                    "Scheduled %s deliverable for %s at tick %d",
+                    preset_name, lead_state.actor_id, deadline_tick,
                 )
 
         await agency.configure(actor_states, world_context, available_actions)

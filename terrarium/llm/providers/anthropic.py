@@ -36,11 +36,27 @@ class AnthropicProvider(LLMProvider):
         model = request.model_override or self._default_model
         start = time.monotonic()
         try:
+            # Build system parameter with optional prompt caching.
+            # Anthropic caches the system prompt prefix server-side when
+            # cache_control is set. Subsequent calls with the same prefix
+            # are charged at 10% of input cost (90% savings).
+            system_content = request.system_prompt or "You are a helpful assistant."
+            if request.cache_system_prompt:
+                system_param: str | list[dict] = [
+                    {
+                        "type": "text",
+                        "text": system_content,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                system_param = system_content
+
             message = await self._client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
-                system=request.system_prompt or "You are a helpful assistant.",  # TODO: ISS-056 move default to config
+                system=system_param,
                 messages=[{"role": "user", "content": request.user_content}],
             )
             latency = (time.monotonic() - start) * 1000

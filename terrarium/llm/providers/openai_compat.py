@@ -14,14 +14,17 @@ OpenAI-compatible endpoint, including:
 
 from __future__ import annotations
 
+import logging
 import time
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import openai
 from openai import AsyncOpenAI
 
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -38,9 +41,11 @@ class OpenAICompatibleProvider(LLMProvider):
         # OpenAI SDK requires a non-empty api_key string.
         # For local endpoints (Ollama, vLLM) that don't need auth,
         # we use a placeholder that satisfies the SDK's validation.
+        import httpx
         self._client = AsyncOpenAI(
             api_key=api_key if api_key else "local-no-auth-needed",
             base_url=base_url,
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0),
         )
         self._default_model = default_model
         self._base_url = base_url
@@ -62,30 +67,56 @@ class OpenAICompatibleProvider(LLMProvider):
                 messages.append({"role": "system", "content": request.system_prompt})
             messages.append({"role": "user", "content": request.user_content})
 
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": request.temperature,
+            }
+
+            # Prompt cache key groups calls sharing the same system prompt prefix.
+            # All actors in a simulation share the same world system prompt,
+            # so they share cache hits. Different worlds get different keys.
+            if request.cache_system_prompt and request.system_prompt:
+                import hashlib
+                kwargs["prompt_cache_key"] = hashlib.sha256(
+                    request.system_prompt.encode()
+                ).hexdigest()[:16]
+
             # Newer OpenAI models (gpt-5.x, o-series) use max_completion_tokens
             # instead of max_tokens. Try the new parameter first, fall back to old.
+            kwargs["max_completion_tokens"] = request.max_tokens
             try:
-                response = await self._client.chat.completions.create(
-                    model=model,
-                    messages=messages,  # type: ignore[arg-type]
-                    max_completion_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                )
+                response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
             except (openai.BadRequestError, TypeError, KeyError):
-                response = await self._client.chat.completions.create(
-                    model=model,
-                    messages=messages,  # type: ignore[arg-type]
-                    max_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                )
+                # Fall back: remove new-style params unsupported by older models/endpoints
+                kwargs.pop("max_completion_tokens", None)
+                kwargs.pop("prompt_cache_retention", None)
+                kwargs["max_tokens"] = request.max_tokens
+                response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+
             latency = (time.monotonic() - start) * 1000
             content = response.choices[0].message.content if response.choices else ""
             usage_data = response.usage
+
+            # Extract cached token count for observability
+            cached_tokens = 0
+            if usage_data and hasattr(usage_data, "prompt_tokens_details"):
+                details = usage_data.prompt_tokens_details
+                if details and hasattr(details, "cached_tokens"):
+                    cached_tokens = details.cached_tokens or 0
+
             usage = LLMUsage(
                 prompt_tokens=usage_data.prompt_tokens if usage_data else 0,
                 completion_tokens=usage_data.completion_tokens if usage_data else 0,
                 total_tokens=usage_data.total_tokens if usage_data else 0,
             )
+
+            if cached_tokens > 0:
+                logger.info(
+                    "OpenAI cache hit: %d/%d prompt tokens cached",
+                    cached_tokens, usage.prompt_tokens,
+                )
+
             return LLMResponse(
                 content=content or "",
                 usage=usage,

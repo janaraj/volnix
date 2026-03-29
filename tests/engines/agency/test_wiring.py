@@ -40,7 +40,7 @@ def test_simulation_runner_config_in_terrarium_config():
     assert hasattr(config, "simulation_runner")
     assert isinstance(config.simulation_runner, SimulationRunnerConfig)
     assert config.simulation_runner.max_logical_time == 86400.0
-    assert config.simulation_runner.max_total_events == 10000
+    assert config.simulation_runner.max_total_events == 50
 
 
 def test_agency_engine_satisfies_protocol():

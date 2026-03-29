@@ -101,11 +101,13 @@ class ActorPromptBuilder:
         trigger_event: WorldEvent | None,
         activation_reason: str,
         available_actions: list[dict[str, Any]],
+        team_roster: list[dict[str, str]] | None = None,
     ) -> str:
         """Build per-actor user prompt (layers 3-4).
 
         Structure:
         - Actor identity (persona, role)
+        - Team roster (who else is in the world)
         - Current state (goal, waiting_for, frustration, recent interactions)
         - Trigger (what just happened)
         - Available actions
@@ -115,6 +117,14 @@ class ActorPromptBuilder:
 
         # Actor identity
         sections.append(f"## You are: {actor.role} (ID: {actor.actor_id})")
+
+        # Team roster — so actors know exact roles for intended_for tagging
+        if team_roster:
+            roster_lines = ["### Team Members"]
+            for member in team_roster:
+                if member["role"] != actor.role:
+                    roster_lines.append(f"- **{member['role']}** (ID: {member['id']})")
+            sections.append("\n".join(roster_lines))
         if actor.persona:
             sections.append(f"### Persona\n{json.dumps(actor.persona, indent=2)}")
 
@@ -180,36 +190,65 @@ class ActorPromptBuilder:
         if actor.goal_context:
             sections.append(f"### Goal context\n{actor.goal_context}")
 
-        # Trigger
+        # Trigger — human-readable summary, not raw JSON
         sections.append(f"### Activation Reason: {activation_reason}")
         if trigger_event:
-            trigger_info: dict[str, Any] = {
-                "event_type": trigger_event.event_type,
-                "actor_id": str(trigger_event.actor_id),
-                "action": trigger_event.action,
-                "service": str(trigger_event.service_id),
-            }
-            if trigger_event.post_state:
-                trigger_info["result"] = trigger_event.post_state
-            sections.append(f"### Trigger Event\n{json.dumps(trigger_info, indent=2)}")
+            # Extract readable content from the trigger
+            actor_role = ""
+            actor_state = None
+            # Try to get the trigger actor's role from actor_states on the world context
+            text = (
+                trigger_event.input_data.get("text")
+                or trigger_event.input_data.get("body")
+                or trigger_event.input_data.get("content")
+                or trigger_event.action
+            )
+            channel = (
+                trigger_event.input_data.get("channel_id")
+                or trigger_event.input_data.get("channel")
+                or ""
+            )
+
+            trigger_lines = [
+                f"**{trigger_event.actor_id}** performed `{trigger_event.action}`"
+                f" on service `{trigger_event.service_id}`"
+            ]
+            if channel:
+                trigger_lines[0] += f" in channel `{channel}`"
+            if text and len(text) > 10:
+                preview = text[:300] + ("..." if len(text) > 300 else "")
+                trigger_lines.append(f'> {preview}')
+            intended = trigger_event.input_data.get("intended_for", [])
+            if intended:
+                trigger_lines.append(f"Addressed to: **{', '.join(intended)}**")
+
+            sections.append("### Trigger\n" + "\n".join(trigger_lines))
 
         # Available actions
         if available_actions:
             action_lines = []
             for action in available_actions:
                 name = action.get("name", "?")
+                service = action.get("service", "")
                 desc = action.get("description", "")
-                action_lines.append(f"- {name}: {desc}")
-            sections.append("### Available Actions\n" + "\n".join(action_lines))
+                required = action.get("required_params", [])
+                params_str = f" — required: {', '.join(required)}" if required else ""
+                action_lines.append(f"- {name} (service: {service}): {desc}{params_str}")
+            sections.append(
+                "### Available Actions\n"
+                "Use `action_type` = the action name, `target_service` = the service name.\n"
+                "Include ALL required parameters in `payload`.\n"
+                + "\n".join(action_lines)
+            )
 
         # Output instruction
         sections.append(
             "### Instructions\n"
-            "Choose ONE action or 'do_nothing'. Respond with JSON matching"
-            " the output schema.\n"
-            "When posting a message, include 'intended_for' in your payload with"
-            " a list of actor roles you're addressing"
-            " (e.g. ['oceanographer'] or ['all']).\n"
+            "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
+            "For messages: only provide `text` in payload — the system auto-fills "
+            "`channel_id` and `thread_ts` from the conversation context.\n"
+            "Include `intended_for` with the exact role names of team members you're addressing "
+            "(e.g. [\"copywriter\"] or [\"all\"] for everyone). Use ONLY roles from the Team Members list above.\n"
             f"Output schema: {json.dumps(ACTION_OUTPUT_SCHEMA, indent=2)}"
         )
 
@@ -248,10 +287,20 @@ class ActorPromptBuilder:
             sections.append("\n".join(actor_section))
 
         if available_actions:
-            action_lines = [
-                f"- {a.get('name', '?')}: {a.get('description', '')}" for a in available_actions
-            ]
-            sections.append("### Available Actions\n" + "\n".join(action_lines))
+            action_lines = []
+            for a in available_actions:
+                required = a.get("required_params", [])
+                params_str = f" — required: {', '.join(required)}" if required else ""
+                action_lines.append(
+                    f"- {a.get('name', '?')} (service: {a.get('service', '')}): "
+                    f"{a.get('description', '')}{params_str}"
+                )
+            sections.append(
+                "### Available Actions\n"
+                "Use `action_type` = the action name, `target_service` = the service name.\n"
+                "Include ALL required parameters in `payload`.\n"
+                + "\n".join(action_lines)
+            )
 
         sections.append(f"### Output Schema\n{json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}")
 
