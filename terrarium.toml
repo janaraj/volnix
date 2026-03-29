@@ -189,15 +189,14 @@ collaboration_mode = "tagged"
 collaboration_enabled = true
 batch_threshold_default = 3
 synthesis_buffer_pct = 0.10
-idle_stop_ticks = 5
-auto_include_chat = true
 
 # ── Simulation Runner ──────────────────────────────────────
 [simulation_runner]
 max_logical_time = 86400.0
-max_total_events = 10000
+max_total_events = 50
+max_ticks = 30
 max_envelopes_per_event = 20
-max_actions_per_actor_per_window = 5
+max_actions_per_actor_per_window = 100
 loop_breaker_threshold = 50
 
 # ── Profiles ──────────────────────────────────────────────────
@@ -325,13 +324,13 @@ max_tokens = 16384
 temperature = 0.5
 
 [llm.routing.agency_individual]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.agency_batch]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 8192
 temperature = 0.7

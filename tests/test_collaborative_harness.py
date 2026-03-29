@@ -229,8 +229,6 @@ class TestCollaborationConfigMatchesToml:
             "collaboration_enabled",
             "batch_threshold_default",
             "synthesis_buffer_pct",
-            "idle_stop_ticks",
-            "auto_include_chat",
         ]
 
         missing = [f for f in collaboration_fields if f not in agency_section]

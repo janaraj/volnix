@@ -2,7 +2,7 @@
 // UI-specific types (not derived from backend)
 // ---------------------------------------------------------------------------
 
-export type ReportTabId = 'overview' | 'scorecard' | 'events' | 'entities' | 'gaps' | 'conditions';
+export type ReportTabId = 'overview' | 'deliverable' | 'scorecard' | 'events' | 'entities' | 'gaps' | 'conditions';
 
 export type OutcomeCategory = 'success' | 'denied' | 'policy' | 'world' | 'system' | 'gap';
 

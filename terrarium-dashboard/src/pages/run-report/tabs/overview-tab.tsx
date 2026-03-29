@@ -139,7 +139,7 @@ function AgentSummary({ runId }: { runId: string }) {
                     <ScoreBar value={overall / 100} />
                     <div className="mt-2 flex gap-4 text-xs text-text-muted">
                       {Object.entries(scores)
-                        .filter(([key]) => key !== 'overall')
+                        .filter(([key, val]) => key !== 'overall' && key !== 'scores' && typeof val === 'number')
                         .map(([key, value]) => (
                           <span key={key}>
                             {key}: {value}

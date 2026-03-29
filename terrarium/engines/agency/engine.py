@@ -74,14 +74,36 @@ class AgencyEngine(BaseEngine):
         )
 
     async def _handle_event(self, event: Event) -> None:
-        """Handle bus events. WorldEvents trigger notify()."""
+        """Handle bus events. WorldEvents trigger notify().
+
+        When SimulationRunner is active (event_queue is wired), skip —
+        the runner calls notify() directly. Running both paths causes
+        a re-entrancy deadlock on _llm_semaphore.
+        """
+        if self._config.get("_event_queue") is not None:
+            return  # SimulationRunner handles notify() directly
+
         if isinstance(event, WorldEvent):
             envelopes = await self.notify(event)
-            # Submit envelopes to the event queue if wired
-            event_queue = self._config.get("_event_queue")
-            if event_queue is not None:
-                for env in envelopes:
-                    event_queue.submit(env)
+
+    def _record_to_ledger(self, *entries) -> None:
+        """Schedule ledger writes without blocking the caller.
+
+        Ledger is observability — writes must never block the simulation loop.
+        Uses asyncio.create_task for fire-and-forget scheduling.
+        """
+        ledger = self._config.get("_ledger")
+        if ledger is None:
+            return
+
+        async def _write(lgr, items):
+            for entry in items:
+                try:
+                    await lgr.append(entry)
+                except Exception:
+                    pass
+
+        asyncio.create_task(_write(ledger, entries))
 
     # -- Activation (called by SimulationRunner or via _handle_event) --
 
@@ -93,8 +115,16 @@ class AgencyEngine(BaseEngine):
         Generate actions via LLM
         Return ActionEnvelopes for EventQueue
         """
+        logger.info(
+            "[AGENCY.notify] event_type=%s, actor=%s, type=%s, actor_states=%d",
+            type(committed_event).__name__,
+            getattr(committed_event, "actor_id", "?"),
+            getattr(committed_event, "event_type", "?"),
+            len(self._actor_states),
+        )
         if not self._actor_states:
             return []
+
 
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
@@ -109,7 +139,13 @@ class AgencyEngine(BaseEngine):
                     continue  # already activated by tier1
 
                 for sub in actor.subscriptions:
-                    if not self._matches_subscription(committed_event, sub):
+                    # When intended_for includes "all", only require service match
+                    # (not specific channel/filter) — broadcast to all listeners
+                    intended_for = committed_event.input_data.get("intended_for", [])
+                    if "all" in intended_for:
+                        if str(committed_event.service_id) != sub.service_id:
+                            continue
+                    elif not self._matches_subscription(committed_event, sub):
                         continue
 
                     # Build structured interaction record
@@ -172,43 +208,35 @@ class AgencyEngine(BaseEngine):
                     if should_activate:
                         activated.append((actor_id, activation_reason))
 
-                    # Record subscription match to ledger
-                    ledger = self._config.get("_ledger")
-                    if ledger is not None:
-                        from terrarium.ledger.entries import (
-                            CollaborationNotificationEntry,
-                            SubscriptionMatchEntry,
-                        )
-
-                        match_entry = SubscriptionMatchEntry(
+                    # Record subscription match to ledger (non-blocking)
+                    from terrarium.ledger.entries import (
+                        CollaborationNotificationEntry,
+                        SubscriptionMatchEntry,
+                    )
+                    self._record_to_ledger(
+                        SubscriptionMatchEntry(
                             actor_id=actor_id,
                             event_id=committed_event.event_id,
                             service_id=sub.service_id,
                             sensitivity=sub.sensitivity,
                             activated=should_activate,
                             reason=activation_reason or "passive",
-                        )
-                        collab_entry = CollaborationNotificationEntry(
+                        ),
+                        CollaborationNotificationEntry(
                             recipient_actor_id=actor_id,
                             source_actor_id=committed_event.actor_id,
                             event_id=committed_event.event_id,
                             channel=committed_event.input_data.get("channel"),
                             intended_for=intended_for,
                             sensitivity=sub.sensitivity,
-                        )
-                        # Use fire-and-forget pattern for ledger writes
-                        try:
-                            await ledger.append(match_entry)
-                            await ledger.append(collab_entry)
-                        except Exception:
-                            logger.debug(
-                                "Failed to record subscription match to ledger"
-                            )
+                        ),
+                    )
 
                     break  # one match per actor per event
 
         if not activated:
             return []
+
 
         # Respect max activations per event
         activated = activated[: self._typed_config.max_activations_per_event]
@@ -227,20 +255,16 @@ class AgencyEngine(BaseEngine):
                 if len(actor.pending_notifications) > max_notif:
                     actor.pending_notifications = actor.pending_notifications[-max_notif:]
 
-        # Record activations to ledger
-        ledger = self._config.get("_ledger")
-        if ledger is not None:
-            from terrarium.ledger.entries import ActorActivationEntry
-
-            for actor_id, reason in activated:
-                tier = self._classify_tier(self._actor_states[actor_id], reason)
-                entry = ActorActivationEntry(
-                    actor_id=actor_id,
-                    activation_reason=reason,
-                    activation_tier=tier,
-                    trigger_event_id=committed_event.event_id,
-                )
-                await ledger.append(entry)
+        # Record activations to ledger (non-blocking)
+        from terrarium.ledger.entries import ActorActivationEntry
+        for actor_id, reason in activated:
+            tier = self._classify_tier(self._actor_states[actor_id], reason)
+            self._record_to_ledger(ActorActivationEntry(
+                actor_id=actor_id,
+                activation_reason=reason,
+                activation_tier=tier,
+                trigger_event_id=committed_event.event_id,
+            ))
 
         # Classify into Tier 2 (batch) and Tier 3 (individual)
         tier2_actors: list[tuple[ActorState, str]] = []
@@ -272,18 +296,15 @@ class AgencyEngine(BaseEngine):
         # Respect max envelopes per event
         envelopes = envelopes[: self._typed_config.max_envelopes_per_event]
 
-        # Record action generation to ledger
-        if ledger is not None:
-            from terrarium.ledger.entries import ActionGenerationEntry
-
-            for env in envelopes:
-                entry = ActionGenerationEntry(
-                    actor_id=env.actor_id,
-                    envelope_id=env.envelope_id,
-                    action_type=env.action_type,
-                    tier=env.metadata.get("activation_tier", 0),
-                )
-                await ledger.append(entry)
+        # Record action generation to ledger (non-blocking)
+        from terrarium.ledger.entries import ActionGenerationEntry
+        for env in envelopes:
+            self._record_to_ledger(ActionGenerationEntry(
+                actor_id=env.actor_id,
+                envelope_id=env.envelope_id,
+                action_type=env.action_type,
+                tier=env.metadata.get("activation_tier", 0),
+            ))
 
         return envelopes
 
@@ -300,7 +321,7 @@ class AgencyEngine(BaseEngine):
                     target_service=(ServiceId(sa.target_service) if sa.target_service else None),
                     payload=sa.payload,
                     logical_time=current_time,
-                    priority=EnvelopePriority.INTERNAL,
+                    priority=EnvelopePriority.SYSTEM,
                     metadata={
                         "activation_reason": "scheduled",
                         "scheduled_description": sa.description,
@@ -313,6 +334,86 @@ class AgencyEngine(BaseEngine):
     def has_scheduled_actions(self) -> bool:
         """Return True if any actor has a scheduled action."""
         return any(a.scheduled_action is not None for a in self._actor_states.values())
+
+    def next_scheduled_time(self) -> float | None:
+        """Earliest logical_time of any actor's scheduled action, or None."""
+        earliest: float | None = None
+        for actor in self._actor_states.values():
+            if actor.scheduled_action is not None:
+                t = actor.scheduled_action.logical_time
+                if earliest is None or t < earliest:
+                    earliest = t
+        return earliest
+
+    async def generate_deliverable(
+        self, actor_id: ActorId, payload: dict,
+    ) -> dict:
+        """Activate the lead actor to synthesize collaboration into a deliverable.
+
+        Uses the actor's goal_context (preset instructions), recent interactions
+        (conversation history), and the preset schema (from payload) to generate
+        structured JSON via LLM.
+
+        Args:
+            actor_id: The lead actor who produces the deliverable.
+            payload: Contains 'preset' name and 'schema' for output format.
+
+        Returns:
+            The synthesized deliverable JSON, or raw payload as fallback.
+        """
+        if not self._llm_router or not self._prompt_builder:
+            return payload
+
+        actor = self._actor_states.get(actor_id)
+        if actor is None:
+            return payload
+
+        schema = payload.get("schema", {})
+        goal_context = actor.goal_context or ""
+
+        # Build conversation context from actor's recent interactions
+        conversation = "\n".join(
+            f"[{r.actor_role or r.actor_id}] {r.summary}"
+            for r in actor.recent_interactions[-20:]
+        ) if actor.recent_interactions else "(no conversation history)"
+
+        system_prompt = self._prompt_builder.build_system_prompt()
+        user_prompt = (
+            f"## DELIVERABLE REQUEST\n\n"
+            f"{goal_context}\n\n"
+            f"## TEAM CONVERSATION\n\n{conversation}\n\n"
+            f"## OUTPUT FORMAT\n\n"
+            f"Respond with ONLY a JSON object matching this schema:\n"
+            f"```json\n{json.dumps(schema, indent=2)}\n```\n\n"
+            f"Synthesize the team's discussion into this structured format. "
+            f"Be comprehensive and include all key findings, methodology, "
+            f"and any dissenting views from the conversation."
+        )
+
+        try:
+            request = LLMRequest(
+                system_prompt=system_prompt,
+                user_content=user_prompt,
+                temperature=0.3,
+                cache_system_prompt=True,
+            )
+            response = await self._llm_router.route(
+                request, "agency",
+                self._typed_config.llm_use_case_individual,
+            )
+
+            content = response.content.strip()
+            # Strip markdown code fences if present
+            if content.startswith("```"):
+                lines = content.split("\n")
+                content = "\n".join(lines[1:])
+                if content.endswith("```"):
+                    content = content[:-3].strip()
+
+            return json.loads(content)
+        except Exception as exc:
+            logger.warning("Deliverable synthesis failed for %s: %s", actor_id, exc)
+            return payload
 
     # -- Tier 1: Deterministic activation check --
 
@@ -388,6 +489,11 @@ class AgencyEngine(BaseEngine):
         then checks all filter criteria against event input_data,
         metadata, and response_body.
         """
+        logger.info(
+            "[AGENCY._matches_sub] service=%s, filter=%s, input_channel=%s",
+            sub.service_id, dict(sub.filter),
+            event.input_data.get("channel", event.input_data.get("channel_id", "?")),
+        )
         # Service must match
         if str(event.service_id) != sub.service_id:
             return False
@@ -397,8 +503,18 @@ class AgencyEngine(BaseEngine):
             if value == "self":
                 continue  # resolved at activation time, not here
 
-            # Check event input_data
+            # "entity" or "entity_type" filter matches against event's entity context
+            # (e.g. filter={"entity_type": "message"} matches chat.postMessage)
+            if key in ("entity", "entity_type"):
+                action_lower = (event.action or "").lower()
+                if value.lower() in action_lower or value.lower() in event.event_type.lower():
+                    continue
+
+            # Check event input_data (also check common aliases like channel/channel_id)
             if key in event.input_data and event.input_data[key] == value:
+                continue
+            # Check alias: "channel" filter matches "channel_id" in input
+            if key == "channel" and event.input_data.get("channel_id") == value:
                 continue
 
             # Check event metadata
@@ -482,6 +598,10 @@ class AgencyEngine(BaseEngine):
             return 3
         if reason in ("frustration_threshold", "wait_threshold"):
             return 3
+        # Subscription-triggered actors need full individual context
+        # for meaningful collaborative responses
+        if reason in ("subscription_immediate", "subscription_batch"):
+            return 3
         return 2
 
     # -- Tier 3: Individual LLM --
@@ -498,11 +618,17 @@ class AgencyEngine(BaseEngine):
 
         async with self._llm_semaphore:
             system_prompt = self._prompt_builder.build_system_prompt()
+            # Build team roster for intended_for tagging
+            team_roster = [
+                {"role": a.role, "id": str(a.actor_id)}
+                for a in self._actor_states.values()
+            ]
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
                 activation_reason=reason,
                 available_actions=self._available_actions,
+                team_roster=team_roster,
             )
 
             request = LLMRequest(
@@ -510,6 +636,8 @@ class AgencyEngine(BaseEngine):
                 user_content=user_prompt,
                 output_schema=None,  # We parse JSON from text
                 temperature=0.7,
+                fresh_session=True,  # Each actor gets isolated ACP session
+                cache_system_prompt=True,  # System prompt is identical across actors
             )
             response = await self._llm_router.route(
                 request,
@@ -517,6 +645,11 @@ class AgencyEngine(BaseEngine):
                 self._typed_config.llm_use_case_individual,
             )
 
+        logger.info(
+            "[AGENCY.individual] actor=%s, LLM response length=%d, preview=%s",
+            actor.actor_id, len(response.content or ""),
+            (response.content or "")[:200],
+        )
         return self._parse_llm_action(actor, response.content, reason, trigger_event)
 
     # -- Tier 2: Batch LLM --
@@ -553,6 +686,7 @@ class AgencyEngine(BaseEngine):
                     system_prompt=system_prompt,
                     user_content=user_prompt,
                     temperature=0.7,
+                    cache_system_prompt=True,  # System prompt is identical across batches
                 )
                 response = await self._llm_router.route(
                     request,
@@ -560,12 +694,31 @@ class AgencyEngine(BaseEngine):
                     self._typed_config.llm_use_case_batch,
                 )
 
+            logger.info(
+                "[AGENCY.batch] LLM response length=%d, preview=%s",
+                len(response.content or ""),
+                (response.content or "")[:200],
+            )
             batch_envs = self._parse_batch_response(batch, response.content, trigger_event)
             envelopes.extend(batch_envs)
 
         return envelopes
 
     # -- Response parsing --
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Strip markdown code fences from LLM output."""
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            # Remove first line (```json or ```)
+            lines = lines[1:]
+            # Remove last line if it's ```
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        return text
 
     def _parse_llm_action(
         self,
@@ -576,7 +729,8 @@ class AgencyEngine(BaseEngine):
     ) -> ActionEnvelope | None:
         """Parse LLM output into ActionEnvelope. Returns None for do_nothing."""
         try:
-            data = json.loads(raw_output)
+            cleaned = self._strip_code_fences(raw_output)
+            data = json.loads(cleaned)
         except (json.JSONDecodeError, ValueError):
             logger.warning("Failed to parse LLM output for actor %s", actor.actor_id)
             return None
@@ -593,14 +747,21 @@ class AgencyEngine(BaseEngine):
         state_updates = data.get("state_updates", {})
         self._apply_state_updates(actor, state_updates)
 
+        # Resolve target_service: LLM may return tool name instead of service name
+        raw_service = data.get("target_service", "")
+        resolved_service = self._resolve_service_name(raw_service, action_type)
+
+        # Build payload — auto-fill communication context from trigger event
+        # so the LLM only needs to provide text + intent, not API details
+        payload = data.get("payload", {})
+        self._autofill_comm_context(payload, action_type, trigger_event, data)
+
         return ActionEnvelope(
             actor_id=actor.actor_id,
             source=ActionSource.INTERNAL,
             action_type=action_type,
-            target_service=(
-                ServiceId(data["target_service"]) if data.get("target_service") else None
-            ),
-            payload=data.get("payload", {}),
+            target_service=ServiceId(resolved_service) if resolved_service else None,
+            payload=payload,
             logical_time=self._get_current_time(),
             priority=EnvelopePriority.INTERNAL,
             parent_event_ids=[trigger_event.event_id],
@@ -610,6 +771,75 @@ class AgencyEngine(BaseEngine):
                 "reasoning": data.get("reasoning", ""),
             },
         )
+
+    @staticmethod
+    def _autofill_comm_context(
+        payload: dict,
+        action_type: str,
+        trigger_event: WorldEvent,
+        llm_data: dict,
+    ) -> None:
+        """Auto-fill communication fields from trigger event.
+
+        The LLM provides text + intent. The system fills channel_id,
+        thread_ts, and intended_for from the conversation context.
+        """
+        comm_actions = {
+            "chat.postMessage", "chat.replyToThread", "chat.update",
+            "users.messages.send", "email_send",
+        }
+        if action_type not in comm_actions:
+            return
+
+        # channel_id: from trigger event if missing or placeholder
+        ch = payload.get("channel_id", "")
+        if not ch or ch.startswith("trigger.") or ch.startswith("{"):
+            payload["channel_id"] = (
+                trigger_event.input_data.get("channel_id")
+                or trigger_event.input_data.get("channel")
+                or (trigger_event.response_body or {}).get("channel", "")
+            )
+
+        # channel: for subscription matching
+        if "channel" not in payload and payload.get("channel_id"):
+            payload["channel"] = payload["channel_id"]
+
+        # thread_ts: for replyToThread, use trigger message's ts
+        if action_type == "chat.replyToThread" and "thread_ts" not in payload:
+            resp = trigger_event.response_body or {}
+            payload["thread_ts"] = resp.get("ts", "")
+
+        # intended_for: from LLM top-level field
+        if "intended_for" not in payload:
+            intended = llm_data.get("intended_for", [])
+            if intended:
+                payload["intended_for"] = intended
+
+    def _resolve_service_name(self, raw_service: str, action_type: str) -> str:
+        """Resolve a service name from LLM output.
+
+        The LLM sometimes returns the tool name (e.g. "chat.replyToThread")
+        instead of the service name (e.g. "slack"). Look up the correct
+        service from available_actions.
+        """
+        if not raw_service:
+            # No service provided — look up by action_type
+            for tool in self._available_actions:
+                if tool.get("name") == action_type:
+                    return tool.get("service", "")
+            return ""
+
+        # Check if raw_service is already a valid service name
+        service_names = {t.get("service", "") for t in self._available_actions}
+        if raw_service in service_names:
+            return raw_service
+
+        # raw_service might be a tool name — look up its service
+        for tool in self._available_actions:
+            if tool.get("name") == raw_service:
+                return tool.get("service", "")
+
+        return raw_service  # pass through as-is
 
     def _parse_batch_response(
         self,
@@ -640,17 +870,22 @@ class AgencyEngine(BaseEngine):
             state_updates = action_data.get("state_updates", {})
             self._apply_state_updates(actor, state_updates)
 
+            batch_payload = action_data.get("payload", {})
+            self._autofill_comm_context(batch_payload, action_type, trigger_event, action_data)
+
             envelopes.append(
                 ActionEnvelope(
                     actor_id=actor.actor_id,
                     source=ActionSource.INTERNAL,
                     action_type=action_type,
                     target_service=(
-                        ServiceId(action_data["target_service"])
+                        ServiceId(self._resolve_service_name(
+                            action_data.get("target_service", ""), action_type,
+                        ))
                         if action_data.get("target_service")
                         else None
                     ),
-                    payload=action_data.get("payload", {}),
+                    payload=batch_payload,
                     logical_time=self._get_current_time(),
                     priority=EnvelopePriority.INTERNAL,
                     parent_event_ids=[trigger_event.event_id],

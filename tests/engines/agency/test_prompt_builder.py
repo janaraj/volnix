@@ -147,10 +147,11 @@ def test_individual_prompt_structure():
     assert "Frustration: 0.30" in prompt
     assert "Urgency: 0.50" in prompt
 
-    # Trigger
+    # Trigger (human-readable summary, not raw JSON)
     assert "event_affected" in prompt
-    assert "Trigger Event" in prompt
-    assert "world.ticket_update" in prompt
+    assert "agent-external" in prompt
+    assert "update_ticket" in prompt
+    assert "helpdesk" in prompt
 
     # Available actions
     assert "reply_ticket" in prompt
@@ -295,8 +296,11 @@ def test_available_actions_formatted():
         available_actions=actions,
     )
 
-    assert "- create_ticket: Create a new support ticket" in prompt
-    assert "- assign_ticket: Assign ticket to an agent" in prompt
+    # Actions now include service context
+    assert "create_ticket" in prompt
+    assert "Create a new support ticket" in prompt
+    assert "assign_ticket" in prompt
+    assert "Assign ticket to an agent" in prompt
 
 
 def test_output_schemas_are_valid_json():

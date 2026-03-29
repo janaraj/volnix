@@ -20,20 +20,14 @@ runner = CliRunner()
 
 
 def _has_llm_provider() -> bool:
-    """Check if an LLM provider is available for world compilation."""
-    try:
-        from terrarium.config.loader import ConfigLoader
-
-        config = ConfigLoader().load()
-        # Check if any LLM provider is configured
-        return bool(getattr(config, "llm", None))
-    except Exception:
-        return False
+    """Check if live API tests are explicitly enabled."""
+    import os
+    return os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
 
 
 skip_no_llm = pytest.mark.skipif(
     not _has_llm_provider(),
-    reason="No LLM provider configured — required for NL world compilation",
+    reason="TERRARIUM_RUN_REAL_API_TESTS not set — required for NL world compilation",
 )
 
 

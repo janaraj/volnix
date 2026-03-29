@@ -17,7 +17,12 @@ from terrarium.core.types import (
 )
 from terrarium.simulation.config import SimulationRunnerConfig
 from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from terrarium.simulation.runner import (
+    SimulationRunner,
+    SimulationStatus,
+    SimulationType,
+    StopReason,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -125,7 +130,7 @@ class TestEndConditions:
     async def test_manual_stop(self) -> None:
         """Runner stops with MANUAL_STOP when stop() is called."""
         q = EventQueue()
-        config = SimulationRunnerConfig(stop_on_empty_queue=False)
+        config = SimulationRunnerConfig(stop_on_empty_queue=False, max_total_events=10000)
         executor = AsyncMock(return_value=_make_world_event())
         runner = _make_runner(queue=q, pipeline_executor=executor, config=config)
 
@@ -619,6 +624,139 @@ class TestMaxEnvelopeCapping:
 
         # 1 initial + 3 capped from animator = 4 total
         assert runner.total_events_processed == 4
+
+
+class TestTimeAdvancement:
+    """Tests for time fast-forward when queue drains in internal-only sims."""
+
+    async def test_internal_only_fast_forwards_to_scheduled_action(self) -> None:
+        """Queue drains, scheduled action at tick 13 -> runner fast-forwards and fires it."""
+        q = EventQueue()
+        event = _make_world_event()
+        executor = AsyncMock(return_value=event)
+
+        # Agency mock: scheduled action at tick 13 (780.0s)
+        scheduled_time = 780.0
+        fired = False
+
+        async def check_scheduled(current_time: float) -> list[ActionEnvelope]:
+            nonlocal fired
+            if not fired and current_time >= scheduled_time:
+                fired = True
+                return [_make_envelope(
+                    logical_time=current_time,
+                    source=ActionSource.INTERNAL,
+                    priority=EnvelopePriority.SYSTEM,
+                )]
+            return []
+
+        agency = AsyncMock()
+        agency.notify = AsyncMock(return_value=[])
+        agency.check_scheduled_actions = AsyncMock(side_effect=check_scheduled)
+        agency.has_scheduled_actions = lambda: not fired
+        agency.next_scheduled_time = lambda: None if fired else scheduled_time
+        agency.update_states_for_event = AsyncMock()
+
+        config = SimulationRunnerConfig(
+            stop_on_empty_queue=True,
+            max_ticks=200,
+            tick_interval_seconds=60.0,
+        )
+
+        runner = _make_runner(
+            queue=q, pipeline_executor=executor, config=config, agency_engine=agency,
+        )
+        # Force internal-only detection
+        runner._simulation_type = SimulationType.INTERNAL_ONLY
+
+        # Submit one initial envelope to start the sim
+        q.submit(_make_envelope(logical_time=0.0))
+
+        reason = await runner.run()
+
+        # The scheduled action should have fired and produced an event
+        assert fired
+        assert runner.total_events_processed >= 2  # initial + scheduled
+        assert reason == StopReason.QUEUE_EMPTY
+
+    async def test_internal_only_no_scheduled_actions_stops_cleanly(self) -> None:
+        """Internal-only sim, queue drains, no scheduled actions -> QUEUE_EMPTY."""
+        q = EventQueue()
+        event = _make_world_event()
+        executor = AsyncMock(return_value=event)
+
+        agency = AsyncMock()
+        agency.notify = AsyncMock(return_value=[])
+        agency.check_scheduled_actions = AsyncMock(return_value=[])
+        agency.has_scheduled_actions = lambda: False
+        agency.next_scheduled_time = lambda: None
+        agency.update_states_for_event = AsyncMock()
+
+        runner = _make_runner(
+            queue=q, pipeline_executor=executor, agency_engine=agency,
+        )
+        runner._simulation_type = SimulationType.INTERNAL_ONLY
+
+        q.submit(_make_envelope(logical_time=0.0))
+        reason = await runner.run()
+
+        assert reason == StopReason.QUEUE_EMPTY
+
+    async def test_fast_forward_respects_max_ticks(self) -> None:
+        """Scheduled action at tick 100, max_ticks=15 -> TICK_LIMIT after fast-forward."""
+        q = EventQueue()
+        event = _make_world_event()
+        executor = AsyncMock(return_value=event)
+
+        agency = AsyncMock()
+        agency.notify = AsyncMock(return_value=[])
+        agency.check_scheduled_actions = AsyncMock(return_value=[])
+        agency.has_scheduled_actions = lambda: True
+        agency.next_scheduled_time = lambda: 6000.0  # tick 100
+        agency.update_states_for_event = AsyncMock()
+
+        config = SimulationRunnerConfig(
+            stop_on_empty_queue=True,
+            max_ticks=15,
+            tick_interval_seconds=60.0,
+        )
+
+        runner = _make_runner(
+            queue=q, pipeline_executor=executor, config=config, agency_engine=agency,
+        )
+        runner._simulation_type = SimulationType.INTERNAL_ONLY
+
+        q.submit(_make_envelope(logical_time=0.0))
+        reason = await runner.run()
+
+        assert reason == StopReason.TICK_LIMIT
+
+    async def test_external_driven_does_not_fast_forward(self) -> None:
+        """External-driven sim with scheduled actions -> no fast-forward, QUEUE_EMPTY."""
+        q = EventQueue()
+        event = _make_world_event()
+        executor = AsyncMock(return_value=event)
+
+        agency = AsyncMock()
+        agency.notify = AsyncMock(return_value=[])
+        agency.check_scheduled_actions = AsyncMock(return_value=[])
+        # Scheduled actions exist but should NOT cause fast-forward
+        agency.has_scheduled_actions = lambda: False
+        agency.next_scheduled_time = lambda: 780.0
+        agency.update_states_for_event = AsyncMock()
+
+        runner = _make_runner(
+            queue=q, pipeline_executor=executor, agency_engine=agency,
+        )
+        # Default is EXTERNAL_DRIVEN (no actor_specs)
+        assert runner._simulation_type == SimulationType.EXTERNAL_DRIVEN
+
+        q.submit(_make_envelope(logical_time=0.0))
+        reason = await runner.run()
+
+        # Should stop normally, NOT fast-forward
+        assert reason == StopReason.QUEUE_EMPTY
+        assert q.current_time < 780.0  # time did not jump
 
 
 class TestRunawayProtectionFullLoop:

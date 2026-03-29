@@ -7,6 +7,7 @@ results to the event bus and ledger.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -141,7 +142,17 @@ class PipelineDAG:
             duration_ms=result.duration_ms,
             message=result.message or "",
         )
-        await self._ledger.append(entry)
+        # Non-blocking: ledger is observability, must not block the pipeline.
+        # Blocking here causes WAL checkpoint contention after ~5 events.
+        ledger = self._ledger
+
+        async def _write():
+            try:
+                await ledger.append(entry)
+            except Exception:
+                pass
+
+        asyncio.create_task(_write())
 
     async def _publish_step_event(self, event: Event) -> None:
         """Publish a step-lifecycle event to the bus.
