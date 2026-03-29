@@ -56,6 +56,7 @@ class LLMRequest(BaseModel, frozen=True):
     max_tokens: int = 4096
     temperature: float = 0.7
     model_override: str | None = None
+    fresh_session: bool = False  # ACP: create isolated session for this call
 
 
 class LLMResponse(BaseModel, frozen=True):

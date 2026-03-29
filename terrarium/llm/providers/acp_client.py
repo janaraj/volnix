@@ -149,9 +149,16 @@ class ACPClientProvider(LLMProvider):
             try:
                 await self._ensure_running()
 
-                # Lazy session: create once, reuse across all calls
-                if self._persistent_session is None:
+                # Session management: fresh_session=True creates an isolated
+                # session (for actor-per-call isolation). Default reuses
+                # the persistent session (for compiler efficiency).
+                if request.fresh_session:
+                    session_id = await self._session_new()
+                elif self._persistent_session is None:
                     self._persistent_session = await self._session_new()
+                    session_id = self._persistent_session
+                else:
+                    session_id = self._persistent_session
 
                 # Build prompt content blocks
                 prompt = self._build_prompt(request)
@@ -159,7 +166,7 @@ class ACPClientProvider(LLMProvider):
                 # Send prompt and collect response
                 self._collected_text.clear()
                 self._last_usage = LLMUsage()
-                await self._session_prompt(self._persistent_session, prompt)
+                await self._session_prompt(session_id, prompt)
 
                 content = "".join(self._collected_text).strip()
                 latency = (time.monotonic() - start) * 1000
