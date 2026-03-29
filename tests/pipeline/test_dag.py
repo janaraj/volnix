@@ -1,5 +1,7 @@
 """Tests for terrarium.pipeline.dag -- DAG-based pipeline execution and short-circuiting."""
 
+import asyncio
+
 import pytest
 import pytest_asyncio
 
@@ -202,6 +204,7 @@ async def test_ledger_recording(tmp_path):
         dag = PipelineDAG(steps=steps, ledger=ledger)
         ctx = _make_ctx()
         await dag.execute(ctx)
+        await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
 
         count = await ledger.get_count("pipeline_step")
         assert count == 2

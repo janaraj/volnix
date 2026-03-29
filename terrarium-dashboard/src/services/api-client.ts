@@ -55,6 +55,11 @@ export class ApiClient {
     return this.request('GET', `/api/v1/runs/${id}`);
   }
 
+  // ── Deliverable endpoint ─────────────────────
+  async getDeliverable(runId: string): Promise<Record<string, unknown>> {
+    return this.request('GET', `/api/v1/runs/${runId}/deliverable`);
+  }
+
   // ── Event endpoints ──────────────────────────
   async getRunEvents(runId: string, params?: EventFilterParams): Promise<EventsListResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/events`, params as Record<string, unknown>);

@@ -108,7 +108,19 @@ class LLMRouter:
             )
 
         async with self._semaphore:
-            response = await provider.generate(request)
+            try:
+                response = await asyncio.wait_for(
+                    provider.generate(request),
+                    timeout=60.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("LLM call timed out after 60s: %s/%s", engine_name, use_case)
+                response = LLMResponse(
+                    content="",
+                    provider=provider_name,
+                    model=model,
+                    error="LLM call timed out after 60s",
+                )
 
         if self._tracker:
             await self._tracker.record(request, response, engine_name)

@@ -31,7 +31,9 @@ function formatDimensionName(name: string): string {
 
 function ScorecardGrid({ data }: { data: ScorecardResponse }) {
   const actorIds = Object.keys(data.per_actor);
-  const dimensions = Object.keys(data.collective).filter((k) => k !== 'overall_score');
+  const dimensions = Object.keys(data.collective).filter(
+    (k) => k !== 'overall_score' && k !== 'scores',
+  );
 
   if (actorIds.length === 0) {
     return <EmptyState title="No scorecard data available" />;
@@ -62,7 +64,8 @@ function ScorecardGrid({ data }: { data: ScorecardResponse }) {
                 {formatDimensionName(dim)}
               </td>
               {actorIds.map((actorId) => {
-                const value = data.per_actor[actorId]?.[dim];
+                const raw = data.per_actor[actorId]?.[dim];
+                const value = typeof raw === 'number' ? raw : null;
                 return (
                   <td key={actorId} className="px-3 py-2 text-center">
                     {value != null ? (

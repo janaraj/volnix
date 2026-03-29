@@ -101,11 +101,13 @@ class ActorPromptBuilder:
         trigger_event: WorldEvent | None,
         activation_reason: str,
         available_actions: list[dict[str, Any]],
+        team_roster: list[dict[str, str]] | None = None,
     ) -> str:
         """Build per-actor user prompt (layers 3-4).
 
         Structure:
         - Actor identity (persona, role)
+        - Team roster (who else is in the world)
         - Current state (goal, waiting_for, frustration, recent interactions)
         - Trigger (what just happened)
         - Available actions
@@ -115,6 +117,14 @@ class ActorPromptBuilder:
 
         # Actor identity
         sections.append(f"## You are: {actor.role} (ID: {actor.actor_id})")
+
+        # Team roster — so actors know exact roles for intended_for tagging
+        if team_roster:
+            roster_lines = ["### Team Members"]
+            for member in team_roster:
+                if member["role"] != actor.role:
+                    roster_lines.append(f"- **{member['role']}** (ID: {member['id']})")
+            sections.append("\n".join(roster_lines))
         if actor.persona:
             sections.append(f"### Persona\n{json.dumps(actor.persona, indent=2)}")
 
@@ -237,8 +247,8 @@ class ActorPromptBuilder:
             "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
             "For messages: only provide `text` in payload — the system auto-fills "
             "`channel_id` and `thread_ts` from the conversation context.\n"
-            "Include `intended_for` with actor roles you're addressing "
-            "(e.g. [\"lead-researcher\"] or [\"all\"]).\n"
+            "Include `intended_for` with the exact role names of team members you're addressing "
+            "(e.g. [\"copywriter\"] or [\"all\"] for everyone). Use ONLY roles from the Team Members list above.\n"
             f"Output schema: {json.dumps(ACTION_OUTPUT_SCHEMA, indent=2)}"
         )
 
