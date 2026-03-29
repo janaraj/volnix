@@ -275,6 +275,22 @@ class SimulationRunner:
             # Step 4: Process next envelope
             envelope = self._queue.pop_next()
             if envelope is None:
+                # Internal-only sims: fast-forward time to the next scheduled
+                # action so it can fire.  Without this, time never advances
+                # (it only advances on committed events) and scheduled work
+                # that gates on a future tick is never reached.
+                if self._simulation_type == SimulationType.INTERNAL_ONLY:
+                    next_time = self._get_next_scheduled_time()
+                    if next_time is not None and next_time > self._queue.current_time:
+                        target_tick = int(next_time / self._config.tick_interval_seconds)
+                        logger.info(
+                            "[RUNNER] fast-forward: tick %d -> %d (time %.1f -> %.1f)",
+                            self._current_tick, target_tick,
+                            self._queue.current_time, next_time,
+                        )
+                        self._current_tick = target_tick
+                        self._queue.current_time = next_time
+                        continue  # next iteration fires the scheduled action
                 await asyncio.sleep(0.01)
                 continue
 
@@ -496,3 +512,16 @@ class SimulationRunner:
             self._consecutive_idle_ticks += 1
         else:
             self._consecutive_idle_ticks = 0
+
+    def _get_next_scheduled_time(self) -> float | None:
+        """Earliest scheduled time across agency and animator, or None."""
+        candidates: list[float] = []
+        if self._agency is not None:
+            t = getattr(self._agency, "next_scheduled_time", lambda: None)()
+            if t is not None:
+                candidates.append(t)
+        if self._animator is not None:
+            t = getattr(self._animator, "next_scheduled_time", lambda: None)()
+            if t is not None:
+                candidates.append(t)
+        return min(candidates) if candidates else None

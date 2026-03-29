@@ -380,6 +380,20 @@ class WorldAnimatorEngine(BaseEngine):
             return self._scheduler.pending_count > 0
         return False
 
+    def next_scheduled_time(self) -> float | None:
+        """Earliest logical time (float seconds) of the next scheduled event, or None.
+
+        Converts the scheduler's datetime-based fire time to float seconds,
+        the inverse of the ``datetime.fromtimestamp(current_time)`` conversion
+        used in :meth:`check_scheduled_events`.
+        """
+        if not self._scheduler:
+            return None
+        nft = self._scheduler.next_fire_time
+        if nft is None:
+            return None
+        return nft.timestamp()
+
     # -- Event handling --------------------------------------------------------
 
     async def _handle_event(self, event: Event) -> None:
