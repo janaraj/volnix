@@ -559,6 +559,7 @@ class AgencyEngine(BaseEngine):
                 user_content=user_prompt,
                 output_schema=None,  # We parse JSON from text
                 temperature=0.7,
+                fresh_session=True,  # Each actor gets isolated ACP session
             )
             response = await self._llm_router.route(
                 request,
