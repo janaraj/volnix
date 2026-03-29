@@ -33,9 +33,10 @@ class TestEnvelopePriority:
         assert EnvelopePriority.EXTERNAL < EnvelopePriority.INTERNAL
 
     def test_envelope_priority_numeric_values(self):
-        assert EnvelopePriority.ENVIRONMENT == 0
-        assert EnvelopePriority.EXTERNAL == 1
-        assert EnvelopePriority.INTERNAL == 2
+        assert EnvelopePriority.SYSTEM == 0
+        assert EnvelopePriority.ENVIRONMENT == 1
+        assert EnvelopePriority.EXTERNAL == 2
+        assert EnvelopePriority.INTERNAL == 3
 
     def test_priority_sortable(self):
         priorities = [

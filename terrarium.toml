@@ -193,8 +193,8 @@ synthesis_buffer_pct = 0.10
 # ── Simulation Runner ──────────────────────────────────────
 [simulation_runner]
 max_logical_time = 86400.0
-max_total_events = 20
-max_ticks = 15
+max_total_events = 50
+max_ticks = 30
 max_envelopes_per_event = 20
 max_actions_per_actor_per_window = 100
 loop_breaker_threshold = 50

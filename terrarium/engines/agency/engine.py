@@ -125,11 +125,9 @@ class AgencyEngine(BaseEngine):
         if not self._actor_states:
             return []
 
-        print(f"[DBG] notify START: actor={committed_event.actor_id}, states={len(self._actor_states)}", flush=True)
 
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
-        print(f"[DBG] tier1: {len(activated)} activated", flush=True)
 
         # Subscription-based activation (collaborative communication)
         if self._typed_config.collaboration_enabled:
@@ -283,13 +281,10 @@ class AgencyEngine(BaseEngine):
                 tier2_actors.append((actor, reason))
 
         envelopes: list[ActionEnvelope] = []
-        print(f"[DBG] tier2={len(tier2_actors)}, tier3={len(tier3_actors)}", flush=True)
 
         # Tier 3: individual LLM calls
         for actor, reason in tier3_actors:
-            print(f"[DBG] LLM call: {actor.actor_id} ({reason})", flush=True)
             env = await self._activate_individual(actor, reason, committed_event)
-            print(f"[DBG] LLM done: {actor.actor_id} -> {'envelope' if env else 'None'}", flush=True)
             if env is not None:
                 envelopes.append(env)
 

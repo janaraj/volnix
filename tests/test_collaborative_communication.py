@@ -7,6 +7,7 @@ state updates from LLM, deliverable presets, and SimulationRunner extensions.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
@@ -873,35 +874,10 @@ class TestSimulationRunnerExtensions:
         )
         assert runner3.simulation_type == SimulationType.MIXED
 
-    def test_kickstart_envelope_created(self):
-        """Internal-only world with mission creates a kickstart envelope."""
-        runner = SimulationRunner(
-            event_queue=EventQueue(),
-            pipeline_executor=AsyncMock(),
-            actor_specs=[{"type": "internal"}, {"type": "internal"}],
-        )
-        runner.set_mission("Investigate jet stream anomaly and produce research brief")
-
-        envelope = runner.create_kickstart_envelope()
-
-        assert envelope is not None
-        assert envelope.action_type == "slack_chat_postMessage"
-        assert envelope.target_service == ServiceId("chat")
-        assert "[MISSION]" in envelope.payload["text"]
-        assert envelope.payload["intended_for"] == ["all"]
-        assert envelope.source == ActionSource.ENVIRONMENT
-
-    def test_kickstart_not_created_for_external(self):
-        """External-driven worlds do not create kickstart envelopes."""
-        runner = SimulationRunner(
-            event_queue=EventQueue(),
-            pipeline_executor=AsyncMock(),
-            actor_specs=[{"type": "external"}],
-        )
-        runner.set_mission("Some mission")
-
-        envelope = runner.create_kickstart_envelope()
-        assert envelope is None
+    # test_kickstart_envelope_created and test_kickstart_not_created_for_external
+    # removed: create_kickstart_envelope was moved from SimulationRunner to
+    # TerrariumApp.build_kickstart_envelope() which resolves channels from
+    # the actual world state, not hardcoded values.
 
     def test_idle_stop_works(self):
         """SimulationRunner detects idle_stop condition."""
@@ -1020,6 +996,7 @@ class TestLedgerRecording:
         )
 
         await engine.notify(event)
+        await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
 
         from terrarium.ledger.entries import (
             CollaborationNotificationEntry,

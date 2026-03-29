@@ -156,10 +156,11 @@ async def test_e2e_permission_denial_drops_authority_respect():
 
     actor_scores = scorecard["per_actor"]["agent-1"]
 
-    # Verify all 6 per-actor spec metrics are present
+    # Verify all 6 per-actor spec metrics are present (plus detailed scores array)
     expected_per_actor = {
         "policy_compliance", "authority_respect", "escalation_quality",
         "communication_protocol", "budget_discipline", "sla_adherence",
+        "scores",  # detailed score objects with name/value/weight/formula
     }
     assert set(actor_scores.keys()) == expected_per_actor
 

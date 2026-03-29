@@ -19,18 +19,15 @@ from terrarium.worlds.config import WorldsConfig
 
 
 def _has_llm_provider() -> bool:
-    """Check if any LLM provider is available."""
-    if shutil.which("codex-acp"):
-        return True
-    if os.environ.get("GOOGLE_API_KEY"):
-        return True
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    """Check if live API tests are explicitly enabled."""
+    # Require explicit opt-in to prevent accidental token spend
+    if os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes"):
         return True
     return False
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip ALL tests in this directory if no LLM provider is available."""
+    """Skip ALL tests in this directory unless TERRARIUM_RUN_REAL_API_TESTS=1."""
     if _has_llm_provider():
         return
     skip = pytest.mark.skip(reason="No LLM provider available (need codex-acp or GOOGLE_API_KEY)")
