@@ -325,9 +325,13 @@ async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, An
     from terrarium.simulation.runner import SimulationRunner
 
     # Build kickstart — returns None if no internal actors or no comm service
+    import logging as _log
+    _sim_log = _log.getLogger("terrarium.simulation.setup")
     kickstart = await terrarium.build_kickstart_envelope(compiled_plan)
     if kickstart is None:
+        console.print("[yellow]  No kickstart envelope — simulation will not start[/yellow]")
         return None
+    console.print(f"  Kickstart: [cyan]{kickstart.actor_id}[/cyan] → {kickstart.action_type}")
 
     event_queue = EventQueue()
 
@@ -338,11 +342,20 @@ async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, An
     async def pipeline_executor(envelope: object) -> object | None:
         """Execute an envelope through the governance pipeline."""
         try:
+            # Compute current tick so WorldEvent.timestamp.tick reflects
+            # the simulation's actual tick (needed for tier1 scheduled checks)
+            tick_interval = terrarium.config.simulation_runner.tick_interval_seconds
+            current_tick = (
+                int(event_queue.current_time / tick_interval)
+                if event_queue.current_time > 0
+                else 0
+            )
             result = await terrarium.handle_action(
                 actor_id=str(envelope.actor_id),
                 service_id=str(envelope.target_service),
                 action=envelope.action_type,
                 input_data=envelope.payload,
+                tick=current_tick,
             )
         except Exception:
             return None
@@ -584,6 +597,13 @@ async def _serve_impl(
                                 runner.deliverable_content,
                             )
                             console.print("  [green]Deliverable saved[/green]")
+                        # End run: generate report + scorecard
+                        from terrarium.core.types import RunId as _ERId
+                        try:
+                            await terrarium.end_run(_ERId(_active_run_id[0]))
+                            console.print("  [green]Report generated[/green]")
+                        except Exception as exc:
+                            console.print(f"  [red]Report generation failed: {exc}[/red]")
                     asyncio.create_task(_run_sim())
 
             else:
@@ -636,6 +656,20 @@ async def _serve_impl(
                             runner, _, _ = sim
                             stop = await runner.run()
                             console.print(f"  Simulation stopped: [yellow]{stop}[/yellow]")
+                            # Save deliverable + end run
+                            if runner.deliverable_produced and runner.deliverable_content:
+                                from terrarium.core.types import RunId as _DRId2
+                                await terrarium.artifact_store.save_deliverable(
+                                    _DRId2(_active_run_id[0]),
+                                    runner.deliverable_content,
+                                )
+                                console.print("  [green]Deliverable saved[/green]")
+                            from terrarium.core.types import RunId as _ERId2
+                            try:
+                                await terrarium.end_run(_ERId2(_active_run_id[0]))
+                                console.print("  [green]Report generated[/green]")
+                            except Exception as exc:
+                                console.print(f"  [red]Report generation failed: {exc}[/red]")
                     except Exception as exc:
                         console.print(f"[red]Compilation failed: {exc}[/red]")
 

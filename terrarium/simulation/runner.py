@@ -107,7 +107,6 @@ class SimulationRunner:
         self._deliverable_produced: bool = False
         self._deliverable_content: dict | None = None
         self._current_tick: int = 0
-        self._events_this_tick: int = 0
 
     @property
     def status(self) -> SimulationStatus:
@@ -249,7 +248,29 @@ class SimulationRunner:
                     self._queue.current_time
                 )
                 for env in agency_envelopes or []:
-                    self._queue.submit(env)
+                    if env.action_type == "produce_deliverable":
+                        # Deliverable: have the agency engine activate the
+                        # lead actor to synthesize the collaboration via LLM.
+                        # Processed immediately — meta-actions bypass the queue
+                        # because they skip the governance pipeline.
+                        deliverable_json = await self._agency.generate_deliverable(
+                            env.actor_id, env.payload,
+                        )
+                        self._deliverable_content = deliverable_json
+                        self._deliverable_produced = True
+                        self._total_events_processed += 1
+                        if self._simulation_type == SimulationType.INTERNAL_ONLY:
+                            self._current_tick += 1
+                            self._queue.current_time = (
+                                float(self._current_tick)
+                                * self._config.tick_interval_seconds
+                            )
+                        logger.info(
+                            "[RUNNER] Deliverable produced by %s: %d bytes",
+                            env.actor_id, len(str(deliverable_json)),
+                        )
+                    else:
+                        self._queue.submit(env)
 
             # Step 4: Process next envelope
             envelope = self._queue.pop_next()
@@ -276,6 +297,11 @@ class SimulationRunner:
                 self._deliverable_content = envelope.payload
                 self._deliverable_produced = True
                 self._total_events_processed += 1
+                if self._simulation_type == SimulationType.INTERNAL_ONLY:
+                    self._current_tick += 1
+                    self._queue.current_time = (
+                        float(self._current_tick) * self._config.tick_interval_seconds
+                    )
                 logger.info(
                     "[RUNNER] Deliverable produced by %s: %d bytes",
                     envelope.actor_id,
@@ -290,7 +316,6 @@ class SimulationRunner:
                 type(committed_event).__name__,
             )
             if committed_event is None:
-                logger.info("[RUNNER] pipeline returned None — skipping notify")
                 continue
 
             self._total_events_processed += 1
@@ -306,6 +331,7 @@ class SimulationRunner:
                 self._events_since_external += 1
 
             # Step 5: Notify AgencyEngine
+            print(f"[DBG] runner: calling notify for event #{self._total_events_processed}", flush=True)
             if self._agency is not None:
                 response_envelopes = await self._agency.notify(committed_event)
                 count = 0
@@ -314,10 +340,7 @@ class SimulationRunner:
                         break
                     self._queue.submit(env)
                     count += 1
-                logger.info(
-                    "[RUNNER] agency.notify returned %d envelopes, submitted %d",
-                    len(response_envelopes or []), count,
-                )
+                print(f"[DBG] runner: notify returned {len(response_envelopes or [])} envelopes", flush=True)
 
             # Step 6: Notify Animator
             if self._animator is not None:
@@ -356,6 +379,17 @@ class SimulationRunner:
 
             # Step 9: Track idle ticks for internal-only worlds
             self._track_idle_ticks(envelope)
+
+            # Step 10: Advance tick for internal-only worlds.
+            # Each committed event = 1 tick. This drives:
+            # - check_scheduled_actions() firing at the right time
+            # - max_ticks end condition
+            # - Runaway window sliding forward
+            if self._simulation_type == SimulationType.INTERNAL_ONLY:
+                self._current_tick += 1
+                self._queue.current_time = (
+                    float(self._current_tick) * self._config.tick_interval_seconds
+                )
 
         return self._stop_reason  # type: ignore[return-value]
 
@@ -448,28 +482,17 @@ class SimulationRunner:
         return True
 
     def _track_idle_ticks(self, envelope: ActionEnvelope) -> None:
-        """Track idle ticks for internal-only world end conditions.
+        """Track consecutive idle actions for internal-only world end conditions.
 
-        An "idle tick" is counted when an action_type is "do_nothing" or similar
-        no-op actions. If all processed actions in a logical time window are idle,
-        the consecutive idle counter increments. Any substantive action resets it.
+        Each committed event is one tick. If the action is a no-op (do_nothing,
+        noop, idle, wait, pass), the consecutive idle counter increments.
+        Any substantive action resets it to zero.
         """
         if self._simulation_type != SimulationType.INTERNAL_ONLY:
             return
 
-        # Detect tick transitions via logical time
-        tick_for_envelope = int(envelope.logical_time)
-        if tick_for_envelope > self._current_tick:
-            # Tick boundary crossed — evaluate whether previous tick was idle
-            if self._events_this_tick == 0 and self._current_tick > 0:
-                # No substantive events in the previous tick
-                self._consecutive_idle_ticks += 1
-            elif self._events_this_tick > 0:
-                self._consecutive_idle_ticks = 0
-            self._current_tick = tick_for_envelope
-            self._events_this_tick = 0
-
-        # Track whether this is a substantive action
         idle_actions = {"do_nothing", "noop", "idle", "wait", "pass"}
-        if envelope.action_type not in idle_actions:
-            self._events_this_tick += 1
+        if envelope.action_type in idle_actions:
+            self._consecutive_idle_ticks += 1
+        else:
+            self._consecutive_idle_ticks = 0

@@ -57,6 +57,7 @@ class LLMRequest(BaseModel, frozen=True):
     temperature: float = 0.7
     model_override: str | None = None
     fresh_session: bool = False  # ACP: create isolated session for this call
+    cache_system_prompt: bool = False  # Enable prompt caching for system prompt
 
 
 class LLMResponse(BaseModel, frozen=True):

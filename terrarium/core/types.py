@@ -145,9 +145,10 @@ class ActionSource(enum.StrEnum):
 class EnvelopePriority(enum.IntEnum):
     """Priority for tie-breaking in EventQueue. Lower = higher priority."""
 
-    ENVIRONMENT = 0  # environment events first (world state changes)
-    EXTERNAL = 1  # external agent actions next
-    INTERNAL = 2  # internal actor actions last
+    SYSTEM = 0  # meta-actions (deliverable, lifecycle) — highest priority
+    ENVIRONMENT = 1  # environment events (world state changes)
+    EXTERNAL = 2  # external agent actions
+    INTERNAL = 3  # internal actor actions — lowest priority
 
 
 class GapResponse(enum.StrEnum):

@@ -125,7 +125,7 @@ class TestEndConditions:
     async def test_manual_stop(self) -> None:
         """Runner stops with MANUAL_STOP when stop() is called."""
         q = EventQueue()
-        config = SimulationRunnerConfig(stop_on_empty_queue=False)
+        config = SimulationRunnerConfig(stop_on_empty_queue=False, max_total_events=10000)
         executor = AsyncMock(return_value=_make_world_event())
         runner = _make_runner(queue=q, pipeline_executor=executor, config=config)
 

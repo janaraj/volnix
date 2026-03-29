@@ -7,6 +7,8 @@ using the Google Generative AI (Gemini) native SDK.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import time
 from typing import ClassVar
 
@@ -14,6 +16,8 @@ from google import genai
 
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleNativeProvider(LLMProvider):
@@ -24,6 +28,8 @@ class GoogleNativeProvider(LLMProvider):
     def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview") -> None:
         self._client = genai.Client(api_key=api_key)
         self._default_model = default_model
+        # Cache: hash(model:system_prompt) → cache.name for reuse
+        self._prompt_cache: dict[str, str] = {}
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Send a request to the Google Generative AI API.
@@ -40,23 +46,62 @@ class GoogleNativeProvider(LLMProvider):
         model = request.model_override or self._default_model
         start = time.monotonic()
         try:
-            prompt = (
-                f"{request.system_prompt}\n\n{request.user_content}"
-                if request.system_prompt
-                else request.user_content
-            )
-            config = {
+            # Explicit context caching for repeated system prompts.
+            # Creates a server-side cache on first call, reuses on subsequent calls.
+            # Supported on gemini-2.5-flash, gemini-2.5-pro, gemini-3-flash-preview, gemini-3-pro-preview.
+            cached_content_name = None
+            if request.cache_system_prompt and request.system_prompt:
+                cache_key = hashlib.sha256(
+                    f"{model}:{request.system_prompt}".encode()
+                ).hexdigest()[:16]
+
+                if cache_key in self._prompt_cache:
+                    cached_content_name = self._prompt_cache[cache_key]
+                else:
+                    try:
+                        from google.genai import types
+                        cache = await asyncio.to_thread(
+                            self._client.caches.create,
+                            model=f"models/{model}",
+                            config=types.CreateCachedContentConfig(
+                                system_instruction=request.system_prompt,
+                                ttl="3600s",  # 1 hour
+                            ),
+                        )
+                        cached_content_name = cache.name
+                        self._prompt_cache[cache_key] = cached_content_name
+                        logger.info("Gemini cache created: %s for model %s", cache_key, model)
+                    except Exception as exc:
+                        logger.warning("Gemini cache creation failed (non-fatal): %s", exc)
+
+            config: dict = {
                 "max_output_tokens": request.max_tokens,
                 "temperature": request.temperature,
             }
             if request.seed is not None:
                 config["seed"] = request.seed
-            response = await asyncio.to_thread(
-                self._client.models.generate_content,
-                model=model,
-                contents=prompt,
-                config=config,
-            )
+
+            if cached_content_name:
+                # Use cached content — system prompt served from cache
+                config["cached_content"] = cached_content_name
+                response = await asyncio.to_thread(
+                    self._client.models.generate_content,
+                    model=model,
+                    contents=request.user_content,
+                    config=config,
+                )
+            else:
+                prompt = (
+                    f"{request.system_prompt}\n\n{request.user_content}"
+                    if request.system_prompt
+                    else request.user_content
+                )
+                response = await asyncio.to_thread(
+                    self._client.models.generate_content,
+                    model=model,
+                    contents=prompt,
+                    config=config,
+                )
             latency = (time.monotonic() - start) * 1000
             content = response.text if response.text else ""
             usage_meta = response.usage_metadata

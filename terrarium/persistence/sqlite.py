@@ -40,6 +40,7 @@ class SQLiteDatabase(Database):
         if self._wal_mode and self._db_path != ":memory:":
             await self._conn.execute("PRAGMA journal_mode=WAL")
             await self._conn.execute("PRAGMA synchronous=NORMAL")
+        await self._conn.execute("PRAGMA busy_timeout=5000")  # 5s wait on lock contention
         await self._conn.execute("PRAGMA foreign_keys=ON")
 
     # ------------------------------------------------------------------

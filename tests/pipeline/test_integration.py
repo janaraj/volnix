@@ -145,6 +145,7 @@ async def test_pipeline_with_real_ledger(tmp_path):
 
         ctx = _make_ctx()
         await dag.execute(ctx)
+        await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
 
         count = await ledger.get_count("pipeline_step")
         assert count == 3
@@ -230,6 +231,7 @@ async def test_side_effect_full_cycle(tmp_path):
         assert se_count >= 1
 
         # Ledger has entries for main pipeline + side effect pipelines
+        await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
         total = await ledger.get_count("pipeline_step")
         assert total >= 2  # At least main + 1 SE execution
     finally:
@@ -258,6 +260,7 @@ async def test_all_verdict_types(tmp_path):
             ctx = _make_ctx()
             await dag.execute(ctx)
 
+        await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
         entries = await ledger.query(LedgerQuery(entry_type="pipeline_step"))
         assert len(entries) == 4
 
