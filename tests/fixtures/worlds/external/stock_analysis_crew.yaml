@@ -1,0 +1,31 @@
+# ===================================================================
+# WORLD DEFINITION -- Stock Analysis (External Agent)
+# ===================================================================
+# World defines the environment only. External agent permissions
+# and budgets are defined in a separate agent profile YAML.
+
+world:
+  name: "Stock Analysis World"
+  description: >
+    A simulated market environment with real-time stock data,
+    news feeds, and trading capabilities via Alpaca. External
+    agents connect to analyze stocks, read market data, and
+    produce investment recommendations.
+
+  services:
+    alpaca: verified/alpaca
+
+  seeds:
+    - "AAPL trading at $185.42, up 2.3% this week on strong Q3 earnings beat"
+    - "Fed minutes released showing hawkish stance, rate pause expected next meeting"
+    - "Tech sector seeing rotation into value stocks, NASDAQ down 0.8% this month"
+    - "VIX at 14.5, near 52-week lows despite rising geopolitical tensions"
+    - "AAPL announced $90B stock buyback program, largest in history"
+    - "Analyst consensus: 28 buy, 7 hold, 2 sell. Average price target $198"
+
+  mission: >
+    Provide market data and news for external agents to analyze
+    stocks and produce investment recommendations.
+
+  reality:
+    preset: messy

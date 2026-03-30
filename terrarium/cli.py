@@ -299,6 +299,10 @@ def run(
     ] = False,
     host: Annotated[str, typer.Option("--host", help="HTTP server bind host")] = "127.0.0.1",
     port: Annotated[int | None, typer.Option("--port", "-p", help="HTTP server bind port")] = None,
+    agents: Annotated[
+        str | None,
+        typer.Option("--agents", help="Path to agent profile YAML (external agent permissions/budgets)"),
+    ] = None,
 ) -> None:
     """Run a full simulation on a world definition.
 
@@ -306,11 +310,12 @@ def run(
       terrarium run customer_support                  # compile + run
       terrarium run --world world_a6b03d8a8f29        # run on existing world (instant)
       terrarium run customer_support --serve --port 8080  # compile + run + HTTP server
+      terrarium run --world world_id --agents agents.yaml  # with agent profiles
     """
     if not world and not world_id:
         print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
         raise typer.Exit(1)
-    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id, host, port))
+    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id, host, port, agents))
 
 
 async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
@@ -403,6 +408,7 @@ async def _run_impl(
     world_id: str | None = None,
     host: str = "127.0.0.1",
     port: int | None = None,
+    agents: str | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -445,6 +451,7 @@ async def _run_impl(
             run_id = await terrarium.create_run(
                 compiled_plan, mode=compiled_plan.mode, tag=tag,
                 world_id=_WId(world_id) if world_id else None,
+                agents_yaml=agents,
             )
             console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
             if hasattr(terrarium, '_current_world_id'):
@@ -524,6 +531,10 @@ def serve(
     ] = None,
     host: Annotated[str, typer.Option("--host", help="HTTP server bind host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", "-p", help="HTTP server bind port")] = 8080,
+    agents: Annotated[
+        str | None,
+        typer.Option("--agents", "-a", help="Path to agent profile YAML (external agent permissions/budgets)"),
+    ] = None,
 ) -> None:
     """Start MCP/HTTP servers for agent connections.
 
@@ -532,16 +543,18 @@ def serve(
       terrarium serve --world world_a6b03d8a8f29    # new run on existing world (instant)
       terrarium serve --run run_64ca8171df83        # re-serve existing run (instant)
       terrarium serve "Support team with email"     # compile from NL + serve
+      terrarium serve --world world_id --agents agents.yaml  # with agent profiles
     """
     if not world and not run and not world_id:
         print_error("Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>")
         raise typer.Exit(1)
-    asyncio.run(_serve_impl(world, settings, run, world_id, host, port))
+    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents))
 
 
 async def _serve_impl(
     world: str, settings: str | None, run_id: str | None,
     world_id: str | None, host: str, port: int,
+    agents: str | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -576,6 +589,7 @@ async def _serve_impl(
                     raise typer.Exit(1)
                 new_run_id = await terrarium.create_run(
                     plan, mode=plan.mode, world_id=_WId(world_id),
+                    agents_yaml=agents,
                 )
                 _active_run_id[0] = str(new_run_id)
                 console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
@@ -642,7 +656,8 @@ async def _serve_impl(
 
                         console.print("  Generating world...")
                         new_run_id = await terrarium.create_run(
-                            compiled_plan, mode=compiled_plan.mode
+                            compiled_plan, mode=compiled_plan.mode,
+                            agents_yaml=agents,
                         )
                         _active_run_id[0] = str(new_run_id)
                         console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")

@@ -190,6 +190,12 @@ collaboration_enabled = true
 batch_threshold_default = 3
 synthesis_buffer_pct = 0.10
 
+# ── External Agent Slots ───────────────────────────────────
+[agents]
+max_external_agents = 10
+allow_unregistered_access = true   # auto-register unknown agents with defaults
+auto_assign_enabled = true         # auto-assign to available slots
+
 # ── Simulation Runner ──────────────────────────────────────
 [simulation_runner]
 max_logical_time = 86400.0

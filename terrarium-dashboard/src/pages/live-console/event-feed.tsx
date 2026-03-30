@@ -93,15 +93,15 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
 
   useEffect(() => {
     if (autoScroll && filteredEvents.length > 0) {
-      virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' });
+      virtualizer.scrollToIndex(0, { align: 'start' });
     }
   }, [filteredEvents.length, autoScroll, virtualizer]);
 
   function handleScroll() {
     if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 32;
-    setAutoScroll(isAtBottom);
+    const { scrollTop } = scrollRef.current;
+    const isAtTop = scrollTop < 32;
+    setAutoScroll(isAtTop);
   }
 
   return (
@@ -116,7 +116,7 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
           onClick={() => {
             setAutoScroll(true);
             if (filteredEvents.length > 0) {
-              virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' });
+              virtualizer.scrollToIndex(0, { align: 'start' });
             }
           }}
           className={cn(

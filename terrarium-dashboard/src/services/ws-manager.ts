@@ -44,6 +44,11 @@ export class WsManager {
   }
 
   connect(runId: string): void {
+    // Already connected to this run — skip (prevents StrictMode double-connect)
+    if (this.currentRunId === runId && this.ws && this.ws.readyState <= WebSocket.OPEN) {
+      return;
+    }
+
     // Disconnect existing connection if any
     if (this.ws) {
       this.disconnect();
