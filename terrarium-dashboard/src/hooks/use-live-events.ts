@@ -37,7 +37,7 @@ export function useLiveEvents(runId: string): ConnectionStatus {
             (old) => {
               if (!old) return old;
               if (old.events.some((e) => e.event_id === newEvent.event_id)) return old;
-              return { ...old, events: [...old.events, newEvent], total: old.total + 1 };
+              return { ...old, events: [newEvent, ...old.events], total: old.total + 1 };
             },
           );
           break;

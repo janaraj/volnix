@@ -28,7 +28,9 @@ export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: Ev
       <div className="flex items-center gap-2">
         <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
         <OutcomeIcon outcome={event.outcome ?? 'success'} size={14} />
-        <span className="font-mono text-xs text-text-muted">{formatTick(event.timestamp?.tick ?? 0)}</span>
+        {(event.timestamp?.tick ?? 0) > 0 && (
+          <span className="font-mono text-xs text-text-muted">{formatTick(event.timestamp.tick)}</span>
+        )}
       </div>
 
       {/* Line 2: actor name */}

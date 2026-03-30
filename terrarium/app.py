@@ -265,6 +265,16 @@ class TerrariumApp:
         actor_registry = ActorRegistry()
         self._actor_registry = actor_registry
         compiler._config["_actor_registry"] = actor_registry
+
+        # Slot manager for external agent identity
+        from terrarium.actors.slot_manager import SlotManager
+        self._slot_manager = SlotManager(
+            actor_registry=actor_registry,
+            config=self._config.agents,
+        )
+        # Pass to gateway for HTTP/MCP token resolution
+        if self._gateway:
+            self._gateway._slot_manager = self._slot_manager
         compiler._ledger = self._ledger  # Same pattern as state_engine
 
         # Register default gateway actors so HTTP/MCP defaults go through governance
@@ -491,6 +501,10 @@ class TerrariumApp:
         if not self._started:
             raise RuntimeError("TerrariumApp is not started. Call start() first.")
 
+        # Resolve actor identity — auto-register unknown agents with defaults
+        if self._slot_manager:
+            actor_id = self._slot_manager.resolve_actor_id(actor_id)
+
         now = datetime.now(UTC)
         ctx = ActionContext(
             request_id=f"req-{uuid.uuid4().hex[:12]}",
@@ -501,13 +515,16 @@ class TerrariumApp:
             world_time=overrides.get("world_time", now),
             wall_time=now,
             tick=overrides.get("tick", 0),
+            run_id=RunId(self._current_run_id) if self._current_run_id else None,
         )
 
         await self._pipeline.execute(ctx)
 
-        # B6 fix: publish event for ALL actions (including short-circuited)
-        # so AgencyEngine + other subscribers can react to blocked/denied actions
-        if self._bus:
+        # Publish event for short-circuited actions only. Successful actions
+        # are already published by the commit step in StateEngine via the
+        # pipeline DAG — publishing again here would create duplicates.
+        # Also publish if no commit_result (pipeline had no commit step).
+        if self._bus and (ctx.short_circuited or not ctx.commit_result):
             from terrarium.core.events import WorldEvent
             from terrarium.core.types import ActionSource, EntityId, EventId, Timestamp
 
@@ -570,7 +587,13 @@ class TerrariumApp:
         # Include the committed WorldEvent in the return so callers
         # (e.g. SimulationRunner) can pass it to agency.notify().
         # External callers (HTTP gateway) use only the response body.
-        committed_event = event if self._bus else None
+        # For successful actions: get from commit step result.
+        # For short-circuited actions: get from the event we just created above.
+        committed_event = None
+        if ctx.short_circuited and self._bus:
+            committed_event = event  # created in the short_circuited block above
+        elif ctx.commit_result and ctx.commit_result.events:
+            committed_event = ctx.commit_result.events[0]  # from StateEngine commit
         logger.debug(
             "[handle_action] _event attached: type=%s, short_circuited=%s",
             type(committed_event).__name__, ctx.short_circuited,
@@ -614,6 +637,11 @@ class TerrariumApp:
             permission_engine._world_mode = mode
         if hasattr(budget_engine, "_world_mode"):
             budget_engine._world_mode = mode
+
+        # Filter gateway tools to only services defined in this world
+        world_services = set(plan.services.keys()) if hasattr(plan, "services") else set()
+        if self._gateway and world_services:
+            self._gateway.set_active_services(world_services)
 
     async def configure_animator(self, plan: Any) -> None:
         """Configure the animator engine from a compiled WorldPlan.
@@ -933,6 +961,7 @@ class TerrariumApp:
     async def create_run(
         self, plan: Any, mode: str = "governed", tag: str | None = None,
         world_id: WorldId | None = None,
+        agents_yaml: str | None = None,
     ) -> RunId:
         """Create a run against an existing world.
 
@@ -1015,6 +1044,12 @@ class TerrariumApp:
                 for actor_def in result["actors"]:
                     if not self._actor_registry.has_actor(actor_def.id):
                         self._actor_registry.register(actor_def)
+
+        # Load external agent profiles if provided
+        if agents_yaml and self._slot_manager:
+            from terrarium.actors.profile import load_agent_profile
+            agent_defs = load_agent_profile(agents_yaml)
+            self._slot_manager.register_from_profile(agent_defs)
 
         self.configure_governance(plan)
         await self.configure_animator(plan)

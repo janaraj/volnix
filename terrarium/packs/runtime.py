@@ -78,7 +78,13 @@ class PackRuntime:
         entity_schemas = pack.get_entity_schemas()
         state_machines = pack.get_state_machines()
 
-        # 2. Validate input against tool parameter schema
+        # 2. Sanitize input: strip null values from optional params.
+        # External agents (CrewAI, LangGraph) serialize unset optional params
+        # as null in JSON. Strip before validation so schema validator doesn't
+        # reject null values for typed fields.
+        input_data = {k: v for k, v in input_data.items() if v is not None}
+
+        # 3. Validate input against tool parameter schema
         tool_def = self._find_tool_def(pack, action)
         if tool_def and "parameters" in tool_def:
             input_result = self._schema_validator.validate_entity(input_data, tool_def["parameters"])
@@ -88,7 +94,7 @@ class PackRuntime:
                     validation_type="schema",
                 )
 
-        # 3. Dispatch to pack (the ABC contract -- handle_action)
+        # 4. Dispatch to pack (the ABC contract -- handle_action)
         proposal = await pack.handle_action(ToolName(action), input_data, state)
 
         # 4. Validate output: entity deltas against schemas
