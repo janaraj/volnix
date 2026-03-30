@@ -206,6 +206,10 @@ class TerrariumApp:
             # Pack registry + profile registry -> adapter engine (for capability checks)
             adapter_engine = self._registry.get("adapter")
             adapter_engine._pack_registry = pack_reg
+
+            # Pack registry → permission engine (for read/write classification)
+            permission_eng = self._registry.get("permission")
+            permission_eng._pack_registry = pack_reg
             profile_reg = getattr(responder, "_profile_registry", None)
             if profile_reg is not None:
                 adapter_engine._profile_registry = profile_reg
