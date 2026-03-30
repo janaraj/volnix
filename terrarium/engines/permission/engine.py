@@ -47,6 +47,7 @@ class PermissionEngine(BaseEngine):
     def __init__(self) -> None:
         super().__init__()
         self._actor_registry: Any = None
+        self._pack_registry: Any = None
         self._world_mode: str = "governed"
 
     # -- PipelineStep interface ------------------------------------------------
@@ -105,56 +106,58 @@ class PermissionEngine(BaseEngine):
 
         service_str = str(ctx.service_id)
 
-        # Check write access to service
-        # write_access must be "all" (string) or a list of service names
-        write_access = perms.get("write", [])
-        if not self._has_access(write_access, service_str):
-            reason = f"No write access to service '{service_str}'"
-            event = PermissionDeniedEvent(
-                event_type="permission.denied",
-                timestamp=_now_timestamp(),
-                actor_id=ctx.actor_id,
-                action=ctx.action,
-                reason=reason,
-            )
-            if self._is_ungoverned():
-                return StepResult(
-                    step_name=self.step_name,
-                    verdict=StepVerdict.ALLOW,
-                    events=[event],
-                    message=f"ungoverned: {reason}",
-                )
-            return StepResult(
-                step_name=self.step_name,
-                verdict=StepVerdict.DENY,
-                events=[event],
-                message=reason,
-            )
+        # Classify action as read or write using pack tool metadata.
+        # GET = read, POST/PUT/PATCH/DELETE = write.
+        is_write = self._is_write_action(ctx.action)
 
-        # Check read access to service
-        read_access = perms.get("read", [])
-        if not self._has_access(read_access, service_str):
-            reason = f"No read access to service '{service_str}'"
-            event = PermissionDeniedEvent(
-                event_type="permission.denied",
-                timestamp=_now_timestamp(),
-                actor_id=ctx.actor_id,
-                action=ctx.action,
-                reason=reason,
-            )
-            if self._is_ungoverned():
+        if is_write:
+            write_access = perms.get("write", [])
+            if not self._has_access(write_access, service_str):
+                reason = f"No write access to service '{service_str}'"
+                event = PermissionDeniedEvent(
+                    event_type="permission.denied",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    action=ctx.action,
+                    reason=reason,
+                )
+                if self._is_ungoverned():
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        events=[event],
+                        message=f"ungoverned: {reason}",
+                    )
                 return StepResult(
                     step_name=self.step_name,
-                    verdict=StepVerdict.ALLOW,
+                    verdict=StepVerdict.DENY,
                     events=[event],
-                    message=f"ungoverned: {reason}",
+                    message=reason,
                 )
-            return StepResult(
-                step_name=self.step_name,
-                verdict=StepVerdict.DENY,
-                events=[event],
-                message=reason,
-            )
+        else:
+            read_access = perms.get("read", [])
+            if not self._has_access(read_access, service_str):
+                reason = f"No read access to service '{service_str}'"
+                event = PermissionDeniedEvent(
+                    event_type="permission.denied",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    action=ctx.action,
+                    reason=reason,
+                )
+                if self._is_ungoverned():
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        events=[event],
+                        message=f"ungoverned: {reason}",
+                    )
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.DENY,
+                    events=[event],
+                    message=reason,
+                )
 
         # Check action-specific constraints
         actions = perms.get("actions", {})
@@ -236,6 +239,25 @@ class PermissionEngine(BaseEngine):
             self._world_mode == WorldMode.UNGOVERNED
             or self._world_mode == "ungoverned"
         )
+
+    def _is_write_action(self, action: str) -> bool:
+        """Determine if an action is a write operation from pack tool metadata.
+
+        Uses ``http_method`` from the tool definition (set by every pack):
+        GET = read, POST/PUT/PATCH/DELETE = write.
+        Falls back to write (safer default — denies rather than leaks).
+        """
+        if self._pack_registry is None:
+            return True
+        try:
+            pack = self._pack_registry.get_pack_for_tool(action)
+            for tool in pack.get_tools():
+                if tool.get("name") == action:
+                    method = tool.get("http_method", "POST").upper()
+                    return method != "GET"
+        except Exception:
+            pass
+        return True
 
     @staticmethod
     def _has_access(access_config: Any, service: str) -> bool:
