@@ -101,10 +101,7 @@ async def test_single_exhaustion_discipline_80(computer, actors):
     assert result["per_actor"]["agent-1"]["budget_discipline"] == 80.0
 
 
-async def test_empty_events_all_scores_100(computer, actors):
-    """No events at all -> all scores default to 100."""
+async def test_empty_events_no_actors_scored(computer, actors):
+    """No events at all -> actors filtered out, per_actor is empty."""
     result = await computer.compute([], actors)
-    for metric, value in result["per_actor"]["agent-1"].items():
-        if metric == "scores":
-            continue
-        assert value == 100.0, f"{metric} should be 100.0 with no events, got {value}"
+    assert result["per_actor"] == {}, "Actors with zero events should not be scored"

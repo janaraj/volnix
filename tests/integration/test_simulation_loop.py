@@ -126,14 +126,13 @@ async def test_dynamic_mode_scheduled_events_executed():
 
 
 @pytest.mark.asyncio
-async def test_dynamic_mode_probabilistic_events_with_messy_world():
-    """Dynamic mode: messy world conditions generate probabilistic events."""
+async def test_dynamic_mode_without_llm_no_events():
+    """Dynamic mode without LLM: no events (probabilistic removed, organic needs LLM)."""
     from terrarium.engines.animator.engine import WorldAnimatorEngine
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
 
-    # High reliability failure rate to guarantee events fire
     conditions = WorldConditions(
         reliability=ReliabilityDimension(failures=100, timeouts=0, degradation=100),
     )
@@ -150,11 +149,9 @@ async def test_dynamic_mode_probabilistic_events_with_messy_world():
     await engine.configure(plan, scheduler)
 
     results = await engine.tick(_utc())
-    # With 100% failure and degradation, at least 2 probabilistic events
-    assert len(results) >= 2
-
-    # Check that events went through app.handle_action
-    assert mock_app.handle_action.call_count >= 2
+    # Without LLM, organic generation can't run — no events produced
+    assert len(results) == 0
+    assert mock_app.handle_action.call_count == 0
 
 
 # ---------------------------------------------------------------------------
