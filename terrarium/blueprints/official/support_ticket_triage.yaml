@@ -1,0 +1,89 @@
+# Support Ticket Triage Blueprint
+# Mixed world: internal agents triage tickets, external customers submit issues.
+world:
+  name: "Support Ticket Triage"
+  description: >
+    An email-based support team receives, reviews, and triages incoming
+    issues for five customers. Internal agents create and update tickets,
+    communicate status through email, and escalate when needed. External
+    customers submit new requests.
+
+  services:
+    gmail: verified/gmail
+    zendesk: verified/zendesk
+
+  actors:
+    - role: support-agent
+      type: internal
+      count: 2
+      personality: >
+        Organized, responsive, and detail-oriented. Calm under pressure.
+        Follows triage protocol consistently.
+      permissions:
+        read: [gmail, zendesk]
+        write: [gmail, zendesk]
+
+    - role: support-lead
+      type: internal
+      count: 1
+      personality: >
+        Decisive and policy-driven. Focuses on quality and consistency.
+        Reviews escalations and ambiguous tickets before closure.
+      permissions:
+        read: [gmail, zendesk]
+        write: [gmail, zendesk]
+
+    - role: customer
+      type: external
+      count: 5
+      permissions:
+        read: [gmail]
+        write: [gmail]
+      budget:
+        api_calls: 50
+        llm_spend: 2.00
+
+  policies:
+    - name: "Triage on receipt"
+      description: "Every new email must be classified by urgency and linked to a ticket."
+      trigger: "new email received without ticket"
+      enforcement: log
+      hold_config:
+        approver_role: support-lead
+        timeout: 4h
+
+    - name: "Approval for closure"
+      description: "High-priority or ambiguous tickets require lead review before closure."
+      trigger: "ticket closure attempted on high-priority item"
+      enforcement: hold
+      hold_config:
+        approver_role: support-lead
+        timeout: 8h
+
+    - name: "Escalate stale requests"
+      description: "Unanswered issues must escalate if idle beyond response window."
+      trigger: "ticket idle beyond SLA"
+      enforcement: escalate
+      hold_config:
+        approver_role: support-lead
+        timeout: 24h
+
+  seeds:
+    - "Customer with a login problem needs account access restored quickly"
+    - "Billing discrepancy — customer asking for clarification on a charge"
+    - "Follow-up on a previously reported bug, may have an open ticket"
+    - "Vague complaint about a broken workflow, needs clarifying follow-up"
+    - "High-priority outage affecting a team's ability to use the service"
+
+  mission: >
+    Provide timely, accurate email-based support. Triage every request
+    into the ticketing system, assign ownership, and maintain clear
+    customer communication until resolution.
+
+compiler:
+  seed: 42
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy
