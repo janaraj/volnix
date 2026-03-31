@@ -68,6 +68,13 @@ max_policies_per_action = 50
 
 [permission]
 cache_ttl_seconds = 300
+visibility_rule_entity_type = "visibility_rule"
+observer_read_prefixes = [
+    "list", "get", "show", "search", "read", "query",
+    "about", "hot", "new", "top", "best", "popular",
+    "trending", "detail", "home_feed", "timeline",
+    "followers", "following", "user_tweets", "user_submitted",
+]
 
 # ── Budget Engine ────────────────────────────────────────────
 

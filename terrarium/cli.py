@@ -315,6 +315,20 @@ def run(
         str | None,
         typer.Option("--agents", help="Path to agent profile YAML (external agent permissions/budgets)"),
     ] = None,
+    preset: Annotated[
+        str | None,
+        typer.Option(
+            "--preset",
+            help="Deliverable preset: synthesis, decision, prediction, brainstorm, recommendation, assessment",
+        ),
+    ] = None,
+    actor_roles: Annotated[
+        str | None,
+        typer.Option(
+            "--actors",
+            help="Comma-separated internal actor roles (e.g. 'economist,analyst,strategist'). First role is lead.",
+        ),
+    ] = None,
 ) -> None:
     """Run a full simulation on a world definition.
 
@@ -323,11 +337,15 @@ def run(
       terrarium run --world world_a6b03d8a8f29        # run on existing world (instant)
       terrarium run customer_support --serve --port 8080  # compile + run + HTTP server
       terrarium run --world world_id --agents agents.yaml  # with agent profiles
+      terrarium run "Market analysis" --preset prediction --actors economist,analyst,strategist
     """
     if not world and not world_id:
         print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
         raise typer.Exit(1)
-    asyncio.run(_run_impl(world, settings, agent, actor, mode, tag, behavior, serve, world_id, host, port, agents))
+    asyncio.run(_run_impl(
+        world, settings, agent, actor, mode, tag, behavior, serve,
+        world_id, host, port, agents, preset=preset, actor_roles=actor_roles,
+    ))
 
 
 async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
@@ -421,6 +439,8 @@ async def _run_impl(
     host: str = "127.0.0.1",
     port: int | None = None,
     agents: str | None = None,
+    preset: str | None = None,
+    actor_roles: str | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -456,6 +476,44 @@ async def _run_impl(
                 compiled_plan = compiled_plan.model_copy(update={"mode": mode})
             if behavior:
                 compiled_plan = compiled_plan.model_copy(update={"behavior": behavior})
+
+            # Apply --preset flag: inject deliverable preset into plan
+            if preset:
+                from terrarium.deliverable_presets import load_preset as _load_preset
+                try:
+                    preset_data = _load_preset(preset)
+                    compiled_plan = compiled_plan.model_copy(update={
+                        "deliverable": {"preset": preset, **preset_data},
+                    })
+                    console.print(f"  Deliverable preset: [cyan]{preset}[/cyan]")
+                except (FileNotFoundError, ValueError) as exc:
+                    print_error(f"Invalid preset '{preset}': {exc}")
+                    raise typer.Exit(1) from None
+
+            # Apply --actors flag: override actor_specs with inline roles
+            if actor_roles:
+                from typing import Any as _Any
+                roles = [r.strip() for r in actor_roles.split(",") if r.strip()]
+                if not roles:
+                    print_error("--actors requires at least one role")
+                    raise typer.Exit(1)
+                actor_specs: list[dict[str, _Any]] = []
+                for i, role in enumerate(roles):
+                    spec: dict[str, _Any] = {
+                        "role": role,
+                        "type": "internal",
+                        "count": 1,
+                    }
+                    if i == 0:
+                        spec["lead"] = True
+                    actor_specs.append(spec)
+                compiled_plan = compiled_plan.model_copy(
+                    update={"actor_specs": actor_specs}
+                )
+                console.print(
+                    f"  Actors: [cyan]{', '.join(roles)}[/cyan] "
+                    f"(lead: {roles[0]})"
+                )
 
             # Step 2: Create world + run
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")

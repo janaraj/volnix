@@ -364,6 +364,55 @@ class WorldCompilerEngine(BaseEngine):
                 },
             )
 
+        # Step 7b: GENERATE visibility rules per actor role (before populate)
+        # Must run before populate_entities so rules are persisted with all other entities.
+        visibility_rules: list[dict[str, Any]] = []
+        if self._llm_router and actors:
+            try:
+                from terrarium.engines.world_compiler.visibility_generator import (
+                    VisibilityRuleGenerator,
+                )
+
+                vis_gen = VisibilityRuleGenerator(
+                    llm_router=self._llm_router,
+                    seed=plan.seed,
+                )
+                context_vars = ctx.for_entity_generation()
+                seen_roles: set[str] = set()
+                for actor in actors:
+                    if actor.role in seen_roles:
+                        continue
+                    seen_roles.add(actor.role)
+                    actor_spec = {
+                        "role": actor.role,
+                        "type": str(actor.type),
+                        "permissions": actor.permissions,
+                        "visibility": getattr(actor, "visibility", None),
+                    }
+                    try:
+                        rules = await vis_gen.generate_for_role(
+                            actor_spec, plan, context_vars,
+                        )
+                        for rule in rules:
+                            visibility_rules.append(rule.model_dump())
+                    except Exception as exc:
+                        logger.warning(
+                            "Visibility rules failed for role %s: %s",
+                            actor.role, exc,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "Visibility rule generation unavailable: %s", exc,
+                )
+
+        if visibility_rules:
+            all_entities.setdefault("visibility_rule", []).extend(visibility_rules)
+            logger.info(
+                "Generated %d visibility rules for %d roles",
+                len(visibility_rules),
+                len({r["actor_role"] for r in visibility_rules}),
+            )
+
         # Step 8: POPULATE state engine + register actors
         snapshot_id = None
         state_engine = self._config.get("_state_engine")

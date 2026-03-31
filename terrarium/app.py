@@ -213,6 +213,10 @@ class TerrariumApp:
             # Pack registry → permission engine (for read/write classification)
             permission_eng = self._registry.get("permission")
             permission_eng._pack_registry = pack_reg
+
+            # Permission engine → responder (for visibility-filtered queries)
+            responder._dependencies["permission"] = permission_eng
+
             profile_reg = getattr(responder, "_profile_registry", None)
             if profile_reg is not None:
                 adapter_engine._profile_registry = profile_reg
@@ -482,13 +486,32 @@ class TerrariumApp:
     async def read_entities(
         self, actor_id: str, entity_type: str
     ) -> dict[str, Any]:
-        """Read entities — read-only state access.
+        """Read entities with visibility scoping.
 
-        Used by HTTP adapter for entity query endpoint.
-        Keeps state access in the app layer (not in adapters).
+        If visibility rules exist for this actor + entity type, returns only
+        visible entities.  Otherwise returns all (backward compat).
         """
         state = self._registry.get("state")
-        entities = await state.query_entities(entity_type)
+        permission = self._registry.get("permission")
+
+        typed_actor = ActorId(actor_id)
+        has_rules = await permission.has_visibility_rules(typed_actor, entity_type)
+
+        if has_rules:
+            visible_ids = await permission.get_visible_entities(
+                typed_actor, entity_type,
+            )
+            if visible_ids:
+                all_ents = await state.query_entities(entity_type)
+                visible_set = {str(eid) for eid in visible_ids}
+                entities = [
+                    e for e in all_ents if e.get("id", "") in visible_set
+                ]
+            else:
+                entities = await state.query_entities(entity_type)
+        else:
+            entities = await state.query_entities(entity_type)
+
         return {
             "entity_type": entity_type,
             "count": len(entities),
@@ -771,12 +794,12 @@ class TerrariumApp:
         # Create ActorState for each internal actor
         actor_states: list[ActorState] = []
         for actor_def in actors:
-            if str(actor_def.type) in ("human", "system"):
+            if str(actor_def.type) in ("human", "system", "observer"):
                 traits = extract_behavior_traits(actor_def)
                 state = ActorState(
                     actor_id=actor_def.id,
                     role=actor_def.role,
-                    actor_type="internal",
+                    actor_type="observer" if str(actor_def.type) == "observer" else "internal",
                     persona=(
                         actor_def.personality.model_dump()
                         if actor_def.personality
@@ -1159,6 +1182,23 @@ class TerrariumApp:
         await self._artifact_store.save_report(run_id, report)
         await self._artifact_store.save_scorecard(run_id, scorecard)
         await self._artifact_store.save_event_log(run_id, raw_events)
+
+        # Generate governance report for Mode 1 (external agent testing)
+        has_external = any(
+            (a.get("type") if isinstance(a, dict) else getattr(a, "type", ""))
+            in ("agent", "external")
+            for a in actors_raw
+        )
+        if has_external:
+            try:
+                gov_report = await reporter.generate_governance_report(
+                    actors=actors_for_report, events=raw_events,
+                )
+                await self._artifact_store.save(
+                    run_id, "governance_report", gov_report,
+                )
+            except Exception as exc:
+                logger.warning("Governance report generation failed: %s", exc)
 
         state = self._registry.get("state")
         if self._config.runs.snapshot_on_complete:

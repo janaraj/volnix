@@ -200,7 +200,19 @@ class PermissionEngineProtocol(Protocol):
         actor_id: ActorId,
         entity_type: str | None = None,
     ) -> list[EntityId]:
-        """Return entity IDs visible to the given actor."""
+        """Return entity IDs visible to the given actor.
+
+        Returns empty list when no visibility rules exist — callers
+        interpret this as "no filtering, return all entities."
+        """
+        ...
+
+    async def has_visibility_rules(
+        self,
+        actor_id: ActorId,
+        entity_type: str,
+    ) -> bool:
+        """Check if visibility rules exist for this actor and entity type."""
         ...
 
     async def get_actor_permissions(

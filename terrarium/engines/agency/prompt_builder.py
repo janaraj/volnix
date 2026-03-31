@@ -128,6 +128,16 @@ class ActorPromptBuilder:
         if actor.persona:
             sections.append(f"### Persona\n{json.dumps(actor.persona, indent=2)}")
 
+        # Observer mode instructions
+        if actor.actor_type == "observer":
+            sections.append(
+                "### Observer Mode\n"
+                "You are an OBSERVER. You can READ and ANALYZE data from services "
+                "but you CANNOT create, update, or delete anything. Your role is "
+                "to observe, analyze, and report findings. Only use read actions "
+                "(list, get, search, query)."
+            )
+
         # Current state
         state_lines = [
             f"- Goal: {actor.current_goal or 'None'}",
