@@ -20,8 +20,8 @@ class AnthropicProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "anthropic"
 
-    def __init__(self, api_key: str, default_model: str = "claude-sonnet-4-6") -> None:
-        self._client = AsyncAnthropic(api_key=api_key)
+    def __init__(self, api_key: str, default_model: str = "claude-sonnet-4-6", timeout: float = 300.0) -> None:
+        self._client = AsyncAnthropic(api_key=api_key, timeout=timeout)
         self._default_model = default_model
 
     async def generate(self, request: LLMRequest) -> LLMResponse:

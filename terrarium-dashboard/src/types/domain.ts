@@ -268,7 +268,7 @@ export interface World {
   name: string;
   seed: number;
   services: string[];
-  status: 'created' | 'generated';
+  status: 'created' | 'generated' | 'failed';
   created_at: string;
   entity_count: number;
   actor_count: number;

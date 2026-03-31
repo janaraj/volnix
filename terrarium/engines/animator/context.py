@@ -29,7 +29,7 @@ class AnimatorContext:
     Built ONCE when animator is configured, updated each tick.
     """
 
-    def __init__(self, plan: WorldPlan) -> None:
+    def __init__(self, plan: WorldPlan, available_tools: list[dict[str, Any]] | None = None) -> None:
         # REUSE the SAME context builder as D4b
         self._base = WorldGenerationContext(plan)
 
@@ -46,6 +46,10 @@ class AnimatorContext:
         self.behavior_description: str = self._base.behavior_description
         self.domain: str = self._base.domain
 
+        # Available tools from pack registry — used by both probabilistic
+        # and organic generators to produce valid actions only
+        self.available_tools: list[dict[str, Any]] = available_tools or []
+
     def for_organic_generation(
         self, recent_actions: list[dict[str, Any]] | None = None
     ) -> dict[str, str]:
@@ -57,12 +61,29 @@ class AnimatorContext:
         Returns:
             Dict of template variables for the ANIMATOR_EVENT prompt template.
         """
+        # Include parameter schemas so the LLM generates valid input_data
+        tool_info = []
+        for t in self.available_tools:
+            params = t.get("parameters", {})
+            required = params.get("required", [])
+            properties = {
+                k: {"type": v.get("type", "string"), "description": v.get("description", "")}
+                for k, v in params.get("properties", {}).items()
+                if k in required
+            }
+            tool_info.append({
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "service": t.get("pack_name", ""),
+                "required_params": properties,
+            })
         return {
             "reality_summary": self.reality_summary,
             "reality_dimensions": json.dumps(self.dimensions, indent=2),
             "behavior_mode": self.behavior,
             "behavior_description": self.behavior_description,
             "domain_description": self.domain,
+            "available_tools": json.dumps(tool_info, indent=2),
         }
 
     def get_probability(self, dimension: str, attribute: str) -> float:

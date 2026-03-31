@@ -81,6 +81,7 @@ class WorldAnimatorEngine(BaseEngine):
         self._typed_config: AnimatorConfig = AnimatorConfig()
         self._recent_actions: list[dict[str, Any]] = []
         self._creativity_used_this_tick: int = 0
+        self._available_tools: list[dict[str, Any]] = []
 
     async def configure(self, plan: WorldPlan, scheduler: WorldScheduler) -> None:
         """Configure from compiled world plan. Called after generate_world().
@@ -104,7 +105,7 @@ class WorldAnimatorEngine(BaseEngine):
         })
 
         # Build AnimatorContext (reuses WorldGenerationContext pattern)
-        self._context = AnimatorContext(plan)
+        self._context = AnimatorContext(plan, available_tools=self._available_tools)
 
         # Register scheduled events from YAML animator settings
         for event_config in settings.get("scheduled_events", []):
@@ -165,14 +166,6 @@ class WorldAnimatorEngine(BaseEngine):
                 result = await self._execute_event(event_def, world_time)
                 results.append(result)
 
-        # Layer 1b: Probabilistic events from per-attribute numbers
-        # Uses Level 2 compiler YAML numbers: reliability.failures=20 -> 20% chance
-        if self._context:
-            probabilistic = self._generate_probabilistic_events(self._context, world_time)
-            for event_def in probabilistic:
-                result = await self._execute_event(event_def, world_time)
-                results.append(result)
-
         # Layer 2: Organic events (LLM, within creativity budget)
         if self._generator and self._behavior in ("dynamic", "reactive"):
             budget = self._typed_config.creativity_budget_per_tick - self._creativity_used_this_tick
@@ -181,11 +174,18 @@ class WorldAnimatorEngine(BaseEngine):
                 budget = 0
             recent = self._recent_actions if self._behavior == "reactive" else None
             if budget > 0:
+                logger.info(
+                    "Animator organic generation: budget=%d, behavior=%s, recent_actions=%d",
+                    budget, self._behavior, len(recent or []),
+                )
                 organic = await self._generator.generate(world_time, budget, recent)
+                logger.info("Animator organic generated %d events", len(organic))
                 for event_def in organic:
                     result = await self._execute_event(event_def, world_time)
                     results.append(result)
                     self._creativity_used_this_tick += 1
+        elif not self._generator and self._behavior != "static":
+            logger.warning("Animator: no organic generator available (LLM router missing?)")
 
         self._recent_actions = []
         return results
@@ -243,6 +243,7 @@ class WorldAnimatorEngine(BaseEngine):
         the per-attribute intensity values from the compiler YAML.
 
         Uses a seeded RNG for reproducibility (same world_time = same events).
+        Maps abstract concepts (volatility, failures) to real pack tools.
 
         Args:
             context: The AnimatorContext with dimension_values.
@@ -254,47 +255,39 @@ class WorldAnimatorEngine(BaseEngine):
         events: list[dict[str, Any]] = []
         rng = random.Random(hash(world_time.isoformat()))
 
-        # Reliability: service failures
+        # Classify available tools by http_method for mapping
+        write_tools = [
+            t for t in self._available_tools
+            if t.get("http_method", "GET").upper() in ("POST", "PUT")
+        ]
+        if not write_tools:
+            # No write tools → can't generate state-changing events
+            return events
+
+        def _pick_tool(tools: list[dict]) -> dict[str, Any]:
+            return rng.choice(tools)
+
+        # Reliability: service failures → update existing data (simulate stale/corrupt)
         failure_prob = context.get_probability("reliability", "failures")
         if rng.random() < failure_prob:
+            tool = _pick_tool(write_tools)
             events.append({
                 "actor_id": "system",
-                "service_id": "world",
-                "action": "service_degradation",
-                "input_data": {"type": "failure", "probability": failure_prob},
+                "service_id": tool.get("pack_name", "world"),
+                "action": tool["name"],
+                "input_data": {"_animator_reason": "service_reliability_event"},
                 "sub_type": "scheduled",
             })
 
-        # Reliability: service degradation over time
-        degradation_prob = context.get_probability("reliability", "degradation")
-        if rng.random() < degradation_prob:
-            events.append({
-                "actor_id": "system",
-                "service_id": "world",
-                "action": "service_degradation",
-                "input_data": {"type": "degradation", "probability": degradation_prob},
-                "sub_type": "scheduled",
-            })
-
-        # Complexity: volatility (situation changes)
+        # Complexity: volatility → create new data (news, price movement)
         volatility_prob = context.get_probability("complexity", "volatility")
         if rng.random() < volatility_prob:
+            tool = _pick_tool(write_tools)
             events.append({
                 "actor_id": "system",
-                "service_id": "world",
-                "action": "situation_change",
-                "input_data": {"type": "volatility", "probability": volatility_prob},
-                "sub_type": "scheduled",
-            })
-
-        # Boundaries: access control incidents
-        gaps_prob = context.get_probability("boundaries", "boundary_gaps")
-        if rng.random() < gaps_prob:
-            events.append({
-                "actor_id": "system",
-                "service_id": "world",
-                "action": "access_incident",
-                "input_data": {"type": "boundary_gap", "probability": gaps_prob},
+                "service_id": tool.get("pack_name", "world"),
+                "action": tool["name"],
+                "input_data": {"_animator_reason": "market_volatility_event"},
                 "sub_type": "scheduled",
             })
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before anything else so API keys are available
+
 import asyncio
 import json
 import shutil
@@ -143,6 +146,9 @@ async def _create_impl(
                     print_warning(str(w))
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -194,6 +200,9 @@ async def _init_impl(world: str, settings: str | None, output: Path | None) -> N
                 print_success("Compilation complete")
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -254,6 +263,9 @@ async def _plan_impl(description: str, output: Path | None, fmt: str) -> None:
                     console.print(content)
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -506,6 +518,9 @@ async def _run_impl(
         console.print("\n[yellow]Interrupted[/yellow]")
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -535,6 +550,10 @@ def serve(
         str | None,
         typer.Option("--agents", "-a", help="Path to agent profile YAML (external agent permissions/budgets)"),
     ] = None,
+    behavior: Annotated[
+        str | None,
+        typer.Option("--behavior", "-b", help="Behavior mode override: static, reactive, dynamic"),
+    ] = None,
 ) -> None:
     """Start MCP/HTTP servers for agent connections.
 
@@ -548,13 +567,14 @@ def serve(
     if not world and not run and not world_id:
         print_error("Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>")
         raise typer.Exit(1)
-    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents))
+    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents, behavior))
 
 
 async def _serve_impl(
     world: str, settings: str | None, run_id: str | None,
     world_id: str | None, host: str, port: int,
     agents: str | None = None,
+    behavior: str | None = None,
 ) -> None:
     try:
         async with app_context() as terrarium:
@@ -587,6 +607,8 @@ async def _serve_impl(
                 if plan is None:
                     console.print(f"[red]World {world_id} not found or has no plan[/red]")
                     raise typer.Exit(1)
+                if behavior:
+                    plan = plan.model_copy(update={"behavior": behavior})
                 new_run_id = await terrarium.create_run(
                     plan, mode=plan.mode, world_id=_WId(world_id),
                     agents_yaml=agents,
@@ -711,6 +733,9 @@ async def _serve_impl(
         console.print("\n[yellow]Shutting down...[/yellow]")
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -774,6 +799,9 @@ async def _mcp_impl(world: str, settings: str | None) -> None:
             await mcp_adapter.run_stdio()
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -877,6 +905,9 @@ async def _report_impl(run_id_str: str, fmt: str, output: Path | None) -> None:
                     console.print(format_scorecard(scorecard_data))
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -919,6 +950,9 @@ async def _diff_impl(runs: list[str], fmt: str, gov_vs_ungov: bool) -> None:
                 console.print(format_diff(result))
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1082,6 +1116,9 @@ async def _inspect_impl(
                 raise typer.Exit(1)
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1202,6 +1239,9 @@ async def _list_impl(resource: str, run_id: str | None, limit: int, fmt: str) ->
                 raise typer.Exit(1)
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1309,6 +1349,9 @@ async def _show_impl(resource: str, name: str, fmt: str) -> None:
                 raise typer.Exit(1)
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1333,6 +1376,9 @@ async def _snapshot_impl(label: str) -> None:
             print_success(f"Snapshot created: {snapshot_id} (label: {label})")
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1408,6 +1454,9 @@ async def _replay_impl(run_id_str: str, tag: str | None) -> None:
             console.print(format_diff(comparison))
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1656,6 +1705,9 @@ async def _ledger_impl(
                 console.print(f"\n[dim]Showing {len(entries)} entries (limit: {tail})[/dim]")
     except TerrariumError as exc:
         print_error(str(exc))
+        if hasattr(exc, "context") and exc.context:
+            for err in exc.context.get("errors", [])[:10]:
+                console.print(f"  [red]• {err}[/red]")
         raise typer.Exit(1) from None
 
 

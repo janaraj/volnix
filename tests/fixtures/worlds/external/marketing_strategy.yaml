@@ -1,0 +1,37 @@
+# ===================================================================
+# WORLD DEFINITION -- Marketing Strategy (External Agent)
+# ===================================================================
+# Multi-service world for marketing campaign development.
+# External agents connect to research social media, track sentiment,
+# collaborate via Slack, and publish content.
+
+world:
+  name: "Marketing Campaign World"
+  description: >
+    A digital marketing environment with social media analytics,
+    community sentiment tracking, team collaboration, and web research
+    capabilities for developing marketing strategies.
+
+  services:
+    twitter: verified/twitter
+    reddit: verified/reddit
+    slack: verified/slack
+    browser: verified/browser
+
+  seeds:
+    - "CrewAI launching enterprise marketing automation platform targeting mid-market"
+    - "Tech industry seeing 40% increase in AI-driven marketing adoption in 2026"
+    - "Competitor HubSpot just released AI content generator, 10K signups in first week"
+    - "#AIMarketing trending on Twitter with 50K+ mentions this week"
+    - "Reddit r/marketing thread: 'Best AI tools for enterprise campaigns' has 2K upvotes"
+    - "Slack workspace has active channels: #campaigns, #analytics, #content-review, #competitor-watch"
+    - "Industry report: 67% of CMOs plan to increase AI marketing spend in next 12 months"
+    - "CrewAI website gets 25K monthly visitors, 3.2% conversion rate"
+
+  mission: >
+    Provide social media data, community insights, team collaboration tools,
+    and web research for external marketing agents to develop and execute
+    campaign strategies.
+
+  reality:
+    preset: messy

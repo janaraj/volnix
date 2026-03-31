@@ -167,17 +167,27 @@ class RunManager:
         )
 
     def _load_existing_runs(self) -> None:
-        """Reload previously persisted runs from disk."""
+        """Reload previously persisted runs from disk.
+
+        Orphaned "running" runs (from server crashes) are marked "stopped"
+        and persisted so the dashboard shows the correct state.
+        """
         if not self._data_dir.exists():
             return
         for meta_path in self._data_dir.glob("*/metadata.json"):
             try:
                 data = json.loads(meta_path.read_text())
                 rid = data["run_id"]
+                # Clean up orphaned "running" runs from crashed sessions
+                if data.get("status") == "running":
+                    data["status"] = "stopped"
+                    data["completed_at"] = datetime.now(UTC).isoformat()
+                    data["stopped_reason"] = "server_restart"
+                    meta_path.write_text(
+                        json.dumps(data, indent=2, default=str)
+                    )
                 self._runs[rid] = data
                 if data.get("tag"):
                     self._tags[data["tag"]] = rid
-                if data.get("status") == "running":
-                    self._active_run = rid
             except (json.JSONDecodeError, KeyError):
                 continue

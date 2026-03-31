@@ -5,7 +5,6 @@ import { formatRelativeTime, truncateId, capitalize } from '@/lib/formatters';
 import { runReportPath, liveConsolePath } from '@/constants/routes';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
 import { ScoreBar } from '@/components/domain/score-bar';
-import { RunTimeline } from '@/pages/run-list/run-timeline';
 import type { Run } from '@/types/domain';
 
 // ---------------------------------------------------------------------------
@@ -23,10 +22,10 @@ interface RunCardProps {
 // ---------------------------------------------------------------------------
 
 const DIMENSION_COLORS: Record<string, string> = {
-  blue: 'bg-info/10 text-info border-info/20',
-  amber: 'bg-warning/10 text-warning border-warning/20',
-  purple: 'bg-accent/10 text-accent border-accent/20',
-  green: 'bg-success/10 text-success border-success/20',
+  blue: 'border-info/40 text-info',
+  amber: 'border-warning/40 text-warning',
+  purple: 'border-accent/40 text-accent',
+  green: 'border-success/40 text-success',
 };
 
 function DimensionBadge({ value, color }: { value: string; color: string }) {
@@ -130,11 +129,6 @@ export function RunCard({ run, selected, onToggleSelect }: RunCardProps) {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Section 2b: Timeline stepper */}
-      <div className="px-5 pb-3">
-        <RunTimeline status={run.status} eventCount={eventCount} />
       </div>
 
       {/* Section 3: Footer — stats (non-zero only) + time */}

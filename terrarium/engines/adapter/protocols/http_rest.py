@@ -693,6 +693,16 @@ class HTTPRestAdapter(ProtocolAdapter):
                         {"service_id": k, "service_name": k}
                         for k in services_raw.keys()
                     ]
+                # Promote summary fields to top level for frontend
+                summary = result.get("summary", {})
+                if summary:
+                    if summary.get("governance_score") is not None:
+                        result["governance_score"] = summary["governance_score"]
+                    if summary.get("event_count") and not result.get("event_count"):
+                        result["event_count"] = summary["event_count"]
+                    if summary.get("actor_count") and not result.get("actor_count"):
+                        result["actor_count"] = summary["actor_count"]
+
             except Exception:
                 pass  # Stats are best-effort; don't break the endpoint
 

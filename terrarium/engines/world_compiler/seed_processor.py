@@ -93,7 +93,7 @@ class CompilerSeedProcessor:
                 "LLM router required for seed expansion"
             )
 
-        available: dict[str, list[dict[str, str]]] = {}
+        available: dict[str, Any] = {}
         for etype, entities in all_entities.items():
             id_field = "id"
             if schemas and etype in schemas:
@@ -108,7 +108,7 @@ class CompilerSeedProcessor:
                 if "status" in e:
                     summary["status"] = e["status"]
                 summaries.append(summary)
-            available[etype] = summaries
+            available[etype] = {"total_count": len(entities), "entities": summaries}
 
         response = await SEED_EXPANSION.execute(
             self._router,
