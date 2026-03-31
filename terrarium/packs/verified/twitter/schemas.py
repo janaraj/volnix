@@ -15,7 +15,7 @@ TWEET_ENTITY_SCHEMA: dict = {
     "required": ["id", "author_id", "text", "tweet_type", "status", "created_at"],
     "properties": {
         "id": {"type": "string"},
-        "author_id": {"type": "string", "x-terrarium-ref": "twitter_user"},
+        "author_id": {"type": "string", "x-terrarium-ref": "user"},
         "text": {"type": "string", "maxLength": 280},
         "tweet_type": {
             "type": "string",
@@ -73,8 +73,8 @@ TWITTER_FOLLOW_ENTITY_SCHEMA: dict = {
     "required": ["id", "follower_id", "following_id", "created_at"],
     "properties": {
         "id": {"type": "string"},
-        "follower_id": {"type": "string", "x-terrarium-ref": "twitter_user"},
-        "following_id": {"type": "string", "x-terrarium-ref": "twitter_user"},
+        "follower_id": {"type": "string", "x-terrarium-ref": "user"},
+        "following_id": {"type": "string", "x-terrarium-ref": "user"},
         "created_at": {"type": "string"},
     },
 }
@@ -85,7 +85,7 @@ TWITTER_LIKE_ENTITY_SCHEMA: dict = {
     "required": ["id", "user_id", "tweet_id", "created_at"],
     "properties": {
         "id": {"type": "string"},
-        "user_id": {"type": "string", "x-terrarium-ref": "twitter_user"},
+        "user_id": {"type": "string", "x-terrarium-ref": "user"},
         "tweet_id": {"type": "string", "x-terrarium-ref": "tweet"},
         "created_at": {"type": "string"},
     },
@@ -97,7 +97,7 @@ TWITTER_LIKE_ENTITY_SCHEMA: dict = {
 
 TWITTER_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "twitter_create_tweet",
+        "name": "create_tweet",
         "description": "Create a new tweet.",
         "http_path": "/2/tweets",
         "http_method": "POST",
@@ -133,7 +133,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_get_tweet",
+        "name": "get_tweet",
         "description": "Get tweet details by ID.",
         "http_path": "/2/tweets/{id}",
         "http_method": "GET",
@@ -155,7 +155,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_delete_tweet",
+        "name": "delete_tweet",
         "description": "Delete a tweet.",
         "http_path": "/2/tweets/{id}",
         "http_method": "DELETE",
@@ -177,7 +177,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_search_recent",
+        "name": "search_recent",
         "description": "Search recent tweets by query.",
         "http_path": "/2/tweets/search/recent",
         "http_method": "GET",
@@ -207,7 +207,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_reply",
+        "name": "reply",
         "description": "Reply to a tweet.",
         "http_path": "/2/tweets",
         "http_method": "POST",
@@ -238,7 +238,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_retweet",
+        "name": "retweet",
         "description": "Retweet a tweet.",
         "http_path": "/2/users/{id}/retweets",
         "http_method": "POST",
@@ -264,7 +264,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_unretweet",
+        "name": "unretweet",
         "description": "Undo a retweet.",
         "http_path": "/2/users/{id}/retweets/{tweet_id}",
         "http_method": "DELETE",
@@ -290,7 +290,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_quote_tweet",
+        "name": "quote_tweet",
         "description": "Quote tweet another tweet.",
         "http_path": "/2/tweets",
         "http_method": "POST",
@@ -321,7 +321,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_like",
+        "name": "like",
         "description": "Like a tweet.",
         "http_path": "/2/users/{id}/likes",
         "http_method": "POST",
@@ -347,7 +347,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_unlike",
+        "name": "unlike",
         "description": "Unlike a tweet.",
         "http_path": "/2/users/{id}/likes/{tweet_id}",
         "http_method": "DELETE",
@@ -373,7 +373,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_follow",
+        "name": "follow",
         "description": "Follow a user.",
         "http_path": "/2/users/{id}/following",
         "http_method": "POST",
@@ -399,7 +399,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_unfollow",
+        "name": "unfollow",
         "description": "Unfollow a user.",
         "http_path": "/2/users/{id}/following/{target_id}",
         "http_method": "DELETE",
@@ -425,7 +425,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_get_followers",
+        "name": "get_followers",
         "description": "List followers of a user.",
         "http_path": "/2/users/{id}/followers",
         "http_method": "GET",
@@ -457,7 +457,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_get_following",
+        "name": "get_following",
         "description": "List users that a user is following.",
         "http_path": "/2/users/{id}/following",
         "http_method": "GET",
@@ -489,7 +489,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_get_user",
+        "name": "get_user",
         "description": "Get user profile by ID.",
         "http_path": "/2/users/{id}",
         "http_method": "GET",
@@ -511,7 +511,7 @@ TWITTER_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "twitter_user_tweets",
+        "name": "user_tweets",
         "description": "Get a user's tweet timeline.",
         "http_path": "/2/users/{id}/tweets",
         "http_method": "GET",

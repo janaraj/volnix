@@ -233,7 +233,7 @@ class TestSocialMediaSimulation:
             print(f"\n  4a. Browsing r/{sr_name}...")
 
             r_hot = await app.handle_action(
-                agent_id, "reddit", "reddit_subreddit_hot",
+                agent_id, "reddit", "subreddit_hot",
                 {"subreddit": sr_name, "limit": 5},
             )
             hot_posts = r_hot.get("data", {}).get("children", [])
@@ -248,7 +248,7 @@ class TestSocialMediaSimulation:
         # 4b: Agent submits a post
         print("\n  4b. Agent posts a response thread...")
         r_submit = await app.handle_action(
-            agent_id, "reddit", "reddit_submit",
+            agent_id, "reddit", "submit",
             {
                 "sr": sr_name if subreddits else "AcmeSupport",
                 "title": "Official Response: Service Outage Update",
@@ -272,7 +272,7 @@ class TestSocialMediaSimulation:
             target_id = target_post.get("id", "")
             print(f"\n  4c. Replying to post: {target_id}...")
             r_comment = await app.handle_action(
-                agent_id, "reddit", "reddit_comment",
+                agent_id, "reddit", "comment",
                 {
                     "parent": target_id,
                     "text": (
@@ -292,7 +292,7 @@ class TestSocialMediaSimulation:
             vote_target = reddit_posts[1]
             print(f"\n  4d. Upvoting post: {vote_target.get('id')}...")
             r_vote = await app.handle_action(
-                agent_id, "reddit", "reddit_vote",
+                agent_id, "reddit", "vote",
                 {
                     "id": vote_target["id"],
                     "dir": 1,
@@ -311,7 +311,7 @@ class TestSocialMediaSimulation:
         # 5a: Agent tweets
         print("  5a. Posting tweet about outage update...")
         r_tweet = await app.handle_action(
-            agent_id, "twitter", "twitter_create_tweet",
+            agent_id, "twitter", "create_tweet",
             {
                 "text": (
                     "We're aware of the service disruption and our team "
@@ -328,7 +328,7 @@ class TestSocialMediaSimulation:
         # 5b: Search for customer complaints
         print("\n  5b. Searching for complaints...")
         r_search = await app.handle_action(
-            agent_id, "twitter", "twitter_search_recent",
+            agent_id, "twitter", "search_recent",
             {"query": "#AcmeSupport", "max_results": 5},
         )
         search_results = r_search.get("data", [])
@@ -348,7 +348,7 @@ class TestSocialMediaSimulation:
                 f"{complaint.get('id')}..."
             )
             r_reply = await app.handle_action(
-                agent_id, "twitter", "twitter_reply",
+                agent_id, "twitter", "reply",
                 {
                     "text": (
                         "We're sorry for the inconvenience. Our team is "
@@ -373,7 +373,7 @@ class TestSocialMediaSimulation:
             target = positive_tweets[0]
             print(f"\n  5d. Liking tweet: {target.get('id')}...")
             r_like = await app.handle_action(
-                agent_id, "twitter", "twitter_like",
+                agent_id, "twitter", "like",
                 {"user_id": agent_id, "tweet_id": target["id"]},
             )
             print(f"      Like: {json.dumps(r_like, default=str)[:150]}")
@@ -405,14 +405,14 @@ class TestSocialMediaSimulation:
         print("=" * 70)
 
         # Reddit state
-        for etype in ["subreddit", "reddit_post", "reddit_comment",
-                       "reddit_user", "reddit_vote"]:
+        for etype in ["subreddit", "reddit_post", "comment",
+                       "reddit_user", "vote"]:
             entities = await state_engine.query_entities(etype)
             print(f"  {etype}: {len(entities)} entities")
 
         # Twitter state
-        for etype in ["tweet", "twitter_user", "twitter_follow",
-                       "twitter_like"]:
+        for etype in ["tweet", "twitter_user", "follow",
+                       "like"]:
             entities = await state_engine.query_entities(etype)
             print(f"  {etype}: {len(entities)} entities")
 

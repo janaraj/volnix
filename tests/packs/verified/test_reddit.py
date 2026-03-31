@@ -261,7 +261,7 @@ class TestSubredditOperations:
     async def test_subreddits_search_matches(self, pack, sample_state):
         """Searching for 'python' returns the python subreddit."""
         result = await pack.handle_action(
-            ToolName("reddit_subreddits_search"),
+            ToolName("subreddits_search"),
             {"query": "python"},
             sample_state,
         )
@@ -274,7 +274,7 @@ class TestSubredditOperations:
     async def test_subreddit_about_found(self, pack, sample_state):
         """Getting details for an existing subreddit returns it."""
         result = await pack.handle_action(
-            ToolName("reddit_subreddit_about"),
+            ToolName("subreddit_about"),
             {"subreddit": "python"},
             sample_state,
         )
@@ -284,7 +284,7 @@ class TestSubredditOperations:
     async def test_subreddit_about_not_found(self, pack, sample_state):
         """Getting a non-existent subreddit returns NOT_FOUND error."""
         result = await pack.handle_action(
-            ToolName("reddit_subreddit_about"),
+            ToolName("subreddit_about"),
             {"subreddit": "nonexistent"},
             sample_state,
         )
@@ -300,7 +300,7 @@ class TestPostOperations:
     async def test_submit_creates_post_with_auto_upvote(self, pack, sample_state):
         """Submitting a post creates a post with upvotes=1, score=1, and a vote record."""
         result = await pack.handle_action(
-            ToolName("reddit_submit"),
+            ToolName("submit"),
             {
                 "sr": "python",
                 "title": "My new post",
@@ -329,7 +329,7 @@ class TestPostOperations:
 
         # Vote delta (auto-upvote)
         vote_delta = deltas[1]
-        assert vote_delta.entity_type == "reddit_vote"
+        assert vote_delta.entity_type == "vote"
         assert vote_delta.operation == "create"
         assert vote_delta.fields["direction"] == "up"
         assert vote_delta.fields["user_id"] == "user-alice"
@@ -343,7 +343,7 @@ class TestPostOperations:
     async def test_submit_validates_subreddit_exists(self, pack, sample_state):
         """Submitting to a non-existent subreddit returns an error."""
         result = await pack.handle_action(
-            ToolName("reddit_submit"),
+            ToolName("submit"),
             {
                 "sr": "nonexistent",
                 "title": "Test post",
@@ -358,7 +358,7 @@ class TestPostOperations:
     async def test_post_detail_found(self, pack, sample_state):
         """Getting an existing post by ID returns its data."""
         result = await pack.handle_action(
-            ToolName("reddit_post_detail"),
+            ToolName("post_detail"),
             {"id": "t3_post1"},
             sample_state,
         )
@@ -368,7 +368,7 @@ class TestPostOperations:
     async def test_post_detail_not_found(self, pack, sample_state):
         """Getting a non-existent post returns NOT_FOUND."""
         result = await pack.handle_action(
-            ToolName("reddit_post_detail"),
+            ToolName("post_detail"),
             {"id": "t3_doesnotexist"},
             sample_state,
         )
@@ -377,7 +377,7 @@ class TestPostOperations:
     async def test_subreddit_hot_sort_order(self, pack, sample_state):
         """Hot sort returns posts ordered by hot score (score / age)."""
         result = await pack.handle_action(
-            ToolName("reddit_subreddit_hot"),
+            ToolName("subreddit_hot"),
             {"subreddit": "python"},
             sample_state,
         )
@@ -391,7 +391,7 @@ class TestPostOperations:
     async def test_subreddit_new_sort_order(self, pack, sample_state):
         """New sort returns posts in descending created_at order."""
         result = await pack.handle_action(
-            ToolName("reddit_subreddit_new"),
+            ToolName("subreddit_new"),
             {"subreddit": "python"},
             sample_state,
         )
@@ -404,7 +404,7 @@ class TestPostOperations:
     async def test_search_by_title_and_body(self, pack, sample_state):
         """Search finds posts matching query in title or body."""
         result = await pack.handle_action(
-            ToolName("reddit_search"),
+            ToolName("search"),
             {"q": "decorators"},
             sample_state,
         )
@@ -414,7 +414,7 @@ class TestPostOperations:
 
         # Search for something appearing only in body
         result2 = await pack.handle_action(
-            ToolName("reddit_search"),
+            ToolName("search"),
             {"q": "quickly"},
             sample_state,
         )
@@ -432,7 +432,7 @@ class TestComments:
     async def test_comment_top_level(self, pack, sample_state):
         """A top-level comment on a post has depth=0."""
         result = await pack.handle_action(
-            ToolName("reddit_comment"),
+            ToolName("comment"),
             {
                 "parent": "t3_post2",
                 "text": "Great tutorial!",
@@ -449,7 +449,7 @@ class TestComments:
     async def test_comment_nested_reply(self, pack, sample_state):
         """Replying to a comment sets depth = parent.depth + 1."""
         result = await pack.handle_action(
-            ToolName("reddit_comment"),
+            ToolName("comment"),
             {
                 "parent": "t1_c1",  # depth=0 comment
                 "text": "I agree with this!",
@@ -465,7 +465,7 @@ class TestComments:
     async def test_comment_increments_post_count(self, pack, sample_state):
         """Commenting on a post produces a delta incrementing comment_count."""
         result = await pack.handle_action(
-            ToolName("reddit_comment"),
+            ToolName("comment"),
             {
                 "parent": "t3_post2",
                 "text": "Nice work!",
@@ -485,7 +485,7 @@ class TestComments:
     async def test_post_comments_returns_tree(self, pack, sample_state):
         """Listing comments for a post returns all published comments."""
         result = await pack.handle_action(
-            ToolName("reddit_post_comments"),
+            ToolName("post_comments"),
             {"id": "t3_post1"},
             sample_state,
         )
@@ -498,7 +498,7 @@ class TestComments:
     async def test_comment_on_nonexistent_post_error(self, pack, sample_state):
         """Commenting on a non-existent post returns NOT_FOUND."""
         result = await pack.handle_action(
-            ToolName("reddit_comment"),
+            ToolName("comment"),
             {
                 "parent": "t3_ghost",
                 "text": "Hello?",
@@ -518,7 +518,7 @@ class TestVoting:
     async def test_upvote_increments_score(self, pack, sample_state):
         """A new upvote on a post increments score by 1."""
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post3", "dir": 1, "user_id": "user-bob"},
             sample_state,
         )
@@ -536,7 +536,7 @@ class TestVoting:
     async def test_downvote_decrements_score(self, pack, sample_state):
         """A new downvote on a post decrements score by 1."""
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post3", "dir": -1, "user_id": "user-bob"},
             sample_state,
         )
@@ -554,7 +554,7 @@ class TestVoting:
         """Flipping from up to down changes score by -2."""
         # user-alice has an existing upvote on t3_post2
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post2", "dir": -1, "user_id": "user-alice"},
             sample_state,
         )
@@ -564,7 +564,7 @@ class TestVoting:
         vote_deltas = [
             d
             for d in result.proposed_state_deltas
-            if d.entity_type == "reddit_vote" and d.operation == "update"
+            if d.entity_type == "vote" and d.operation == "update"
         ]
         assert len(vote_deltas) == 1
         assert vote_deltas[0].fields["direction"] == "down"
@@ -583,7 +583,7 @@ class TestVoting:
         """Voting the same direction twice is a no-op."""
         # user-alice already has an upvote on t3_post2
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post2", "dir": 1, "user_id": "user-alice"},
             sample_state,
         )
@@ -594,7 +594,7 @@ class TestVoting:
         """Unvoting (dir=0) removes the existing vote and adjusts score."""
         # user-alice has an existing upvote on t3_post2
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post2", "dir": 0, "user_id": "user-alice"},
             sample_state,
         )
@@ -604,7 +604,7 @@ class TestVoting:
         vote_deltas = [
             d
             for d in result.proposed_state_deltas
-            if d.entity_type == "reddit_vote" and d.operation == "delete"
+            if d.entity_type == "vote" and d.operation == "delete"
         ]
         assert len(vote_deltas) == 1
 
@@ -621,7 +621,7 @@ class TestVoting:
         """Voting updates the post author's karma."""
         # Upvote post3 (author: user-alice, post_karma: 11)
         result = await pack.handle_action(
-            ToolName("reddit_vote"),
+            ToolName("vote"),
             {"id": "t3_post3", "dir": 1, "user_id": "user-bob"},
             sample_state,
         )
@@ -645,7 +645,7 @@ class TestFeedAndDiscovery:
         """Best feed returns only posts from subscribed subreddits."""
         # user-alice subscribes to sr-python only
         result = await pack.handle_action(
-            ToolName("reddit_best"),
+            ToolName("best"),
             {"user_id": "user-alice"},
             sample_state,
         )
@@ -658,7 +658,7 @@ class TestFeedAndDiscovery:
     async def test_popular_returns_all_public(self, pack, sample_state):
         """Popular returns posts from all public, active subreddits."""
         result = await pack.handle_action(
-            ToolName("reddit_popular"),
+            ToolName("popular"),
             {},
             sample_state,
         )
@@ -674,7 +674,7 @@ class TestFeedAndDiscovery:
     async def test_user_submitted_returns_author_posts(self, pack, sample_state):
         """User submitted returns only posts by that user."""
         result = await pack.handle_action(
-            ToolName("reddit_user_submitted"),
+            ToolName("user_submitted"),
             {"username": "alice_coder"},
             sample_state,
         )
@@ -694,7 +694,7 @@ class TestSubscribe:
         """Subscribing adds the subreddit to the user's subscribed list."""
         # user-alice is not subscribed to rust
         result = await pack.handle_action(
-            ToolName("reddit_subscribe"),
+            ToolName("subscribe"),
             {"subreddit": "rust", "user_id": "user-alice"},
             sample_state,
         )
@@ -722,7 +722,7 @@ class TestSubscribe:
         """Unsubscribing removes the subreddit from the user's subscribed list."""
         # user-alice is subscribed to sr-python
         result = await pack.handle_action(
-            ToolName("reddit_unsubscribe"),
+            ToolName("unsubscribe"),
             {"subreddit": "python", "user_id": "user-alice"},
             sample_state,
         )

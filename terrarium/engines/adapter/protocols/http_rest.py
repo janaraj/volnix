@@ -55,11 +55,11 @@ COMMUNICATION_ACTIONS: frozenset[str] = frozenset({
     # Email pack (gmail)
     "email_send",
     # Reddit pack
-    "reddit_submit",
-    "reddit_comment",
+    "submit",
+    "comment",
     # Twitter pack
-    "twitter_create_tweet",
-    "twitter_reply",
+    "create_tweet",
+    "reply",
 })
 
 

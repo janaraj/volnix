@@ -54,7 +54,7 @@ class TestAllCommunicationPacksInActionsSet:
 
     def test_reddit_pack_actions_included(self):
         """Reddit posting actions must be in COMMUNICATION_ACTIONS."""
-        reddit_actions = {"reddit_submit", "reddit_comment"}
+        reddit_actions = {"submit", "comment"}
         missing = reddit_actions - COMMUNICATION_ACTIONS
         assert not missing, (
             f"Reddit pack communication actions missing from COMMUNICATION_ACTIONS: {missing}"
@@ -62,7 +62,7 @@ class TestAllCommunicationPacksInActionsSet:
 
     def test_twitter_pack_actions_included(self):
         """Twitter tweet/reply actions must be in COMMUNICATION_ACTIONS."""
-        twitter_actions = {"twitter_create_tweet", "twitter_reply"}
+        twitter_actions = {"create_tweet", "reply"}
         missing = twitter_actions - COMMUNICATION_ACTIONS
         assert not missing, (
             f"Twitter pack communication actions missing from COMMUNICATION_ACTIONS: {missing}"
