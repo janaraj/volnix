@@ -48,11 +48,29 @@ class WorldDataGenerator:
     ) -> dict[str, list[dict[str, Any]]]:
         """Generate ALL entities from WorldPlan via LLM.
 
-        Iterates plan services and generates each entity section independently.
+        Generates entity types in dependency order: root entities (no
+        references) first, then dependent entities. Previously generated
+        entity IDs are passed as context so the LLM produces valid
+        cross-references.
+
+        Dependency order is derived from ``x-terrarium-ref`` annotations
+        in entity schemas — generic across all packs.
         """
         all_entities: dict[str, list[dict[str, Any]]] = {}
-        for spec in self.iter_generation_specs(plan):
-            all_entities[spec.entity_type] = await self.generate_section(spec, ctx)
+        specs = self.iter_generation_specs(plan)
+        ordered = self._sort_by_dependency(specs)
+
+        for spec in ordered:
+            ref_context = self._build_ref_context(spec.entity_schema, all_entities)
+            all_entities[spec.entity_type] = await self.generate_section(
+                spec, ctx, ref_context=ref_context,
+            )
+            logger.info(
+                "Generated %d %s entities (refs: %s)",
+                len(all_entities[spec.entity_type]),
+                spec.entity_type,
+                list(ref_context.keys()) or "none",
+            )
         return all_entities
 
     def iter_generation_specs(
@@ -73,10 +91,101 @@ class WorldDataGenerator:
                 )
         return specs
 
+    def _sort_by_dependency(
+        self, specs: list[EntityGenerationSpec],
+    ) -> list[EntityGenerationSpec]:
+        """Sort specs so referenced entity types are generated before dependents.
+
+        Uses ``x-terrarium-ref`` annotations in schemas to build a dependency
+        graph, then topologically sorts. Entity types with no references come
+        first. Works generically across all packs.
+        """
+        # Map entity_type -> spec
+        spec_map = {s.entity_type: s for s in specs}
+        known_types = set(spec_map.keys())
+
+        # Build dependency edges: entity_type -> set of types it depends on
+        deps: dict[str, set[str]] = {s.entity_type: set() for s in specs}
+        for spec in specs:
+            properties = spec.entity_schema.get("properties", {})
+            for _field, field_schema in properties.items():
+                ref = field_schema.get("x-terrarium-ref")
+                if isinstance(ref, str) and ref in known_types and ref != spec.entity_type:
+                    deps[spec.entity_type].add(ref)
+                elif isinstance(ref, dict):
+                    target = ref.get("entity_type", "")
+                    if target in known_types and target != spec.entity_type:
+                        deps[spec.entity_type].add(target)
+
+        # Topological sort (Kahn's algorithm)
+        in_degree = {et: 0 for et in deps}
+        for et, dep_set in deps.items():
+            for dep in dep_set:
+                in_degree[et] += 1  # et depends on dep
+
+        queue = [et for et, deg in in_degree.items() if deg == 0]
+        ordered: list[str] = []
+        while queue:
+            et = queue.pop(0)
+            ordered.append(et)
+            # Find types that depend on et and reduce their in-degree
+            for other, dep_set in deps.items():
+                if et in dep_set:
+                    dep_set.discard(et)
+                    if len(deps[other]) == 0 and other not in ordered and other not in queue:
+                        queue.append(other)
+
+        # Append any remaining (circular deps — generate in original order)
+        for spec in specs:
+            if spec.entity_type not in ordered:
+                ordered.append(spec.entity_type)
+
+        return [spec_map[et] for et in ordered if et in spec_map]
+
+    def _build_ref_context(
+        self,
+        schema: dict[str, Any],
+        all_entities: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        """Build reference context from already-generated entities.
+
+        For each field with ``x-terrarium-ref`` pointing to an already-generated
+        entity type, extract the IDs (and key fields for richer context).
+        Generic across all packs — uses only schema annotations.
+
+        Returns:
+            Dict mapping field_name -> {target_type, valid_ids, samples}.
+        """
+        refs: dict[str, Any] = {}
+        properties = schema.get("properties", {})
+        for field_name, field_schema in properties.items():
+            ref_target = field_schema.get("x-terrarium-ref")
+            if isinstance(ref_target, dict):
+                ref_target = ref_target.get("entity_type")
+            if not isinstance(ref_target, str) or ref_target not in all_entities:
+                continue
+            entities = all_entities[ref_target]
+            ids = [e.get("id") or e.get("_entity_id", "") for e in entities if e.get("id") or e.get("_entity_id")]
+            # Include a few sample entities for richer context (name, role, etc.)
+            samples = []
+            for e in entities[:5]:
+                sample = {"id": e.get("id", "")}
+                for key in ("name", "username", "display_name", "role", "title", "symbol", "status"):
+                    if key in e:
+                        sample[key] = e[key]
+                samples.append(sample)
+            refs[field_name] = {
+                "target_type": ref_target,
+                "valid_ids": ids,
+                "samples": samples,
+            }
+        return refs
+
     async def generate_section(
         self,
         spec: EntityGenerationSpec,
         ctx: WorldGenerationContext,
+        ref_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate a single entity section via LLM."""
         if not self._router:
@@ -91,6 +200,7 @@ class WorldDataGenerator:
             schema=spec.entity_schema,
             count=spec.count,
             base_vars=base_vars,
+            ref_context=ref_context,
         )
 
     async def _generate_batch(
@@ -99,10 +209,14 @@ class WorldDataGenerator:
         schema: dict[str, Any],
         count: int,
         base_vars: dict[str, str],
+        ref_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate N entities via LLM. No fallback."""
         if count == 0:
             return []
+
+        # Build reference context string for the prompt
+        existing_refs = json.dumps(ref_context, indent=2) if ref_context else "none"
 
         response = await ENTITY_GENERATION.execute(
             self._router,
@@ -111,6 +225,7 @@ class WorldDataGenerator:
             entity_type=entity_type,
             count=str(count),
             entity_schema=json.dumps(schema, indent=2),
+            existing_refs=existing_refs,
         )
         parsed = ENTITY_GENERATION.parse_json_response(response)
         return self.parse_generated_entities(entity_type, parsed, count)

@@ -37,6 +37,7 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str | None,
         base_url: str,
         default_model: str = "gpt-5.4-mini",
+        timeout: float = 300.0,
     ) -> None:
         # OpenAI SDK requires a non-empty api_key string.
         # For local endpoints (Ollama, vLLM) that don't need auth,
@@ -45,7 +46,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self._client = AsyncOpenAI(
             api_key=api_key if api_key else "local-no-auth-needed",
             base_url=base_url,
-            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0),
+            timeout=httpx.Timeout(connect=10.0, read=timeout, write=10.0, pool=10.0),
         )
         self._default_model = default_model
         self._base_url = base_url

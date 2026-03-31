@@ -142,7 +142,7 @@ shopify = "/shopify"
 [logging]
 level = "INFO"                      # DEBUG | INFO | WARNING | ERROR
 format = "text"                     # text | json (future)
-llm_debug = false                   # Write LLM responses to data/llm_debug/
+llm_debug = true                    # Write LLM responses to data/llm_debug/
 
 # ── Webhook Event Delivery ───────────────────────────────────
 
@@ -239,6 +239,7 @@ api_key_ref = "ANTHROPIC_API_KEY"
 type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key_ref = "OPENAI_API_KEY"
+timeout_seconds = 300
 
 [llm.providers.gemini_openai]
 type = "openai_compatible"
@@ -294,38 +295,39 @@ timeout_seconds = 300
 # ── Task-Specific Routing ────────────────────────────────────
 
 [llm.routing.world_compiler]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 16384
 temperature = 0.4
 
 [llm.routing.responder_tier2]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.profile_infer]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.animator]
-provider = "codex_acp"
-model = ""
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 2048
-temperature = 0.9
+temperature = 0.5
+
 
 [llm.routing.data_generator]
-provider = "codex_acp"
-model = "gemini-2.5-flash"
+provider = "openai"
+model = "gpt-4.1-mini"
 max_tokens = 16384
 temperature = 0.5
 

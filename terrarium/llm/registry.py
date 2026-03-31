@@ -116,6 +116,7 @@ class ProviderRegistry:
             return AnthropicProvider(
                 api_key=api_key or "",
                 default_model=entry.default_model or "claude-sonnet-4-6",
+                timeout=entry.timeout_seconds,
             )
         elif entry.type == "openai_compatible":
             from terrarium.llm.providers.openai_compat import OpenAICompatibleProvider
@@ -124,6 +125,7 @@ class ProviderRegistry:
                 api_key=api_key,
                 base_url=entry.base_url or "",
                 default_model=entry.default_model or "gpt-5.4-mini",
+                timeout=entry.timeout_seconds,
             )
         elif entry.type == "google":
             from terrarium.llm.providers.google import GoogleNativeProvider
@@ -131,6 +133,7 @@ class ProviderRegistry:
             return GoogleNativeProvider(
                 api_key=api_key or "",
                 default_model=entry.default_model or "gemini-3-flash-preview",
+                timeout=entry.timeout_seconds,
             )
         elif entry.type == "acp":
             from terrarium.llm.providers.acp_client import ACPClientProvider

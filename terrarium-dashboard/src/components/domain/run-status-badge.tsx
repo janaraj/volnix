@@ -32,6 +32,7 @@ export function RunStatusBadge({ status }: RunStatusBadgeProps) {
       'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
       runStatusToColorClass(status),
       STATUS_STYLES[status] ?? 'bg-neutral/10 border-neutral/20',
+      status === 'running' && 'pulse-live',
     )}>
       <Icon size={12} className={cn(status === 'running' && 'animate-spin')} />
       {capitalize(status)}

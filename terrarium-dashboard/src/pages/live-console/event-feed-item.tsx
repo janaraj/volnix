@@ -12,57 +12,51 @@ interface EventFeedItemProps {
 }
 
 export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: EventFeedItemProps) {
-  const showDescription =
-    event.policy_hit != null || (event.outcome !== 'success');
+  const isBlocked = event.outcome !== 'success' && event.outcome != null;
 
   return (
     <button
       type="button"
       onClick={() => onSelect(event.event_id ?? '')}
       className={cn(
-        'w-full rounded px-3 py-2 text-left transition-colors hover:bg-bg-elevated',
+        'w-full rounded px-2 py-1.5 text-left transition-colors hover:bg-bg-elevated animate-slide-in',
         isSelected && 'bg-bg-elevated border border-border',
       )}
     >
-      {/* Line 1: timestamp + outcome + tick */}
-      <div className="flex items-center gap-2">
+      {/* Line 1: timestamp + outcome icon */}
+      <div className="flex items-center gap-1.5">
         <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
-        <OutcomeIcon outcome={event.outcome ?? 'success'} size={14} />
+        <OutcomeIcon outcome={event.outcome ?? 'success'} size={12} />
         {(event.timestamp?.tick ?? 0) > 0 && (
-          <span className="font-mono text-xs text-text-muted">{formatTick(event.timestamp.tick)}</span>
+          <span className="font-mono text-[10px] text-text-muted">{formatTick(event.timestamp!.tick)}</span>
         )}
       </div>
 
-      {/* Line 2: actor name */}
-      <div className="mt-1">
+      {/* Line 2: actor → action → outcome (narrative) */}
+      <div className="mt-0.5 flex items-center gap-1 text-xs">
         <span
           role="button"
           tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectActor(event.actor_id);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.stopPropagation();
-              onSelectActor(event.actor_id);
-            }
-          }}
-          className="text-xs text-info hover:underline"
+          onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
+          className="text-info hover:underline truncate max-w-[140px]"
         >
           {event.actor_id}
         </span>
+        <span className="text-text-muted">&rarr;</span>
+        <span className="font-mono text-text-primary truncate">{event.action ?? event.event_type}</span>
+        {isBlocked && (
+          <>
+            <span className="text-text-muted">&rarr;</span>
+            <span className="text-error text-[10px] uppercase font-medium">{event.outcome}</span>
+          </>
+        )}
       </div>
 
-      {/* Line 3: action name */}
-      <div className="mt-0.5 font-mono text-xs text-text-primary">{event.action ?? event.event_type}</div>
-
-      {/* Line 4: brief description (conditional) */}
-      {showDescription && (
-        <div className="mt-0.5 text-xs text-text-muted">
-          {event.policy_hit
-            ? `${event.policy_hit.enforcement ?? 'unknown'}: ${event.policy_hit.policy_name ?? ''}`
-            : (event.outcome ?? '').toUpperCase()}
+      {/* Line 3: policy detail if blocked */}
+      {event.policy_hit && (
+        <div className="mt-0.5 text-[10px] text-warning pl-2 border-l border-warning/30">
+          {event.policy_hit.enforcement}: {event.policy_hit.policy_name}
         </div>
       )}
     </button>

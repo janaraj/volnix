@@ -56,7 +56,10 @@ def json_schema_to_pydantic(tool_name: str, schema: dict[str, Any]) -> type:
             item_py = type_map.get(items_type, str)
             py_type: type = list[item_py]  # type: ignore[valid-type]
         elif json_type == "object":
-            py_type = dict[str, Any]  # type: ignore[assignment]
+            # Free-form objects → string (JSON) for LLM compatibility.
+            # OpenAI/Anthropic function calling requires strict object schemas.
+            # The LLM sends a JSON string; the HTTP layer deserializes it.
+            py_type = str
         else:
             py_type = type_map.get(json_type, str)
 

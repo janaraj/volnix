@@ -14,7 +14,6 @@ import { EntityLink } from '@/components/domain/entity-link';
 import { FidelityIndicator } from '@/components/domain/fidelity-indicator';
 import { ScoreBar } from '@/components/domain/score-bar';
 import { ServiceBadge } from '@/components/domain/service-badge';
-import { RunStatusBadge } from '@/components/domain/run-status-badge';
 import { capitalize, formatCurrency, truncateId } from '@/lib/formatters';
 
 interface ContextViewProps {
@@ -46,54 +45,55 @@ function CausalLink({ eventId, onSelect }: { eventId: string; onSelect: (id: str
   );
 }
 
-function MetricCard({ title, value }: { title: string; value: string | number }) {
-  return (
-    <div className="rounded border border-border-default p-3 hover:border-border transition-colors">
-      <p className="text-xs uppercase text-text-muted">{title}</p>
-      <p className="text-lg font-semibold font-mono">{value}</p>
-    </div>
-  );
-}
-
 function RunOverviewView({ run, eventCount }: { run: Run; eventCount: number }) {
+  const agentCount = ((run.world_def as any)?.actor_specs ?? (run.world_def as any)?.actors ?? []).length;
+  const serviceCount = (run.services ?? []).length;
+
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold">Run Overview</h3>
-
-      <div className="flex items-center gap-2">
-        <RunStatusBadge status={run.status} />
-        <span className="text-sm text-text-secondary font-mono">{capitalize(run.world_def.name)}</span>
+      {/* Header — status + badges already shown in RunHeaderBar, just show world name */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-text-secondary">{capitalize(run.world_def.name)}</span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md border border-accent/40 px-2 py-0.5 text-xs font-medium text-accent">
+            {capitalize(run.mode)}
+          </span>
+          <span className="rounded-md border border-warning/40 px-2 py-0.5 text-xs font-medium text-warning">
+            {capitalize(run.config_snapshot?.behavior ?? 'static')}
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <MetricCard title="Tick" value={(run.current_tick ?? 0) > 0 ? run.current_tick! : 'Live'} />
-        <MetricCard title="Agents" value={`${(run.world_def?.actor_specs ?? run.world_def?.actors ?? []).length} defined`} />
-        <MetricCard title="Events" value={eventCount} />
-        <MetricCard title="Services" value={(run.services ?? []).length} />
+      {/* Telemetry strip — compact 4-column row */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="rounded border border-border p-2.5">
+          <p className="text-[10px] uppercase tracking-wider text-text-muted">Tick</p>
+          <p className="text-lg font-semibold font-mono text-text-primary">
+            {(run.current_tick ?? 0) > 0 ? run.current_tick : <span className="text-info">Live</span>}
+          </p>
+        </div>
+        <div className="rounded border border-border p-2.5">
+          <p className="text-[10px] uppercase tracking-wider text-text-muted">Agents</p>
+          <p className="text-lg font-semibold font-mono text-text-primary">{agentCount}</p>
+        </div>
+        <div className="rounded border border-border p-2.5">
+          <p className="text-[10px] uppercase tracking-wider text-text-muted">Events</p>
+          <p className="text-lg font-semibold font-mono text-text-primary">{eventCount}</p>
+        </div>
+        <div className="rounded border border-border p-2.5">
+          <p className="text-[10px] uppercase tracking-wider text-text-muted">Services</p>
+          <p className="text-lg font-semibold font-mono text-text-primary">{serviceCount}</p>
+        </div>
       </div>
 
-      {(run.services ?? []).length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs uppercase text-text-muted">Services</p>
-          <div className="flex flex-wrap gap-2">
-            {(run.services ?? []).map((s) => (
-              <ServiceBadge key={s.service_id} serviceId={s.service_id} tier={s.fidelity_tier} />
-            ))}
-          </div>
+      {/* Services list */}
+      {serviceCount > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {(run.services ?? []).map((s) => (
+            <ServiceBadge key={s.service_id} serviceId={s.service_id} tier={s.fidelity_tier} />
+          ))}
         </div>
       )}
-
-      <div className="flex flex-wrap gap-2">
-        <span className="rounded-md border border-info/20 bg-info/10 px-2 py-0.5 text-xs font-medium text-info">
-          {capitalize(run.reality_preset)}
-        </span>
-        <span className="rounded-md border border-warning/20 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-          {capitalize(run.config_snapshot?.behavior ?? 'static')}
-        </span>
-        <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-          {capitalize(run.mode)}
-        </span>
-      </div>
     </div>
   );
 }

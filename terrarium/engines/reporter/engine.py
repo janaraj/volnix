@@ -111,16 +111,33 @@ class ReportGeneratorEngine(BaseEngine):
         self,
         world_id: WorldId = None,
         actors: list[dict[str, Any]] | None = None,
+        events: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Generate a summary scorecard for a world.
 
         Args:
             world_id: Optional world identifier (unused, kept for API compat).
-            actors: Explicit actor list. If ``None``, reads from registry.
+            actors: Explicit actor list. If ``None``, reads from registry
+                and supplements with actors discovered from events.
+            events: Pre-filtered event list. If ``None``, reads all from bus.
+                Pass run-scoped events to avoid cross-run contamination.
         """
-        events = await self._get_timeline()
+        if events is None:
+            events = await self._get_timeline()
         if actors is None:
             actors = self._get_actors()
+
+        # Supplement with actors discovered from events (external agents
+        # that connected at runtime may not be in the static registry).
+        known_ids = {a.get("id") or a.get("actor_id") for a in actors}
+        internal = {"world_compiler", "animator", "system", "policy",
+                    "budget", "state", "permission", "responder"}
+        for evt in events:
+            aid = evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
+            if aid and str(aid) not in known_ids and str(aid) not in internal:
+                actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
+                known_ids.add(str(aid))
+
         return await self._scorecard.compute(events, actors)
 
     async def generate_gap_log(
@@ -149,18 +166,20 @@ class ReportGeneratorEngine(BaseEngine):
         self,
         world_id: WorldId = None,
         actors: list[dict[str, Any]] | None = None,
+        events: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Generate a comprehensive report combining all diagnostics.
 
         Args:
             world_id: Optional world identifier.
             actors: Explicit actor list. If ``None``, reads from registry.
+            events: Pre-filtered event list. If ``None``, reads all from bus.
         """
-        scorecard = await self.generate_scorecard(world_id, actors=actors)
+        if events is None:
+            events = await self._get_timeline()
+        scorecard = await self.generate_scorecard(world_id, actors=actors, events=events)
         gap_log = await self.generate_gap_log(world_id)
-        gap_summary = await self._gap_analyzer.get_gap_summary(
-            await self._get_timeline()
-        )
+        gap_summary = await self._gap_analyzer.get_gap_summary(events)
         condition_report = await self.generate_condition_report(
             world_id, actors=actors,
         )

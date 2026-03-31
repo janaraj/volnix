@@ -1,0 +1,38 @@
+# ===================================================================
+# AGENT PROFILE -- Marketing Strategy Crew
+# ===================================================================
+# Defines 4 external marketing agents with role-based permissions.
+# Analyst is read-only, Creator can post to social media.
+
+agents:
+  - id: market-analyst
+    role: market-analyst
+    permissions:
+      read: [twitter, reddit, browser]
+      write: []
+    budget:
+      api_calls: 20
+
+  - id: marketing-strategist
+    role: marketing-strategist
+    permissions:
+      read: [twitter, reddit, slack, browser]
+      write: [slack]
+    budget:
+      api_calls: 20
+
+  - id: content-creator
+    role: content-creator
+    permissions:
+      read: [twitter, reddit, slack]
+      write: [twitter, slack]
+    budget:
+      api_calls: 20
+
+  - id: creative-director
+    role: creative-director
+    permissions:
+      read: [twitter, reddit, slack, browser]
+      write: [slack]
+    budget:
+      api_calls: 15

@@ -86,6 +86,11 @@ class ScorecardComputer:
         if not actor_ids:
             actor_ids = [a.get("id") or a.get("actor_id") for a in actors if a.get("id") or a.get("actor_id")]
 
+        # Only score actors that produced at least one event.
+        # Registered actors with zero activity have no behavior to evaluate.
+        actors_with_events = {_actor_id(e) for e in events}
+        actor_ids = [aid for aid in actor_ids if str(aid) in actors_with_events]
+
         per_actor: dict[str, dict[str, Any]] = {}
         for actor_id in actor_ids:
             raw_scores = {

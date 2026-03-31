@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
-import { ChevronRight, Pause, Square } from 'lucide-react';
+import { ChevronRight, CheckCircle2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Run } from '@/types/domain';
 import type { ConnectionStatus } from '@/types/ui';
 import { RunStatusBadge } from '@/components/domain/run-status-badge';
+import { useApiClient } from '@/providers/services-provider';
+import { queryKeys } from '@/constants/query-keys';
 import { cn } from '@/lib/cn';
 import { capitalize, formatTick } from '@/lib/formatters';
 
@@ -18,6 +22,37 @@ const STATUS_CONFIG: Record<ConnectionStatus, { dot: string; label: string }> = 
   disconnected: { dot: 'bg-error', label: 'Disconnected' },
   reconnecting: { dot: 'bg-warning', label: 'Reconnecting' },
 };
+
+function CompleteRunButton({ runId }: { runId: string }) {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const [completing, setCompleting] = useState(false);
+
+  async function handleComplete() {
+    setCompleting(true);
+    try {
+      await api.completeRun(runId);
+    } catch {
+      // Run may already be completed — that's fine
+    }
+    // Always refresh run detail so the UI updates
+    await queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(runId) });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.runs.events(runId) });
+    setCompleting(false);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleComplete}
+      disabled={completing}
+      className="inline-flex items-center gap-1.5 rounded-md border border-success/40 px-2.5 py-1 text-xs font-medium text-success transition-colors hover:bg-success/10 disabled:opacity-50"
+    >
+      <CheckCircle2 size={12} />
+      {completing ? 'Completing...' : 'Complete Run'}
+    </button>
+  );
+}
 
 export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBarProps) {
   const tagName = run.tag || run.run_id;
@@ -67,22 +102,9 @@ export function RunHeaderBar({ run, connectionStatus, eventCount }: RunHeaderBar
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="Not available in v1"
-            className="rounded p-1 text-text-muted opacity-50"
-          >
-            <Pause size={16} />
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Not available in v1"
-            className="rounded p-1 text-text-muted opacity-50"
-          >
-            <Square size={16} />
-          </button>
+          {run.status === 'running' && (
+            <CompleteRunButton runId={run.run_id} />
+          )}
         </div>
       </div>
     </div>
