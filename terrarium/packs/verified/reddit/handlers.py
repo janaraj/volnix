@@ -96,11 +96,11 @@ def _paginate_after(
 
 
 # ---------------------------------------------------------------------------
-# 1. reddit_subreddits_search — GET /subreddits/search
+# 1. subreddits_search — GET /subreddits/search
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subreddits_search(
+async def handle_subreddits_search(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -134,11 +134,11 @@ async def handle_reddit_subreddits_search(
 
 
 # ---------------------------------------------------------------------------
-# 2. reddit_subreddit_about — GET /r/{subreddit}/about
+# 2. subreddit_about — GET /r/{subreddit}/about
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subreddit_about(
+async def handle_subreddit_about(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -158,11 +158,11 @@ async def handle_reddit_subreddit_about(
 
 
 # ---------------------------------------------------------------------------
-# 3. reddit_subscribe — POST /api/subscribe
+# 3. subscribe — POST /api/subscribe
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subscribe(
+async def handle_subscribe(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -219,11 +219,11 @@ async def handle_reddit_subscribe(
 
 
 # ---------------------------------------------------------------------------
-# 4. reddit_unsubscribe — POST /api/unsubscribe
+# 4. unsubscribe — POST /api/unsubscribe
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_unsubscribe(
+async def handle_unsubscribe(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -279,11 +279,11 @@ async def handle_reddit_unsubscribe(
 
 
 # ---------------------------------------------------------------------------
-# 5. reddit_submit — POST /api/submit
+# 5. submit — POST /api/submit
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_submit(
+async def handle_submit(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -352,7 +352,7 @@ async def handle_reddit_submit(
     }
 
     vote_delta = StateDelta(
-        entity_type="reddit_vote",
+        entity_type="vote",
         entity_id=EntityId(vote_id),
         operation="create",
         fields=vote_fields,
@@ -375,11 +375,11 @@ async def handle_reddit_submit(
 
 
 # ---------------------------------------------------------------------------
-# 6. reddit_post_detail — GET /comments/{id}
+# 6. post_detail — GET /comments/{id}
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_post_detail(
+async def handle_post_detail(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -399,11 +399,11 @@ async def handle_reddit_post_detail(
 
 
 # ---------------------------------------------------------------------------
-# 7. reddit_subreddit_hot — GET /r/{subreddit}/hot
+# 7. subreddit_hot — GET /r/{subreddit}/hot
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subreddit_hot(
+async def handle_subreddit_hot(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -437,11 +437,11 @@ async def handle_reddit_subreddit_hot(
 
 
 # ---------------------------------------------------------------------------
-# 8. reddit_subreddit_new — GET /r/{subreddit}/new
+# 8. subreddit_new — GET /r/{subreddit}/new
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subreddit_new(
+async def handle_subreddit_new(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -475,11 +475,11 @@ async def handle_reddit_subreddit_new(
 
 
 # ---------------------------------------------------------------------------
-# 9. reddit_subreddit_top — GET /r/{subreddit}/top
+# 9. subreddit_top — GET /r/{subreddit}/top
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_subreddit_top(
+async def handle_subreddit_top(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -538,11 +538,11 @@ async def handle_reddit_subreddit_top(
 
 
 # ---------------------------------------------------------------------------
-# 10. reddit_search — GET /search
+# 10. search — GET /search
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_search(
+async def handle_search(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -603,11 +603,11 @@ async def handle_reddit_search(
 
 
 # ---------------------------------------------------------------------------
-# 11. reddit_remove — POST /api/remove
+# 11. remove — POST /api/remove
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_remove(
+async def handle_remove(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -619,7 +619,7 @@ async def handle_reddit_remove(
         entity_type = "reddit_post"
         entities = state.get("reddit_posts", [])
     elif target_type == "comment":
-        entity_type = "reddit_comment"
+        entity_type = "comment"
         entities = state.get("reddit_comments", [])
     else:
         return ResponseProposal(
@@ -654,11 +654,11 @@ async def handle_reddit_remove(
 
 
 # ---------------------------------------------------------------------------
-# 12. reddit_comment — POST /api/comment
+# 12. comment — POST /api/comment
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_comment(
+async def handle_comment(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -721,7 +721,7 @@ async def handle_reddit_comment(
         # Increment parent reply_count
         new_reply_count = parent_comment.get("reply_count", 0) + 1
         parent_delta = StateDelta(
-            entity_type="reddit_comment",
+            entity_type="comment",
             entity_id=EntityId(parent_comment_id),
             operation="update",
             fields={"reply_count": new_reply_count, "updated_at": now},
@@ -769,7 +769,7 @@ async def handle_reddit_comment(
     }
 
     comment_delta = StateDelta(
-        entity_type="reddit_comment",
+        entity_type="comment",
         entity_id=EntityId(comment_id),
         operation="create",
         fields=comment_fields,
@@ -785,7 +785,7 @@ async def handle_reddit_comment(
         "direction": "up",
     }
     vote_delta = StateDelta(
-        entity_type="reddit_vote",
+        entity_type="vote",
         entity_id=EntityId(vote_id),
         operation="create",
         fields=vote_fields,
@@ -810,11 +810,11 @@ async def handle_reddit_comment(
 
 
 # ---------------------------------------------------------------------------
-# 13. reddit_post_comments — GET /comments/{id}/comments
+# 13. post_comments — GET /comments/{id}/comments
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_post_comments(
+async def handle_post_comments(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -841,11 +841,11 @@ async def handle_reddit_post_comments(
 
 
 # ---------------------------------------------------------------------------
-# 14. reddit_vote — POST /api/vote
+# 14. vote — POST /api/vote
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_vote(
+async def handle_vote(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -861,7 +861,7 @@ async def handle_reddit_vote(
         entities = state.get("reddit_posts", [])
     elif target_id.startswith("t1_"):
         target_type = "comment"
-        entity_type = "reddit_comment"
+        entity_type = "comment"
         entities = state.get("reddit_comments", [])
     else:
         return ResponseProposal(
@@ -913,7 +913,7 @@ async def handle_reddit_vote(
 
         # Delete the vote record
         vote_delta = StateDelta(
-            entity_type="reddit_vote",
+            entity_type="vote",
             entity_id=EntityId(existing_vote["id"]),
             operation="delete",
             fields=existing_vote,
@@ -937,7 +937,7 @@ async def handle_reddit_vote(
             downvote_change = -1
 
         vote_delta = StateDelta(
-            entity_type="reddit_vote",
+            entity_type="vote",
             entity_id=EntityId(existing_vote["id"]),
             operation="update",
             fields={"direction": new_direction},
@@ -956,7 +956,7 @@ async def handle_reddit_vote(
             "direction": new_direction,
         }
         vote_delta = StateDelta(
-            entity_type="reddit_vote",
+            entity_type="vote",
             entity_id=EntityId(vote_id),
             operation="create",
             fields=vote_fields,
@@ -1018,11 +1018,11 @@ async def handle_reddit_vote(
 
 
 # ---------------------------------------------------------------------------
-# 15. reddit_user_about — GET /user/{username}/about
+# 15. user_about — GET /user/{username}/about
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_user_about(
+async def handle_user_about(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1042,11 +1042,11 @@ async def handle_reddit_user_about(
 
 
 # ---------------------------------------------------------------------------
-# 16. reddit_user_submitted — GET /user/{username}/submitted
+# 16. user_submitted — GET /user/{username}/submitted
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_user_submitted(
+async def handle_user_submitted(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1085,11 +1085,11 @@ async def handle_reddit_user_submitted(
 
 
 # ---------------------------------------------------------------------------
-# 17. reddit_best — GET /best
+# 17. best — GET /best
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_best(
+async def handle_best(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
@@ -1126,11 +1126,11 @@ async def handle_reddit_best(
 
 
 # ---------------------------------------------------------------------------
-# 18. reddit_popular — GET /r/popular
+# 18. popular — GET /r/popular
 # ---------------------------------------------------------------------------
 
 
-async def handle_reddit_popular(
+async def handle_popular(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:

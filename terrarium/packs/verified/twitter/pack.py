@@ -14,22 +14,22 @@ from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
 from terrarium.packs.verified.twitter.handlers import (
-    handle_twitter_create_tweet,
-    handle_twitter_delete_tweet,
-    handle_twitter_follow,
-    handle_twitter_get_followers,
-    handle_twitter_get_following,
-    handle_twitter_get_tweet,
-    handle_twitter_get_user,
-    handle_twitter_like,
-    handle_twitter_quote_tweet,
-    handle_twitter_reply,
-    handle_twitter_retweet,
-    handle_twitter_search_recent,
-    handle_twitter_unfollow,
-    handle_twitter_unlike,
-    handle_twitter_unretweet,
-    handle_twitter_user_tweets,
+    handle_create_tweet,
+    handle_delete_tweet,
+    handle_follow,
+    handle_get_followers,
+    handle_get_following,
+    handle_get_tweet,
+    handle_get_user,
+    handle_like,
+    handle_quote_tweet,
+    handle_reply,
+    handle_retweet,
+    handle_search_recent,
+    handle_unfollow,
+    handle_unlike,
+    handle_unretweet,
+    handle_user_tweets,
 )
 from terrarium.packs.verified.twitter.schemas import (
     TWEET_ENTITY_SCHEMA,
@@ -47,11 +47,11 @@ from terrarium.packs.verified.twitter.state_machines import (
 class TwitterPack(ServicePack):
     """Verified pack for Twitter/X social media services.
 
-    Tools: twitter_create_tweet, twitter_get_tweet, twitter_delete_tweet,
-    twitter_search_recent, twitter_reply, twitter_retweet, twitter_unretweet,
-    twitter_quote_tweet, twitter_like, twitter_unlike, twitter_follow,
-    twitter_unfollow, twitter_get_followers, twitter_get_following,
-    twitter_get_user, twitter_user_tweets.
+    Tools: create_tweet, get_tweet, delete_tweet,
+    search_recent, reply, retweet, unretweet,
+    quote_tweet, like, unlike, follow,
+    unfollow, get_followers, get_following,
+    get_user, user_tweets.
     """
 
     pack_name: ClassVar[str] = "twitter"
@@ -59,22 +59,22 @@ class TwitterPack(ServicePack):
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "twitter_create_tweet": handle_twitter_create_tweet,
-        "twitter_get_tweet": handle_twitter_get_tweet,
-        "twitter_delete_tweet": handle_twitter_delete_tweet,
-        "twitter_search_recent": handle_twitter_search_recent,
-        "twitter_reply": handle_twitter_reply,
-        "twitter_retweet": handle_twitter_retweet,
-        "twitter_unretweet": handle_twitter_unretweet,
-        "twitter_quote_tweet": handle_twitter_quote_tweet,
-        "twitter_like": handle_twitter_like,
-        "twitter_unlike": handle_twitter_unlike,
-        "twitter_follow": handle_twitter_follow,
-        "twitter_unfollow": handle_twitter_unfollow,
-        "twitter_get_followers": handle_twitter_get_followers,
-        "twitter_get_following": handle_twitter_get_following,
-        "twitter_get_user": handle_twitter_get_user,
-        "twitter_user_tweets": handle_twitter_user_tweets,
+        "create_tweet": handle_create_tweet,
+        "get_tweet": handle_get_tweet,
+        "delete_tweet": handle_delete_tweet,
+        "search_recent": handle_search_recent,
+        "reply": handle_reply,
+        "retweet": handle_retweet,
+        "unretweet": handle_unretweet,
+        "quote_tweet": handle_quote_tweet,
+        "like": handle_like,
+        "unlike": handle_unlike,
+        "follow": handle_follow,
+        "unfollow": handle_unfollow,
+        "get_followers": handle_get_followers,
+        "get_following": handle_get_following,
+        "get_user": handle_get_user,
+        "user_tweets": handle_user_tweets,
     }
 
     def get_tools(self) -> list[dict]:
@@ -82,19 +82,19 @@ class TwitterPack(ServicePack):
         return list(TWITTER_TOOL_DEFINITIONS)
 
     def get_entity_schemas(self) -> dict:
-        """Return entity schemas (tweet, twitter_user, twitter_follow, twitter_like)."""
+        """Return entity schemas (tweet, user, follow, like)."""
         return {
             "tweet": TWEET_ENTITY_SCHEMA,
-            "twitter_user": TWITTER_USER_ENTITY_SCHEMA,
-            "twitter_follow": TWITTER_FOLLOW_ENTITY_SCHEMA,
-            "twitter_like": TWITTER_LIKE_ENTITY_SCHEMA,
+            "user": TWITTER_USER_ENTITY_SCHEMA,
+            "follow": TWITTER_FOLLOW_ENTITY_SCHEMA,
+            "like": TWITTER_LIKE_ENTITY_SCHEMA,
         }
 
     def get_state_machines(self) -> dict:
-        """Return state machines for tweet and twitter_user entities."""
+        """Return state machines for tweet and user entities."""
         return {
             "tweet": {"transitions": TWEET_TRANSITIONS},
-            "twitter_user": {"transitions": TWITTER_USER_TRANSITIONS},
+            "user": {"transitions": TWITTER_USER_TRANSITIONS},
         }
 
     async def handle_action(
