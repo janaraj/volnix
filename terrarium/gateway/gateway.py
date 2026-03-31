@@ -26,6 +26,7 @@ class Gateway:
         self._config = config
         self._adapters: dict[str, Any] = {}
         self._tool_map: dict[str, tuple[str, str]] = {}  # tool_name -> (service_id, action)
+        self._world_services: set[str] | None = None  # filter to world's services when set
         self._started = False
 
     @property
@@ -62,6 +63,24 @@ class Gateway:
         self._adapters["http"] = http_adapter
 
         self._started = True
+
+    def set_active_services(self, services: set[str]) -> None:
+        """Restrict tools to only the services defined in the world.
+
+        Called after world compilation. Until called, all packs are visible.
+        """
+        self._world_services = services if services else None
+        if self._world_services:
+            # Filter tool map to only active services
+            self._tool_map = {
+                name: (svc, action)
+                for name, (svc, action) in self._tool_map.items()
+                if svc in self._world_services
+            }
+            logger.info(
+                "Gateway: filtered to %d tools from services %s",
+                len(self._tool_map), self._world_services,
+            )
 
     async def handle_request(
         self,
@@ -158,6 +177,9 @@ class Gateway:
 
         for pack_meta in pack_registry.list_packs():
             pack_name = pack_meta["pack_name"]
+            # Filter to world's active services when set
+            if self._world_services and pack_name not in self._world_services:
+                continue
             pack = pack_registry.get_pack(pack_name)
             from terrarium.kernel.surface import ServiceSurface
             surface = ServiceSurface.from_pack(pack)

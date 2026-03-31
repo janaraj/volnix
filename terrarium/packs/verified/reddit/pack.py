@@ -13,24 +13,24 @@ from terrarium.core.context import ResponseProposal
 from terrarium.core.types import ToolName
 from terrarium.packs.base import ActionHandler, ServicePack
 from terrarium.packs.verified.reddit.handlers import (
-    handle_reddit_best,
-    handle_reddit_comment,
-    handle_reddit_popular,
-    handle_reddit_post_comments,
-    handle_reddit_post_detail,
-    handle_reddit_remove,
-    handle_reddit_search,
-    handle_reddit_submit,
-    handle_reddit_subreddit_about,
-    handle_reddit_subreddit_hot,
-    handle_reddit_subreddit_new,
-    handle_reddit_subreddit_top,
-    handle_reddit_subreddits_search,
-    handle_reddit_subscribe,
-    handle_reddit_unsubscribe,
-    handle_reddit_user_about,
-    handle_reddit_user_submitted,
-    handle_reddit_vote,
+    handle_best,
+    handle_comment,
+    handle_popular,
+    handle_post_comments,
+    handle_post_detail,
+    handle_remove,
+    handle_search,
+    handle_submit,
+    handle_subreddit_about,
+    handle_subreddit_hot,
+    handle_subreddit_new,
+    handle_subreddit_top,
+    handle_subreddits_search,
+    handle_subscribe,
+    handle_unsubscribe,
+    handle_user_about,
+    handle_user_submitted,
+    handle_vote,
 )
 from terrarium.packs.verified.reddit.schemas import (
     REDDIT_COMMENT_ENTITY_SCHEMA,
@@ -51,11 +51,11 @@ from terrarium.packs.verified.reddit.state_machines import (
 class RedditPack(ServicePack):
     """Verified pack for Reddit-style social media services.
 
-    Tools: reddit_subreddits_search, reddit_subreddit_about, reddit_subscribe,
-    reddit_unsubscribe, reddit_submit, reddit_post_detail, reddit_subreddit_hot,
-    reddit_subreddit_new, reddit_subreddit_top, reddit_search, reddit_remove,
-    reddit_comment, reddit_post_comments, reddit_vote, reddit_user_about,
-    reddit_user_submitted, reddit_best, reddit_popular.
+    Tools: subreddits_search, subreddit_about, subscribe,
+    unsubscribe, submit, post_detail, subreddit_hot,
+    subreddit_new, subreddit_top, search, remove,
+    comment, post_comments, vote, user_about,
+    user_submitted, best, popular.
     """
 
     pack_name: ClassVar[str] = "reddit"
@@ -63,24 +63,24 @@ class RedditPack(ServicePack):
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "reddit_subreddits_search": handle_reddit_subreddits_search,
-        "reddit_subreddit_about": handle_reddit_subreddit_about,
-        "reddit_subscribe": handle_reddit_subscribe,
-        "reddit_unsubscribe": handle_reddit_unsubscribe,
-        "reddit_submit": handle_reddit_submit,
-        "reddit_post_detail": handle_reddit_post_detail,
-        "reddit_subreddit_hot": handle_reddit_subreddit_hot,
-        "reddit_subreddit_new": handle_reddit_subreddit_new,
-        "reddit_subreddit_top": handle_reddit_subreddit_top,
-        "reddit_search": handle_reddit_search,
-        "reddit_remove": handle_reddit_remove,
-        "reddit_comment": handle_reddit_comment,
-        "reddit_post_comments": handle_reddit_post_comments,
-        "reddit_vote": handle_reddit_vote,
-        "reddit_user_about": handle_reddit_user_about,
-        "reddit_user_submitted": handle_reddit_user_submitted,
-        "reddit_best": handle_reddit_best,
-        "reddit_popular": handle_reddit_popular,
+        "subreddits_search": handle_subreddits_search,
+        "subreddit_about": handle_subreddit_about,
+        "subscribe": handle_subscribe,
+        "unsubscribe": handle_unsubscribe,
+        "submit": handle_submit,
+        "post_detail": handle_post_detail,
+        "subreddit_hot": handle_subreddit_hot,
+        "subreddit_new": handle_subreddit_new,
+        "subreddit_top": handle_subreddit_top,
+        "search": handle_search,
+        "remove": handle_remove,
+        "comment": handle_comment,
+        "post_comments": handle_post_comments,
+        "vote": handle_vote,
+        "user_about": handle_user_about,
+        "user_submitted": handle_user_submitted,
+        "best": handle_best,
+        "popular": handle_popular,
     }
 
     def get_tools(self) -> list[dict]:
@@ -92,16 +92,16 @@ class RedditPack(ServicePack):
         return {
             "subreddit": SUBREDDIT_ENTITY_SCHEMA,
             "reddit_post": REDDIT_POST_ENTITY_SCHEMA,
-            "reddit_comment": REDDIT_COMMENT_ENTITY_SCHEMA,
+            "comment": REDDIT_COMMENT_ENTITY_SCHEMA,
             "reddit_user": REDDIT_USER_ENTITY_SCHEMA,
-            "reddit_vote": REDDIT_VOTE_ENTITY_SCHEMA,
+            "vote": REDDIT_VOTE_ENTITY_SCHEMA,
         }
 
     def get_state_machines(self) -> dict:
         """Return state machines for Reddit entities."""
         return {
             "reddit_post": {"transitions": REDDIT_POST_TRANSITIONS},
-            "reddit_comment": {"transitions": REDDIT_COMMENT_TRANSITIONS},
+            "comment": {"transitions": REDDIT_COMMENT_TRANSITIONS},
             "reddit_user": {"transitions": REDDIT_USER_TRANSITIONS},
             "subreddit": {"transitions": SUBREDDIT_TRANSITIONS},
         }

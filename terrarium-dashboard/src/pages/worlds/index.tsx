@@ -5,15 +5,22 @@ import { QueryGuard } from '@/components/feedback/query-guard';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { useWorlds } from '@/hooks/queries/use-worlds';
 import { formatRelativeTime, truncateId, capitalize } from '@/lib/formatters';
-import { cn } from '@/lib/cn';
 import type { World } from '@/types/domain';
 
 function StatusBadge({ status }: { status: World['status'] }) {
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-error/20 bg-error/10 px-2.5 py-0.5 text-xs font-medium text-error">
+        <span className="h-2 w-2 rounded-full bg-error" />
+        Failed
+      </span>
+    );
+  }
   if (status === 'created') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/20 bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning">
         <span className="h-2 w-2 animate-pulse rounded-full bg-warning" />
-        Creating...
+        Generating...
       </span>
     );
   }

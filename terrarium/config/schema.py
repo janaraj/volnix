@@ -19,7 +19,7 @@ from terrarium.llm.config import LLMConfig
 from terrarium.gateway.config import GatewayConfig
 from terrarium.reality.config import RealityConfig, SeedConfig
 from terrarium.runs.config import RunConfig
-from terrarium.actors.config import ActorConfig
+from terrarium.actors.config import ActorConfig, SlotManagerConfig
 from terrarium.templates.config import TemplateConfig
 from terrarium.engines.state.config import StateConfig
 from terrarium.engines.policy.config import PolicyConfig
@@ -102,6 +102,7 @@ class TerrariumConfig(BaseModel):
     runs: RunConfig = Field(default_factory=RunConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     actors: ActorConfig = Field(default_factory=ActorConfig)
+    agents: SlotManagerConfig = Field(default_factory=SlotManagerConfig)
     templates: TemplateConfig = Field(default_factory=TemplateConfig)
     world_compiler: WorldCompilerConfig = Field(default_factory=WorldCompilerConfig)
     agency: AgencyConfig = Field(default_factory=AgencyConfig)

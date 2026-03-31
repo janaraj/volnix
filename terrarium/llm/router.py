@@ -107,19 +107,26 @@ class LLMRouter:
                 **{**request.model_dump(), "model_override": model}
             )
 
+        # Use configured timeout from routing or defaults (not hardcoded)
+        timeout = (
+            getattr(routing, "timeout_seconds", None)
+            or self._config.defaults.timeout_seconds
+            or 120.0
+        )
+
         async with self._semaphore:
             try:
                 response = await asyncio.wait_for(
                     provider.generate(request),
-                    timeout=60.0,
+                    timeout=timeout,
                 )
             except asyncio.TimeoutError:
-                logger.warning("LLM call timed out after 60s: %s/%s", engine_name, use_case)
+                logger.warning("LLM call timed out after %ds: %s/%s", int(timeout), engine_name, use_case)
                 response = LLMResponse(
                     content="",
                     provider=provider_name,
                     model=model,
-                    error="LLM call timed out after 60s",
+                    error=f"LLM call timed out after {int(timeout)}s",
                 )
 
         if self._tracker:
@@ -196,8 +203,8 @@ class LLMRouter:
                 "success": response.error is None,
                 "error": response.error,
                 "system_prompt": (
-                    request.system_prompt[:500] + "..."
-                    if len(request.system_prompt) > 500
+                    request.system_prompt[:2000] + "..."
+                    if len(request.system_prompt) > 2000
                     else request.system_prompt
                 ),
                 "user_content": request.user_content,

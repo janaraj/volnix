@@ -362,23 +362,20 @@ def test_parse_duration_bare_number():
 
 
 @pytest.mark.asyncio
-async def test_probabilistic_events_with_high_reliability_failures():
-    """High reliability.failures generates service_degradation events."""
+async def test_dynamic_mode_without_llm_produces_no_events():
+    """Dynamic mode without LLM router produces no events (organic generation requires LLM)."""
     conditions = WorldConditions(
         reliability=ReliabilityDimension(failures=100, timeouts=0, degradation=100),
         complexity=ComplexityDimension(volatility=100),
         boundaries=BoundaryDimension(boundary_gaps=100),
     )
-    context = AnimatorContext(_make_plan(conditions=conditions))
 
     engine, scheduler = await _setup_engine(behavior="dynamic", conditions=conditions)
 
-    # With all probs at 100%, all events should fire
-    events = engine._generate_probabilistic_events(context, _utc())
-    actions = [e["action"] for e in events]
-    assert "service_degradation" in actions
-    assert "situation_change" in actions
-    assert "access_incident" in actions
+    # Without LLM, tick should produce no events (probabilistic path removed,
+    # organic path requires LLM)
+    results = await engine.tick(_utc())
+    assert results == []
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,30 @@
+# ===================================================================
+# AGENT PROFILE -- Stock Analysis Crew
+# ===================================================================
+# Defines external agent roles, permissions, and budgets.
+# Independent from the world definition — can change between runs.
+
+agents:
+  - id: financial-analyst
+    role: financial-analyst
+    permissions:
+      read: [alpaca]
+      write: []
+    budget:
+      api_calls: 200
+
+  - id: research-analyst
+    role: research-analyst
+    permissions:
+      read: [alpaca]
+      write: []
+    budget:
+      api_calls: 200
+
+  - id: investment-advisor
+    role: investment-advisor
+    permissions:
+      read: [alpaca]
+      write: [alpaca]
+    budget:
+      api_calls: 300

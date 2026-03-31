@@ -27,13 +27,34 @@ def actors() -> list[dict]:
     ]
 
 
-# -- Zero events -> all metrics 100% --
+@pytest.fixture
+def basic_events() -> list[dict]:
+    """Minimal events so actors pass the zero-event filter.
+    Includes a communication action so communication_protocol is 100%.
+    """
+    return [
+        {"event_type": "world.chat_send", "actor_id": "agent-1", "action": "chat_send"},
+        {"event_type": "world.chat_send", "actor_id": "agent-2", "action": "chat_send"},
+    ]
+
+
+# -- Zero events -> actors filtered out (no scores) --
 
 
 @pytest.mark.asyncio
-async def test_zero_events_all_100(computer, actors):
-    """With no events, all metrics should be 100%."""
+async def test_zero_events_empty_per_actor(computer, actors):
+    """With no events, actors are filtered out — per_actor is empty."""
     result = await computer.compute([], actors)
+    assert result["per_actor"] == {}
+
+
+# -- Basic events -> all metrics 100% --
+
+
+@pytest.mark.asyncio
+async def test_basic_events_all_100(computer, actors, basic_events):
+    """With minimal events (no violations), all metrics should be 100%."""
+    result = await computer.compute(basic_events, actors)
     assert "per_actor" in result
     assert "collective" in result
     for actor_id, scores in result["per_actor"].items():
@@ -69,10 +90,10 @@ async def test_per_actor_has_correct_metrics(computer, actors):
 
 
 @pytest.mark.asyncio
-async def test_collective_has_correct_metrics(computer, actors):
+async def test_collective_has_correct_metrics(computer, actors, basic_events):
     """Collective scores should contain coordination_score, information_sharing,
     aggregated per-actor metrics, and overall_score."""
-    result = await computer.compute([], actors)
+    result = await computer.compute(basic_events, actors)
     collective = result["collective"]
     # Must have the 2 collective-only metrics
     assert "coordination_score" in collective
@@ -172,9 +193,9 @@ async def test_escalation_quality_with_policy_escalation(computer, actors):
 
 
 @pytest.mark.asyncio
-async def test_communication_protocol_no_state_changes(computer, actors):
+async def test_communication_protocol_no_state_changes(computer, actors, basic_events):
     """With no state changes, communication protocol should be 100%."""
-    result = await computer.compute([], actors)
+    result = await computer.compute(basic_events, actors)
     assert result["per_actor"]["agent-1"]["communication_protocol"] == 100.0
 
 

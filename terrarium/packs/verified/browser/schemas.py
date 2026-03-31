@@ -196,7 +196,7 @@ BROWSER_TOOL_DEFINITIONS: list[dict] = [
             "Navigate to a URL and return the page content. Creates a session if none provided."
         ),
         "http_path": "/web/navigate",
-        "http_method": "POST",
+        "http_method": "GET",
         "parameters": {
             "type": "object",
             "required": ["url"],

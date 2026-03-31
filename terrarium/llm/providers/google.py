@@ -25,9 +25,10 @@ class GoogleNativeProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "google"
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview") -> None:
+    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview", timeout: float = 300.0) -> None:
         self._client = genai.Client(api_key=api_key)
         self._default_model = default_model
+        self._timeout = timeout
         # Cache: hash(model:system_prompt) → cache.name for reuse
         self._prompt_cache: dict[str, str] = {}
 

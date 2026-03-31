@@ -11,6 +11,26 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class SlotManagerConfig(BaseModel, frozen=True):
+    """Configuration for external agent slot management."""
+
+    # Max external agents that can be connected simultaneously.
+    max_external_agents: int = 10
+    # Allow tool calls without registration (backward compat).
+    # When True, unknown actors are auto-registered with default permissions.
+    allow_unregistered_access: bool = True
+    # Auto-assign agents to available slots when no actor_id specified.
+    auto_assign_enabled: bool = True
+    # Default permissions for auto-registered agents (no profile provided).
+    default_permissions: dict[str, Any] = Field(
+        default_factory=lambda: {"read": "all", "write": "all"}
+    )
+    # Default budget for auto-registered agents. None = no limit.
+    default_budget: dict[str, Any] | None = None
+    # Token prefix for generated agent tokens.
+    token_prefix: str = "terr_"
+
+
 class ActorConfig(BaseModel, frozen=True):
     """Top-level actor configuration section."""
 

@@ -55,11 +55,11 @@ COMMUNICATION_ACTIONS: frozenset[str] = frozenset({
     # Email pack (gmail)
     "email_send",
     # Reddit pack
-    "reddit_submit",
-    "reddit_comment",
+    "submit",
+    "comment",
     # Twitter pack
-    "twitter_create_tweet",
-    "twitter_reply",
+    "create_tweet",
+    "reply",
 })
 
 
@@ -160,10 +160,27 @@ class HTTPRestAdapter(ProtocolAdapter):
                     content={"error": "Malformed JSON in request body"},
                 )
 
+            # Resolve agent identity (priority: token > body > header > default)
+            auth = request.headers.get("authorization", "")
+            token_actor_id = None
+            if auth.startswith("Bearer terr_"):
+                token = auth.removeprefix("Bearer ").strip()
+                slot_mgr = getattr(gateway, "_slot_manager", None)
+                if slot_mgr:
+                    resolved = slot_mgr.resolve_token(token)
+                    if resolved:
+                        token_actor_id = str(resolved)
+                    else:
+                        from starlette.responses import JSONResponse as _JR401
+                        return _JR401(
+                            status_code=401,
+                            content={"error": "Invalid or expired agent token"},
+                        )
+
             # Detect format: wrapped (SDK) vs raw (standard tool transport)
             if "arguments" in body:
                 if isinstance(body["arguments"], dict):
-                    actor_id = body.get("actor_id", "http-agent")
+                    actor_id = token_actor_id or body.get("actor_id", "http-agent")
                     arguments = body["arguments"]
                     raw_mode = False
                 else:
@@ -175,7 +192,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                     )
             else:
                 actor_id = (
-                    request.headers.get("x-actor-id", "").strip()
+                    token_actor_id
+                    or request.headers.get("x-actor-id", "").strip()
                     or "http-agent"
                 )
                 arguments = body
@@ -186,6 +204,10 @@ class HTTPRestAdapter(ProtocolAdapter):
                 tool_name=tool_name,
                 input_data=arguments,
             )
+
+            # Strip internal _event field from responses to external agents
+            if isinstance(result, dict):
+                result.pop("_event", None)
 
             if raw_mode:
                 if isinstance(result, dict):
@@ -199,6 +221,87 @@ class HTTPRestAdapter(ProtocolAdapter):
                     "is_error": is_error,
                 }
             return result
+
+        # ── Agent slot management ──────────────────────────────
+
+        @app.get("/api/v1/agents/slots")
+        async def list_agent_slots():
+            """Discover available actor slots for external agents."""
+            slot_mgr = getattr(gateway, "_slot_manager", None)
+            if not slot_mgr:
+                return {"slots": [], "total": 0, "available": 0}
+            slots = slot_mgr.discover_slots()
+            return {
+                "slots": [s.model_dump() for s in slots],
+                "total": len(slots),
+                "available": sum(1 for s in slots if s.status == "available"),
+            }
+
+        @app.post("/api/v1/agents/register")
+        async def register_agent(request: StarletteRequest):
+            """Claim an actor slot and receive an agent token.
+
+            Request body:
+              {"actor_id": "analyst-abc123", "agent_name": "my-agent"}
+              OR {"agent_name": "my-agent", "role_hint": "analyst"}  (auto-assign)
+            """
+            slot_mgr = getattr(gateway, "_slot_manager", None)
+            if not slot_mgr:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+
+            body = await request.json()
+            agent_name = body.get("agent_name", "unnamed-agent")
+            actor_id = body.get("actor_id")
+
+            if actor_id:
+                from terrarium.core.types import ActorId as _AId
+                reg = slot_mgr.register(_AId(actor_id), agent_name)
+            else:
+                role_hint = body.get("role_hint")
+                reg = slot_mgr.auto_assign(agent_name, role_hint)
+
+            if reg is None:
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=409,
+                    content={"error": "No available slot or slot already claimed"},
+                )
+            return reg.model_dump()
+
+        @app.delete("/api/v1/agents/{token}")
+        async def release_agent(token: str):
+            """Release an actor slot."""
+            slot_mgr = getattr(gateway, "_slot_manager", None)
+            if not slot_mgr:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+            actor_id = slot_mgr.release(token)
+            if actor_id is None:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=404, content={"error": "Token not found"})
+            return {"status": "released", "actor_id": str(actor_id)}
+
+        @app.get("/api/v1/agents/whoami")
+        async def whoami(request: StarletteRequest):
+            """Verify an agent token and return identity."""
+            slot_mgr = getattr(gateway, "_slot_manager", None)
+            if not slot_mgr:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+            auth = request.headers.get("authorization", "")
+            if not auth.startswith("Bearer terr_"):
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=401, content={"error": "Missing or invalid Authorization header"})
+            token = auth.removeprefix("Bearer ").strip()
+            actor_id = slot_mgr.resolve_token(token)
+            if actor_id is None:
+                from starlette.responses import JSONResponse
+                return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+            return {
+                "actor_id": str(actor_id),
+                "agent_name": slot_mgr.get_agent_name(token),
+            }
 
         @app.get("/api/v1/health")
         async def health():
@@ -590,6 +693,16 @@ class HTTPRestAdapter(ProtocolAdapter):
                         {"service_id": k, "service_name": k}
                         for k in services_raw.keys()
                     ]
+                # Promote summary fields to top level for frontend
+                summary = result.get("summary", {})
+                if summary:
+                    if summary.get("governance_score") is not None:
+                        result["governance_score"] = summary["governance_score"]
+                    if summary.get("event_count") and not result.get("event_count"):
+                        result["event_count"] = summary["event_count"]
+                    if summary.get("actor_count") and not result.get("actor_count"):
+                        result["actor_count"] = summary["actor_count"]
+
             except Exception:
                 pass  # Stats are best-effort; don't break the endpoint
 
@@ -1206,30 +1319,38 @@ class HTTPRestAdapter(ProtocolAdapter):
             bus = gateway._app.bus
             queue: asyncio.Queue = asyncio.Queue()
 
-            def _classify(event: Any) -> dict:
-                """Classify bus event by Python type hierarchy."""
-                from terrarium.core.events import (
-                    BudgetEvent,
-                    SimulationEvent,
-                )
-                from terrarium.simulation.runner import SimulationStatus
+            def _classify(event: Any) -> dict | None:
+                """Classify bus event for WebSocket delivery.
 
+                Returns None for events that should not be forwarded to the client
+                (e.g., engine lifecycle, pipeline steps). Only world action events
+                appear in the event feed to avoid duplicates and phantom entries.
+                """
                 try:
                     data = event.model_dump(mode="json") if hasattr(event, "model_dump") else {}
                 except Exception:
                     logger.warning("Event serialization failed: %s", type(event).__name__)
                     data = {}
 
-                if isinstance(event, BudgetEvent):
-                    msg_type = "budget_update"
-                elif isinstance(event, SimulationEvent) and event.status == SimulationStatus.COMPLETED:
-                    msg_type = "run_complete"
-                elif isinstance(event, SimulationEvent):
-                    msg_type = "status"
-                else:
-                    msg_type = "event"
+                event_type = getattr(event, "event_type", "")
 
-                return {"type": msg_type, "data": data}
+                # Budget events
+                if event_type.startswith("budget."):
+                    return {"type": "budget_update", "data": data}
+
+                # Simulation lifecycle
+                if event_type.startswith("simulation."):
+                    status = getattr(event, "status", "")
+                    if status == "completed":
+                        return {"type": "run_complete", "data": data}
+                    return {"type": "status", "data": data}
+
+                # World action events (tool calls from agents)
+                if event_type.startswith("world."):
+                    return {"type": "event", "data": data}
+
+                # Skip everything else (engine lifecycle, pipeline steps, permissions, etc.)
+                return None
 
             def _make_chat_message(event: Any) -> dict | None:
                 """Build a chat_message payload if the event is a communication action."""
@@ -1263,6 +1384,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                 if event_run is not None and str(event_run) != run_id:
                     return
                 classified = _classify(event)
+                if classified is None:
+                    return  # skip non-world events
                 await queue.put(classified)
                 # Also emit a chat_message for communication actions
                 chat_msg = _make_chat_message(event)

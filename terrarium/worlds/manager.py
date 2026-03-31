@@ -98,6 +98,15 @@ class WorldManager:
                 world_id, entity_count, actor_count,
             )
 
+    async def mark_failed(self, world_id: WorldId, error: str = "") -> None:
+        """Mark a world as failed during generation."""
+        wid = str(world_id)
+        if wid in self._worlds:
+            self._worlds[wid]["status"] = "failed"
+            self._worlds[wid]["error"] = error
+            self._save_metadata(world_id)
+            logger.warning("World %s generation failed: %s", world_id, error)
+
     async def list_worlds(self, limit: int = 50) -> list[dict[str, Any]]:
         """List worlds, newest first."""
         worlds = sorted(
@@ -155,15 +164,29 @@ class WorldManager:
         )
 
     def _load_existing_worlds(self) -> None:
-        """Reload previously persisted worlds from disk."""
+        """Reload previously persisted worlds from disk.
+
+        Stale "created" worlds (generation never completed, older than 1 hour)
+        are marked "failed" so the dashboard shows the correct state.
+        """
         if not self._data_dir.exists():
             return
+        now = datetime.now(UTC)
         for meta_path in self._data_dir.glob("*/metadata.json"):
             try:
                 data = json.loads(meta_path.read_text())
                 wid = data["world_id"]
+                # Clean up stale "created" worlds (generation never completed)
+                if data.get("status") == "created":
+                    created = datetime.fromisoformat(data.get("created_at", ""))
+                    if (now - created).total_seconds() > 3600:
+                        data["status"] = "failed"
+                        data["error"] = "generation_timeout"
+                        meta_path.write_text(
+                            json.dumps(data, indent=2, default=str)
+                        )
                 self._worlds[wid] = data
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError, ValueError):
                 logger.warning(
                     "Skipping corrupted world metadata: %s", meta_path,
                 )

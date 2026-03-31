@@ -1,12 +1,14 @@
-import type { Run } from '@/types/domain';
+import { useMemo } from 'react';
+import type { Run, WorldEvent } from '@/types/domain';
 import { getActorRole, getActorType, getGovernanceScore } from '@/types/domain';
 import { useActor } from '@/hooks/queries/use-actors';
+import { useRunEvents } from '@/hooks/queries/use-events';
 import { QueryGuard } from '@/components/feedback/query-guard';
 import { SectionLoading } from '@/components/feedback/section-loading';
 import { ActorBadge } from '@/components/domain/actor-badge';
 import { ScoreBar } from '@/components/domain/score-bar';
 import { ServiceBadge } from '@/components/domain/service-badge';
-import { capitalize } from '@/lib/formatters';
+// formatters import removed — capitalize no longer used
 
 interface InspectorProps {
   runId: string;
@@ -67,45 +69,35 @@ function AgentInspector({ runId, actorId }: { runId: string; actorId: string }) 
   );
 }
 
-function RunInspector({ run }: { run: Run }) {
-  const actorSpecs = run.world_def?.actor_specs ?? run.world_def?.actors ?? [];
+function RunInspector({ run, runId }: { run: Run; runId: string }) {
+  const eventsQuery = useRunEvents(runId, { sort: 'desc', limit: 500 });
+  const events = eventsQuery.data?.events ?? [];
+
+  // Derive active actors from events (the truth of who acted)
+  const INTERNAL = new Set(['world_compiler', 'animator', 'system', 'policy', 'budget', 'state', 'permission', 'responder']);
+  const activeActors = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.forEach((e: WorldEvent) => {
+      if (!INTERNAL.has(e.actor_id)) {
+        counts[e.actor_id] = (counts[e.actor_id] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).sort(([, a], [, b]) => b - a);
+  }, [events]);
 
   return (
     <div className="space-y-4">
       <p className="text-xs uppercase text-text-muted">Inspector</p>
 
-      {/* Mode / preset / behavior badges */}
-      <div className="flex flex-wrap gap-2">
-        <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-          {capitalize(run.mode)}
-        </span>
-        <span className="rounded-md border border-warning/20 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-          {capitalize(run.config_snapshot?.behavior ?? 'static')}
-        </span>
-      </div>
-
-      {/* Actors */}
-      {actorSpecs.length > 0 && (
+      {/* Active agents — derived from events */}
+      {activeActors.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs uppercase text-text-muted">Actors</p>
+          <p className="text-xs uppercase text-text-muted">Active Agents</p>
           <div className="space-y-1">
-            {actorSpecs.map((a: Record<string, unknown>, i: number) => (
-              <div key={a.id as string ?? i} className="flex items-center justify-between text-xs">
-                <span className="text-text-primary">
-                  {a.id as string ?? capitalize(a.role as string ?? '')}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {(a.count as number) > 1 && (
-                    <span className="font-mono text-text-muted">&times;{a.count as number}</span>
-                  )}
-                  <span className={
-                    (a.type as string) === 'external'
-                      ? 'rounded bg-info/10 px-1.5 py-0.5 text-info'
-                      : 'rounded bg-bg-elevated px-1.5 py-0.5 text-text-muted'
-                  }>
-                    {a.type as string}
-                  </span>
-                </div>
+            {activeActors.map(([actorId, count]) => (
+              <div key={actorId} className="flex items-center justify-between text-xs">
+                <span className="text-info font-mono">{actorId}</span>
+                <span className="font-mono text-text-muted">{count} actions</span>
               </div>
             ))}
           </div>
@@ -132,5 +124,5 @@ export function Inspector({ runId, selectedActorId, run }: InspectorProps) {
     return <AgentInspector runId={runId} actorId={selectedActorId} />;
   }
 
-  return <RunInspector run={run} />;
+  return <RunInspector run={run} runId={runId} />;
 }

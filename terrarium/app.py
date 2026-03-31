@@ -1,6 +1,7 @@
 """TerrariumApp -- bootstrap and orchestration for the full system."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -56,6 +57,8 @@ class TerrariumApp:
         self._world_manager: Any = None
         self._actor_registry: Any = None
         self._started = False
+        self._last_action_time: datetime | None = None
+        self._idle_watcher_task: Any = None
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -206,6 +209,10 @@ class TerrariumApp:
             # Pack registry + profile registry -> adapter engine (for capability checks)
             adapter_engine = self._registry.get("adapter")
             adapter_engine._pack_registry = pack_reg
+
+            # Pack registry → permission engine (for read/write classification)
+            permission_eng = self._registry.get("permission")
+            permission_eng._pack_registry = pack_reg
             profile_reg = getattr(responder, "_profile_registry", None)
             if profile_reg is not None:
                 adapter_engine._profile_registry = profile_reg
@@ -265,25 +272,24 @@ class TerrariumApp:
         actor_registry = ActorRegistry()
         self._actor_registry = actor_registry
         compiler._config["_actor_registry"] = actor_registry
+
+        # Slot manager for external agent identity
+        from terrarium.actors.slot_manager import SlotManager
+        self._slot_manager = SlotManager(
+            actor_registry=actor_registry,
+            config=self._config.agents,
+        )
+        # Pass to gateway for HTTP/MCP token resolution
+        if self._gateway:
+            self._gateway._slot_manager = self._slot_manager
         compiler._ledger = self._ledger  # Same pattern as state_engine
 
-        # Register default gateway actors so HTTP/MCP defaults go through governance
+        # Register system actor (always needed) and default gateway actors
+        # (only when no agent profile is loaded — profile defines who can connect).
         from terrarium.actors.definition import ActorDefinition
         from terrarium.core.types import ActorType
 
         default_gateway_actors = [
-            ActorDefinition(
-                id=ActorId("http-agent"),
-                type=ActorType.AGENT,
-                role="gateway-default",
-                permissions={"read": "all", "write": "all"},
-            ),
-            ActorDefinition(
-                id=ActorId("mcp-agent"),
-                type=ActorType.AGENT,
-                role="gateway-default",
-                permissions={"read": "all", "write": "all"},
-            ),
             ActorDefinition(
                 id=ActorId("system"),
                 type=ActorType.SYSTEM,
@@ -386,6 +392,16 @@ class TerrariumApp:
 
         mission = getattr(plan, "mission", "")
         if not mission:
+            return None
+
+        # Only build kickstart for worlds with internal simulation actors.
+        # External-only worlds (no actor_specs, or all type=agent/external)
+        # should not start a simulation — external agents drive the world.
+        actor_specs = getattr(plan, "actor_specs", [])
+        has_internal_actors = any(
+            a.get("type") not in ("agent", "external") for a in actor_specs
+        )
+        if not has_internal_actors:
             return None
 
         # Find lead actor from registry
@@ -491,6 +507,13 @@ class TerrariumApp:
         if not self._started:
             raise RuntimeError("TerrariumApp is not started. Call start() first.")
 
+        # Track last action time for idle auto-complete
+        self._last_action_time = datetime.now(UTC)
+
+        # Resolve actor identity — auto-register unknown agents with defaults
+        if self._slot_manager:
+            actor_id = self._slot_manager.resolve_actor_id(actor_id)
+
         now = datetime.now(UTC)
         ctx = ActionContext(
             request_id=f"req-{uuid.uuid4().hex[:12]}",
@@ -501,13 +524,16 @@ class TerrariumApp:
             world_time=overrides.get("world_time", now),
             wall_time=now,
             tick=overrides.get("tick", 0),
+            run_id=RunId(self._current_run_id) if self._current_run_id else None,
         )
 
         await self._pipeline.execute(ctx)
 
-        # B6 fix: publish event for ALL actions (including short-circuited)
-        # so AgencyEngine + other subscribers can react to blocked/denied actions
-        if self._bus:
+        # Publish event for short-circuited actions only. Successful actions
+        # are already published by the commit step in StateEngine via the
+        # pipeline DAG — publishing again here would create duplicates.
+        # Also publish if no commit_result (pipeline had no commit step).
+        if self._bus and (ctx.short_circuited or not ctx.commit_result):
             from terrarium.core.events import WorldEvent
             from terrarium.core.types import ActionSource, EntityId, EventId, Timestamp
 
@@ -570,7 +596,13 @@ class TerrariumApp:
         # Include the committed WorldEvent in the return so callers
         # (e.g. SimulationRunner) can pass it to agency.notify().
         # External callers (HTTP gateway) use only the response body.
-        committed_event = event if self._bus else None
+        # For successful actions: get from commit step result.
+        # For short-circuited actions: get from the event we just created above.
+        committed_event = None
+        if ctx.short_circuited and self._bus:
+            committed_event = event  # created in the short_circuited block above
+        elif ctx.commit_result and ctx.commit_result.events:
+            committed_event = ctx.commit_result.events[0]  # from StateEngine commit
         logger.debug(
             "[handle_action] _event attached: type=%s, short_circuited=%s",
             type(committed_event).__name__, ctx.short_circuited,
@@ -615,6 +647,19 @@ class TerrariumApp:
         if hasattr(budget_engine, "_world_mode"):
             budget_engine._world_mode = mode
 
+        # Filter gateway tools to only services defined in this world
+        world_services = set(plan.services.keys()) if hasattr(plan, "services") else set()
+        if self._gateway and world_services:
+            self._gateway.set_active_services(world_services)
+
+        # Wire behavior mode + LLM + state to PackRuntime for dynamic generation
+        responder = self._registry.get("responder")
+        if hasattr(responder, "_tier1") and hasattr(responder._tier1, "_runtime"):
+            runtime = responder._tier1._runtime
+            runtime._behavior = plan.behavior
+            runtime._llm_router = self._llm_router
+            runtime._state_engine = self._registry.get("state")
+
     async def configure_animator(self, plan: Any) -> None:
         """Configure the animator engine from a compiled WorldPlan.
 
@@ -627,6 +672,23 @@ class TerrariumApp:
             plan: A WorldPlan object with conditions, behavior, and animator_settings.
         """
         animator = self._registry.get("animator")
+
+        # Pass available tools so Animator generates valid actions only.
+        # Filter to world-active services (same as gateway filtering).
+        responder = self._registry.get("responder")
+        if hasattr(responder, "_pack_registry"):
+            all_tools = responder._pack_registry.list_tools()
+            world_services = set()
+            plan_data = plan.model_dump() if hasattr(plan, "model_dump") else {}
+            for svc in plan_data.get("services", {}):
+                world_services.add(str(svc))
+            if world_services:
+                animator._available_tools = [
+                    t for t in all_tools if t.get("pack_name") in world_services
+                ]
+            else:
+                animator._available_tools = all_tools
+
         await animator.configure(plan, self._scheduler)
 
     async def configure_agency(self, plan: Any, result: dict) -> None:
@@ -875,12 +937,7 @@ class TerrariumApp:
 
     # ── Run management ─────────────────────────────────────────
 
-    _GATEWAY_ACTORS = [
-        {"id": "http-agent", "role": "agent", "type": "external",
-         "permissions": {"read": "all", "write": "all"}},
-        {"id": "mcp-agent", "role": "agent", "type": "external",
-         "permissions": {"read": "all", "write": "all"}},
-    ]
+    _GATEWAY_ACTORS: list[dict] = []  # Populated at runtime from ActorRegistry
 
     # ── World lifecycle ───────────────────────────────────────
 
@@ -933,6 +990,7 @@ class TerrariumApp:
     async def create_run(
         self, plan: Any, mode: str = "governed", tag: str | None = None,
         world_id: WorldId | None = None,
+        agents_yaml: str | None = None,
     ) -> RunId:
         """Create a run against an existing world.
 
@@ -1016,16 +1074,54 @@ class TerrariumApp:
                     if not self._actor_registry.has_actor(actor_def.id):
                         self._actor_registry.register(actor_def)
 
+        # Load external agent profiles if provided.
+        # When a profile is given, it defines authorized agents — no defaults needed.
+        # When no profile, register http-agent/mcp-agent as fallback identities.
+        if agents_yaml and self._slot_manager:
+            from terrarium.actors.profile import load_agent_profile
+            agent_defs = load_agent_profile(agents_yaml)
+            self._slot_manager.register_from_profile(agent_defs)
+        else:
+            # No profile — register default gateway actors for backward compat
+            from terrarium.actors.definition import ActorDefinition
+            from terrarium.core.types import ActorType
+            for default_id in ("http-agent", "mcp-agent"):
+                aid = ActorId(default_id)
+                if self._actor_registry and not self._actor_registry.has_actor(aid):
+                    self._actor_registry.register(ActorDefinition(
+                        id=aid,
+                        type=ActorType.AGENT,
+                        role="gateway-default",
+                        permissions={"read": "all", "write": "all"},
+                    ))
+
         self.configure_governance(plan)
         await self.configure_animator(plan)
         await self.configure_agency(plan, result)
 
         # Track active run
         self._current_run_id = str(run_id)
+        self._last_action_time = None
         await self._run_manager.start_run(run_id)
 
         # Save compilation result as run artifact
         await self._artifact_store.save_config(run_id, result)
+
+        # Start idle watcher for external-only runs (no internal actors).
+        # Runs with a SimulationRunner handle completion via end conditions.
+        world_def = plan.model_dump() if hasattr(plan, "model_dump") else {}
+        actors = world_def.get("actor_specs", world_def.get("actors", []))
+        has_internal = any(
+            a.get("type") not in ("agent", "external") for a in actors
+        )
+        if not has_internal:
+            self._idle_watcher_task = asyncio.create_task(
+                self._idle_watcher(run_id, timeout_seconds=300)
+            )
+            # Start animator bridge for reactive/dynamic behavior
+            plan_behavior = world_def.get("behavior", "static")
+            if plan_behavior == "reactive" and self._bus:
+                await self._start_animator_bridge(plan_behavior)
 
         return run_id
 
@@ -1046,20 +1142,22 @@ class TerrariumApp:
             for a in actors_raw if isinstance(a, dict) and a.get("id")
         ]
 
-        reporter = self._registry.get("reporter")
-        report = await reporter.generate_full_report(actors=actors_for_report)
-        scorecard = await reporter.generate_scorecard(actors=actors_for_report)
-
-        await self._artifact_store.save_report(run_id, report)
-        await self._artifact_store.save_scorecard(run_id, scorecard)
-
-        # Save event log from bus (includes blocked/denied events)
+        # Get run-scoped events FIRST (filtered by run_id).
+        # Must happen before report generation so the reporter uses only
+        # this run's events, not the global timeline from all runs.
         raw_events: list[dict] = []
         persistence = getattr(self._bus, "_persistence", None)
         if persistence:
             raw_events = await persistence.query_raw(
                 filters={"run_id": str(run_id)},
             )
+
+        reporter = self._registry.get("reporter")
+        report = await reporter.generate_full_report(actors=actors_for_report, events=raw_events)
+        scorecard = await reporter.generate_scorecard(actors=actors_for_report, events=raw_events)
+
+        await self._artifact_store.save_report(run_id, report)
+        await self._artifact_store.save_scorecard(run_id, scorecard)
         await self._artifact_store.save_event_log(run_id, raw_events)
 
         state = self._registry.get("state")
@@ -1110,6 +1208,72 @@ class TerrariumApp:
 
         await self._run_manager.complete_run(run_id, summary=summary)
         return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
+
+    async def _start_animator_bridge(self, behavior: str) -> None:
+        """Subscribe to bus events and trigger Animator for external-only runs.
+
+        In normal simulation, the SimulationRunner calls animator.notify_event()
+        and animator.tick() after every committed event. For external-only serve
+        mode (no SimulationRunner), this bridge does the same via bus subscription.
+
+        - Static: bridge not started (caller checks)
+        - Reactive: animator.tick() generates events only when agents acted
+        - Dynamic: animator.tick() generates organic events after every action
+        """
+        animator = self._registry.get("animator")
+        if animator is None or not hasattr(animator, "tick"):
+            logger.warning("Animator bridge: no animator engine available")
+            return
+
+        async def _on_committed_event(event: Any) -> None:
+            event_type = getattr(event, "event_type", "")
+            if not event_type.startswith("world."):
+                return
+            # Skip events generated by the animator itself to prevent cascading.
+            # Animator events use actor_id="system" — only trigger on external agent actions.
+            actor = str(getattr(event, "actor_id", ""))
+            if actor in ("system", "animator", "world_compiler"):
+                return
+            # Notify animator (records action for reactive mode)
+            try:
+                await animator.notify_event(event)
+            except Exception:
+                pass
+            # Tick animator to generate environment events
+            try:
+                results = await animator.tick(datetime.now(UTC))
+                if results:
+                    logger.info(
+                        "Animator bridge: generated %d events after %s by %s",
+                        len(results), event_type, actor,
+                    )
+            except Exception as exc:
+                logger.warning("Animator bridge tick failed: %s", exc)
+
+        await self._bus.subscribe("*", _on_committed_event)
+        logger.info("Animator bridge started (behavior=%s)", behavior)
+
+    async def _idle_watcher(self, run_id: RunId, timeout_seconds: int = 300) -> None:
+        """Auto-complete a run after idle timeout (no external actions).
+
+        Runs as a background task for external-only runs (no SimulationRunner).
+        Checks every 30s if the last action was more than timeout_seconds ago.
+        """
+        while self._current_run_id == str(run_id):
+            await asyncio.sleep(30)
+            if self._last_action_time is None:
+                continue
+            elapsed = (datetime.now(UTC) - self._last_action_time).total_seconds()
+            if elapsed >= timeout_seconds:
+                logger.info(
+                    "Run %s idle for %ds, auto-completing",
+                    run_id, int(elapsed),
+                )
+                try:
+                    await self.end_run(run_id)
+                except Exception as exc:
+                    logger.warning("Auto-complete failed for %s: %s", run_id, exc)
+                return
 
     async def diff_runs(self, run_ids: list[str]) -> dict:
         """Compare multiple runs using saved artifacts."""

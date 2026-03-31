@@ -177,9 +177,9 @@ class TestStateMachines:
 
 class TestTweetCRUD:
     async def test_create_tweet(self, pack, sample_state):
-        """twitter_create_tweet creates a tweet and increments author tweet_count."""
+        """create_tweet creates a tweet and increments author tweet_count."""
         proposal = await pack.handle_action(
-            ToolName("twitter_create_tweet"),
+            ToolName("create_tweet"),
             {"text": "My first tweet!", "author_id": "user-alice"},
             sample_state,
         )
@@ -204,10 +204,10 @@ class TestTweetCRUD:
         assert author_delta.fields["tweet_count"] == 4  # was 3
 
     async def test_create_tweet_280_char_limit(self, pack, sample_state):
-        """twitter_create_tweet returns error if text exceeds 280 characters."""
+        """create_tweet returns error if text exceeds 280 characters."""
         long_text = "x" * 281
         proposal = await pack.handle_action(
-            ToolName("twitter_create_tweet"),
+            ToolName("create_tweet"),
             {"text": long_text, "author_id": "user-alice"},
             sample_state,
         )
@@ -217,9 +217,9 @@ class TestTweetCRUD:
         assert proposal.proposed_state_deltas == []
 
     async def test_create_tweet_extracts_hashtags(self, pack, sample_state):
-        """twitter_create_tweet auto-extracts hashtags from text."""
+        """create_tweet auto-extracts hashtags from text."""
         proposal = await pack.handle_action(
-            ToolName("twitter_create_tweet"),
+            ToolName("create_tweet"),
             {"text": "Love #Python and #AI!", "author_id": "user-alice"},
             sample_state,
         )
@@ -227,9 +227,9 @@ class TestTweetCRUD:
         assert set(data["hashtags"]) == {"Python", "AI"}
 
     async def test_create_tweet_extracts_mentions(self, pack, sample_state):
-        """twitter_create_tweet auto-extracts @mentions from text."""
+        """create_tweet auto-extracts @mentions from text."""
         proposal = await pack.handle_action(
-            ToolName("twitter_create_tweet"),
+            ToolName("create_tweet"),
             {"text": "Hey @bob and @carol check this out", "author_id": "user-alice"},
             sample_state,
         )
@@ -237,9 +237,9 @@ class TestTweetCRUD:
         assert set(data["mentions"]) == {"bob", "carol"}
 
     async def test_get_tweet_found(self, pack, sample_state):
-        """twitter_get_tweet returns the tweet when it exists."""
+        """get_tweet returns the tweet when it exists."""
         proposal = await pack.handle_action(
-            ToolName("twitter_get_tweet"),
+            ToolName("get_tweet"),
             {"id": "tweet-aaa"},
             sample_state,
         )
@@ -248,9 +248,9 @@ class TestTweetCRUD:
         assert proposal.proposed_state_deltas == []
 
     async def test_get_tweet_not_found(self, pack, sample_state):
-        """twitter_get_tweet returns error for a nonexistent tweet."""
+        """get_tweet returns error for a nonexistent tweet."""
         proposal = await pack.handle_action(
-            ToolName("twitter_get_tweet"),
+            ToolName("get_tweet"),
             {"id": "tweet-nonexistent"},
             sample_state,
         )
@@ -266,9 +266,9 @@ class TestTweetCRUD:
 
 class TestReplyRetweetQuote:
     async def test_reply_increments_reply_count(self, pack, sample_state):
-        """twitter_reply creates a reply tweet and increments parent reply_count."""
+        """reply creates a reply tweet and increments parent reply_count."""
         proposal = await pack.handle_action(
-            ToolName("twitter_reply"),
+            ToolName("reply"),
             {
                 "text": "Great point!",
                 "author_id": "user-bob",
@@ -288,9 +288,9 @@ class TestReplyRetweetQuote:
         assert parent_delta.fields["reply_count"] == 1  # was 0
 
     async def test_retweet_creates_entity_and_increments_count(self, pack, sample_state):
-        """twitter_retweet creates a retweet entity and increments retweet_count."""
+        """retweet creates a retweet entity and increments retweet_count."""
         proposal = await pack.handle_action(
-            ToolName("twitter_retweet"),
+            ToolName("retweet"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -307,7 +307,7 @@ class TestReplyRetweetQuote:
         assert original_delta.fields["retweet_count"] == 3  # was 2
 
     async def test_unretweet_decrements_count(self, pack, sample_state):
-        """twitter_unretweet marks retweet as deleted and decrements retweet_count."""
+        """unretweet marks retweet as deleted and decrements retweet_count."""
         # Add a retweet by bob of tweet-aaa to the state
         retweet = {
             "id": "tweet-rt-bob",
@@ -334,7 +334,7 @@ class TestReplyRetweetQuote:
         sample_state["tweets"].append(retweet)
 
         proposal = await pack.handle_action(
-            ToolName("twitter_unretweet"),
+            ToolName("unretweet"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -348,9 +348,9 @@ class TestReplyRetweetQuote:
         assert orig_delta.fields["retweet_count"] == 1  # was 2
 
     async def test_quote_tweet_with_text(self, pack, sample_state):
-        """twitter_quote_tweet creates a quote tweet with the given text."""
+        """quote_tweet creates a quote tweet with the given text."""
         proposal = await pack.handle_action(
-            ToolName("twitter_quote_tweet"),
+            ToolName("quote_tweet"),
             {
                 "text": "This is so true!",
                 "author_id": "user-bob",
@@ -365,9 +365,9 @@ class TestReplyRetweetQuote:
         assert data["author_id"] == "user-bob"
 
     async def test_quote_increments_quote_count(self, pack, sample_state):
-        """twitter_quote_tweet increments the original tweet's quote_count."""
+        """quote_tweet increments the original tweet's quote_count."""
         proposal = await pack.handle_action(
-            ToolName("twitter_quote_tweet"),
+            ToolName("quote_tweet"),
             {
                 "text": "Interesting take",
                 "author_id": "user-bob",
@@ -389,9 +389,9 @@ class TestReplyRetweetQuote:
 
 class TestLikes:
     async def test_like_creates_record_and_increments(self, pack, sample_state):
-        """twitter_like creates a like entity and increments tweet like_count."""
+        """like creates a like entity and increments tweet like_count."""
         proposal = await pack.handle_action(
-            ToolName("twitter_like"),
+            ToolName("like"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -400,7 +400,7 @@ class TestLikes:
         # Two deltas: like create + tweet like_count update
         assert len(proposal.proposed_state_deltas) == 2
         like_delta = proposal.proposed_state_deltas[0]
-        assert like_delta.entity_type == "twitter_like"
+        assert like_delta.entity_type == "like"
         assert like_delta.operation == "create"
         assert like_delta.fields["user_id"] == "user-bob"
         assert like_delta.fields["tweet_id"] == "tweet-aaa"
@@ -409,7 +409,7 @@ class TestLikes:
         assert tweet_delta.fields["like_count"] == 6  # was 5
 
     async def test_like_idempotent_error(self, pack, sample_state):
-        """twitter_like returns liked=True with no deltas if already liked."""
+        """like returns liked=True with no deltas if already liked."""
         sample_state["twitter_likes"] = [
             {
                 "id": "like-existing",
@@ -419,7 +419,7 @@ class TestLikes:
             }
         ]
         proposal = await pack.handle_action(
-            ToolName("twitter_like"),
+            ToolName("like"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -427,7 +427,7 @@ class TestLikes:
         assert proposal.proposed_state_deltas == []
 
     async def test_unlike_decrements(self, pack, sample_state):
-        """twitter_unlike deletes the like and decrements tweet like_count."""
+        """unlike deletes the like and decrements tweet like_count."""
         sample_state["twitter_likes"] = [
             {
                 "id": "like-001",
@@ -437,7 +437,7 @@ class TestLikes:
             }
         ]
         proposal = await pack.handle_action(
-            ToolName("twitter_unlike"),
+            ToolName("unlike"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -446,16 +446,16 @@ class TestLikes:
         # Two deltas: like delete + tweet like_count update
         assert len(proposal.proposed_state_deltas) == 2
         like_delta = proposal.proposed_state_deltas[0]
-        assert like_delta.entity_type == "twitter_like"
+        assert like_delta.entity_type == "like"
         assert like_delta.operation == "delete"
 
         tweet_delta = proposal.proposed_state_deltas[1]
         assert tweet_delta.fields["like_count"] == 4  # was 5
 
     async def test_unlike_nonexistent_error(self, pack, sample_state):
-        """twitter_unlike returns error if the like does not exist."""
+        """unlike returns error if the like does not exist."""
         proposal = await pack.handle_action(
-            ToolName("twitter_unlike"),
+            ToolName("unlike"),
             {"user_id": "user-bob", "tweet_id": "tweet-aaa"},
             sample_state,
         )
@@ -471,9 +471,9 @@ class TestLikes:
 
 class TestSocialGraph:
     async def test_follow_increments_both_counts(self, pack, sample_state):
-        """twitter_follow creates a follow entity and increments both user counts."""
+        """follow creates a follow entity and increments both user counts."""
         proposal = await pack.handle_action(
-            ToolName("twitter_follow"),
+            ToolName("follow"),
             {"user_id": "user-alice", "target_user_id": "user-bob"},
             sample_state,
         )
@@ -482,7 +482,7 @@ class TestSocialGraph:
         # Three deltas: follow create, alice following_count, bob follower_count
         assert len(proposal.proposed_state_deltas) == 3
         follow_delta = proposal.proposed_state_deltas[0]
-        assert follow_delta.entity_type == "twitter_follow"
+        assert follow_delta.entity_type == "follow"
         assert follow_delta.operation == "create"
         assert follow_delta.fields["follower_id"] == "user-alice"
         assert follow_delta.fields["following_id"] == "user-bob"
@@ -494,7 +494,7 @@ class TestSocialGraph:
         assert bob_delta.fields["follower_count"] == 21  # was 20
 
     async def test_follow_idempotent_error(self, pack, sample_state):
-        """twitter_follow returns following=True with no deltas if already following."""
+        """follow returns following=True with no deltas if already following."""
         sample_state["twitter_follows"] = [
             {
                 "id": "follow-existing",
@@ -504,7 +504,7 @@ class TestSocialGraph:
             }
         ]
         proposal = await pack.handle_action(
-            ToolName("twitter_follow"),
+            ToolName("follow"),
             {"user_id": "user-alice", "target_user_id": "user-bob"},
             sample_state,
         )
@@ -512,7 +512,7 @@ class TestSocialGraph:
         assert proposal.proposed_state_deltas == []
 
     async def test_unfollow_decrements_counts(self, pack, sample_state):
-        """twitter_unfollow deletes the follow and decrements both user counts."""
+        """unfollow deletes the follow and decrements both user counts."""
         sample_state["twitter_follows"] = [
             {
                 "id": "follow-001",
@@ -522,7 +522,7 @@ class TestSocialGraph:
             }
         ]
         proposal = await pack.handle_action(
-            ToolName("twitter_unfollow"),
+            ToolName("unfollow"),
             {"user_id": "user-alice", "target_user_id": "user-bob"},
             sample_state,
         )
@@ -540,7 +540,7 @@ class TestSocialGraph:
         assert bob_delta.fields["follower_count"] == 19  # was 20
 
     async def test_get_followers_paginated(self, pack, sample_state):
-        """twitter_get_followers returns paginated follower list."""
+        """get_followers returns paginated follower list."""
         # alice and bob both follow user-bob (need a third user for multiple followers)
         sample_state["twitter_follows"] = [
             {
@@ -551,7 +551,7 @@ class TestSocialGraph:
             },
         ]
         proposal = await pack.handle_action(
-            ToolName("twitter_get_followers"),
+            ToolName("get_followers"),
             {"id": "user-bob", "max_results": 1},
             sample_state,
         )
@@ -570,9 +570,9 @@ class TestSocialGraph:
 
 class TestDiscovery:
     async def test_search_recent_by_hashtag(self, pack, sample_state):
-        """twitter_search_recent filters tweets by #hashtag."""
+        """search_recent filters tweets by #hashtag."""
         proposal = await pack.handle_action(
-            ToolName("twitter_search_recent"),
+            ToolName("search_recent"),
             {"query": "#python"},
             sample_state,
         )
@@ -582,9 +582,9 @@ class TestDiscovery:
         assert proposal.proposed_state_deltas == []
 
     async def test_search_recent_by_text(self, pack, sample_state):
-        """twitter_search_recent matches free text substring."""
+        """search_recent matches free text substring."""
         proposal = await pack.handle_action(
-            ToolName("twitter_search_recent"),
+            ToolName("search_recent"),
             {"query": "great"},
             sample_state,
         )
@@ -593,7 +593,7 @@ class TestDiscovery:
         assert results[0]["id"] == "tweet-bbb"
 
     async def test_user_tweets_reverse_chronological(self, pack, sample_state):
-        """twitter_user_tweets returns tweets sorted by created_at descending."""
+        """user_tweets returns tweets sorted by created_at descending."""
         # Add a second published tweet by alice (newer than tweet-aaa)
         newer_tweet = {
             "id": "tweet-ccc",
@@ -620,7 +620,7 @@ class TestDiscovery:
         sample_state["tweets"].append(newer_tweet)
 
         proposal = await pack.handle_action(
-            ToolName("twitter_user_tweets"),
+            ToolName("user_tweets"),
             {"id": "user-alice"},
             sample_state,
         )
@@ -641,15 +641,15 @@ class TestErrorHandling:
         """Dispatching an unknown action raises PackNotFoundError."""
         with pytest.raises(PackNotFoundError):
             await pack.handle_action(
-                ToolName("twitter_nonexistent_action"),
+                ToolName("nonexistent_action"),
                 {},
                 sample_state,
             )
 
     async def test_delete_tweet_transitions_to_deleted(self, pack, sample_state):
-        """twitter_delete_tweet transitions a published tweet to deleted status."""
+        """delete_tweet transitions a published tweet to deleted status."""
         proposal = await pack.handle_action(
-            ToolName("twitter_delete_tweet"),
+            ToolName("delete_tweet"),
             {"id": "tweet-aaa"},
             sample_state,
         )
@@ -670,9 +670,9 @@ class TestErrorHandling:
 
 class TestTimeline:
     async def test_user_tweets_returns_only_that_users_tweets(self, pack, sample_state):
-        """twitter_user_tweets only returns tweets authored by the requested user."""
+        """user_tweets only returns tweets authored by the requested user."""
         proposal = await pack.handle_action(
-            ToolName("twitter_user_tweets"),
+            ToolName("user_tweets"),
             {"id": "user-bob"},
             sample_state,
         )
@@ -682,9 +682,9 @@ class TestTimeline:
         assert all(t["author_id"] == "user-bob" for t in results)
 
     async def test_user_tweets_excludes_deleted(self, pack, sample_state):
-        """twitter_user_tweets excludes tweets with status='deleted'."""
+        """user_tweets excludes tweets with status='deleted'."""
         proposal = await pack.handle_action(
-            ToolName("twitter_user_tweets"),
+            ToolName("user_tweets"),
             {"id": "user-alice"},
             sample_state,
         )

@@ -264,9 +264,17 @@ appear as real entities with proper cross-references.
 ## Entity Schema
 {entity_schema}
 
+## Existing Entity References
+{existing_refs}
+For any field with x-terrarium-ref in the schema, you MUST use an ID from the
+valid_ids list above. The "samples" show what those entities look like — use them
+to create coherent relationships (e.g., assign tweets to users matching their personality).
+If "none", this entity type has no reference dependencies — generate fresh IDs.
+
 ## Rules
 - Generate exactly {count} {entity_type} entities as a valid JSON array
 - Each entity MUST conform to the schema above (required fields, valid types, enum values)
+- Reference fields MUST use IDs from the existing_refs valid_ids lists
 - Keep text fields concise: descriptions 1-2 sentences, subjects under 80 chars
 - Focus on facts an agent needs (who, what, status, urgency), not prose
 - Output ONLY a valid JSON array. No markdown, no explanation.""",
@@ -351,11 +359,13 @@ natural language description into concrete entity modifications.
 {available_entities}
 
 ## Rules
-- Create entities or modify existing ones to establish the seed scenario
-- Entity fields must use the "fields" key (not "properties")
-- Reference existing entity IDs when modifying
-- New entities must have realistic IDs and complete required fields
-- The seed must be CONSISTENT with the reality personality and behavior mode
+- Modify existing entities or create new ones to establish the seed
+- Use "fields" key for entity data (not "properties")
+- Reference fields (site_id, author_id, etc.) MUST use IDs from Available Entities
+- New entities MUST include all required fields for their type
+- Large numbers in seeds (e.g. "50K mentions") → store as FIELD VALUE on entity, NOT as count invariant
+- Prefer "exists" and "field_equals" invariants over "count" invariants
+- Prefer modifying existing entities over creating new ones
 
 Output JSON:
 {{
@@ -514,12 +524,17 @@ Generate organic world events that happen between agent turns.
 Creativity: {creativity}, Frequency: {event_frequency}
 Escalation on inaction: {escalation_on_inaction}
 
+## Available Tools (you MUST only use these action names)
+{available_tools}
+
 ## Rules
 - Generate up to {budget} events as a JSON array
 - Each event:
-  {{"actor_id": "npc_id", "service_id": "service", "action": "tool_name",
+  {{"actor_id": "system", "service_id": "service_name", "action": "tool_name_from_list_above",
     "input_data": {{}}, "sub_type": "organic"}}
-- Events must use actors and services that exist in the world
+- You MUST use action names from the Available Tools list above — do NOT invent actions
+- Use "system" as actor_id for environment events
+- Use the service name from the tool's "service" field as service_id
 - Reality dimensions shape what happens (messy = things go wrong, hostile = active opposition)
 - Events go through the governance pipeline -- they CAN be blocked by policies
 

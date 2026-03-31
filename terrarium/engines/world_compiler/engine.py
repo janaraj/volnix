@@ -246,7 +246,14 @@ class WorldCompilerEngine(BaseEngine):
             spec.entity_type: spec
             for spec in data_gen.iter_generation_specs(plan)
         }
-        for entity_type, spec in section_specs.items():
+        # Sort by dependency: generate root entities (no x-terrarium-ref)
+        # before dependent entities. Ensures valid cross-references.
+        ordered_specs = data_gen._sort_by_dependency(list(section_specs.values()))
+
+        for spec in ordered_specs:
+            entity_type = spec.entity_type
+            # Build reference context from already-generated entities
+            ref_context = data_gen._build_ref_context(spec.entity_schema, all_entities)
             section_entities, section_result = await self._generate_validated_entity_section(
                 spec=spec,
                 ctx=ctx,
@@ -255,6 +262,7 @@ class WorldCompilerEngine(BaseEngine):
                 normalized_schema=normalized_schemas.get(entity_type),
                 state_machine=state_machines.get(entity_type),
                 repair_template=SECTION_REPAIR,
+                ref_context=ref_context,
             )
             all_entities[entity_type] = section_entities
             retry_counts[entity_type] = max(
@@ -536,13 +544,14 @@ class WorldCompilerEngine(BaseEngine):
         normalized_schema: Any,
         state_machine: dict[str, Any] | None,
         repair_template: Any,
+        ref_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if normalized_schema is None:
             raise WorldGenerationValidationError(
                 f"No normalized schema available for entity type '{spec.entity_type}'"
             )
 
-        entities = await data_gen.generate_section(spec, ctx)
+        entities = await data_gen.generate_section(spec, ctx, ref_context=ref_context)
         retries = 0
         result = validator.validate_entity_section(
             spec.entity_type,
@@ -585,6 +594,8 @@ class WorldCompilerEngine(BaseEngine):
             )
 
         if not result.valid:
+            for err in result.errors[:10]:
+                logger.error("Section validation [%s]: %s", spec.entity_type, err)
             raise WorldGenerationValidationError(
                 f"Entity section '{spec.entity_type}' failed validation",
                 context={"errors": result.errors},
@@ -686,6 +697,12 @@ class WorldCompilerEngine(BaseEngine):
         validation_sections: dict[str, dict[str, Any]],
     ) -> dict[str, list[dict[str, Any]]]:
         validation = await validator.validate_world(plan, all_entities, actors=actors)
+        if not validation.valid:
+            # Log ALL validation errors before any repair attempts
+            for section_name, section_result in validation.sections.items():
+                if not section_result.valid:
+                    for err in section_result.errors:
+                        logger.error("Initial validation: [%s] %s", section_name, err)
         while not validation.valid:
             repairable_sections = [
                 section
@@ -694,6 +711,10 @@ class WorldCompilerEngine(BaseEngine):
                 and retry_counts.get(section, 0) < self._typed_config.max_section_retries
             ]
             if not repairable_sections:
+                for section_name, section_result in validation.sections.items():
+                    if not section_result.valid:
+                        for err in section_result.errors[:5]:
+                            logger.error("Validation: [%s] %s", section_name, err)
                 raise WorldGenerationValidationError(
                     "Generated world failed cross-section validation",
                     context={"errors": validation.errors},

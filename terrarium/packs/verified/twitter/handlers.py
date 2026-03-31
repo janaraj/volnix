@@ -68,11 +68,11 @@ def _extract_mentions(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def handle_twitter_create_tweet(
+async def handle_create_tweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_create_tweet`` action.
+    """Handle the ``create_tweet`` action.
 
     Creates a new tweet entity with tweet_type="original". Auto-extracts
     hashtags and mentions from text. Increments the author's tweet_count.
@@ -142,11 +142,11 @@ async def handle_twitter_create_tweet(
     )
 
 
-async def handle_twitter_get_tweet(
+async def handle_get_tweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_get_tweet`` action.
+    """Handle the ``get_tweet`` action.
 
     Finds a single tweet by ID. No state mutations.
     """
@@ -164,11 +164,11 @@ async def handle_twitter_get_tweet(
     )
 
 
-async def handle_twitter_delete_tweet(
+async def handle_delete_tweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_delete_tweet`` action.
+    """Handle the ``delete_tweet`` action.
 
     Transitions a tweet to status="deleted".
     """
@@ -200,11 +200,11 @@ async def handle_twitter_delete_tweet(
     )
 
 
-async def handle_twitter_search_recent(
+async def handle_search_recent(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_search_recent`` action.
+    """Handle the ``search_recent`` action.
 
     Searches recent tweets. Supports #hashtag filter, @mention filter,
     "from:username" filter, and free text substring matching.
@@ -264,13 +264,16 @@ async def handle_twitter_search_recent(
                 filtered.append(t)
         tweets = filtered
 
-    # Apply free text search
+    # Apply free text search (tokenized — match any word)
     if free_text:
-        filtered = []
-        for t in tweets:
-            if free_text in t.get("text", "").lower():
-                filtered.append(t)
-        tweets = filtered
+        tokens = [w for w in free_text.split() if len(w) > 2]
+        if tokens:
+            filtered = []
+            for t in tweets:
+                text_lower = t.get("text", "").lower()
+                if any(tok in text_lower for tok in tokens):
+                    filtered.append(t)
+            tweets = filtered
 
     # Sort by created_at desc
     tweets.sort(key=lambda t: t.get("created_at", ""), reverse=True)
@@ -290,11 +293,11 @@ async def handle_twitter_search_recent(
     )
 
 
-async def handle_twitter_reply(
+async def handle_reply(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_reply`` action.
+    """Handle the ``reply`` action.
 
     Creates a reply tweet. Increments the parent tweet's reply_count
     and the author's tweet_count.
@@ -383,11 +386,11 @@ async def handle_twitter_reply(
     )
 
 
-async def handle_twitter_retweet(
+async def handle_retweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_retweet`` action.
+    """Handle the ``retweet`` action.
 
     Creates a retweet entity. Idempotent: if already retweeted, returns
     the existing retweet. Increments the original tweet's retweet_count
@@ -481,11 +484,11 @@ async def handle_twitter_retweet(
     )
 
 
-async def handle_twitter_unretweet(
+async def handle_unretweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_unretweet`` action.
+    """Handle the ``unretweet`` action.
 
     Deletes the retweet tweet entity and decrements the original
     tweet's retweet_count.
@@ -543,11 +546,11 @@ async def handle_twitter_unretweet(
     )
 
 
-async def handle_twitter_quote_tweet(
+async def handle_quote_tweet(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_quote_tweet`` action.
+    """Handle the ``quote_tweet`` action.
 
     Creates a quote tweet. Increments the original tweet's quote_count
     and the author's tweet_count.
@@ -641,14 +644,14 @@ async def handle_twitter_quote_tweet(
 # ---------------------------------------------------------------------------
 
 
-async def handle_twitter_like(
+async def handle_like(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_like`` action.
+    """Handle the ``like`` action.
 
     Idempotent: checks twitter_likes for an existing like. Creates a
-    twitter_like entity and increments the tweet's like_count.
+    like entity and increments the tweet's like_count.
     """
     user_id = input_data["user_id"]
     tweet_id = input_data["tweet_id"]
@@ -679,7 +682,7 @@ async def handle_twitter_like(
     }
 
     like_delta = StateDelta(
-        entity_type="twitter_like",
+        entity_type="like",
         entity_id=EntityId(like_id),
         operation="create",
         fields=like_fields,
@@ -701,13 +704,13 @@ async def handle_twitter_like(
     )
 
 
-async def handle_twitter_unlike(
+async def handle_unlike(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_unlike`` action.
+    """Handle the ``unlike`` action.
 
-    Deletes the twitter_like entity and decrements the tweet's like_count.
+    Deletes the like entity and decrements the tweet's like_count.
     """
     user_id = input_data["user_id"]
     tweet_id = input_data["tweet_id"]
@@ -733,7 +736,7 @@ async def handle_twitter_unlike(
         )
 
     like_delta = StateDelta(
-        entity_type="twitter_like",
+        entity_type="like",
         entity_id=EntityId(existing_like["id"]),
         operation="delete",
         fields=existing_like,
@@ -761,13 +764,13 @@ async def handle_twitter_unlike(
 # ---------------------------------------------------------------------------
 
 
-async def handle_twitter_follow(
+async def handle_follow(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_follow`` action.
+    """Handle the ``follow`` action.
 
-    Idempotent check. Creates a twitter_follow entity, increments the
+    Idempotent check. Creates a follow entity, increments the
     follower's following_count and the target's follower_count.
     """
     user_id = input_data["user_id"]
@@ -805,7 +808,7 @@ async def handle_twitter_follow(
     }
 
     follow_delta = StateDelta(
-        entity_type="twitter_follow",
+        entity_type="follow",
         entity_id=EntityId(follow_id),
         operation="create",
         fields=follow_fields,
@@ -837,13 +840,13 @@ async def handle_twitter_follow(
     )
 
 
-async def handle_twitter_unfollow(
+async def handle_unfollow(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_unfollow`` action.
+    """Handle the ``unfollow`` action.
 
-    Deletes the twitter_follow entity and decrements the follower's
+    Deletes the follow entity and decrements the follower's
     following_count and the target's follower_count.
     """
     user_id = input_data["user_id"]
@@ -876,7 +879,7 @@ async def handle_twitter_unfollow(
         )
 
     follow_delta = StateDelta(
-        entity_type="twitter_follow",
+        entity_type="follow",
         entity_id=EntityId(existing_follow["id"]),
         operation="delete",
         fields=existing_follow,
@@ -908,11 +911,11 @@ async def handle_twitter_unfollow(
     )
 
 
-async def handle_twitter_get_followers(
+async def handle_get_followers(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_get_followers`` action.
+    """Handle the ``get_followers`` action.
 
     Lists followers of a user. Paginated. No state mutations.
     """
@@ -951,11 +954,11 @@ async def handle_twitter_get_followers(
     )
 
 
-async def handle_twitter_get_following(
+async def handle_get_following(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_get_following`` action.
+    """Handle the ``get_following`` action.
 
     Lists users that a user is following. Paginated. No state mutations.
     """
@@ -999,11 +1002,11 @@ async def handle_twitter_get_following(
 # ---------------------------------------------------------------------------
 
 
-async def handle_twitter_get_user(
+async def handle_get_user(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_get_user`` action.
+    """Handle the ``get_user`` action.
 
     Finds a single user by ID. No state mutations.
     """
@@ -1021,11 +1024,11 @@ async def handle_twitter_get_user(
     )
 
 
-async def handle_twitter_user_tweets(
+async def handle_user_tweets(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    """Handle the ``twitter_user_tweets`` action.
+    """Handle the ``user_tweets`` action.
 
     Returns a user's published tweets sorted by created_at desc. Paginated.
     No state mutations.

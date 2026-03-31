@@ -221,10 +221,10 @@ async def handle_web_search(
     Search across all published web pages. Ranks by title (3),
     keywords (2), content/meta (1). Supports pagination.
     """
-    query = input_data["query"].lower()
+    query_tokens = [t for t in input_data["query"].lower().split() if len(t) > 2]
     pages = state.get("web_pages", [])
 
-    # Score each published/compromised page
+    # Score each published/compromised page (tokenized matching)
     scored: list[tuple[int, dict[str, Any]]] = []
     for p in pages:
         if p.get("status") not in ("published", "compromised"):
@@ -235,14 +235,15 @@ async def handle_web_search(
         meta = p.get("meta_description", "").lower()
         keywords = " ".join(p.get("keywords", [])).lower()
 
-        if query in title:
-            score += 3
-        if query in keywords:
-            score += 2
-        if query in content:
-            score += 1
-        if query in meta:
-            score += 1
+        for token in query_tokens:
+            if token in title:
+                score += 3
+            if token in keywords:
+                score += 2
+            if token in content:
+                score += 1
+            if token in meta:
+                score += 1
         if score > 0:
             scored.append((score, p))
 

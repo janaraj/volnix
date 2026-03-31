@@ -360,7 +360,7 @@ LEGACY_EMAIL_TOOL_DEFINITIONS: list[dict] = [
         "name": "email_search",
         "description": "Search emails by query, sender, or subject.",
         "http_path": "/email/v1/messages/search",
-        "http_method": "POST",
+        "http_method": "GET",
         "parameters": {
             "type": "object",
             "required": [],

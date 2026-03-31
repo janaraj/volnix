@@ -46,9 +46,10 @@ async def test_overall_score_is_weighted():
     """B3 regression: overall_score should use SCORE_REGISTRY weights, not simple average."""
     computer = ScorecardComputer()
     actors = [{"id": "agent-1", "type": "agent"}]
-    result = await computer.compute([], actors)
+    events = [{"event_type": "world.chat_send", "actor_id": "agent-1", "action": "chat_send"}]
+    result = await computer.compute(events, actors)
 
-    # With no events, all per-actor scores are 100.0
+    # With minimal events (no violations), all per-actor scores are 100.0
     # Weighted: sum(100 * weight for each) = 100 * 1.0 = 100.0
     assert result["collective"]["overall_score"] == 100.0
 

@@ -166,7 +166,7 @@ REDDIT_VOTE_ENTITY_SCHEMA: dict = {
 
 REDDIT_TOOL_DEFINITIONS: list[dict] = [
     {
-        "name": "reddit_subreddits_search",
+        "name": "subreddits_search",
         "description": "Search subreddits by query string, optionally filter by topic.",
         "http_path": "/subreddits/search",
         "http_method": "GET",
@@ -199,7 +199,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_subreddit_about",
+        "name": "subreddit_about",
         "description": "Get details about a specific subreddit.",
         "http_path": "/r/{subreddit}/about",
         "http_method": "GET",
@@ -221,7 +221,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_subscribe",
+        "name": "subscribe",
         "description": "Subscribe the current user to a subreddit.",
         "http_path": "/api/subscribe",
         "http_method": "POST",
@@ -247,7 +247,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_unsubscribe",
+        "name": "unsubscribe",
         "description": "Unsubscribe the current user from a subreddit.",
         "http_path": "/api/unsubscribe",
         "http_method": "POST",
@@ -273,7 +273,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_submit",
+        "name": "submit",
         "description": "Create a new post (submission) in a subreddit.",
         "http_path": "/api/submit",
         "http_method": "POST",
@@ -320,7 +320,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_post_detail",
+        "name": "post_detail",
         "description": "Get details of a specific post by ID.",
         "http_path": "/comments/{id}",
         "http_method": "GET",
@@ -342,7 +342,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_subreddit_hot",
+        "name": "subreddit_hot",
         "description": "List hot posts in a subreddit, sorted by hotness score.",
         "http_path": "/r/{subreddit}/hot",
         "http_method": "GET",
@@ -375,7 +375,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_subreddit_new",
+        "name": "subreddit_new",
         "description": "List newest posts in a subreddit, sorted by creation time.",
         "http_path": "/r/{subreddit}/new",
         "http_method": "GET",
@@ -408,7 +408,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_subreddit_top",
+        "name": "subreddit_top",
         "description": "List top posts in a subreddit, sorted by score.",
         "http_path": "/r/{subreddit}/top",
         "http_method": "GET",
@@ -447,7 +447,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_search",
+        "name": "search",
         "description": "Search posts across Reddit or within a specific subreddit.",
         "http_path": "/search",
         "http_method": "GET",
@@ -485,7 +485,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_remove",
+        "name": "remove",
         "description": "Remove a post or comment (moderator action).",
         "http_path": "/api/remove",
         "http_method": "POST",
@@ -512,7 +512,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_comment",
+        "name": "comment",
         "description": "Create a comment on a post or reply to another comment.",
         "http_path": "/api/comment",
         "http_method": "POST",
@@ -544,7 +544,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_post_comments",
+        "name": "post_comments",
         "description": "List comments for a specific post.",
         "http_path": "/comments/{id}/comments",
         "http_method": "GET",
@@ -573,7 +573,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_vote",
+        "name": "vote",
         "description": "Vote on a post or comment.",
         "http_path": "/api/vote",
         "http_method": "POST",
@@ -604,7 +604,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_user_about",
+        "name": "user_about",
         "description": "Get details about a specific user by username.",
         "http_path": "/user/{username}/about",
         "http_method": "GET",
@@ -626,7 +626,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_user_submitted",
+        "name": "user_submitted",
         "description": "List posts submitted by a specific user.",
         "http_path": "/user/{username}/submitted",
         "http_method": "GET",
@@ -660,7 +660,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_best",
+        "name": "best",
         "description": "Get the user's home feed with posts from subscribed subreddits.",
         "http_path": "/best",
         "http_method": "GET",
@@ -693,7 +693,7 @@ REDDIT_TOOL_DEFINITIONS: list[dict] = [
         },
     },
     {
-        "name": "reddit_popular",
+        "name": "popular",
         "description": "Get trending posts from all public subreddits.",
         "http_path": "/r/popular",
         "http_method": "GET",

@@ -111,8 +111,8 @@ class TestStaticMode:
 class TestDynamicMode:
     """Dynamic mode: animator generates events autonomously."""
 
-    async def test_dynamic_mode_probabilistic_events(self, app_with_mock_llm) -> None:
-        """Dynamic mode generates probabilistic events based on Level 2 numbers."""
+    async def test_dynamic_mode_without_llm_no_events(self, app_with_mock_llm) -> None:
+        """Dynamic mode without real LLM produces no events (organic-only, no probabilistic)."""
         app = app_with_mock_llm
         plan = _make_plan(preset="hostile", behavior="dynamic")
 
@@ -121,31 +121,16 @@ class TestDynamicMode:
         animator._config["_app"] = app
         await animator.configure(plan, scheduler)
 
-        # Run multiple ticks to see probabilistic events
+        # Without a real LLM router, organic generation can't run.
+        # Probabilistic events were removed — dynamic mode relies on
+        # organic LLM generation or query-driven PackRuntime generation.
         now = datetime.now(timezone.utc)
         all_events = []
-        for tick in range(5):
+        for tick in range(3):
             results = await animator.tick(now + timedelta(minutes=tick))
             all_events.extend(results)
 
-        print(f"\n{'='*60}")
-        print("DYNAMIC MODE: Hostile World (5 ticks)")
-        print(f"{'='*60}")
-        print(f"  Behavior: {plan.behavior}")
-        print(f"  Reality: hostile")
-        print(f"  reliability.failures = {plan.conditions.reliability.failures} → {plan.conditions.reliability.failures}% per tick")
-        print(f"  complexity.volatility = {plan.conditions.complexity.volatility} → {plan.conditions.complexity.volatility}% per tick")
-        print(f"  boundaries.boundary_gaps = {plan.conditions.boundaries.boundary_gaps} → {plan.conditions.boundaries.boundary_gaps}% per tick")
-        print(f"  Total events across 5 ticks: {len(all_events)}")
-        for i, evt in enumerate(all_events[:10]):
-            if isinstance(evt, dict):
-                print(f"    Event {i+1}: {evt}")
-            else:
-                print(f"    Event {i+1}: {json.dumps(evt, default=str)[:100]}")
-
-        # Hostile world should generate SOME probabilistic events across 5 ticks
-        # (failures=50%, volatility=30%, gaps=30%)
-        assert len(all_events) > 0, "Hostile dynamic mode should generate events"
+        assert len(all_events) == 0, "Without LLM, dynamic mode produces no animator events"
 
 
 # ── Reactive Mode ────────────────────────────────────────────────
