@@ -49,6 +49,8 @@ class PermissionEngine(BaseEngine):
         self._actor_registry: Any = None
         self._pack_registry: Any = None
         self._world_mode: str = "governed"
+        from terrarium.engines.permission.config import PermissionConfig
+        self._typed_config: PermissionConfig = PermissionConfig()
 
     # -- PipelineStep interface ------------------------------------------------
 
@@ -103,6 +105,27 @@ class PermissionEngine(BaseEngine):
                 verdict=StepVerdict.ALLOW,
                 message="no permissions defined — allowed",
             )
+
+        # Observer actors: read-only — deny all non-read actions
+        actor_type = str(getattr(actor, "type", ""))
+        if actor_type == "observer":
+            action_lower = str(ctx.action).lower()
+            read_prefixes = self._typed_config.observer_read_prefixes
+            is_read_action = any(action_lower.startswith(p) for p in read_prefixes)
+            if not is_read_action:
+                event = PermissionDeniedEvent(
+                    event_type="permission.denied",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    action=ctx.action,
+                    reason=f"Observer actor cannot perform write action '{ctx.action}'",
+                )
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.DENY,
+                    events=[event],
+                    message=f"Observer '{ctx.actor_id}' denied: {ctx.action}",
+                )
 
         service_str = str(ctx.service_id)
 
@@ -213,10 +236,103 @@ class PermissionEngine(BaseEngine):
         return await self.execute(ctx)
 
     async def get_visible_entities(
-        self, actor_id: ActorId, entity_type: str
+        self, actor_id: ActorId, entity_type: str,
     ) -> list[EntityId]:
-        """Return entity IDs visible to the actor (stub — Phase G)."""
-        return []
+        """Return entity IDs visible to the given actor.
+
+        Queries ``visibility_rule`` entities from State Engine, resolves
+        ``$self`` references, builds filters, returns matching entity IDs.
+
+        Returns empty list ``[]`` when no rules exist — callers interpret
+        this as "no filtering, return all entities" (backward compat).
+        """
+        state_engine = self._dependencies.get("state")
+        if state_engine is None:
+            return []
+
+        actor = self._get_actor(actor_id)
+        if actor is None:
+            return []
+
+        rule_entity_type = self._typed_config.visibility_rule_entity_type
+        try:
+            rules = await state_engine.query_entities(
+                rule_entity_type, {"actor_role": actor.role},
+            )
+        except Exception:
+            return []
+
+        if not rules:
+            return []
+
+        applicable = [
+            r for r in rules
+            if r.get("target_entity_type") in (entity_type, "*")
+        ]
+        if not applicable:
+            return []
+
+        visible_ids: list[EntityId] = []
+        for rule in applicable:
+            filter_field = rule.get("filter_field")
+            filter_value = rule.get("filter_value")
+            include_unmatched = rule.get("include_unmatched", False)
+
+            if filter_field is None:
+                # No filter = see all entities of this type
+                entities = await state_engine.query_entities(entity_type)
+                visible_ids.extend(
+                    EntityId(e.get("id", "")) for e in entities if e.get("id")
+                )
+            else:
+                resolved = self._resolve_self_ref(filter_value, actor_id)
+                entities = await state_engine.query_entities(
+                    entity_type, {filter_field: resolved},
+                )
+                visible_ids.extend(
+                    EntityId(e.get("id", "")) for e in entities if e.get("id")
+                )
+
+                if include_unmatched:
+                    all_ents = await state_engine.query_entities(entity_type)
+                    for e in all_ents:
+                        if not e.get(filter_field):
+                            eid = EntityId(e.get("id", ""))
+                            if eid and eid not in visible_ids:
+                                visible_ids.append(eid)
+
+        return visible_ids
+
+    async def has_visibility_rules(
+        self, actor_id: ActorId, entity_type: str,
+    ) -> bool:
+        """Check if visibility rules exist for this actor and entity type."""
+        state_engine = self._dependencies.get("state")
+        if state_engine is None:
+            return False
+        actor = self._get_actor(actor_id)
+        if actor is None:
+            return False
+
+        rule_entity_type = self._typed_config.visibility_rule_entity_type
+        try:
+            rules = await state_engine.query_entities(
+                rule_entity_type, {"actor_role": actor.role},
+            )
+        except Exception:
+            return False
+
+        return any(
+            r.get("target_entity_type") in (entity_type, "*")
+            for r in rules
+        )
+
+    @staticmethod
+    def _resolve_self_ref(value: str | None, actor_id: ActorId) -> str:
+        """Resolve ``$self.actor_id`` references in filter values."""
+        if value is None:
+            return ""
+        return value.replace("$self.actor_id", str(actor_id))
 
     async def get_actor_permissions(self, actor_id: ActorId) -> dict[str, Any]:
         """Return the actor's permission definition."""

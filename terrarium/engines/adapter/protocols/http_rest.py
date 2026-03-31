@@ -1095,6 +1095,22 @@ class HTTPRestAdapter(ProtocolAdapter):
                 )
             return deliverable
 
+        @app.get("/api/v1/runs/{run_id}/governance-report")
+        async def get_governance_report(run_id: str):
+            """Get the governance report for a Mode 1 agent testing run."""
+            from starlette.responses import JSONResponse
+            from terrarium.core.types import RunId as _RId
+
+            artifact = await gateway._app.artifact_store.load_artifact(
+                _RId(run_id), "governance_report",
+            )
+            if artifact is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "No governance report for this run"},
+                )
+            return {"run_id": run_id, **artifact}
+
         @app.get("/api/v1/runs/{run_id}/gaps")
         async def get_run_gaps(run_id: str):
             """Capability gap log for a specific run."""

@@ -125,6 +125,7 @@ class ActorType(enum.StrEnum):
     AGENT = "agent"
     HUMAN = "human"
     SYSTEM = "system"
+    OBSERVER = "observer"
 
 
 class WorldMode(enum.StrEnum):
@@ -266,6 +267,32 @@ class SideEffect(BaseModel, frozen=True):
     target_service: ServiceId | None = None
     target_entity: EntityId | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class VisibilityRule(BaseModel, frozen=True):
+    """Declarative rule for entity-level visibility scoping.
+
+    Generated at compile time by the LLM from world context.
+    Stored as entities in the State Engine (entity_type
+    configurable via ``PermissionConfig.visibility_rule_entity_type``).
+
+    Attributes:
+        id: Unique rule identifier.
+        actor_role: The actor role this rule applies to.
+        target_entity_type: Entity type this rule scopes, or ``"*"`` for all.
+        filter_field: Entity field to filter on (``None`` = see all).
+        filter_value: Value to match.  ``$self.actor_id`` is resolved at runtime.
+        include_unmatched: Also include entities where *filter_field* is null/empty.
+        description: Human-readable explanation.
+    """
+
+    id: str
+    actor_role: str
+    target_entity_type: str
+    filter_field: str | None = None
+    filter_value: str | None = None
+    include_unmatched: bool = False
+    description: str = ""
 
 
 class Timestamp(BaseModel, frozen=True):

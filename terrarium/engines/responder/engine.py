@@ -194,18 +194,45 @@ class WorldResponderEngine(BaseEngine):
             return f"{name}es"
         return f"{name}s"
 
+    async def _query_with_visibility(
+        self,
+        state_engine: Any,
+        permission_engine: Any,
+        actor_id: Any,
+        entity_type: str,
+    ) -> list[dict[str, Any]]:
+        """Query entities filtered by actor visibility.
+
+        If no visibility rules exist → return ALL (backward compat).
+        If rules exist → return only visible entities.
+        """
+        if permission_engine is None:
+            return await state_engine.query_entities(entity_type)
+
+        has_rules = await permission_engine.has_visibility_rules(actor_id, entity_type)
+        if not has_rules:
+            return await state_engine.query_entities(entity_type)
+
+        visible_ids = await permission_engine.get_visible_entities(actor_id, entity_type)
+        if not visible_ids:
+            return await state_engine.query_entities(entity_type)
+
+        all_entities = await state_engine.query_entities(entity_type)
+        visible_set = {str(eid) for eid in visible_ids}
+        return [e for e in all_entities if e.get("id", "") in visible_set]
+
     async def _build_state_for_pack(self, ctx: ActionContext) -> dict:
         """Fetch relevant entity state from StateEngine for the pack.
 
-        Note: Currently fetches ALL entities per type. For large worlds,
-        this should be optimized to fetch only entities relevant to the
-        action (e.g., by actor, by target_entity). Phase D+ optimization.
+        Uses visibility scoping when visibility rules exist for the actor.
+        Falls back to returning all entities when no rules are defined
+        (backward compatible).
         """
         state_engine = self._dependencies.get("state")
         if state_engine is None:
             return {}
 
-        # Query entities of all types the pack manages
+        permission_engine = self._dependencies.get("permission")
         pack = self._pack_registry.get_pack_for_tool(ctx.action)
         entity_types = list(pack.get_entity_schemas().keys())
 
@@ -213,7 +240,9 @@ class WorldResponderEngine(BaseEngine):
         for etype in entity_types:
             key = self._pluralize(etype)
             try:
-                entities = await state_engine.query_entities(etype)
+                entities = await self._query_with_visibility(
+                    state_engine, permission_engine, ctx.actor_id, etype,
+                )
                 result[key] = entities
             except Exception as exc:
                 logger.warning("Failed to query entities of type '%s': %s", etype, exc)
@@ -225,18 +254,20 @@ class WorldResponderEngine(BaseEngine):
     ) -> dict[str, Any]:
         """Fetch relevant entity state from StateEngine for a profiled service.
 
-        Queries all entity types defined in the profile and returns them
-        keyed by pluralized entity type name.
+        Uses visibility scoping when visibility rules exist for the actor.
         """
         state_engine = self._dependencies.get("state")
         if state_engine is None:
             return {}
 
+        permission_engine = self._dependencies.get("permission")
         result: dict[str, Any] = {}
         for entity_def in profile.entities:
             key = self._pluralize(entity_def.name)
             try:
-                entities = await state_engine.query_entities(entity_def.name)
+                entities = await self._query_with_visibility(
+                    state_engine, permission_engine, ctx.actor_id, entity_def.name,
+                )
                 result[key] = entities
             except Exception as exc:
                 logger.warning(

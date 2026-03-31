@@ -16,7 +16,7 @@ from terrarium.runs.config import RunConfig
 
 _ALLOWED_ARTIFACT_TYPES = frozenset({
     "report", "scorecard", "event_log", "config", "metadata",
-    "captured_surface", "deliverable",
+    "captured_surface", "deliverable", "governance_report",
 })
 
 
@@ -89,6 +89,14 @@ class ArtifactStore:
             return None
         text = await asyncio.to_thread(path.read_text)
         return json.loads(text)
+
+    async def save(self, run_id: RunId, artifact_type: str, data: Any) -> str:
+        """Save an artifact by type name.
+
+        Generic entry point — validates against ``_ALLOWED_ARTIFACT_TYPES``
+        and delegates to ``_write_artifact``.
+        """
+        return await self._write_artifact(run_id, artifact_type, data)
 
     # ── Private helpers ──────────────────────────────────────────
 

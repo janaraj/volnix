@@ -53,6 +53,16 @@ class ReportGeneratorEngine(BaseEngine):
         self._differ = CounterfactualDiffer(scorecard_computer=self._scorecard)
         self._challenge_analyzer = WorldChallengeAnalyzer()
         self._boundary_analyzer = AgentBoundaryAnalyzer()
+
+        from terrarium.engines.reporter.governance_report import GovernanceReportGenerator
+        self._governance_report = GovernanceReportGenerator(
+            scorecard_computer=self._scorecard,
+            gap_analyzer=self._gap_analyzer,
+            challenge_analyzer=self._challenge_analyzer,
+            boundary_analyzer=self._boundary_analyzer,
+            conditions=self._config.get("_conditions"),
+        )
+
         logger.info("ReportGeneratorEngine initialized with all sub-components")
 
     async def _handle_event(self, event: Event) -> None:
@@ -252,3 +262,26 @@ class ReportGeneratorEngine(BaseEngine):
             "world_to_agent": world_to_agent,
             "agent_to_world": agent_to_world,
         }
+
+    async def generate_governance_report(
+        self,
+        world_id: WorldId = None,
+        actors: list[dict[str, Any]] | None = None,
+        events: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Generate Mode 1 governance report for external agent testing.
+
+        Packages scorecard + gaps + challenges + boundaries into one
+        structured artifact.
+
+        Args:
+            world_id: Optional world identifier (unused, kept for API compat).
+            actors: Explicit actor list. If ``None``, reads from registry.
+            events: Pre-filtered event list. If ``None``, reads all from bus.
+                Pass run-scoped events to avoid cross-run contamination.
+        """
+        if events is None:
+            events = await self._get_timeline()
+        if actors is None:
+            actors = self._get_actors()
+        return await self._governance_report.generate(events, actors)
