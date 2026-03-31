@@ -9,7 +9,7 @@ agents:
     role: market-analyst
     permissions:
       read: [twitter, reddit, browser]
-      write: []
+      write: [twitter, reddit, browser, slack]
     budget:
       api_calls: 20
 

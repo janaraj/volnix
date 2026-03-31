@@ -50,6 +50,10 @@ class PackRuntime:
         self._registry = pack_registry
         self._schema_validator = schema_validator or SchemaValidator()
         self._sm_validator = state_machine_validator or StateMachineValidator()
+        # Injected by app.py for dynamic mode query-driven generation
+        self._behavior: str = "static"
+        self._llm_router: Any = None
+        self._state_engine: Any = None
 
     async def execute(
         self,
@@ -97,7 +101,15 @@ class PackRuntime:
         # 4. Dispatch to pack (the ABC contract -- handle_action)
         proposal = await pack.handle_action(ToolName(action), input_data, state)
 
-        # 4. Validate output: entity deltas against schemas
+        # 4b. Dynamic enrichment: generate relevant entities when results are sparse.
+        # Only in dynamic behavior mode for read (GET) actions.
+        if self._behavior == "dynamic" and self._llm_router and self._state_engine:
+            if tool_def and tool_def.get("http_method", "GET").upper() == "GET":
+                proposal = await self._dynamic_enrich(
+                    pack, action, input_data, state, proposal,
+                )
+
+        # 5. Validate output: entity deltas against schemas
         for delta in (proposal.proposed_state_deltas or []):
             schema = entity_schemas.get(delta.entity_type)
             if schema and delta.operation == "create":
@@ -209,3 +221,148 @@ class PackRuntime:
             if tool.get("name") == action:
                 return tool
         return None
+
+    async def _dynamic_enrich(
+        self,
+        pack: ServicePack,
+        action: str,
+        input_data: dict[str, Any],
+        state: dict[str, Any],
+        proposal: ResponseProposal,
+    ) -> ResponseProposal:
+        """Generate relevant entities when Tier 1 returns sparse results.
+
+        Fires in dynamic behavior mode for read/GET actions. Generates
+        entities matching the query context via the same LLM infrastructure
+        used during world compilation, inserts into state, re-runs the
+        pack handler with enriched state.
+        """
+        import json
+        from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
+        from terrarium.engines.world_compiler.prompt_templates import ENTITY_GENERATION
+
+        # Check if response has a sparse results list
+        body = proposal.response_body
+        results_key = None
+        for key in ("results", "items", "tweets", "posts", "messages",
+                     "entities", "data", "news", "bars", "orders", "tickets"):
+            if key in body and isinstance(body[key], list):
+                results_key = key
+                break
+        if results_key is None:
+            return proposal
+
+        if len(body[results_key]) >= 5:
+            return proposal  # Already has enough results
+
+        # Determine target entity type by field overlap with pack schemas
+        entity_schemas = pack.get_entity_schemas()
+        target_type = self._match_entity_type(body[results_key], entity_schemas)
+        if not target_type:
+            return proposal
+
+        schema = entity_schemas[target_type]
+
+        # Extract query context from input_data
+        query = (
+            input_data.get("query")
+            or input_data.get("q")
+            or input_data.get("search")
+            or input_data.get("subreddit")
+            or input_data.get("symbol")
+            or input_data.get("keywords")
+            or str(input_data)
+        )
+
+        # Build ref context from existing state (reuse data_generator logic)
+        data_gen = WorldDataGenerator(llm_router=self._llm_router)
+        # Map state keys back to entity type names for ref context
+        entity_state: dict[str, list[dict]] = {}
+        for etype in entity_schemas:
+            for state_key, entities in state.items():
+                if isinstance(entities, list) and (
+                    state_key == etype
+                    or state_key.startswith(etype)
+                    or state_key.rstrip("s").rstrip("e") == etype.rstrip("s").rstrip("e")
+                ):
+                    entity_state[etype] = entities
+                    break
+        ref_context = data_gen._build_ref_context(schema, entity_state)
+
+        # Generate entities via LLM (same template as world compilation)
+        try:
+            response = await ENTITY_GENERATION.execute(
+                self._llm_router,
+                entity_type=target_type,
+                count="3",
+                entity_schema=json.dumps(schema, indent=2),
+                domain_description=f"Generate entities relevant to the search: {query}",
+                mission="",
+                reality_summary="",
+                behavior_mode="dynamic",
+                actor_summary="",
+                policies_summary="",
+                seed_scenarios=f"All entities MUST be relevant to: {query}",
+                existing_refs=json.dumps(ref_context, indent=2) if ref_context else "none",
+            )
+            parsed = ENTITY_GENERATION.parse_json_response(response)
+            entities = data_gen.parse_generated_entities(target_type, parsed, 3)
+        except Exception as exc:
+            logger.warning("Dynamic generation failed for %s: %s", action, exc)
+            return proposal
+
+        if not entities:
+            return proposal
+
+        # Insert into state DB
+        try:
+            await self._state_engine.populate_entities({target_type: entities})
+            logger.info(
+                "Dynamic enrichment: +%d %s for '%s'",
+                len(entities), target_type, str(query)[:50],
+            )
+        except Exception as exc:
+            logger.warning("Dynamic insert failed: %s", exc)
+            return proposal
+
+        # Re-run pack handler with enriched state
+        try:
+            for etype in entity_schemas:
+                plural = etype + "s" if not etype.endswith("s") else etype + "es"
+                try:
+                    state[plural] = await self._state_engine.query_entities(etype)
+                except Exception:
+                    pass
+            return await pack.handle_action(ToolName(action), input_data, state)
+        except Exception:
+            return proposal
+
+    @staticmethod
+    def _match_entity_type(
+        results: list[dict],
+        entity_schemas: dict[str, dict],
+    ) -> str | None:
+        """Match result items to an entity type by field overlap with schemas.
+
+        Generic across all packs — no hardcoded mappings.
+        """
+        if not results:
+            return max(
+                entity_schemas,
+                key=lambda t: len(entity_schemas[t].get("properties", {})),
+                default=None,
+            )
+
+        result_fields: set[str] = set()
+        for r in results[:3]:
+            result_fields.update(r.keys())
+
+        best_type = None
+        best_overlap = 0
+        for etype, schema in entity_schemas.items():
+            schema_fields = set(schema.get("properties", {}).keys())
+            overlap = len(result_fields & schema_fields)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_type = etype
+        return best_type
