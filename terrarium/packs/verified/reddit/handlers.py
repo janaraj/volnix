@@ -567,16 +567,18 @@ async def handle_reddit_search(
     # Only published posts
     posts = [p for p in posts if p.get("status") == "published"]
 
-    # Score and filter by relevance
+    # Score and filter by relevance (tokenized — match any word)
+    query_tokens = [t for t in query.split() if len(t) > 2]
     scored: list[tuple[dict[str, Any], int]] = []
     for p in posts:
         relevance = 0
         title = p.get("title", "").lower()
         body = p.get("body", "").lower()
-        if query in title:
-            relevance += 3
-        if query in body:
-            relevance += 1
+        for token in query_tokens:
+            if token in title:
+                relevance += 3
+            if token in body:
+                relevance += 1
         if relevance > 0:
             scored.append((p, relevance))
 

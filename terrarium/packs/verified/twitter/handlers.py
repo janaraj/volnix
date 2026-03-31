@@ -264,13 +264,16 @@ async def handle_twitter_search_recent(
                 filtered.append(t)
         tweets = filtered
 
-    # Apply free text search
+    # Apply free text search (tokenized — match any word)
     if free_text:
-        filtered = []
-        for t in tweets:
-            if free_text in t.get("text", "").lower():
-                filtered.append(t)
-        tweets = filtered
+        tokens = [w for w in free_text.split() if len(w) > 2]
+        if tokens:
+            filtered = []
+            for t in tweets:
+                text_lower = t.get("text", "").lower()
+                if any(tok in text_lower for tok in tokens):
+                    filtered.append(t)
+            tweets = filtered
 
     # Sort by created_at desc
     tweets.sort(key=lambda t: t.get("created_at", ""), reverse=True)

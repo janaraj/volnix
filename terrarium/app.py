@@ -652,6 +652,14 @@ class TerrariumApp:
         if self._gateway and world_services:
             self._gateway.set_active_services(world_services)
 
+        # Wire behavior mode + LLM + state to PackRuntime for dynamic generation
+        responder = self._registry.get("responder")
+        if hasattr(responder, "_tier1") and hasattr(responder._tier1, "_runtime"):
+            runtime = responder._tier1._runtime
+            runtime._behavior = plan.behavior
+            runtime._llm_router = self._llm_router
+            runtime._state_engine = self._registry.get("state")
+
     async def configure_animator(self, plan: Any) -> None:
         """Configure the animator engine from a compiled WorldPlan.
 
@@ -1112,7 +1120,7 @@ class TerrariumApp:
             )
             # Start animator bridge for reactive/dynamic behavior
             plan_behavior = world_def.get("behavior", "static")
-            if plan_behavior in ("reactive", "dynamic") and self._bus:
+            if plan_behavior == "reactive" and self._bus:
                 await self._start_animator_bridge(plan_behavior)
 
         return run_id
