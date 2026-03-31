@@ -1,0 +1,68 @@
+# Market Prediction Analysis Blueprint
+# Internal-only world: 3 analysts predict market direction using social data.
+world:
+  name: "Market Prediction Analysis"
+  description: >
+    A team of financial analysts tasked with predicting S&P 500 direction
+    over the next quarter. Each analyst brings a different lens — macro
+    fundamentals, technical patterns, risk metrics. They collaborate via
+    Slack and monitor social media sentiment on Twitter and Reddit.
+
+  services:
+    slack: verified/slack
+    twitter: verified/twitter
+    reddit: verified/reddit
+
+  actors:
+    - role: macro-economist
+      type: internal
+      count: 1
+      personality: >
+        Focuses on GDP growth, employment data, and Federal Reserve policy
+        signals. Cautious and fundamentals-based. Distrusts short-term
+        technical indicators.
+      permissions:
+        read: [slack, twitter, reddit]
+        write: [slack]
+
+    - role: technical-analyst
+      type: internal
+      count: 1
+      personality: >
+        Chart pattern expert who tracks moving averages, RSI, and volume
+        analysis. Confident in trend continuation signals. Dismissive of
+        macro narratives that contradict price action.
+      permissions:
+        read: [slack, twitter, reddit]
+        write: [slack]
+
+    - role: risk-analyst
+      type: internal
+      count: 1
+      personality: >
+        Focuses on tail risks, black swan scenarios, and volatility
+        indices. Naturally bearish and always highlights downside.
+        Monitors social sentiment for panic signals.
+      permissions:
+        read: [slack, twitter, reddit]
+        write: [slack]
+
+  seeds:
+    - "Fed signaled a possible rate pause at the next meeting"
+    - "S&P 500 is in a 3-month uptrend but volume is weakening"
+    - "VIX is at historically low levels despite rising geopolitical tensions"
+    - "Corporate earnings season starts in 2 weeks with mixed guidance"
+    - "#SPX500 trending on Twitter with mixed sentiment"
+    - "Reddit r/wallstreetbets debate on whether market is overbought"
+
+  mission: >
+    Predict S&P 500 direction over the next quarter. Provide a confidence
+    level, key risk factors, and bull/bear/base case scenarios.
+
+compiler:
+  seed: 42
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

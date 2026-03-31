@@ -4,10 +4,21 @@
 
 # Terrarium local config & runtime data
 terrarium.local.toml
+terrarium.development.toml.bak
 data/
+dev_data/
+terrarium_data/
 logs/
 reports/
 snapshots/
+
+# Internal docs (specs, plans — not for public release)
+internal_docs/
+
+# Internal development tracking
+IMPLEMENTATION_STATUS.md
+MASTER_ISSUES.md
+OPEN_QUESTIONS.md
 
 # Python
 __pycache__/
