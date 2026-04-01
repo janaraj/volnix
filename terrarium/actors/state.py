@@ -66,6 +66,7 @@ class Subscription(BaseModel, frozen=True):
 
     service_id: str
     filter: dict[str, Any] = Field(default_factory=dict)
+    # V2: batch/passive unused in MVP — all subscriptions activate immediately
     sensitivity: Literal["immediate", "batch", "passive"] = "immediate"
 
 
@@ -109,7 +110,8 @@ class ActorState(BaseModel):
 
     actor_id: ActorId
     role: str
-    actor_type: str = "internal"  # "external" | "internal"
+    actor_type: str = "internal"  # "external" | "internal" | "observer"
+    autonomous: bool = False  # Autonomous agents work in a loop; reactive actors respond when triggered
 
     # Identity (generated at compile time, immutable during run)
     persona: dict[str, Any] = Field(default_factory=dict)

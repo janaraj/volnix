@@ -505,6 +505,7 @@ class TestSensitivityLevels:
         await engine.notify(event)
         assert len(alice.pending_notifications) > 0
 
+    @pytest.mark.skip(reason="V2: batch/passive sensitivity disabled for MVP")
     async def test_batch_accumulates_then_activates(self):
         """Batch sensitivity accumulates notifications and activates after threshold."""
         alice = _make_actor(
@@ -553,6 +554,7 @@ class TestSensitivityLevels:
         # Actor should now have pending notifications from the third batch
         assert len(alice.pending_notifications) > 0
 
+    @pytest.mark.skip(reason="V2: batch/passive sensitivity disabled for MVP")
     async def test_passive_stores_no_activation(self):
         """Passive sensitivity records interaction but does not activate actor."""
         alice = _make_actor(

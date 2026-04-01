@@ -841,6 +841,11 @@ class WorldCompilerEngine(BaseEngine):
             existing_seed_invariants=existing_seed_invariants,
             schemas=schemas,
         )
+        if not result.valid:
+            logger.warning(
+                "Seed [%s] initial validation failed (%d errors): %s",
+                section, len(result.errors), "; ".join(result.errors[:3]),
+            )
 
         while not result.valid and retries < self._typed_config.max_section_retries:
             repaired_payload = await self._repair_section_payload(
@@ -871,6 +876,8 @@ class WorldCompilerEngine(BaseEngine):
             )
 
         if not result.valid:
+            for err in result.errors:
+                logger.error("Seed validation [%s] %s: %s", section, description[:60], err)
             raise WorldGenerationValidationError(
                 f"Seed section '{section}' failed validation",
                 context={"errors": result.errors},

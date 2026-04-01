@@ -1,61 +1,21 @@
-# Campaign Brainstorm Blueprint
-# Internal-only world: creative team brainstorms a product launch campaign.
+# Campaign Brainstorm World
+# Pair with: --internal agents_campaign_creatives.yaml
 world:
   name: "Campaign Brainstorm"
   description: >
-    A creative team brainstorming the launch campaign for FlowState, a new
-    productivity app for remote workers who struggle with focus and deep
-    work. The team generates bold, channel-aware ideas while avoiding
-    generic feature-led or guilt-based messaging.
+    A creative brainstorming environment for a product launch campaign.
+    FlowState is a new productivity app for remote workers who struggle
+    with focus. The team collaborates via Slack to generate bold,
+    channel-aware campaign ideas.
 
   services:
     slack: verified/slack
-
-  actors:
-    - role: creative-director
-      type: internal
-      count: 1
-      personality: >
-        Big-picture thinker who pushes for bold, unconventional ideas.
-        Rejects safe or generic concepts. Values authenticity and
-        emotional resonance over feature-heavy messaging.
-      permissions:
-        read: [slack]
-        write: [slack]
-
-    - role: copywriter
-      type: internal
-      count: 1
-      personality: >
-        Wordsmith focused on memorable taglines and hooks. Iterates
-        rapidly and generates many options. Enjoys wordplay and cultural
-        references. Kills darlings without hesitation.
-      permissions:
-        read: [slack]
-        write: [slack]
-
-    - role: social-media-specialist
-      type: internal
-      count: 1
-      personality: >
-        Platform-native strategist who understands each channel's culture.
-        Favors short-form video and interactive content. Advocates for
-        creator partnerships over traditional ads.
-      permissions:
-        read: [slack]
-        write: [slack]
 
   seeds:
     - "FlowState launches in 6 weeks with a $50K marketing budget"
     - "Target audience: remote workers aged 25-40 who use Slack daily"
     - "Competitors are focused on productivity guilt messaging"
     - "Beta users say the app feels like putting on noise-canceling headphones for your brain"
-
-  mission: >
-    Create a strong launch campaign brainstorm with at least five distinct
-    ideas spanning social media, content marketing, and community
-    engagement. Each idea should include a tagline, channel strategy, and
-    estimated effort level.
 
 compiler:
   seed: 42

@@ -172,6 +172,14 @@ class ActorPromptBuilder:
                     if record.channel:
                         channel_tag = f" in {record.channel}"
 
+                    # Show if this message was addressed to the current actor
+                    addressed_tag = ""
+                    if record.intended_for:
+                        if actor.role in record.intended_for or "all" in record.intended_for:
+                            addressed_tag = " **[addressed to YOU]**"
+                        else:
+                            addressed_tag = f" [to: {', '.join(record.intended_for)}]"
+
                     if record.source == "self":
                         interaction_lines.append(
                             f"- [tick {record.tick}] You:"
@@ -182,7 +190,7 @@ class ActorPromptBuilder:
                             f"- [tick {record.tick}] {record.actor_role}"
                             f" ({record.actor_id}):"
                             f' "{record.summary}"{channel_tag}'
-                            f"{reply_tag}{source_tag}"
+                            f"{addressed_tag}{reply_tag}{source_tag}"
                         )
                 else:
                     # Backward compat: plain string
@@ -250,6 +258,47 @@ class ActorPromptBuilder:
                 "Include ALL required parameters in `payload`.\n"
                 + "\n".join(action_lines)
             )
+
+        # Autonomous agent work loop instructions
+        if actor.autonomous:
+            # Progress facts — let the LLM reason about what phase it's in
+            own_actions = len([r for r in actor.recent_interactions if r.source == "self"])
+            total_messages = len(actor.recent_interactions)
+            sections.append(
+                f"### Progress\n"
+                f"- You have taken {own_actions} actions so far\n"
+                f"- The team has exchanged {total_messages} messages total\n"
+                f"- Your tracked context: {actor.goal_context or 'Not set — update via state_updates.goal_context'}"
+            )
+
+            team_size = len(team_roster) if team_roster else 1
+            team_note = ""
+            if team_size > 1:
+                team_note = (
+                    f"You are part of a team of {team_size} agents working together.\n"
+                    "- Leverage your teammates' expertise — ask them questions, request their analysis\n"
+                    "- Share your findings with the team so others can build on them\n"
+                    "- Read what teammates have shared (shown in Recent Activity) and incorporate it\n"
+                    "- Use `intended_for` to address specific teammates by role, or 'all' for the whole team\n"
+                    "- If a message is marked **[addressed to YOU]**, prioritize responding to it\n\n"
+                )
+
+            sections.append(
+                "### Work Mode\n"
+                f"{team_note}"
+                "- Use the available actions to research, gather data, and find information relevant to the mission\n"
+                "- After gathering data, share your findings with the team\n"
+                "- IMPORTANT: Read 'Recent Activity' carefully. Do NOT repeat what you or others already said\n"
+                "- Each action should add NEW information, analysis, or response — not restate previous messages\n"
+                "- If you have nothing new to contribute, respond with action_type: 'do_nothing'\n\n"
+                "Track your progress by updating `pending_tasks` and `goal_context` in state_updates.\n"
+                "The lead agent will synthesize the team's findings and produce the final deliverable."
+            )
+            if actor.pending_tasks:
+                sections.append(
+                    "### Your Pending Tasks\n"
+                    + "\n".join(f"- {t}" for t in actor.pending_tasks)
+                )
 
         # Output instruction
         sections.append(

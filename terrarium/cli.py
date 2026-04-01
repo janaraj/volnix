@@ -315,11 +315,11 @@ def run(
         str | None,
         typer.Option("--agents", help="Path to agent profile YAML (external agent permissions/budgets)"),
     ] = None,
-    preset: Annotated[
+    deliverable: Annotated[
         str | None,
         typer.Option(
-            "--preset",
-            help="Deliverable preset: synthesis, decision, prediction, brainstorm, recommendation, assessment",
+            "--deliverable",
+            help="Deliverable type: synthesis, decision, prediction, brainstorm, recommendation, assessment",
         ),
     ] = None,
     actor_roles: Annotated[
@@ -329,22 +329,29 @@ def run(
             help="Comma-separated internal actor roles (e.g. 'economist,analyst,strategist'). First role is lead.",
         ),
     ] = None,
+    internal: Annotated[
+        str | None,
+        typer.Option(
+            "--internal", "-i",
+            help="Path to internal agent team YAML (autonomous agents working toward mission)",
+        ),
+    ] = None,
 ) -> None:
     """Run a full simulation on a world definition.
 
     Examples:
       terrarium run customer_support                  # compile + run
-      terrarium run --world world_a6b03d8a8f29        # run on existing world (instant)
-      terrarium run customer_support --serve --port 8080  # compile + run + HTTP server
-      terrarium run --world world_id --agents agents.yaml  # with agent profiles
-      terrarium run "Market analysis" --preset prediction --actors economist,analyst,strategist
+      terrarium run customer_support --internal agents_team.yaml  # with internal team
+      terrarium run --world world_id --agents agents.yaml  # with external agents
+      terrarium run "Market analysis" --deliverable prediction --actors economist,analyst,strategist
     """
     if not world and not world_id:
         print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
         raise typer.Exit(1)
     asyncio.run(_run_impl(
         world, settings, agent, actor, mode, tag, behavior, serve,
-        world_id, host, port, agents, preset=preset, actor_roles=actor_roles,
+        world_id, host, port, agents, deliverable=deliverable,
+        actor_roles=actor_roles, internal=internal,
     ))
 
 
@@ -439,9 +446,13 @@ async def _run_impl(
     host: str = "127.0.0.1",
     port: int | None = None,
     agents: str | None = None,
-    preset: str | None = None,
+    deliverable: str | None = None,
     actor_roles: str | None = None,
+    internal: str | None = None,
 ) -> None:
+    # Resolve --internal path before entering async context
+    internal = _resolve_internal(internal)
+
     try:
         async with app_context() as terrarium:
             # Step 1: Load plan — from existing world or compile fresh
@@ -477,18 +488,12 @@ async def _run_impl(
             if behavior:
                 compiled_plan = compiled_plan.model_copy(update={"behavior": behavior})
 
-            # Apply --preset flag: inject deliverable preset into plan
-            if preset:
-                from terrarium.deliverable_presets import load_preset as _load_preset
-                try:
-                    preset_data = _load_preset(preset)
-                    compiled_plan = compiled_plan.model_copy(update={
-                        "deliverable": {"preset": preset, **preset_data},
-                    })
-                    console.print(f"  Deliverable preset: [cyan]{preset}[/cyan]")
-                except (FileNotFoundError, ValueError) as exc:
-                    print_error(f"Invalid preset '{preset}': {exc}")
-                    raise typer.Exit(1) from None
+            # Apply deliverable (CLI --deliverable overrides blueprint default)
+            try:
+                compiled_plan = _apply_deliverable(compiled_plan, deliverable)
+            except (FileNotFoundError, ValueError) as exc:
+                print_error(f"Invalid deliverable '{deliverable}': {exc}")
+                raise typer.Exit(1) from None
 
             # Apply --actors flag: override actor_specs with inline roles
             if actor_roles:
@@ -515,13 +520,16 @@ async def _run_impl(
                     f"(lead: {roles[0]})"
                 )
 
+            # Apply internal agents (merge into plan before create_run)
+            compiled_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
+
             # Step 2: Create world + run
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")
             from terrarium.core.types import WorldId as _WId
             run_id = await terrarium.create_run(
                 compiled_plan, mode=compiled_plan.mode, tag=tag,
                 world_id=_WId(world_id) if world_id else None,
-                agents_yaml=agents,
+                agents_yaml=agents, internal_profile=internal_profile,
             )
             console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
             if hasattr(terrarium, '_current_world_id'):
@@ -612,20 +620,95 @@ def serve(
         str | None,
         typer.Option("--behavior", "-b", help="Behavior mode override: static, reactive, dynamic"),
     ] = None,
+    deliverable: Annotated[
+        str | None,
+        typer.Option(
+            "--deliverable",
+            help="Deliverable type: synthesis, decision, prediction, brainstorm, recommendation, assessment",
+        ),
+    ] = None,
+    internal: Annotated[
+        str | None,
+        typer.Option(
+            "--internal", "-i",
+            help="Path to internal agent team YAML (autonomous agents working toward mission)",
+        ),
+    ] = None,
 ) -> None:
     """Start MCP/HTTP servers for agent connections.
 
     Examples:
-      terrarium serve customer_support              # compile + serve blueprint
-      terrarium serve --world world_a6b03d8a8f29    # new run on existing world (instant)
-      terrarium serve --run run_64ca8171df83        # re-serve existing run (instant)
-      terrarium serve "Support team with email"     # compile from NL + serve
-      terrarium serve --world world_id --agents agents.yaml  # with agent profiles
+      terrarium serve customer_support                                       # world only
+      terrarium serve customer_support --agents external.yaml                # world + external agents
+      terrarium serve climate_research_station --internal agents_climate.yaml  # world + internal team
+      terrarium serve --world world_id --internal team.yaml                  # existing world + team
     """
     if not world and not run and not world_id:
         print_error("Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>")
         raise typer.Exit(1)
-    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents, behavior))
+    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents, behavior, deliverable, internal))
+
+
+def _resolve_internal(internal: str | None) -> str | None:
+    """Resolve --internal flag to a file path. Supports name-based lookup."""
+    if not internal:
+        return None
+    from terrarium.paths import resolve_agent_profile
+    resolved = resolve_agent_profile(internal)
+    if resolved:
+        console.print(f"  Internal agents: [cyan]{resolved}[/cyan]")
+        return str(resolved)
+    # Assume it's a direct path
+    if Path(internal).exists():
+        console.print(f"  Internal agents: [cyan]{internal}[/cyan]")
+        return internal
+    print_error(f"Internal agent profile not found: {internal}")
+    raise typer.Exit(1)
+
+
+def _apply_internal_agents(plan: Any, internal: str | None) -> tuple[Any, Any]:
+    """Load internal agent profile and merge into plan.
+
+    Returns (updated_plan, internal_profile). Profile is passed to
+    create_run() for agent registration and ActorState creation.
+    Plan gets: mission, deliverable_config, actor_specs merged —
+    so both create_run() and _setup_simulation() see the same data.
+    """
+    if not internal:
+        return plan, None
+    from terrarium.actors.internal_profile import load_internal_profile
+    profile = load_internal_profile(internal)
+    updates: dict[str, Any] = {}
+    if profile.mission:
+        updates["mission"] = profile.mission
+    if profile.deliverable:
+        from terrarium.deliverable_presets import load_preset as _lp
+        preset_data = _lp(profile.deliverable)
+        updates["deliverable_config"] = {"preset": profile.deliverable, **preset_data}
+        console.print(f"  Deliverable: [cyan]{profile.deliverable}[/cyan]")
+    agent_specs = [
+        {"role": a.role, "type": "internal", "count": 1}
+        for a in profile.agents
+    ]
+    updates["actor_specs"] = list(plan.actor_specs) + agent_specs
+    console.print(f"  Internal team: [cyan]{', '.join(a.role for a in profile.agents)}[/cyan]")
+    return plan.model_copy(update=updates), profile
+
+
+def _apply_deliverable(plan: Any, deliverable: str | None) -> Any:
+    """Apply deliverable preset to plan. CLI flag overrides blueprint default."""
+    deliverable_name = deliverable
+    if not deliverable_name:
+        existing = getattr(plan, "deliverable_config", {})
+        deliverable_name = existing.get("preset") if existing else None
+    if deliverable_name:
+        from terrarium.deliverable_presets import load_preset as _load_preset
+        preset_data = _load_preset(deliverable_name)
+        plan = plan.model_copy(update={
+            "deliverable_config": {"preset": deliverable_name, **preset_data},
+        })
+        console.print(f"  Deliverable: [cyan]{deliverable_name}[/cyan]")
+    return plan
 
 
 async def _serve_impl(
@@ -633,7 +716,12 @@ async def _serve_impl(
     world_id: str | None, host: str, port: int,
     agents: str | None = None,
     behavior: str | None = None,
+    deliverable: str | None = None,
+    internal: str | None = None,
 ) -> None:
+    # Resolve --internal path before entering async context
+    internal = _resolve_internal(internal)
+
     try:
         async with app_context() as terrarium:
             # 1. Start server immediately — dashboard accessible right away
@@ -667,9 +755,11 @@ async def _serve_impl(
                     raise typer.Exit(1)
                 if behavior:
                     plan = plan.model_copy(update={"behavior": behavior})
+                plan = _apply_deliverable(plan, deliverable)
+                plan, internal_profile = _apply_internal_agents(plan, internal)
                 new_run_id = await terrarium.create_run(
                     plan, mode=plan.mode, world_id=_WId(world_id),
-                    agents_yaml=agents,
+                    agents_yaml=agents, internal_profile=internal_profile,
                 )
                 _active_run_id[0] = str(new_run_id)
                 console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
@@ -734,10 +824,12 @@ async def _serve_impl(
                             saved.write_text(reviewer.to_yaml(compiled_plan))
                             console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
+                        compiled_plan = _apply_deliverable(compiled_plan, deliverable)
+                        compiled_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
                         console.print("  Generating world...")
                         new_run_id = await terrarium.create_run(
                             compiled_plan, mode=compiled_plan.mode,
-                            agents_yaml=agents,
+                            agents_yaml=agents, internal_profile=internal_profile,
                         )
                         _active_run_id[0] = str(new_run_id)
                         console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")

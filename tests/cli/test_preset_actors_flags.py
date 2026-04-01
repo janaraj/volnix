@@ -140,14 +140,14 @@ class TestActorRolesParsing:
 class TestCLIFlagsHarness:
     """Structural contracts for CLI flags — catches signature drift."""
 
-    def test_run_command_has_preset_option(self):
-        """The run command must accept --preset."""
+    def test_run_command_has_deliverable_option(self):
+        """The run command must accept --deliverable."""
         from terrarium.cli import app
         from typer.testing import CliRunner
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
-        assert "--preset" in result.output, "--preset not in run --help output"
+        assert "--deliverable" in result.output, "--deliverable not in run --help output"
 
     def test_run_command_has_actors_option(self):
         """The run command must accept --actors."""
@@ -158,12 +158,12 @@ class TestCLIFlagsHarness:
         result = runner.invoke(app, ["run", "--help"])
         assert "--actors" in result.output, "--actors not in run --help output"
 
-    def test_preset_help_lists_all_presets(self):
-        """--preset help text must mention all 6 presets."""
+    def test_deliverable_help_lists_all_types(self):
+        """--deliverable help text must mention all 6 types."""
         from terrarium.cli import app
         from typer.testing import CliRunner
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
         for name in ["synthesis", "decision", "prediction", "brainstorm", "recommendation", "assessment"]:
-            assert name in result.output, f"Preset '{name}' not mentioned in --preset help"
+            assert name in result.output, f"Deliverable '{name}' not mentioned in --deliverable help"

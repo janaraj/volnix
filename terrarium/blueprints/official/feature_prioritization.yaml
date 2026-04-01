@@ -1,49 +1,14 @@
-# Feature Prioritization Blueprint
-# Internal-only world: product team decides which feature to build next.
+# Feature Prioritization World
+# Pair with: --internal agents_feature_team.yaml
 world:
   name: "Feature Prioritization Decision"
   description: >
-    A product team at a growing B2B SaaS company must decide which feature
-    to prioritize for the next quarter. Resources are limited and each
-    option has strong advocates. The team must weigh customer demand,
-    engineering effort, and strategic value to produce a clear decision.
+    A product team environment at a growing B2B SaaS company. Customer
+    feedback, engineering estimates, and competitive data available for
+    the team to analyze and discuss via Slack.
 
   services:
     slack: verified/slack
-
-  actors:
-    - role: product-lead
-      type: internal
-      count: 1
-      personality: >
-        Strategic thinker who balances customer needs with business goals.
-        Facilitates structured discussions and insists on data-backed
-        arguments. Will not approve decisions without clear rationale.
-      permissions:
-        read: [slack]
-        write: [slack]
-
-    - role: engineer
-      type: internal
-      count: 1
-      personality: >
-        Pragmatic builder who evaluates options by technical complexity and
-        long-term maintenance burden. Advocates for API v2 due to
-        accumulated tech debt. Skeptical of scope creep.
-      permissions:
-        read: [slack]
-        write: [slack]
-
-    - role: designer
-      type: internal
-      count: 1
-      personality: >
-        User-centric advocate passionate about dark mode due to consistent
-        user feedback. Values accessibility and user satisfaction over
-        engineering convenience.
-      permissions:
-        read: [slack]
-        write: [slack]
 
   policies:
     - name: "Evidence-backed decision"
@@ -64,11 +29,6 @@ world:
     - "Engineering estimates: dark mode 3 weeks, API v2 8 weeks, mobile app 12 weeks"
     - "Two enterprise customers threatened to churn without API v2"
     - "Mobile app usage from competitors shows 60% engagement lift"
-
-  mission: >
-    Decide which feature to prioritize: dark mode, API v2, or mobile app.
-    Consider customer demand, engineering effort, strategic value, and
-    churn risk. Produce a decision with rationale and alternatives.
 
 compiler:
   seed: 42

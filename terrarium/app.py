@@ -714,16 +714,19 @@ class TerrariumApp:
 
         await animator.configure(plan, self._scheduler)
 
-    async def configure_agency(self, plan: Any, result: dict) -> None:
+    async def configure_agency(
+        self, plan: Any, result: dict,
+        internal_profile: Any | None = None,
+    ) -> None:
         """Configure the AgencyEngine from compilation results.
 
         Creates ActorState for each internal actor, builds WorldContextBundle,
-        extracts available actions from service packs.
-
-        Handles gracefully if the agency engine is not registered.
+        extracts available actions from service packs. If an internal agent
+        profile is provided, creates autonomous ActorStates for the team.
 
         Args:
             plan: A WorldPlan object with actors, behavior, and mission.
+            internal_profile: Optional InternalAgentProfile from --internal YAML.
             result: The compilation result dict from generate_world().
         """
         from terrarium.actors.state import ActorState
@@ -828,6 +831,53 @@ class TerrariumApp:
 
                 actor_states.append(state)
 
+        # Create ActorState for internal agents from --internal profile
+        if internal_profile:
+            from terrarium.actors.personality import Personality
+
+            for agent_def in internal_profile.agents:
+                personality = agent_def.personality
+                if not personality and agent_def.personality_hint:
+                    personality = Personality(
+                        style="professional",
+                        description=agent_def.personality_hint,
+                    )
+                traits = extract_behavior_traits(agent_def)
+                state = ActorState(
+                    actor_id=agent_def.id,
+                    role=agent_def.role,
+                    actor_type="internal",
+                    autonomous=True,
+                    persona=personality.model_dump() if personality else {},
+                    behavior_traits=traits,
+                    current_goal=internal_profile.mission,
+                )
+                actor_states.append(state)
+
+            # Give all autonomous agents a Slack subscription for team communication.
+            # Query state for the primary channel (same logic as build_kickstart_envelope).
+            from terrarium.actors.state import Subscription as _AgentSub
+            state_engine = self._registry.get("state")
+            team_channel = None
+            if state_engine:
+                channels = await state_engine.query_entities("channel")
+                for ch in channels:
+                    name = ch.get("name", "").lower()
+                    if name in ("general", "team", "research"):
+                        team_channel = ch.get("id")
+                        break
+                if team_channel is None and channels:
+                    team_channel = channels[0].get("id")
+            if team_channel:
+                for state in actor_states:
+                    if state.autonomous:
+                        state.subscriptions.append(_AgentSub(
+                            service_id="slack",
+                            filter={"channel": team_channel},
+                            sensitivity="immediate",
+                        ))
+                logger.info("Internal agents subscribed to team channel: %s", team_channel)
+
         # Set batch_threshold from config for each actor
         batch_threshold = self._config.agency.batch_threshold_default
         for state in actor_states:
@@ -853,6 +903,7 @@ class TerrariumApp:
                     "Applied pre-generated subscriptions for %d actors",
                     sum(1 for s in actor_states if s.subscriptions),
                 )
+
             elif self._llm_router:
                 try:
                     from terrarium.engines.world_compiler.subscription_generator import (
@@ -940,6 +991,21 @@ class TerrariumApp:
                     preset_name, lead_state.actor_id, deadline_tick,
                 )
 
+        # Schedule initial continue_work for autonomous agents (non-lead)
+        # so they start working after the kickstart fires.
+        # Lead agent keeps their produce_deliverable schedule.
+        tick_interval = self._config.simulation_runner.tick_interval_seconds
+        for state in actor_states:
+            if state.autonomous and state.scheduled_action is None:
+                from terrarium.actors.state import ScheduledAction
+                state.scheduled_action = ScheduledAction(
+                    logical_time=tick_interval,  # Start at tick 1
+                    action_type="continue_work",
+                    description=f"Begin work on: {state.current_goal or 'mission'}",
+                    target_service=None,
+                    payload={},
+                )
+
         await agency.configure(actor_states, world_context, available_actions)
 
     async def compile_and_run(self, plan: Any) -> dict:
@@ -985,7 +1051,11 @@ class TerrariumApp:
 
         # Generate world (LLM → entities → populate_entities → world's state.db)
         compiler = self._registry.get("world_compiler")
-        result = await compiler.generate_world(plan)
+        try:
+            result = await compiler.generate_world(plan)
+        except Exception as exc:
+            await self._world_manager.mark_failed(world_id, error=str(exc))
+            raise
 
         # Save generation result alongside the world
         import json as _json
@@ -1014,6 +1084,7 @@ class TerrariumApp:
         self, plan: Any, mode: str = "governed", tag: str | None = None,
         world_id: WorldId | None = None,
         agents_yaml: str | None = None,
+        internal_profile: Any | None = None,
     ) -> RunId:
         """Create a run against an existing world.
 
@@ -1118,9 +1189,18 @@ class TerrariumApp:
                         permissions={"read": "all", "write": "all"},
                     ))
 
+        # Register internal agents in actor registry (profile loaded by CLI layer)
+        if internal_profile:
+            for agent_def in internal_profile.agents:
+                if not self._actor_registry.has_actor(agent_def.id):
+                    self._actor_registry.register(agent_def)
+            logger.info(
+                "Registered %d internal agents", len(internal_profile.agents),
+            )
+
         self.configure_governance(plan)
         await self.configure_animator(plan)
-        await self.configure_agency(plan, result)
+        await self.configure_agency(plan, result, internal_profile=internal_profile)
 
         # Track active run
         self._current_run_id = str(run_id)

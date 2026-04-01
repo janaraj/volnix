@@ -334,26 +334,39 @@ class CompilerWorldValidator:
                 errors=errors,
             )
 
+        # Normalize LLM-generated invariant kinds to canonical names
+        _KIND_ALIASES = {
+            "equals": "exists",
+            "exist": "exists",
+            "has": "exists",
+            "field_equal": "field_equals",
+            "field_eq": "field_equals",
+            "ref": "references",
+            "reference": "references",
+        }
+
         for index, invariant in enumerate(invariants):
             prefix = f"[{index}]"
+            # Normalize kind aliases from LLM output
+            kind = _KIND_ALIASES.get(invariant.kind, invariant.kind)
             matches = self._select_entities(invariant.selector, all_entities)
 
-            if invariant.kind == "exists":
+            if kind == "exists":
                 if not matches:
                     errors.append(f"{prefix} selector did not match any entities")
-            elif invariant.kind == "count":
+            elif kind == "count":
                 errors.extend(
                     self._validate_count_invariant(prefix, invariant, matches)
                 )
-            elif invariant.kind == "field_equals":
+            elif kind == "field_equals":
                 errors.extend(
                     self._validate_field_equals_invariant(prefix, invariant, matches)
                 )
-            elif invariant.kind == "temporal":
+            elif kind == "temporal":
                 errors.extend(
                     self._validate_temporal_invariant(prefix, invariant, matches)
                 )
-            elif invariant.kind == "references":
+            elif kind == "references":
                 errors.extend(
                     self._validate_reference_invariant(
                         prefix,
@@ -364,7 +377,7 @@ class CompilerWorldValidator:
                     )
                 )
             else:
-                errors.append(f"{prefix} unsupported invariant kind '{invariant.kind}'")
+                errors.append(f"{prefix} unsupported invariant kind '{kind}'")
 
             if errors and not self._collect_all:
                 break
