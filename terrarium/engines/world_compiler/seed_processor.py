@@ -96,10 +96,20 @@ class CompilerSeedProcessor:
         available: dict[str, Any] = {}
         for etype, entities in all_entities.items():
             id_field = "id"
+            schema_fields: dict[str, str] = {}
+            ref_annotations: dict[str, str] = {}
             if schemas and etype in schemas:
                 schema_obj = schemas[etype]
                 if hasattr(schema_obj, "identity_field") and schema_obj.identity_field:
                     id_field = schema_obj.identity_field
+                # Include field names + types so LLM knows valid fields
+                json_schema = getattr(schema_obj, "json_schema", {})
+                for fname, fdef in json_schema.get("properties", {}).items():
+                    schema_fields[fname] = fdef.get("type", "string") if isinstance(fdef, dict) else "string"
+                # Include reference annotations so LLM knows which fields reference which entity types
+                # references is list[ReferenceRule] with .field and .target_entity_type
+                for ref_rule in getattr(schema_obj, "references", []):
+                    ref_annotations[ref_rule.field] = ref_rule.target_entity_type
             summaries = []
             for e in entities[: self.ENTITY_CONTEXT_LIMIT]:
                 summary: dict[str, str] = {
@@ -108,7 +118,15 @@ class CompilerSeedProcessor:
                 if "status" in e:
                     summary["status"] = e["status"]
                 summaries.append(summary)
-            available[etype] = {"total_count": len(entities), "entities": summaries}
+            entry: dict[str, Any] = {
+                "total_count": len(entities),
+                "entities": summaries,
+            }
+            if schema_fields:
+                entry["fields"] = schema_fields
+            if ref_annotations:
+                entry["references"] = ref_annotations
+            available[etype] = entry
 
         response = await SEED_EXPANSION.execute(
             self._router,

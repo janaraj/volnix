@@ -53,9 +53,12 @@ class AgencyConfig(BaseModel):
     collaboration_mode: str = "tagged"
     # Enable subscription-based activation for collaborative actors.
     collaboration_enabled: bool = True
-    # Batch N notifications before activating (reduces LLM calls for chatty channels).
+    # V2: Batch N notifications before activating (reduces LLM calls for chatty channels).
+    # Unused in MVP — all subscriptions activate immediately.
     batch_threshold_default: int = 3
     # Reserve this % of max_ticks for final synthesis/deliverable production.
     synthesis_buffer_pct: float = 0.1
+    # Logical time between autonomous agent activations (work loop interval).
+    autonomous_tick_interval: float = 60.0
     # (Future) Auto-add chat service subscription for all internal actors.
     # auto_include_chat: bool = True  -- not yet enforced

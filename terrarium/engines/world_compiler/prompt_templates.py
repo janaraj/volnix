@@ -356,34 +356,38 @@ natural language description into concrete entity modifications.
 {policies_summary}
 
 ## Available Entities (already generated)
+Each entity type shows: existing entity IDs, field schema, and reference constraints.
+If a field has a "references" annotation (e.g. "author_id" → "reddit_user"), the value MUST be an ID from that entity type.
 {available_entities}
 
 ## Rules
 - Modify existing entities or create new ones to establish the seed
 - Use "fields" key for entity data (not "properties")
-- Reference fields (site_id, author_id, etc.) MUST use IDs from Available Entities
-- New entities MUST include all required fields for their type
+- Reference fields (author_id, channel_id, etc.) MUST use IDs from the CORRECT entity type shown in "references"
+- NEVER cross entity types: a reddit comment's author_id must reference a reddit_user, not a twitter user
+- New entities MUST only use field names listed in the "fields" schema for that entity type
 - Large numbers in seeds (e.g. "50K mentions") → store as FIELD VALUE on entity, NOT as count invariant
-- Prefer "exists" and "field_equals" invariants over "count" invariants
 - Prefer modifying existing entities over creating new ones
+
+## CRITICAL: Invariant Rules
+- Invariants VERIFY that your entity changes were applied correctly
+- ONLY use "exists" invariants with selector matching the entity's "id" field
+- One invariant per entity you create or modify — just verify it exists by ID
+- NEVER use "field_equals", "count", "references", or "temporal" invariants
+- NEVER use complex objects as values in selectors — only simple string IDs
+- Keep it simple: if you created entity with id "ticket-seed-001", your invariant is {{"kind": "exists", "selector": {{"entity_type": "ticket", "match": {{"id": "ticket-seed-001"}}}}}}
 
 Output JSON:
 {{
   "entities_to_create": [
-    {{"entity_type": "...", "fields": {{"id": "...", ...}}}}
+    {{"entity_type": "ticket", "fields": {{"id": "ticket-seed-001", "subject": "...", ...}}}}
   ],
   "entities_to_modify": [
-    {{"entity_type": "...", "entity_id": "existing_id", "field_updates": {{...}}}}
+    {{"entity_type": "ticket", "entity_id": "existing-ticket-id", "field_updates": {{"status": "escalated"}}}}
   ],
   "invariants": [
-    {{
-      "kind": "<exists|count|field_equals|references>",
-      "selector": {{"entity_type": "...", "match": {{"field": "value"}}}},
-      "operator": "<eq|gte|lte>",
-      "field": "optional_field_name",
-      "value": "optional comparison value",
-      "target_selector": {{"entity_type": "...", "match": {{"field": "value"}}}}
-    }}
+    {{"kind": "exists", "selector": {{"entity_type": "ticket", "match": {{"id": "ticket-seed-001"}}}}}},
+    {{"kind": "exists", "selector": {{"entity_type": "ticket", "match": {{"id": "existing-ticket-id"}}}}}}
   ]
 }}
 

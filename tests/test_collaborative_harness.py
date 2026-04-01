@@ -181,6 +181,7 @@ class TestDeliverablePresetsAllValid:
 class TestSubscriptionSensitivityLevelsAllHandled:
     """Every Literal value in Subscription.sensitivity must have handler code in notify()."""
 
+    @pytest.mark.skip(reason="V2: batch/passive sensitivity disabled for MVP — all subscriptions activate immediately")
     def test_subscription_sensitivity_levels_all_handled(self):
         """Check that the engine notify() handles every sensitivity level."""
         # Get the Literal values from the Subscription model

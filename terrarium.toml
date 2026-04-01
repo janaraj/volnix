@@ -303,9 +303,9 @@ timeout_seconds = 300
 
 [llm.routing.world_compiler]
 provider = "openai"
-model = "gpt-4.1-mini"
+model = "gpt-5.4-nano"
 max_tokens = 16384
-temperature = 0.4
+temperature = 0
 
 [llm.routing.responder_tier2]
 provider = "openai"
@@ -334,18 +334,18 @@ temperature = 0.5
 
 [llm.routing.data_generator]
 provider = "openai"
-model = "gpt-4.1-mini"
+model = "gpt-5.4-nano"
 max_tokens = 16384
-temperature = 0.5
+temperature = 0
 
 [llm.routing.agency_individual]
 provider = "openai"
-model = "gpt-4.1-mini"
+model = "gpt-5.4-nano"
 max_tokens = 4096
-temperature = 0.7
+temperature = 0
 
 [llm.routing.agency_batch]
 provider = "openai"
-model = "gpt-4.1-mini"
+model = "gpt-5.4-nano"
 max_tokens = 8192
-temperature = 0.7
+temperature = 0

@@ -1,50 +1,15 @@
-# Security Posture Assessment Blueprint
-# Internal-only world: security team assesses risks and compliance gaps.
+# Security Posture Assessment World
+# Pair with: --internal agents_security_team.yaml
 world:
   name: "Security Posture Assessment"
   description: >
-    Quarterly security posture assessment led by an internal security team.
-    Recent incidents, overdue patches, audit gaps, and infrastructure
-    weaknesses must be reviewed. The team ranks risks and produces a
-    prioritized remediation plan. Vulnerability tickets tracked in Zendesk.
+    A security assessment environment with vulnerability tracking,
+    compliance audit data, and team collaboration. Security team can
+    track tickets in Zendesk and coordinate findings via Slack.
 
   services:
     slack: verified/slack
     zendesk: verified/zendesk
-
-  actors:
-    - role: security-lead
-      type: internal
-      count: 1
-      personality: >
-        Strategic thinker who balances risk mitigation with business
-        enablement. Prioritizes actual exploitability over theoretical
-        severity. Final authority on risk ranking.
-      permissions:
-        read: [slack, zendesk]
-        write: [slack, zendesk]
-
-    - role: network-engineer
-      type: internal
-      count: 1
-      personality: >
-        Infrastructure-focused specialist in network segmentation,
-        firewall rules, and traffic analysis. Tends to over-index on
-        network-layer risks. Detailed and thorough.
-      permissions:
-        read: [slack, zendesk]
-        write: [slack, zendesk]
-
-    - role: compliance-officer
-      type: internal
-      count: 1
-      personality: >
-        Regulatory-focused and risk-averse. Tracks SOC 2 and GDPR
-        compliance. Insists on documented controls and auditable evidence
-        for every finding.
-      permissions:
-        read: [slack, zendesk]
-        write: [slack, zendesk]
 
   policies:
     - name: "Critical risk consensus"
@@ -74,11 +39,6 @@ world:
     - "SOC 2 audit in 6 weeks — 4 controls have documented gaps"
     - "Phishing attempt last month compromised one employee credential"
     - "New microservices deployment has no network segmentation yet"
-
-  mission: >
-    Assess current security posture. Identify and rank risks, document
-    compliance gaps and strengths, and produce a prioritized action plan
-    with owners and deadlines.
 
 compiler:
   seed: 42

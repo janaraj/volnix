@@ -48,19 +48,16 @@ against committed WorldEvents at runtime.
 - Generate subscriptions that make sense for this actor's role and responsibilities
 - Each subscription targets a specific service_id (must be one of the available services)
 - The filter dict contains service-specific match criteria (e.g. {{"channel": "#research"}})
-- Sensitivity levels:
-  - "immediate": actor should react right away (e.g. direct messages, urgent alerts)
-  - "batch": actor accumulates notifications, acts after a threshold (e.g. general channel chatter)
-  - "passive": actor records the info but doesn't activate (e.g. background awareness)
 - Be specific with filters — don't subscribe to everything
 - Consider the actor's role: a researcher subscribes to research channels, not admin channels
+- All subscriptions are immediate (actor reacts right away)
 
 Output a JSON array of subscription objects:
 [
   {{
     "service_id": "<service name>",
     "filter": {{"<key>": "<value>"}},
-    "sensitivity": "immediate|batch|passive"
+    "sensitivity": "immediate"
   }}
 ]
 
@@ -281,9 +278,9 @@ class SubscriptionGenerator:
             if not isinstance(filter_dict, dict):
                 filter_dict = {}
 
-            sensitivity = item.get("sensitivity", "immediate")
-            if sensitivity not in ("immediate", "batch", "passive"):
-                sensitivity = "immediate"
+            # V2: respect LLM-chosen sensitivity (batch/passive)
+            # For MVP, all subscriptions activate immediately.
+            sensitivity = "immediate"
 
             subscriptions.append(
                 Subscription(

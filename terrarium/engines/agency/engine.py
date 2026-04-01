@@ -164,6 +164,10 @@ class AgencyEngine(BaseEngine):
 
                     should_activate = False
                     activation_reason = ""
+                    logger.info(
+                        "[AGENCY.notify] %s sub matched: svc=%s sensitivity=%s",
+                        actor_id, sub.service_id, sub.sensitivity,
+                    )
 
                     if collab_mode == "tagged" and intended_for:
                         # Only activate if actor is tagged or "all"
@@ -172,38 +176,18 @@ class AgencyEngine(BaseEngine):
                             or actor.role in intended_for
                             or str(actor_id) in intended_for
                         ):
-                            if sub.sensitivity == "immediate":
-                                should_activate = True
-                                activation_reason = "subscription_immediate"
-                            elif sub.sensitivity == "batch":
-                                actor.batch_notification_count += 1
-                                if actor.batch_notification_count >= actor.batch_threshold:
-                                    should_activate = True
-                                    activation_reason = "subscription_batch"
-                                    actor.batch_notification_count = 0
-                            # passive: record stored, no activation
+                            # V2: batch/passive sensitivity gating
+                            should_activate = True
+                            activation_reason = "subscription_match"
                     elif collab_mode == "open":
-                        # All subscribed actors activate
-                        if sub.sensitivity == "immediate":
-                            should_activate = True
-                            activation_reason = "subscription_immediate"
-                        elif sub.sensitivity == "batch":
-                            actor.batch_notification_count += 1
-                            if actor.batch_notification_count >= actor.batch_threshold:
-                                should_activate = True
-                                activation_reason = "subscription_batch"
-                                actor.batch_notification_count = 0
+                        # V2: batch/passive sensitivity gating
+                        should_activate = True
+                        activation_reason = "subscription_match"
                     elif not intended_for:
-                        # No intended_for specified — treat as open for this event
-                        if sub.sensitivity == "immediate":
-                            should_activate = True
-                            activation_reason = "subscription_immediate"
-                        elif sub.sensitivity == "batch":
-                            actor.batch_notification_count += 1
-                            if actor.batch_notification_count >= actor.batch_threshold:
-                                should_activate = True
-                                activation_reason = "subscription_batch"
-                                actor.batch_notification_count = 0
+                        # No intended_for specified — treat as open
+                        # V2: batch/passive sensitivity gating
+                        should_activate = True
+                        activation_reason = "subscription_match"
 
                     if should_activate:
                         activated.append((actor_id, activation_reason))
@@ -314,21 +298,29 @@ class AgencyEngine(BaseEngine):
         for actor in self._actor_states.values():
             if actor.scheduled_action and actor.scheduled_action.logical_time <= current_time:
                 sa = actor.scheduled_action
-                env = ActionEnvelope(
-                    actor_id=actor.actor_id,
-                    source=ActionSource.INTERNAL,
-                    action_type=sa.action_type,
-                    target_service=(ServiceId(sa.target_service) if sa.target_service else None),
-                    payload=sa.payload,
-                    logical_time=current_time,
-                    priority=EnvelopePriority.SYSTEM,
-                    metadata={
-                        "activation_reason": "scheduled",
-                        "scheduled_description": sa.description,
-                    },
-                )
-                envelopes.append(env)
                 actor.scheduled_action = None
+
+                if sa.action_type == "continue_work":
+                    # Autonomous agent work loop — activate via LLM
+                    env = await self._activate_autonomous_agent(actor)
+                    if env is not None:
+                        envelopes.append(env)
+                else:
+                    # Standard scheduled action (produce_deliverable, etc.)
+                    env = ActionEnvelope(
+                        actor_id=actor.actor_id,
+                        source=ActionSource.INTERNAL,
+                        action_type=sa.action_type,
+                        target_service=(ServiceId(sa.target_service) if sa.target_service else None),
+                        payload=sa.payload,
+                        logical_time=current_time,
+                        priority=EnvelopePriority.SYSTEM,
+                        metadata={
+                            "activation_reason": "scheduled",
+                            "scheduled_description": sa.description,
+                        },
+                    )
+                    envelopes.append(env)
         return envelopes
 
     def has_scheduled_actions(self) -> bool:
@@ -652,6 +644,65 @@ class AgencyEngine(BaseEngine):
         )
         return self._parse_llm_action(actor, response.content, reason, trigger_event)
 
+    async def _activate_autonomous_agent(
+        self, actor: ActorState,
+    ) -> ActionEnvelope | None:
+        """Activate an autonomous agent to continue their work loop.
+
+        The agent sees their full context including recent_interactions
+        (messages from teammates received via event bus subscriptions).
+        They decide what to do next: research, share findings, or do_nothing.
+        """
+        if not self._llm_router or not self._prompt_builder:
+            return None
+
+        async with self._llm_semaphore:
+            system_prompt = self._prompt_builder.build_system_prompt()
+            team_roster = [
+                {"role": a.role, "id": str(a.actor_id)}
+                for a in self._actor_states.values()
+            ]
+            user_prompt = self._prompt_builder.build_individual_prompt(
+                actor=actor,
+                trigger_event=None,
+                activation_reason="autonomous_continue",
+                available_actions=self._available_actions,
+                team_roster=team_roster,
+            )
+
+            request = LLMRequest(
+                system_prompt=system_prompt,
+                user_content=user_prompt,
+                output_schema=None,
+                temperature=0.7,
+                fresh_session=True,
+                cache_system_prompt=True,
+            )
+            response = await self._llm_router.route(
+                request,
+                "agency",
+                self._typed_config.llm_use_case_individual,
+            )
+
+        logger.info(
+            "[AGENCY.autonomous] actor=%s, LLM response length=%d",
+            actor.actor_id, len(response.content or ""),
+        )
+        env = self._parse_llm_action(actor, response.content, "autonomous_continue", None)
+
+        # Auto-reschedule: if the agent produced an action, schedule next tick
+        if env is not None and actor.autonomous:
+            tick_interval = self._typed_config.autonomous_tick_interval
+            actor.scheduled_action = ScheduledAction(
+                logical_time=self._get_current_time() + tick_interval,
+                action_type="continue_work",
+                description=f"Continue: {actor.current_goal or 'mission'}",
+                target_service=None,
+                payload={},
+            )
+
+        return env
+
     # -- Tier 2: Batch LLM --
 
     async def _activate_batch(
@@ -725,7 +776,7 @@ class AgencyEngine(BaseEngine):
         actor: ActorState,
         raw_output: str,
         reason: str,
-        trigger_event: WorldEvent,
+        trigger_event: WorldEvent | None,
     ) -> ActionEnvelope | None:
         """Parse LLM output into ActionEnvelope. Returns None for do_nothing."""
         try:
@@ -752,9 +803,16 @@ class AgencyEngine(BaseEngine):
         resolved_service = self._resolve_service_name(raw_service, action_type)
 
         # Build payload — auto-fill communication context from trigger event
-        # so the LLM only needs to provide text + intent, not API details
+        # so the LLM only needs to provide text + intent, not API details.
+        # For autonomous agents (no trigger), use their primary subscription channel.
         payload = data.get("payload", {})
-        self._autofill_comm_context(payload, action_type, trigger_event, data)
+        if trigger_event is not None:
+            self._autofill_comm_context(payload, action_type, trigger_event, data)
+        else:
+            # Autonomous agent — use primary Slack subscription channel
+            self._autofill_autonomous_comm(payload, action_type, actor, data)
+
+        parent_ids = [trigger_event.event_id] if trigger_event else []
 
         return ActionEnvelope(
             actor_id=actor.actor_id,
@@ -764,7 +822,7 @@ class AgencyEngine(BaseEngine):
             payload=payload,
             logical_time=self._get_current_time(),
             priority=EnvelopePriority.INTERNAL,
-            parent_event_ids=[trigger_event.event_id],
+            parent_event_ids=parent_ids,
             metadata={
                 "activation_reason": reason,
                 "activation_tier": 3,
@@ -791,14 +849,15 @@ class AgencyEngine(BaseEngine):
         if action_type not in comm_actions:
             return
 
-        # channel_id: from trigger event if missing or placeholder
-        ch = payload.get("channel_id", "")
-        if not ch or ch.startswith("trigger.") or ch.startswith("{"):
-            payload["channel_id"] = (
-                trigger_event.input_data.get("channel_id")
-                or trigger_event.input_data.get("channel")
-                or (trigger_event.response_body or {}).get("channel", "")
-            )
+        # channel_id: always use trigger event's channel for replies.
+        # Don't trust LLM's channel choice — system manages channel context.
+        trigger_channel = (
+            trigger_event.input_data.get("channel_id")
+            or trigger_event.input_data.get("channel")
+            or (trigger_event.response_body or {}).get("channel", "")
+        )
+        if trigger_channel:
+            payload["channel_id"] = trigger_channel
 
         # channel: for subscription matching
         if "channel" not in payload and payload.get("channel_id"):
@@ -808,6 +867,40 @@ class AgencyEngine(BaseEngine):
         if action_type == "chat.replyToThread" and "thread_ts" not in payload:
             resp = trigger_event.response_body or {}
             payload["thread_ts"] = resp.get("ts", "")
+
+        # intended_for: from LLM top-level field
+        if "intended_for" not in payload:
+            intended = llm_data.get("intended_for", [])
+            if intended:
+                payload["intended_for"] = intended
+
+    @staticmethod
+    def _autofill_autonomous_comm(
+        payload: dict,
+        action_type: str,
+        actor: ActorState,
+        llm_data: dict,
+    ) -> None:
+        """Auto-fill communication fields for autonomous agents (no trigger event).
+
+        Uses the agent's first Slack subscription channel as the team channel.
+        """
+        comm_actions = {
+            "chat.postMessage", "chat.replyToThread", "chat.update",
+            "users.messages.send", "email_send",
+        }
+        if action_type not in comm_actions:
+            return
+
+        # Use team channel from agent's subscriptions.
+        # Don't trust LLM's channel choice — system manages channel context.
+        for sub in actor.subscriptions:
+            if sub.service_id == "slack" and sub.filter.get("channel"):
+                payload["channel_id"] = sub.filter["channel"]
+                break
+
+        if "channel" not in payload and payload.get("channel_id"):
+            payload["channel"] = payload["channel_id"]
 
         # intended_for: from LLM top-level field
         if "intended_for" not in payload:
@@ -948,16 +1041,20 @@ class AgencyEngine(BaseEngine):
                 )
 
         # Recent interactions (structured InteractionRecord)
+        # Include message text so agents can read what teammates wrote
+        text = committed_event.input_data.get("text", "")
+        summary = text[:300] if text else f"{committed_event.action}"
         record = InteractionRecord(
             tick=committed_event.timestamp.tick,
             actor_id=str(committed_event.actor_id),
             actor_role=self._get_actor_role(committed_event.actor_id),
             action=committed_event.action,
-            summary=f"{committed_event.action} by {committed_event.actor_id}",
+            summary=summary,
             source="observed",
             event_id=str(committed_event.event_id),
             reply_to=committed_event.input_data.get("reply_to_event_id"),
             channel=committed_event.input_data.get("channel"),
+            intended_for=committed_event.input_data.get("intended_for", []),
         )
         actor.recent_interactions.append(record)
         max_interactions = config.max_recent_interactions

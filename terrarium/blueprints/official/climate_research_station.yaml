@@ -1,61 +1,15 @@
-# Climate Research Station Blueprint
-# Internal-only world: 4 researchers collaborate to analyze anomalous data.
+# Climate Research Station World
+# Pair with: --internal agents_climate_researchers.yaml
 world:
   name: "Climate Research Station"
   description: >
-    A climate research team of four specialists investigates anomalous jet
-    stream patterns. The team collaborates in Slack to share findings,
-    question assumptions, and challenge methodology before reaching
-    conclusions. Researchers email reports to stakeholders.
+    A climate research environment with anomalous jet stream patterns,
+    ocean temperature data, and team collaboration channels. Researchers
+    can share findings via Slack and email reports to stakeholders.
 
   services:
     slack: verified/slack
     gmail: verified/gmail
-
-  actors:
-    - role: lead-researcher
-      type: internal
-      count: 1
-      personality: >
-        Synthesizes findings from the team. Cautious about premature
-        conclusions. 15 years of field experience. Insists on consensus
-        before publishing.
-      permissions:
-        read: [slack, gmail]
-        write: [slack, gmail]
-
-    - role: atmospheric-physicist
-      type: internal
-      count: 1
-      personality: >
-        Expert in jet stream dynamics and upper-atmosphere modeling.
-        Methodical and insists on large sample sizes. Prefers quantitative
-        analysis over qualitative intuition.
-      permissions:
-        read: [slack, gmail]
-        write: [slack, gmail]
-
-    - role: oceanographer
-      type: internal
-      count: 1
-      personality: >
-        Data-driven researcher who proactively shares ocean temperature
-        datasets. Identifies oceanic-atmospheric correlations others miss.
-        Collaborative and detail-oriented.
-      permissions:
-        read: [slack, gmail]
-        write: [slack, gmail]
-
-    - role: statistician
-      type: internal
-      count: 1
-      personality: >
-        Critical thinker who challenges weak methodology. Demands
-        confidence intervals on every claim. Pushes for statistical rigor
-        and reproducibility.
-      permissions:
-        read: [slack, gmail]
-        write: [slack, gmail]
 
   policies:
     - name: "Evidence before conclusion"
@@ -78,11 +32,6 @@ world:
     - "Anomalous jet stream data detected in March readings"
     - "Ocean temperatures in the same region show unusual warming patterns"
     - "Previous studies on similar anomalies were inconclusive"
-
-  mission: >
-    Determine if March jet stream anomalies correlate with ocean
-    temperature changes. Produce a research brief with findings,
-    methodology, and confidence level.
 
 compiler:
   seed: 42

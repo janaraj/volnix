@@ -135,6 +135,43 @@ def resolve_blueprint(name: str) -> Path | None:
     return None  # Caller treats as NL description
 
 
+def resolve_agent_profile(name: str) -> Path | None:
+    """Resolve an agent profile (internal or external) by name.
+
+    Priority: exact path → user blueprints → official blueprints (agents_ prefix) → None.
+    Supports both ``agents_climate_researchers`` and ``climate_researchers``
+    (auto-prepends ``agents_`` prefix if needed).
+    """
+    if not name or not name.strip():
+        return None
+
+    # 1. Exact relative file path
+    p = Path(name)
+    if p.suffix in (".yaml", ".yml"):
+        if not p.is_absolute() and ".." not in p.parts and p.exists():
+            return p.resolve()
+
+    # 2. Name-based lookup
+    stem = p.stem if name.endswith((".yaml", ".yml")) else name
+    if not _is_safe_name(stem):
+        return None
+
+    for search_dir in (user_blueprints_dir(), official_blueprints_dir()):
+        if not search_dir.exists():
+            continue
+        # Try exact name first
+        candidate = search_dir / f"{stem}.yaml"
+        if candidate.exists():
+            return candidate
+        # Try with agents_ prefix
+        if not stem.startswith("agents_"):
+            candidate = search_dir / f"agents_{stem}.yaml"
+            if candidate.exists():
+                return candidate
+
+    return None
+
+
 def resolve_preset(name: str) -> Path | None:
     """Resolve a reality preset name.
 
