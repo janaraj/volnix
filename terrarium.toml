@@ -149,7 +149,7 @@ shopify = "/shopify"
 [logging]
 level = "INFO"                      # DEBUG | INFO | WARNING | ERROR
 format = "text"                     # text | json (future)
-llm_debug = false                   # Write LLM responses to data/llm_debug/
+llm_debug = true                    # Write LLM responses to data/llm_debug/
 
 # ── Webhook Event Delivery ───────────────────────────────────
 
@@ -220,6 +220,9 @@ infer_on_missing = true
 # ══════════════════════════════════════════════════════════════
 # LLM Configuration
 # ══════════════════════════════════════════════════════════════
+
+[llm]
+llm_debug = true
 
 # ── Defaults ─────────────────────────────────────────────────
 

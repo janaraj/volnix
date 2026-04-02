@@ -132,8 +132,8 @@ class LLMRouter:
         if self._tracker:
             await self._tracker.record(request, response, engine_name)
 
-        # Debug-level: write LLM response content to file for traceability
-        if logger.isEnabledFor(logging.DEBUG):
+        # Write LLM request/response to file when llm_debug is enabled
+        if getattr(self._config, "llm_debug", False):
             self._write_debug_response(engine_name, use_case, request, response)
 
         return response
@@ -173,7 +173,7 @@ class LLMRouter:
 
     # ── Debug response logging ────────────────────────────────────
 
-    _LLM_DEBUG_DIR = Path("data/llm_debug")
+    _LLM_DEBUG_DIR = Path.home() / ".terrarium" / "data" / "llm_debug"
 
     def _write_debug_response(
         self,

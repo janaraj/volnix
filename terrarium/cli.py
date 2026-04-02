@@ -520,14 +520,14 @@ async def _run_impl(
                     f"(lead: {roles[0]})"
                 )
 
-            # Apply internal agents (merge into plan before create_run)
-            compiled_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
+            # Apply internal agents — compile_plan for world, sim_plan for simulation
+            compile_plan, sim_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
 
-            # Step 2: Create world + run
+            # Step 2: Create world + run (compile_plan excludes agent actor_specs)
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")
             from terrarium.core.types import WorldId as _WId
             run_id = await terrarium.create_run(
-                compiled_plan, mode=compiled_plan.mode, tag=tag,
+                compile_plan, mode=compile_plan.mode, tag=tag,
                 world_id=_WId(world_id) if world_id else None,
                 agents_yaml=agents, internal_profile=internal_profile,
             )
@@ -548,7 +548,7 @@ async def _run_impl(
                 console.print("  MCP:  stdio (connect via mcp client)")
                 console.print("[dim]Press Ctrl+C to stop[/dim]")
 
-                sim = await _setup_simulation(terrarium, compiled_plan)
+                sim = await _setup_simulation(terrarium, sim_plan)
                 if sim is not None:
                     runner, _, _ = sim
                     console.print("[bold]Step 4/4: Running simulation...[/bold]")
@@ -666,33 +666,42 @@ def _resolve_internal(internal: str | None) -> str | None:
     raise typer.Exit(1)
 
 
-def _apply_internal_agents(plan: Any, internal: str | None) -> tuple[Any, Any]:
-    """Load internal agent profile and merge into plan.
+def _apply_internal_agents(plan: Any, internal: str | None) -> tuple[Any, Any, Any]:
+    """Load internal agent profile. Returns (compile_plan, sim_plan, profile).
 
-    Returns (updated_plan, internal_profile). Profile is passed to
-    create_run() for agent registration and ActorState creation.
-    Plan gets: mission, deliverable_config, actor_specs merged —
-    so both create_run() and _setup_simulation() see the same data.
+    compile_plan: for create_run() → compiler. Has mission + deliverable but
+                  NO agent actor_specs. Agents are not part of the world.
+    sim_plan:     for _setup_simulation(). Has agent actor_specs so simulation
+                  type detection (internal_only vs external) works.
+    profile:      for create_run(internal_profile=...). Registration + ActorState.
     """
     if not internal:
-        return plan, None
+        return plan, plan, None
     from terrarium.actors.internal_profile import load_internal_profile
     profile = load_internal_profile(internal)
-    updates: dict[str, Any] = {}
+
+    # Compile plan: mission + deliverable only — agents stay OUT of compilation
+    compile_updates: dict[str, Any] = {}
     if profile.mission:
-        updates["mission"] = profile.mission
+        compile_updates["mission"] = profile.mission
     if profile.deliverable:
         from terrarium.deliverable_presets import load_preset as _lp
         preset_data = _lp(profile.deliverable)
-        updates["deliverable_config"] = {"preset": profile.deliverable, **preset_data}
+        compile_updates["deliverable_config"] = {"preset": profile.deliverable, **preset_data}
         console.print(f"  Deliverable: [cyan]{profile.deliverable}[/cyan]")
+    compile_plan = plan.model_copy(update=compile_updates) if compile_updates else plan
+
+    # Sim plan: agent specs added for SimulationRunner type detection
     agent_specs = [
         {"role": a.role, "type": "internal", "count": 1}
         for a in profile.agents
     ]
-    updates["actor_specs"] = list(plan.actor_specs) + agent_specs
+    sim_plan = compile_plan.model_copy(update={
+        "actor_specs": list(compile_plan.actor_specs) + agent_specs,
+    })
+
     console.print(f"  Internal team: [cyan]{', '.join(a.role for a in profile.agents)}[/cyan]")
-    return plan.model_copy(update=updates), profile
+    return compile_plan, sim_plan, profile
 
 
 def _apply_deliverable(plan: Any, deliverable: str | None) -> Any:
@@ -756,9 +765,9 @@ async def _serve_impl(
                 if behavior:
                     plan = plan.model_copy(update={"behavior": behavior})
                 plan = _apply_deliverable(plan, deliverable)
-                plan, internal_profile = _apply_internal_agents(plan, internal)
+                compile_plan, sim_plan, internal_profile = _apply_internal_agents(plan, internal)
                 new_run_id = await terrarium.create_run(
-                    plan, mode=plan.mode, world_id=_WId(world_id),
+                    compile_plan, mode=compile_plan.mode, world_id=_WId(world_id),
                     agents_yaml=agents, internal_profile=internal_profile,
                 )
                 _active_run_id[0] = str(new_run_id)
@@ -766,8 +775,8 @@ async def _serve_impl(
                 tools = await terrarium.gateway.get_tool_manifest()
                 console.print(f"  [green]{len(tools)} tools available[/green]")
 
-                # Start simulation for internal-only worlds
-                sim = await _setup_simulation(terrarium, plan)
+                # Start simulation (sim_plan has agent specs for type detection)
+                sim = await _setup_simulation(terrarium, sim_plan)
                 if sim is not None:
                     runner, _, _ = sim
                     async def _run_sim() -> None:
@@ -825,10 +834,10 @@ async def _serve_impl(
                             console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
                         compiled_plan = _apply_deliverable(compiled_plan, deliverable)
-                        compiled_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
+                        compile_plan, sim_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
                         console.print("  Generating world...")
                         new_run_id = await terrarium.create_run(
-                            compiled_plan, mode=compiled_plan.mode,
+                            compile_plan, mode=compile_plan.mode,
                             agents_yaml=agents, internal_profile=internal_profile,
                         )
                         _active_run_id[0] = str(new_run_id)
@@ -837,8 +846,8 @@ async def _serve_impl(
                         tools = await terrarium.gateway.get_tool_manifest()
                         console.print(f"  [green]{len(tools)} tools available[/green]")
 
-                        # Start simulation for internal-only worlds
-                        sim = await _setup_simulation(terrarium, compiled_plan)
+                        # Start simulation (sim_plan has agent specs for type detection)
+                        sim = await _setup_simulation(terrarium, sim_plan)
                         if sim is not None:
                             runner, _, _ = sim
                             stop = await runner.run()

@@ -14,54 +14,20 @@ from terrarium.actors.state import ActorState, InteractionRecord
 from terrarium.core.events import WorldEvent
 from terrarium.simulation.world_context import WorldContextBundle
 
-# Output schema for action generation
-ACTION_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "action_type": {
-            "type": "string",
-            "description": "The action to take (or 'do_nothing')",
-        },
-        "target_service": {
-            "type": ["string", "null"],
-            "description": "Service to target",
-        },
-        "payload": {"type": "object", "description": "Action parameters"},
-        "reasoning": {
-            "type": "string",
-            "description": "Brief reasoning for this action",
-        },
-        "state_updates": {
-            "type": "object",
-            "properties": {
-                "frustration_delta": {"type": "number"},
-                "urgency": {"type": "number"},
-                "new_goal": {"type": ["string", "null"]},
-                "goal_strategy": {"type": ["string", "null"]},
-                "schedule_action": {"type": ["object", "null"]},
-                "pending_tasks": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Your current task list",
-                },
-                "goal_context": {
-                    "type": ["string", "null"],
-                    "description": "Updated context about your goal progress",
-                },
-            },
-        },
-        "intended_for": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": (
-                "When posting a message, list the actor roles you are addressing"
-                " (e.g. ['oceanographer'] or ['all'])"
-            ),
-        },
-    },
-    "required": ["action_type", "reasoning"],
-}
+# Compact output example shown to LLM (replaces verbose JSON Schema)
+OUTPUT_EXAMPLE = """{
+  "action_type": "tool_name or do_nothing",
+  "target_service": "service_name",
+  "payload": { "param": "value" },
+  "reasoning": "why this action",
+  "intended_for": ["role_name"],
+  "state_updates": {
+    "goal_context": "updated progress notes",
+    "pending_tasks": ["remaining task 1", "remaining task 2"]
+  }
+}"""
 
+# Full schema kept for batch prompts and backward compat
 BATCH_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -84,6 +50,32 @@ BATCH_OUTPUT_SCHEMA: dict[str, Any] = {
     "required": ["actor_actions"],
 }
 
+# Keep ACTION_OUTPUT_SCHEMA for _parse_llm_action compatibility
+ACTION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "action_type": {"type": "string"},
+        "target_service": {"type": ["string", "null"]},
+        "payload": {"type": "object"},
+        "reasoning": {"type": "string"},
+        "state_updates": {
+            "type": "object",
+            "properties": {
+                "pending_tasks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "goal_context": {"type": ["string", "null"]},
+            },
+        },
+        "intended_for": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["action_type", "reasoning"],
+}
+
 
 class ActorPromptBuilder:
     """Builds LLM prompts for actor action generation."""
@@ -103,215 +95,243 @@ class ActorPromptBuilder:
         available_actions: list[dict[str, Any]],
         team_roster: list[dict[str, str]] | None = None,
     ) -> str:
-        """Build per-actor user prompt (layers 3-4).
+        """Build per-actor user prompt.
 
-        Structure:
-        - Actor identity (persona, role)
-        - Team roster (who else is in the world)
-        - Current state (goal, waiting_for, frustration, recent interactions)
-        - Trigger (what just happened)
-        - Available actions
-        - Output schema
+        Section order designed for LLM comprehension:
+        1. Identity (who am I)
+        2. Team + channel (who else, where we talk)
+        3. Instructions (what to do — BEFORE tools/state)
+        4. Context (goal, tasks, action history, recent activity)
+        5. Trigger (what activated me, if any)
+        6. Output format (compact example)
         """
         sections: list[str] = []
 
-        # Actor identity
-        sections.append(f"## You are: {actor.role} (ID: {actor.actor_id})")
+        # --- 1. Identity ---
+        persona_desc = ""
+        if actor.persona:
+            persona_desc = actor.persona.get("description", "")
+            if not persona_desc:
+                persona_desc = json.dumps(actor.persona)
+        identity = f"## You are: {actor.role} (ID: {actor.actor_id})"
+        if persona_desc:
+            identity += f"\n{persona_desc}"
+        sections.append(identity)
 
-        # Team roster — so actors know exact roles for intended_for tagging
+        # --- 2. Team + channel ---
         if team_roster:
-            roster_lines = ["### Team Members"]
+            team_lines = ["## Your Team"]
             for member in team_roster:
                 if member["role"] != actor.role:
-                    roster_lines.append(f"- **{member['role']}** (ID: {member['id']})")
-            sections.append("\n".join(roster_lines))
-        if actor.persona:
-            sections.append(f"### Persona\n{json.dumps(actor.persona, indent=2)}")
+                    team_lines.append(f"- **{member['role']}** (ID: {member['id']})")
+            # Show team channel for autonomous agents
+            if actor.autonomous:
+                for sub in actor.subscriptions:
+                    if sub.service_id == "slack" and sub.filter.get("channel"):
+                        team_lines.append(
+                            f"\nTeam channel: `{sub.filter['channel']}`"
+                        )
+                        break
+            sections.append("\n".join(team_lines))
 
-        # Observer mode instructions
+        # --- 3. Instructions (before tools/state — shapes LLM intent early) ---
         if actor.actor_type == "observer":
             sections.append(
-                "### Observer Mode\n"
-                "You are an OBSERVER. You can READ and ANALYZE data from services "
-                "but you CANNOT create, update, or delete anything. Your role is "
-                "to observe, analyze, and report findings. Only use read actions "
-                "(list, get, search, query)."
+                "## Instructions\n"
+                "You are an OBSERVER. You can READ and ANALYZE data but CANNOT "
+                "create, update, or delete anything. Only use read actions."
+            )
+        elif actor.autonomous:
+            sections.append(self._build_autonomous_instructions(actor, team_roster))
+        else:
+            sections.append(
+                "## Instructions\n"
+                "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
+                "For messages: only provide `text` in payload — the system "
+                "auto-fills `channel_id`.\n"
+                "Use `intended_for` to address teammates by role."
             )
 
-        # Current state
-        state_lines = [
-            f"- Goal: {actor.current_goal or 'None'}",
-            f"- Strategy: {actor.goal_strategy or 'None'}",
-            f"- Frustration: {actor.frustration:.2f}",
-            f"- Urgency: {actor.urgency:.2f}",
-        ]
-        if actor.waiting_for:
-            state_lines.append(
-                f"- Waiting for: {actor.waiting_for.description} "
-                f"(since t={actor.waiting_for.since:.1f},"
-                f" patience={actor.waiting_for.patience:.1f})"
-            )
-        if actor.pending_notifications:
-            state_lines.append(f"- Pending notifications: {len(actor.pending_notifications)}")
-            for notif in actor.pending_notifications[-5:]:  # last 5
-                state_lines.append(f"  - {notif}")
-        sections.append("### Current State\n" + "\n".join(state_lines))
+        # --- 4. Context ---
+        context_parts = []
 
-        # Structured interaction history (conversational context)
-        if actor.recent_interactions:
-            interaction_lines = ["### Recent activity you're aware of"]
-            for record in actor.recent_interactions[-10:]:  # last 10
-                if isinstance(record, InteractionRecord):
-                    source_tag = ""
-                    if record.source == "notified":
-                        source_tag = " [notified via subscription]"
-                    reply_tag = ""
-                    if record.reply_to:
-                        reply_tag = f" (reply to {record.reply_to})"
-                    channel_tag = ""
-                    if record.channel:
-                        channel_tag = f" in {record.channel}"
-
-                    # Show if this message was addressed to the current actor
-                    addressed_tag = ""
-                    if record.intended_for:
-                        if actor.role in record.intended_for or "all" in record.intended_for:
-                            addressed_tag = " **[addressed to YOU]**"
-                        else:
-                            addressed_tag = f" [to: {', '.join(record.intended_for)}]"
-
-                    if record.source == "self":
-                        interaction_lines.append(
-                            f"- [tick {record.tick}] You:"
-                            f' "{record.summary}"{channel_tag}{reply_tag}'
-                        )
-                    else:
-                        interaction_lines.append(
-                            f"- [tick {record.tick}] {record.actor_role}"
-                            f" ({record.actor_id}):"
-                            f' "{record.summary}"{channel_tag}'
-                            f"{addressed_tag}{reply_tag}{source_tag}"
-                        )
-                else:
-                    # Backward compat: plain string
-                    interaction_lines.append(f"- {record}")
-            sections.append("\n".join(interaction_lines))
+        # Goal context
+        context_parts.append(
+            f"### Mission Context\n"
+            f"{actor.goal_context or 'Not set — update via state_updates.goal_context'}"
+        )
 
         # Pending tasks
         if actor.pending_tasks:
-            task_lines = ["### Your pending tasks"]
+            task_lines = ["### Pending Tasks"]
             for i, task in enumerate(actor.pending_tasks, 1):
                 task_lines.append(f"{i}. {task}")
-            sections.append("\n".join(task_lines))
+            context_parts.append("\n".join(task_lines))
 
-        # Goal context
-        if actor.goal_context:
-            sections.append(f"### Goal context\n{actor.goal_context}")
-
-        # Trigger — human-readable summary, not raw JSON
-        sections.append(f"### Activation Reason: {activation_reason}")
-        if trigger_event:
-            # Extract readable content from the trigger
-            actor_role = ""
-            actor_state = None
-            # Try to get the trigger actor's role from actor_states on the world context
-            text = (
-                trigger_event.input_data.get("text")
-                or trigger_event.input_data.get("body")
-                or trigger_event.input_data.get("content")
-                or trigger_event.action
-            )
-            channel = (
-                trigger_event.input_data.get("channel_id")
-                or trigger_event.input_data.get("channel")
-                or ""
-            )
-
-            trigger_lines = [
-                f"**{trigger_event.actor_id}** performed `{trigger_event.action}`"
-                f" on service `{trigger_event.service_id}`"
-            ]
-            if channel:
-                trigger_lines[0] += f" in channel `{channel}`"
-            if text and len(text) > 10:
-                preview = text[:300] + ("..." if len(text) > 300 else "")
-                trigger_lines.append(f'> {preview}')
-            intended = trigger_event.input_data.get("intended_for", [])
-            if intended:
-                trigger_lines.append(f"Addressed to: **{', '.join(intended)}**")
-
-            sections.append("### Trigger\n" + "\n".join(trigger_lines))
-
-        # Available actions
-        if available_actions:
-            action_lines = []
-            for action in available_actions:
-                name = action.get("name", "?")
-                service = action.get("service", "")
-                desc = action.get("description", "")
-                required = action.get("required_params", [])
-                params_str = f" — required: {', '.join(required)}" if required else ""
-                action_lines.append(f"- {name} (service: {service}): {desc}{params_str}")
-            sections.append(
-                "### Available Actions\n"
-                "Use `action_type` = the action name, `target_service` = the service name.\n"
-                "Include ALL required parameters in `payload`.\n"
-                + "\n".join(action_lines)
-            )
-
-        # Autonomous agent work loop instructions
+        # Action history (anti-repetition: shows what agent already did)
         if actor.autonomous:
-            # Progress facts — let the LLM reason about what phase it's in
-            own_actions = len([r for r in actor.recent_interactions if r.source == "self"])
-            total_messages = len(actor.recent_interactions)
-            sections.append(
-                f"### Progress\n"
-                f"- You have taken {own_actions} actions so far\n"
-                f"- The team has exchanged {total_messages} messages total\n"
-                f"- Your tracked context: {actor.goal_context or 'Not set — update via state_updates.goal_context'}"
+            context_parts.append(
+                self._build_action_history(actor, available_actions)
             )
 
-            team_size = len(team_roster) if team_roster else 1
-            team_note = ""
-            if team_size > 1:
-                team_note = (
-                    f"You are part of a team of {team_size} agents working together.\n"
-                    "- Leverage your teammates' expertise — ask them questions, request their analysis\n"
-                    "- Share your findings with the team so others can build on them\n"
-                    "- Read what teammates have shared (shown in Recent Activity) and incorporate it\n"
-                    "- Use `intended_for` to address specific teammates by role, or 'all' for the whole team\n"
-                    "- If a message is marked **[addressed to YOU]**, prioritize responding to it\n\n"
-                )
-
-            sections.append(
-                "### Work Mode\n"
-                f"{team_note}"
-                "- Use the available actions to research, gather data, and find information relevant to the mission\n"
-                "- After gathering data, share your findings with the team\n"
-                "- IMPORTANT: Read 'Recent Activity' carefully. Do NOT repeat what you or others already said\n"
-                "- Each action should add NEW information, analysis, or response — not restate previous messages\n"
-                "- If you have nothing new to contribute, respond with action_type: 'do_nothing'\n\n"
-                "Track your progress by updating `pending_tasks` and `goal_context` in state_updates.\n"
-                "The lead agent will synthesize the team's findings and produce the final deliverable."
+        # Recent activity (what the team has been doing)
+        if actor.recent_interactions:
+            context_parts.append(
+                self._build_recent_activity(actor)
             )
-            if actor.pending_tasks:
-                sections.append(
-                    "### Your Pending Tasks\n"
-                    + "\n".join(f"- {t}" for t in actor.pending_tasks)
-                )
 
-        # Output instruction
+        if context_parts:
+            sections.append("## What You Know\n\n" + "\n\n".join(context_parts))
+
+        # --- 5. Trigger ---
+        if trigger_event:
+            sections.append(self._build_trigger(trigger_event))
+        elif activation_reason:
+            sections.append(f"## Trigger: {activation_reason}")
+
+        # --- 6. Output format ---
         sections.append(
-            "### Instructions\n"
-            "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
-            "For messages: only provide `text` in payload — the system auto-fills "
-            "`channel_id` and `thread_ts` from the conversation context.\n"
-            "Include `intended_for` with the exact role names of team members you're addressing "
-            "(e.g. [\"copywriter\"] or [\"all\"] for everyone). Use ONLY roles from the Team Members list above.\n"
-            f"Output schema: {json.dumps(ACTION_OUTPUT_SCHEMA, indent=2)}"
+            "## Output\n"
+            "Respond with ONE JSON action:\n"
+            f"```json\n{OUTPUT_EXAMPLE}\n```"
         )
 
         return "\n\n".join(sections)
+
+    # -- Helper methods --
+
+    @staticmethod
+    def _build_autonomous_instructions(
+        actor: ActorState,
+        team_roster: list[dict[str, str]] | None,
+    ) -> str:
+        """Build instructions for autonomous agents."""
+        team_size = len(team_roster) if team_roster else 1
+        team_note = ""
+        if team_size > 1:
+            team_note = (
+                f"You are part of a team of {team_size} working together.\n"
+                "- Leverage teammates' expertise — ask questions, request analysis\n"
+                "- Read what teammates shared in Recent Activity and build on it\n"
+                "- Use `intended_for` to address teammates by role or 'all'\n\n"
+            )
+
+        return (
+            "## Instructions\n"
+            f"{team_note}"
+            "The world's services contain real data generated during world creation.\n"
+            "Your job is to QUERY these services and share findings with the team.\n\n"
+            "1. QUERY before you speak. Use READ tools to find actual data from services.\n"
+            "2. SHARE facts, not plans. Post specific data you found (numbers, quotes, dates).\n"
+            "3. RESPOND to teammates. Messages marked [TO YOU] need your response.\n"
+            "4. NO REPETITION. Check Your Action History. Don't re-query or re-state.\n"
+            "5. Track progress via state_updates.pending_tasks and goal_context.\n"
+            "6. If nothing new to add: action_type 'do_nothing'.\n\n"
+            "For messages: only provide `text` in payload — the system auto-fills `channel_id`."
+        )
+
+    @staticmethod
+    def _build_action_history(
+        actor: ActorState,
+        available_actions: list[dict[str, Any]],
+    ) -> str:
+        """Build summary of agent's own actions (anti-repetition)."""
+        # Build lookup: tool name → http_method
+        method_lookup = {
+            a.get("name", ""): a.get("http_method", "POST").upper()
+            for a in available_actions
+        }
+
+        own = [r for r in actor.recent_interactions if r.source == "self"]
+        if not own:
+            return "### Your Action History\nNo actions taken yet."
+
+        queries = []
+        messages = []
+        other = []
+        for r in own:
+            method = method_lookup.get(r.action, "POST")
+            if method == "GET":
+                queries.append(r.action)
+            elif r.action in ("chat.postMessage", "chat.replyToThread",
+                              "chat.update", "email_send"):
+                messages.append(r.action)
+            else:
+                other.append(r.action)
+
+        lines = ["### Your Action History"]
+        if queries:
+            lines.append(f"- Queries: {len(queries)} ({', '.join(queries)})")
+        if messages:
+            lines.append(f"- Messages: {len(messages)} ({', '.join(messages)})")
+        if other:
+            lines.append(f"- Other: {len(other)} ({', '.join(other)})")
+        lines.append(f"- Total: {len(own)}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_recent_activity(actor: ActorState) -> str:
+        """Build recent interaction history with full text and addressing."""
+        lines = ["### Recent Activity"]
+        for record in actor.recent_interactions[-10:]:
+            if not isinstance(record, InteractionRecord):
+                lines.append(f"- {record}")
+                continue
+
+            channel_tag = f" in {record.channel}" if record.channel else ""
+            reply_tag = f" (reply to {record.reply_to})" if record.reply_to else ""
+
+            # Show if addressed to this agent
+            addressed_tag = ""
+            if record.intended_for:
+                if actor.role in record.intended_for or "all" in record.intended_for:
+                    addressed_tag = " [TO YOU]"
+                else:
+                    addressed_tag = f" [to: {', '.join(record.intended_for)}]"
+
+            if record.source == "self":
+                lines.append(
+                    f"- [tick {record.tick}] You: "
+                    f'"{record.summary}"{channel_tag}{reply_tag}'
+                )
+            else:
+                lines.append(
+                    f"- [tick {record.tick}] {record.actor_role}: "
+                    f'"{record.summary}"{channel_tag}'
+                    f"{addressed_tag}{reply_tag}"
+                )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_trigger(trigger_event: WorldEvent) -> str:
+        """Build trigger section from a WorldEvent."""
+        text = (
+            trigger_event.input_data.get("text")
+            or trigger_event.input_data.get("body")
+            or trigger_event.input_data.get("content")
+            or trigger_event.action
+        )
+        channel = (
+            trigger_event.input_data.get("channel_id")
+            or trigger_event.input_data.get("channel")
+            or ""
+        )
+
+        trigger_lines = [
+            f"## Trigger",
+            f"**{trigger_event.actor_id}** performed `{trigger_event.action}`"
+            f" on `{trigger_event.service_id}`"
+        ]
+        if channel:
+            trigger_lines[-1] += f" in `{channel}`"
+        if text and len(text) > 10:
+            preview = text[:500] + ("..." if len(text) > 500 else "")
+            trigger_lines.append(f"> {preview}")
+        intended = trigger_event.input_data.get("intended_for", [])
+        if intended:
+            trigger_lines.append(f"Addressed to: **{', '.join(intended)}**")
+
+        return "\n".join(trigger_lines)
 
     def build_batch_prompt(
         self,
@@ -323,44 +343,27 @@ class ActorPromptBuilder:
         Each actor gets a summary section. The LLM generates actions for all.
         """
         sections: list[str] = []
-        sections.append(
-            "## Batch Action Generation\n"
-            "Generate actions for each of the following actors. "
-            "Each actor may choose 'do_nothing' if they have no reason to act."
-        )
 
-        for actor, trigger, reason in actors_with_triggers:
+        for actor, trigger_event, reason in actors_with_triggers:
             actor_section = [
                 f"### Actor: {actor.role} (ID: {actor.actor_id})",
-                f"- Goal: {actor.current_goal or 'None'}",
-                f"- Frustration: {actor.frustration:.2f}",
-                f"- Activation reason: {reason}",
+                f"Activation: {reason}",
             ]
-            if actor.persona:
-                persona_brief = str(actor.persona)[:200]
-                actor_section.append(f"- Persona: {persona_brief}")
-            if trigger:
-                actor_section.append(
-                    f"- Trigger: {trigger.event_type} by {trigger.actor_id} -> {trigger.action}"
+            if trigger_event:
+                text = (
+                    trigger_event.input_data.get("text")
+                    or trigger_event.action
                 )
+                preview = (text[:200] + "...") if len(text) > 200 else text
+                actor_section.append(
+                    f"Trigger: {trigger_event.actor_id} → "
+                    f"{trigger_event.action}: {preview}"
+                )
+            if actor.current_goal:
+                actor_section.append(f"Goal: {actor.current_goal}")
             sections.append("\n".join(actor_section))
 
-        if available_actions:
-            action_lines = []
-            for a in available_actions:
-                required = a.get("required_params", [])
-                params_str = f" — required: {', '.join(required)}" if required else ""
-                action_lines.append(
-                    f"- {a.get('name', '?')} (service: {a.get('service', '')}): "
-                    f"{a.get('description', '')}{params_str}"
-                )
-            sections.append(
-                "### Available Actions\n"
-                "Use `action_type` = the action name, `target_service` = the service name.\n"
-                "Include ALL required parameters in `payload`.\n"
-                + "\n".join(action_lines)
-            )
-
-        sections.append(f"### Output Schema\n{json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}")
-
+        sections.append(
+            f"Respond with JSON: {json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}"
+        )
         return "\n\n".join(sections)

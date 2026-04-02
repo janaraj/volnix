@@ -767,6 +767,7 @@ class TerrariumApp:
                             "description": tool_info.get("description", ""),
                             "service": pack_name,
                             "required_params": params.get("required", []),
+                            "http_method": tool_info.get("http_method", "POST"),
                         }
                     )
         except KeyError:
@@ -779,6 +780,7 @@ class TerrariumApp:
             behavior_description=ctx_vars.get("behavior_description", ""),
             governance_rules_summary=ctx_vars.get("policies_summary", ""),
             mission=getattr(plan, "mission", "") or "",
+            seeds=getattr(plan, "seeds", []),
             available_services=available_actions,
         )
 
