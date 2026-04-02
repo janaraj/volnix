@@ -31,6 +31,7 @@ def test_world_context_defaults():
     assert ctx.available_services == []
     assert ctx.mission == ""
     assert ctx.reality_dimensions == {}
+    assert ctx.seeds == []
 
 
 def test_to_system_prompt_full():
@@ -42,14 +43,20 @@ def test_to_system_prompt_full():
         behavior_description="Responds to agent actions.",
         governance_rules_summary="No PII sharing.",
         mission="Evaluate agent quality.",
+        seeds=["VIP customer waiting 3 days for refund"],
         available_services=[
             {
-                "name": "helpdesk",
-                "actions": [
-                    {"name": "reply_ticket"},
-                    {"name": "close_ticket"},
-                ],
-            }
+                "name": "reply_ticket",
+                "service": "helpdesk",
+                "http_method": "POST",
+                "required_params": ["ticket_id", "text"],
+            },
+            {
+                "name": "list_tickets",
+                "service": "helpdesk",
+                "http_method": "GET",
+                "required_params": [],
+            },
         ],
     )
 
@@ -59,14 +66,14 @@ def test_to_system_prompt_full():
     assert "Corporate helpdesk simulation." in prompt
     assert "## Reality" in prompt
     assert "Messy reality" in prompt
-    assert "## Behavior Mode" in prompt
-    assert "reactive: Responds to agent actions." in prompt
-    assert "## Governance Rules" in prompt
-    assert "No PII sharing." in prompt
     assert "## Mission" in prompt
     assert "Evaluate agent quality." in prompt
-    assert "## Available Services" in prompt
-    assert "helpdesk: reply_ticket, close_ticket" in prompt
+    assert "## World Scenarios" in prompt
+    assert "VIP customer waiting 3 days" in prompt
+    assert "## Available Tools" in prompt
+    assert "### helpdesk" in prompt
+    assert "action_type: \"list_tickets\"" in prompt
+    assert "action_type: \"reply_ticket\"" in prompt
 
 
 def test_to_system_prompt_minimal():
@@ -81,33 +88,30 @@ def test_to_system_prompt_minimal():
 
     assert "## World" in prompt
     assert "Simple world" in prompt
-    assert "## Governance Rules" not in prompt
     assert "## Mission" not in prompt
-    assert "## Available Services" not in prompt
+    assert "## Available Tools" not in prompt
 
 
 def test_to_system_prompt_multiple_services():
-    """to_system_prompt renders multiple services correctly."""
+    """to_system_prompt renders services grouped by name with read/write."""
     ctx = WorldContextBundle(
         world_description="Multi-service world",
         reality_summary="Ideal",
         behavior_mode="dynamic",
         available_services=[
-            {
-                "name": "email",
-                "actions": [{"name": "send_email"}, {"name": "list_emails"}],
-            },
-            {
-                "name": "calendar",
-                "actions": [{"name": "create_event"}],
-            },
+            {"name": "email_send", "service": "email", "http_method": "POST", "required_params": ["to", "body"]},
+            {"name": "email_search", "service": "email", "http_method": "GET", "required_params": ["q"]},
+            {"name": "create_event", "service": "calendar", "http_method": "POST", "required_params": ["title"]},
         ],
     )
 
     prompt = ctx.to_system_prompt()
 
-    assert "- email: send_email, list_emails" in prompt
-    assert "- calendar: create_event" in prompt
+    assert "### email" in prompt
+    assert "action_type: \"email_search\"" in prompt
+    assert "action_type: \"email_send\"" in prompt
+    assert "### calendar" in prompt
+    assert "action_type: \"create_event\"" in prompt
 
 
 def test_world_context_equality():

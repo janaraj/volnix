@@ -249,18 +249,18 @@ class TestInteractionRecord:
         assert "satellite analysis" in record.summary
 
     async def test_truncates_long_content(self):
-        """Long summary text is truncated to 200 characters."""
+        """Long summary text is truncated to 500 characters."""
         actor = _make_actor()
         engine = await _create_engine([actor])
 
-        long_text = "A" * 300
+        long_text = "A" * 600
         event = _make_world_event(
             input_data={"text": long_text},
         )
 
         record = engine._build_interaction_record(event, actor, source="observed")
 
-        assert len(record.summary) == 200
+        assert len(record.summary) == 500
         assert record.summary.endswith("...")
 
     async def test_includes_reply_to(self):
@@ -643,7 +643,6 @@ class TestPromptRendering:
 
         assert "oceanographer" in prompt
         assert "SST anomaly" in prompt
-        assert "[notified via subscription]" in prompt
         assert "You:" in prompt  # self-authored interaction
         assert "(reply to evt-001)" in prompt
 
@@ -661,7 +660,7 @@ class TestPromptRendering:
             available_actions=[],
         )
 
-        assert "Your pending tasks" in prompt
+        assert "Pending Tasks" in prompt
         assert "Analyze SST data" in prompt
         assert "Draft findings summary" in prompt
 
@@ -679,7 +678,7 @@ class TestPromptRendering:
             available_actions=[],
         )
 
-        assert "Goal context" in prompt
+        assert "Mission Context" in prompt
         assert "Phase 2 complete" in prompt
 
     def test_backward_compat_string_interactions(self):

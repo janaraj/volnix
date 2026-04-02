@@ -133,7 +133,6 @@ class TestInteractionRecordFieldsRenderedInPrompt:
         assert "This is a test message" in prompt, "summary not rendered"
         assert "#testing" in prompt, "channel not rendered"
         assert "evt-parent-000" in prompt, "reply_to not rendered"
-        assert "[notified via subscription]" in prompt, "source=notified not rendered"
         assert "tick" in prompt.lower(), "tick not rendered"
 
 

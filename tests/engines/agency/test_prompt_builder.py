@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from terrarium.actors.state import ActorState, WaitingFor
+from terrarium.actors.state import ActorState, InteractionRecord
 from terrarium.core.events import WorldEvent
 from terrarium.core.types import ActorId, EntityId, ServiceId, Timestamp
 from terrarium.engines.agency.prompt_builder import (
@@ -20,24 +20,15 @@ def _make_world_context() -> WorldContextBundle:
     return WorldContextBundle(
         world_description="A corporate helpdesk simulation.",
         reality_summary="Messy reality with occasional system failures.",
-        behavior_mode="reactive",
-        behavior_description="World reacts to agent actions.",
-        governance_rules_summary="No PII sharing. Manager approval for refunds > $100.",
         mission="Evaluate agent support quality.",
+        seeds=["VIP customer waiting 3 days for refund"],
         available_services=[
-            {
-                "name": "helpdesk",
-                "actions": [
-                    {"name": "reply_ticket"},
-                    {"name": "close_ticket"},
-                ],
-            },
-            {
-                "name": "email",
-                "actions": [
-                    {"name": "send_email"},
-                ],
-            },
+            {"name": "reply_ticket", "service": "helpdesk", "http_method": "POST",
+             "description": "Reply to a ticket", "required_params": ["ticket_id", "text"]},
+            {"name": "list_tickets", "service": "helpdesk", "http_method": "GET",
+             "description": "List tickets", "required_params": []},
+            {"name": "email_search", "service": "email", "http_method": "GET",
+             "description": "Search emails", "required_params": ["q"]},
         ],
     )
 
@@ -48,10 +39,8 @@ def _make_actor(**kwargs) -> ActorState:
         "role": "support_agent",
         "actor_type": "internal",
         "current_goal": "Resolve ticket quickly",
-        "goal_strategy": "Check knowledge base first",
-        "frustration": 0.3,
-        "urgency": 0.5,
-        "persona": {"name": "Alice", "temperament": "patient"},
+        "goal_context": "Resolve ticket quickly",
+        "persona": {"description": "Patient and thorough support agent"},
     }
     defaults.update(kwargs)
     return ActorState(**defaults)
@@ -66,21 +55,12 @@ def _make_event() -> WorldEvent:
         service_id=ServiceId("helpdesk"),
         action="update_ticket",
         target_entity=EntityId("ticket-42"),
-        input_data={"status": "escalated"},
-        post_state={"status": "escalated", "priority": "high"},
+        input_data={"status": "escalated", "text": "This ticket needs attention"},
     )
 
 
-def _sample_actions() -> list[dict]:
-    return [
-        {"name": "reply_ticket", "description": "Reply to a support ticket"},
-        {"name": "close_ticket", "description": "Close a resolved ticket"},
-        {"name": "send_email", "description": "Send an email notification"},
-    ]
-
-
 def test_system_prompt_from_world_context():
-    """System prompt includes all world context sections."""
+    """System prompt includes world, mission, seeds, services grouped by read/write."""
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
 
@@ -88,17 +68,16 @@ def test_system_prompt_from_world_context():
 
     assert "## World" in prompt
     assert "corporate helpdesk" in prompt
-    assert "## Reality" in prompt
-    assert "Messy reality" in prompt
-    assert "## Behavior Mode" in prompt
-    assert "reactive" in prompt
-    assert "## Governance Rules" in prompt
-    assert "Manager approval" in prompt
     assert "## Mission" in prompt
     assert "Evaluate agent" in prompt
-    assert "## Available Services" in prompt
-    assert "helpdesk" in prompt
-    assert "email" in prompt
+    assert "## World Scenarios" in prompt
+    assert "VIP customer" in prompt
+    assert "## Available Tools" in prompt
+    assert "### helpdesk" in prompt
+    assert "action_type: \"list_tickets\"" in prompt
+    assert "action_type: \"reply_ticket\"" in prompt
+    assert "### email" in prompt
+    assert "action_type: \"email_search\"" in prompt
 
 
 def test_system_prompt_minimal():
@@ -106,7 +85,6 @@ def test_system_prompt_minimal():
     ctx = WorldContextBundle(
         world_description="Simple world",
         reality_summary="Ideal",
-        behavior_mode="static",
     )
     builder = ActorPromptBuilder(ctx)
 
@@ -114,57 +92,105 @@ def test_system_prompt_minimal():
 
     assert "## World" in prompt
     assert "Simple world" in prompt
-    # No governance or mission sections
-    assert "## Governance Rules" not in prompt
     assert "## Mission" not in prompt
+    assert "## Services" not in prompt
 
 
 def test_individual_prompt_structure():
-    """Individual prompt contains all required sections."""
+    """Individual prompt contains identity, instructions, context, trigger, output."""
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
     actor = _make_actor()
     event = _make_event()
-    actions = _sample_actions()
 
     prompt = builder.build_individual_prompt(
         actor=actor,
         trigger_event=event,
         activation_reason="event_affected",
-        available_actions=actions,
+        available_actions=[],
     )
 
-    # Actor identity
+    # Identity
     assert "support_agent" in prompt
     assert "actor-alice" in prompt
+    assert "Patient and thorough" in prompt
 
-    # Persona
-    assert "Alice" in prompt
-    assert "patient" in prompt
+    # Instructions
+    assert "## Instructions" in prompt
 
-    # Current state
+    # Context
+    assert "Mission Context" in prompt
     assert "Resolve ticket quickly" in prompt
-    assert "Frustration: 0.30" in prompt
-    assert "Urgency: 0.50" in prompt
 
-    # Trigger (human-readable summary, not raw JSON)
-    assert "event_affected" in prompt
+    # Trigger
     assert "agent-external" in prompt
     assert "update_ticket" in prompt
-    assert "helpdesk" in prompt
 
-    # Available actions
-    assert "reply_ticket" in prompt
-    assert "close_ticket" in prompt
-    assert "send_email" in prompt
-
-    # Output schema
-    assert "Instructions" in prompt
+    # Output
+    assert "## Output" in prompt
     assert "do_nothing" in prompt
 
 
+def test_individual_prompt_no_trigger():
+    """Individual prompt works without a trigger event."""
+    ctx = _make_world_context()
+    builder = ActorPromptBuilder(ctx)
+    actor = _make_actor()
+
+    prompt = builder.build_individual_prompt(
+        actor=actor,
+        trigger_event=None,
+        activation_reason="frustration_threshold",
+        available_actions=[],
+    )
+
+    assert "frustration_threshold" in prompt
+    assert "## Trigger\n**" not in prompt
+
+
+def test_individual_prompt_with_interactions():
+    """Individual prompt shows recent interactions with text."""
+    ctx = _make_world_context()
+    builder = ActorPromptBuilder(ctx)
+    actor = _make_actor()
+    actor.recent_interactions = [
+        InteractionRecord(
+            tick=1.0,
+            actor_id="agent-external",
+            actor_role="customer",
+            action="reply_ticket",
+            summary="I need help with my account",
+            source="observed",
+            event_id="evt-1",
+        ),
+        InteractionRecord(
+            tick=2.0,
+            actor_id="actor-alice",
+            actor_role="support_agent",
+            action="reply_ticket",
+            summary="Let me look into that for you",
+            source="self",
+            event_id="evt-2",
+        ),
+    ]
+
+    prompt = builder.build_individual_prompt(
+        actor=actor,
+        trigger_event=None,
+        activation_reason="event_affected",
+        available_actions=[],
+    )
+
+    assert "Recent Activity" in prompt
+    assert "I need help with my account" in prompt
+    assert "You:" in prompt
+    assert "Let me look into that" in prompt
+
+
 def test_individual_prompt_with_waiting():
-    """Individual prompt includes waiting_for information."""
+    """Waiting_for is no longer rendered (internal engine state)."""
+    from terrarium.actors.state import WaitingFor
+
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
     actor = _make_actor(
@@ -182,135 +208,59 @@ def test_individual_prompt_with_waiting():
         available_actions=[],
     )
 
-    assert "Waiting for: Manager approval for refund" in prompt
-    assert "patience=10.0" in prompt
+    # Waiting_for is engine-internal, not shown in new prompt
+    assert "wait_threshold" in prompt
 
 
-def test_individual_prompt_no_trigger():
-    """Individual prompt works without a trigger event."""
-    ctx = _make_world_context()
-    builder = ActorPromptBuilder(ctx)
-    actor = _make_actor()
-
-    prompt = builder.build_individual_prompt(
-        actor=actor,
-        trigger_event=None,
-        activation_reason="frustration_threshold",
-        available_actions=[],
-    )
-
-    assert "frustration_threshold" in prompt
-    assert "Trigger Event" not in prompt
-
-
-def test_individual_prompt_with_interactions():
-    """Individual prompt shows recent interactions."""
-    from terrarium.actors.state import InteractionRecord
+def test_autonomous_prompt_has_team_and_instructions():
+    """Autonomous agent prompt includes team channel and work instructions."""
+    from terrarium.actors.state import Subscription
 
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
-    actor = _make_actor()
-    actor.recent_interactions = [
-        InteractionRecord(
-            tick=1.0,
-            actor_id="agent-external",
-            actor_role="customer",
-            action="reply_ticket",
-            summary="reply_ticket by agent-external",
-            source="observed",
-            event_id="evt-1",
-        ),
-        InteractionRecord(
-            tick=2.0,
-            actor_id="actor-alice",
-            actor_role="support_agent",
-            action="close_ticket",
-            summary="close_ticket by actor-alice",
-            source="self",
-            event_id="evt-2",
-        ),
+    actor = _make_actor(autonomous=True)
+    actor.subscriptions = [
+        Subscription(service_id="slack", filter={"channel": "#research"})
     ]
 
     prompt = builder.build_individual_prompt(
         actor=actor,
         trigger_event=None,
-        activation_reason="event_affected",
-        available_actions=[],
+        activation_reason="autonomous_continue",
+        available_actions=[{"name": "email_search", "http_method": "GET"}],
+        team_roster=[
+            {"role": "support_agent", "id": "actor-alice"},
+            {"role": "manager", "id": "actor-bob"},
+        ],
     )
 
-    assert "Recent activity you're aware of" in prompt
-    assert "reply_ticket by agent-external" in prompt
+    assert "#research" in prompt
+    assert "QUERY before you speak" in prompt
+    assert "SHARE facts, not plans" in prompt
+    assert "Action History" in prompt
 
 
 def test_batch_prompt_structure():
-    """Batch prompt contains sections for each actor."""
+    """Batch prompt contains actor sections."""
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
 
     actor1 = _make_actor(actor_id=ActorId("actor-alice"), role="support_agent")
     actor2 = _make_actor(actor_id=ActorId("actor-bob"), role="manager")
     event = _make_event()
-    actions = _sample_actions()
-
-    actors_with_triggers = [
-        (actor1, event, "event_affected"),
-        (actor2, None, "frustration_threshold"),
-    ]
 
     prompt = builder.build_batch_prompt(
-        actors_with_triggers=actors_with_triggers,
-        available_actions=actions,
+        actors_with_triggers=[
+            (actor1, event, "event_affected"),
+            (actor2, None, "frustration_threshold"),
+        ],
+        available_actions=[],
     )
 
-    # Header
-    assert "Batch Action Generation" in prompt
-
-    # Actor 1
     assert "Actor: support_agent (ID: actor-alice)" in prompt
     assert "event_affected" in prompt
-
-    # Actor 2
     assert "Actor: manager (ID: actor-bob)" in prompt
     assert "frustration_threshold" in prompt
-
-    # Actions and schema
-    assert "reply_ticket" in prompt
-    assert "Output Schema" in prompt
-
-
-def test_available_actions_formatted():
-    """Available actions are properly formatted in prompts."""
-    ctx = _make_world_context()
-    builder = ActorPromptBuilder(ctx)
-    actor = _make_actor()
-
-    actions = [
-        {"name": "create_ticket", "description": "Create a new support ticket"},
-        {"name": "assign_ticket", "description": "Assign ticket to an agent"},
-    ]
-
-    prompt = builder.build_individual_prompt(
-        actor=actor,
-        trigger_event=None,
-        activation_reason="event_affected",
-        available_actions=actions,
-    )
-
-    # Actions now include service context
-    assert "create_ticket" in prompt
-    assert "Create a new support ticket" in prompt
-    assert "assign_ticket" in prompt
-    assert "Assign ticket to an agent" in prompt
-
-
-def test_output_schemas_are_valid_json():
-    """ACTION_OUTPUT_SCHEMA and BATCH_OUTPUT_SCHEMA are valid JSON-serializable dicts."""
-    # Round-trip through JSON
-    action_json = json.dumps(ACTION_OUTPUT_SCHEMA)
-    assert json.loads(action_json) == ACTION_OUTPUT_SCHEMA
-
-    batch_json = json.dumps(BATCH_OUTPUT_SCHEMA)
-    assert json.loads(batch_json) == BATCH_OUTPUT_SCHEMA
 
 
 def test_batch_prompt_with_no_actions():
@@ -324,5 +274,42 @@ def test_batch_prompt_with_no_actions():
         available_actions=[],
     )
 
-    assert "Batch Action Generation" in prompt
-    assert "Available Actions" not in prompt
+    assert "Actor: support_agent" in prompt
+
+
+def test_output_schemas_are_valid_json():
+    """ACTION_OUTPUT_SCHEMA and BATCH_OUTPUT_SCHEMA are valid JSON-serializable dicts."""
+    action_json = json.dumps(ACTION_OUTPUT_SCHEMA)
+    assert json.loads(action_json) == ACTION_OUTPUT_SCHEMA
+
+    batch_json = json.dumps(BATCH_OUTPUT_SCHEMA)
+    assert json.loads(batch_json) == BATCH_OUTPUT_SCHEMA
+
+
+def test_addressed_to_you_tag():
+    """Messages addressed to the agent show [TO YOU] tag."""
+    ctx = _make_world_context()
+    builder = ActorPromptBuilder(ctx)
+    actor = _make_actor(role="support_agent")
+    actor.recent_interactions = [
+        InteractionRecord(
+            tick=1.0,
+            actor_id="manager",
+            actor_role="manager",
+            action="chat.postMessage",
+            summary="Please handle ticket 42",
+            source="notified",
+            event_id="evt-1",
+            intended_for=["support_agent"],
+        ),
+    ]
+
+    prompt = builder.build_individual_prompt(
+        actor=actor,
+        trigger_event=None,
+        activation_reason="subscription_match",
+        available_actions=[],
+    )
+
+    assert "[TO YOU]" in prompt
+    assert "Please handle ticket 42" in prompt

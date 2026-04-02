@@ -538,8 +538,8 @@ class AgencyEngine(BaseEngine):
         summary_text = content or text or body or subject or event.action
 
         # Truncate to reasonable length
-        if len(summary_text) > 200:
-            summary_text = summary_text[:197] + "..."
+        if len(summary_text) > 500:
+            summary_text = summary_text[:497] + "..."
 
         # Get actor role from actor states
         actor_role = ""
@@ -1041,22 +1041,25 @@ class AgencyEngine(BaseEngine):
                 )
 
         # Recent interactions (structured InteractionRecord)
-        # Include message text so agents can read what teammates wrote
-        text = committed_event.input_data.get("text", "")
-        summary = text[:300] if text else f"{committed_event.action}"
-        record = InteractionRecord(
-            tick=committed_event.timestamp.tick,
-            actor_id=str(committed_event.actor_id),
-            actor_role=self._get_actor_role(committed_event.actor_id),
-            action=committed_event.action,
-            summary=summary,
-            source="observed",
-            event_id=str(committed_event.event_id),
-            reply_to=committed_event.input_data.get("reply_to_event_id"),
-            channel=committed_event.input_data.get("channel"),
-            intended_for=committed_event.input_data.get("intended_for", []),
-        )
-        actor.recent_interactions.append(record)
+        # Skip if already recorded via subscription notification in notify()
+        event_id_str = str(committed_event.event_id)
+        already_recorded = any(r.event_id == event_id_str for r in actor.recent_interactions)
+        if not already_recorded:
+            text = committed_event.input_data.get("text", "")
+            summary = text[:300] if text else f"{committed_event.action}"
+            record = InteractionRecord(
+                tick=committed_event.timestamp.tick,
+                actor_id=str(committed_event.actor_id),
+                actor_role=self._get_actor_role(committed_event.actor_id),
+                action=committed_event.action,
+                summary=summary,
+                source="observed",
+                event_id=event_id_str,
+                reply_to=committed_event.input_data.get("reply_to_event_id"),
+                channel=committed_event.input_data.get("channel"),
+                intended_for=committed_event.input_data.get("intended_for", []),
+            )
+            actor.recent_interactions.append(record)
         max_interactions = config.max_recent_interactions
         if max_interactions <= 0:
             actor.recent_interactions.clear()
