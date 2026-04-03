@@ -55,6 +55,7 @@ class Gateway:
 
         # Create protocol adapters
         from terrarium.engines.adapter.protocols.anthropic_compat import AnthropicCompatAdapter
+        from terrarium.engines.adapter.protocols.gemini_compat import GeminiCompatAdapter
         from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
         from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
         from terrarium.engines.adapter.protocols.openai_compat import OpenAICompatAdapter
@@ -63,10 +64,12 @@ class Gateway:
         http_adapter = HTTPRestAdapter(self, self._config)
         openai_adapter = OpenAICompatAdapter(self)
         anthropic_adapter = AnthropicCompatAdapter(self)
+        gemini_adapter = GeminiCompatAdapter(self)
         self._adapters["mcp"] = mcp_adapter
         self._adapters["http"] = http_adapter
         self._adapters["openai"] = openai_adapter
         self._adapters["anthropic"] = anthropic_adapter
+        self._adapters["gemini"] = gemini_adapter
 
         self._started = True
 
@@ -198,6 +201,8 @@ class Gateway:
                 tools.extend(op.to_openai_function() for op in surface.operations)
             elif protocol == "anthropic":
                 tools.extend(op.to_anthropic_tool() for op in surface.operations)
+            elif protocol == "gemini":
+                tools.extend(op.to_gemini_tool() for op in surface.operations)
 
         return tools
 
