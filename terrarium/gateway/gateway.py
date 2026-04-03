@@ -54,13 +54,19 @@ class Gateway:
         )
 
         # Create protocol adapters
+        from terrarium.engines.adapter.protocols.anthropic_compat import AnthropicCompatAdapter
         from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
         from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
+        from terrarium.engines.adapter.protocols.openai_compat import OpenAICompatAdapter
 
         mcp_adapter = MCPServerAdapter(self)
         http_adapter = HTTPRestAdapter(self, self._config)
+        openai_adapter = OpenAICompatAdapter(self)
+        anthropic_adapter = AnthropicCompatAdapter(self)
         self._adapters["mcp"] = mcp_adapter
         self._adapters["http"] = http_adapter
+        self._adapters["openai"] = openai_adapter
+        self._adapters["anthropic"] = anthropic_adapter
 
         self._started = True
 
