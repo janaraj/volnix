@@ -108,6 +108,22 @@ class APIOperation(BaseModel, frozen=True):
             },
         }
 
+    def to_gemini_tool(self) -> dict[str, Any]:
+        """Generate Google Gemini function declaration definition.
+
+        Uses ``parameters_json_schema`` so the Gemini SDK accepts
+        standard JSON Schema dicts without requiring ``types.Schema`` objects.
+        """
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters_json_schema": {
+                "type": "object",
+                "properties": self.parameters,
+                "required": self.required_params,
+            },
+        }
+
 
 class ServiceSurface(BaseModel, frozen=True):
     """Complete specification for simulating a service.
