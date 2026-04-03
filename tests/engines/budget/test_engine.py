@@ -235,3 +235,163 @@ class TestMultipleActors:
         ctx = _make_ctx(actor_id="agent-2")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
+
+
+class TestSpendUsdBudget:
+    """Test spend_usd budget — deducts actual dollar amounts from payload."""
+
+    @pytest.mark.asyncio
+    async def test_spend_deducted_from_payload_amount(self, engine):
+        """Action with amount in payload deducts from spend_usd."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 1000.0}))
+        engine._actor_registry = reg
+        ctx = _make_ctx(input_data={"amount": 200})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.spend_usd_remaining == 800.0
+        assert state.spend_usd_total == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_spend_exhaustion_blocks(self, engine):
+        """When spend_usd reaches 0, further actions are denied."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 100.0}))
+        engine._actor_registry = reg
+
+        # First action: $100 refund → exhausts budget
+        ctx = _make_ctx(input_data={"amount": 100})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        # Second action: any amount → denied
+        ctx = _make_ctx(input_data={"amount": 10})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+        assert "spend_usd" in result.message
+        assert any(isinstance(e, BudgetExhaustedEvent) for e in result.events)
+
+    @pytest.mark.asyncio
+    async def test_no_amount_in_payload_zero_spend(self, engine):
+        """Actions without amount field don't deduct from spend_usd."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 500.0}))
+        engine._actor_registry = reg
+        ctx = _make_ctx(input_data={"query": "search something"})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.spend_usd_remaining == 500.0  # Unchanged
+
+    @pytest.mark.asyncio
+    async def test_spend_warning_threshold(self, engine):
+        """Warning event emitted at 80% spend."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 100.0}))
+        engine._actor_registry = reg
+
+        # Spend $85 → 85% used → warning
+        ctx = _make_ctx(input_data={"amount": 85})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+        warning_events = [e for e in result.events if isinstance(e, BudgetWarningEvent)]
+        assert len(warning_events) == 1
+        assert warning_events[0].budget_type == "spend_usd"
+
+    @pytest.mark.asyncio
+    async def test_spend_cumulative_across_actions(self, engine):
+        """Multiple small actions accumulate toward spend_usd limit."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 500.0}))
+        engine._actor_registry = reg
+
+        # 8 x $60 = $480 (under $500)
+        for i in range(8):
+            ctx = _make_ctx(input_data={"amount": 60})
+            result = await engine.execute(ctx)
+            assert result.verdict == StepVerdict.ALLOW
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.spend_usd_remaining == 20.0  # 500 - 480
+
+        # 9th action: $60 would exceed → but check is "remaining <= 0"
+        # remaining is 20, not 0 yet, so it's allowed but remaining goes to 0
+        ctx = _make_ctx(input_data={"amount": 60})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW  # Still allowed (remaining was > 0)
+
+        # 10th action: now remaining is 0 → DENIED
+        ctx = _make_ctx(input_data={"amount": 10})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+
+    @pytest.mark.asyncio
+    async def test_spend_usd_not_defined_unlimited(self, engine):
+        """When spend_usd is not in budget_def, spending is unlimited."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100}))
+        engine._actor_registry = reg
+        ctx = _make_ctx(input_data={"amount": 999999})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_negative_amount_clamped_to_zero(self, engine):
+        """Negative amounts in payload cannot add budget back."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 100.0}))
+        engine._actor_registry = reg
+        ctx = _make_ctx(input_data={"amount": -500})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.spend_usd_remaining == 100.0  # Unchanged — negative clamped to 0
+
+    @pytest.mark.asyncio
+    async def test_spend_deduction_event_emitted(self, engine):
+        """A BudgetDeductionEvent with budget_type=spend_usd is emitted."""
+        reg = _make_registry(_make_agent(budget={"spend_usd": 1000.0}))
+        engine._actor_registry = reg
+        ctx = _make_ctx(input_data={"amount": 200})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        spend_events = [
+            e for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "spend_usd"
+        ]
+        assert len(spend_events) == 1
+        assert spend_events[0].amount == 200.0
+        assert spend_events[0].remaining == 800.0
+
+    @pytest.mark.asyncio
+    async def test_spend_and_api_calls_independent(self, engine):
+        """spend_usd and api_calls track independently."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 3, "spend_usd": 500.0}))
+        engine._actor_registry = reg
+
+        # 3 actions with $100 each
+        for _ in range(3):
+            ctx = _make_ctx(input_data={"amount": 100})
+            result = await engine.execute(ctx)
+            assert result.verdict == StepVerdict.ALLOW
+
+        # api_calls exhausted (3/3), but spend_usd still has $200
+        ctx = _make_ctx(input_data={"amount": 100})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+        assert "api_calls" in result.message
+
+    @pytest.mark.asyncio
+    async def test_ungoverned_spend_exhausted_allowed(self, engine):
+        """In ungoverned mode, spend exhaustion is logged but allowed."""
+        engine._world_mode = "ungoverned"
+        reg = _make_registry(_make_agent(budget={"spend_usd": 50.0}))
+        engine._actor_registry = reg
+
+        # Exhaust budget
+        ctx = _make_ctx(input_data={"amount": 50})
+        await engine.execute(ctx)
+
+        # Next action: exhausted but allowed in ungoverned
+        ctx = _make_ctx(input_data={"amount": 10})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+        assert "ungoverned" in result.message
