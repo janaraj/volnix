@@ -219,6 +219,7 @@ def test_autonomous_prompt_has_team_and_instructions():
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
     actor = _make_actor(autonomous=True)
+    actor.team_channel = "#research"
     actor.subscriptions = [
         Subscription(service_id="slack", filter={"channel": "#research"})
     ]

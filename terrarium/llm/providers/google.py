@@ -82,6 +82,23 @@ class GoogleNativeProvider(LLMProvider):
             if request.seed is not None:
                 config["seed"] = request.seed
 
+            if request.tools:
+                from google.genai import types
+
+                declarations = []
+                for t in request.tools:
+                    declarations.append(
+                        types.FunctionDeclaration(
+                            name=t.name,
+                            description=t.description,
+                            parameters=t.parameters,
+                        )
+                    )
+                config["tools"] = [types.Tool(function_declarations=declarations)]
+                config["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                )
+
             if cached_content_name:
                 # Use cached content — system prompt served from cache
                 config["cached_content"] = cached_content_name
@@ -105,6 +122,23 @@ class GoogleNativeProvider(LLMProvider):
                 )
             latency = (time.monotonic() - start) * 1000
             content = response.text if response.text else ""
+
+            # Parse native tool calls from response
+            parsed_tool_calls = None
+            if hasattr(response, "candidates") and response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        from terrarium.llm.types import ToolCall
+
+                        fc = part.function_call
+                        parsed_tool_calls = [
+                            ToolCall(
+                                name=fc.name,
+                                arguments=dict(fc.args) if fc.args else {},
+                            )
+                        ]
+                        break
+
             usage_meta = response.usage_metadata
             usage = LLMUsage(
                 prompt_tokens=(
@@ -119,6 +153,7 @@ class GoogleNativeProvider(LLMProvider):
             )
             return LLMResponse(
                 content=content,
+                tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,
                 provider="google",

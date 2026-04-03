@@ -478,7 +478,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
                 "timeframe": {
                     "type": "string",
                     "description": "Bar timeframe.",
-                    "enum": ["1Min", "5Min", "15Min", "1Hour", "1Day"],
+                    "enum": ["1Min", "5Min", "15Min", "1H", "1D"],
                 },
                 "start": {
                     "type": "string",

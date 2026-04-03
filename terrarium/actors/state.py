@@ -131,7 +131,7 @@ class ActorState(BaseModel):
     recent_interactions: list[InteractionRecord] = Field(default_factory=list)
 
     # Scheduling
-    scheduled_action: ScheduledAction | None = None
+    scheduled_actions: list[ScheduledAction] = Field(default_factory=list)
 
     # Activation
     activation_tier: int = 0  # 0, 1, 2, or 3
@@ -139,6 +139,7 @@ class ActorState(BaseModel):
 
     # Collaborative communication
     subscriptions: list[Subscription] = Field(default_factory=list)
+    team_channel: str | None = None  # Slack channel ID for team collaboration
     pending_tasks: list[str] = Field(default_factory=list)
     goal_context: str | None = None
     batch_notification_count: int = 0

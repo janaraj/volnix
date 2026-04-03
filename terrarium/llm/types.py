@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import enum
 
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class ProviderType(enum.StrEnum):
@@ -18,6 +20,34 @@ class ProviderType(enum.StrEnum):
     ACP = "acp"
     CLI = "cli"
     MOCK = "mock"
+
+
+class ToolDefinition(BaseModel, frozen=True):
+    """Provider-agnostic tool definition.
+
+    Each LLM provider converts to its native format:
+    - OpenAI: ``{"type": "function", "function": {...}}``
+    - Anthropic: ``{"name": ..., "input_schema": {...}}``
+    - Google: ``types.FunctionDeclaration(...)``
+
+    Tool names are namespaced as ``{service}__{tool}`` to avoid collisions.
+    """
+
+    name: str                                   # "twitter__search_recent"
+    service: str = ""                           # "twitter"
+    description: str = ""                       # "Search recent tweets"
+    parameters: dict[str, Any] = Field(default_factory=dict)  # JSON Schema
+
+
+class ToolCall(BaseModel, frozen=True):
+    """Parsed tool call from an LLM response.
+
+    Provider implementations convert their native format to this model
+    so callers don't need to know which provider was used.
+    """
+
+    name: str                                   # "twitter__search_recent"
+    arguments: dict[str, Any] = Field(default_factory=dict)  # {"query": "..."}
 
 
 class LLMUsage(BaseModel, frozen=True):
@@ -58,6 +88,7 @@ class LLMRequest(BaseModel, frozen=True):
     model_override: str | None = None
     fresh_session: bool = False  # ACP: create isolated session for this call
     cache_system_prompt: bool = False  # Enable prompt caching for system prompt
+    tools: list[ToolDefinition] | None = None  # Native tool calling definitions
 
 
 class LLMResponse(BaseModel, frozen=True):
@@ -75,6 +106,7 @@ class LLMResponse(BaseModel, frozen=True):
 
     content: str = ""
     structured_output: dict | None = None
+    tool_calls: list[ToolCall] | None = None  # Parsed native tool calls
     usage: LLMUsage = LLMUsage()
     model: str = ""
     provider: str = ""

@@ -12,7 +12,7 @@ from typing import ClassVar
 from anthropic import AsyncAnthropic
 
 from terrarium.llm.provider import LLMProvider
-from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ToolCall
 
 
 class AnthropicProvider(LLMProvider):
@@ -52,15 +52,39 @@ class AnthropicProvider(LLMProvider):
             else:
                 system_param = system_content
 
-            message = await self._client.messages.create(
+            create_kwargs: dict = dict(
                 model=model,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 system=system_param,
                 messages=[{"role": "user", "content": request.user_content}],
             )
+            if request.tools:
+                create_kwargs["tools"] = [
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.parameters,
+                    }
+                    for t in request.tools
+                ]
+                create_kwargs["tool_choice"] = {"type": "any"}
+
+            message = await self._client.messages.create(**create_kwargs)
             latency = (time.monotonic() - start) * 1000
-            content = message.content[0].text if message.content else ""
+
+            # Parse text and tool_use blocks from the response content.
+            content = ""
+            parsed_tool_calls: list[ToolCall] | None = None
+            for block in message.content:
+                if hasattr(block, "text"):
+                    content = block.text
+                elif hasattr(block, "type") and block.type == "tool_use":
+                    if parsed_tool_calls is None:
+                        parsed_tool_calls = []
+                    parsed_tool_calls.append(
+                        ToolCall(name=block.name, arguments=block.input)
+                    )
             usage = LLMUsage(
                 prompt_tokens=message.usage.input_tokens,
                 completion_tokens=message.usage.output_tokens,
@@ -71,6 +95,7 @@ class AnthropicProvider(LLMProvider):
             )
             return LLMResponse(
                 content=content,
+                tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,
                 provider="anthropic",

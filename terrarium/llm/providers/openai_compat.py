@@ -83,6 +83,22 @@ class OpenAICompatibleProvider(LLMProvider):
                     request.system_prompt.encode()
                 ).hexdigest()[:16]
 
+            # Native tool calling: pass tool definitions so the LLM returns
+            # structured tool_calls instead of raw JSON text.
+            if request.tools:
+                kwargs["tools"] = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        },
+                    }
+                    for t in request.tools
+                ]
+                kwargs["tool_choice"] = "required"
+
             # Newer OpenAI models (gpt-5.x, o-series) use max_completion_tokens
             # instead of max_tokens. Try the new parameter first, fall back to old.
             kwargs["max_completion_tokens"] = request.max_tokens
@@ -96,7 +112,28 @@ class OpenAICompatibleProvider(LLMProvider):
                 response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
 
             latency = (time.monotonic() - start) * 1000
-            content = response.choices[0].message.content if response.choices else ""
+            message = response.choices[0].message if response.choices else None
+            content = message.content if message and message.content else ""
+
+            # Parse native tool calls from response
+            parsed_tool_calls = None
+            if message and message.tool_calls:
+                import json as _json
+                from terrarium.llm.types import ToolCall
+                parsed_tool_calls = []
+                for tc in message.tool_calls:
+                    try:
+                        args = (
+                            _json.loads(tc.function.arguments)
+                            if isinstance(tc.function.arguments, str)
+                            else tc.function.arguments or {}
+                        )
+                    except _json.JSONDecodeError:
+                        args = {}
+                    parsed_tool_calls.append(
+                        ToolCall(name=tc.function.name, arguments=args)
+                    )
+
             usage_data = response.usage
 
             # Extract cached token count for observability
@@ -120,6 +157,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
             return LLMResponse(
                 content=content or "",
+                tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,
                 provider="openai_compatible",

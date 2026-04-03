@@ -20,7 +20,7 @@ class SimulationRunnerConfig(BaseModel):
     max_total_events: int = 50
 
     # Stop when the event queue is empty AND no engine has scheduled future work.
-    # If an actor has a scheduled_action, this condition is suppressed.
+    # If an actor has scheduled_actions, this condition is suppressed.
     stop_on_empty_queue: bool = True
 
     # ── Runaway loop protection ─────────────────────────────────
