@@ -54,6 +54,8 @@ class BudgetTracker:
             "llm_spend_total": budget_def.get("llm_spend", 0.0),
             "world_actions_remaining": budget_def.get("world_actions", 0),
             "world_actions_total": budget_def.get("world_actions", 0),
+            "spend_usd_remaining": budget_def.get("spend_usd", 0.0),
+            "spend_usd_total": budget_def.get("spend_usd", 0.0),
         }
         self._warned[aid] = set()
 
@@ -76,6 +78,8 @@ class BudgetTracker:
             llm_spend_total_usd=state["llm_spend_total"],
             world_actions_remaining=state["world_actions_remaining"],
             world_actions_total=state["world_actions_total"],
+            spend_usd_remaining=state["spend_usd_remaining"],
+            spend_usd_total=state["spend_usd_total"],
         )
 
     def deduct(self, actor_id: ActorId, cost: ActionCost) -> dict[str, Any]:
@@ -96,6 +100,7 @@ class BudgetTracker:
         state["api_calls_remaining"] = max(0, state["api_calls_remaining"] - cost.api_calls)
         state["llm_spend_remaining"] = max(0.0, state["llm_spend_remaining"] - cost.llm_spend_usd)
         state["world_actions_remaining"] = max(0, state["world_actions_remaining"] - cost.world_actions)
+        state["spend_usd_remaining"] = max(0.0, state["spend_usd_remaining"] - cost.spend_usd)
 
         return state
 
@@ -146,6 +151,32 @@ class BudgetTracker:
                 events.extend(
                     self._check_dimension_threshold(
                         actor_id, "llm_spend", used_pct, remaining,
+                        warning_pct, critical_pct,
+                    )
+                )
+
+        # Check world_actions thresholds
+        if "world_actions" in budget_def and budget_def["world_actions"] > 0:
+            total = state["world_actions_total"]
+            remaining = state["world_actions_remaining"]
+            if total > 0:
+                used_pct = ((total - remaining) / total) * 100.0
+                events.extend(
+                    self._check_dimension_threshold(
+                        actor_id, "world_actions", used_pct, remaining,
+                        warning_pct, critical_pct,
+                    )
+                )
+
+        # Check spend_usd thresholds
+        if "spend_usd" in budget_def and budget_def["spend_usd"] > 0:
+            total = state["spend_usd_total"]
+            remaining = state["spend_usd_remaining"]
+            if total > 0:
+                used_pct = ((total - remaining) / total) * 100.0
+                events.extend(
+                    self._check_dimension_threshold(
+                        actor_id, "spend_usd", used_pct, remaining,
                         warning_pct, critical_pct,
                     )
                 )

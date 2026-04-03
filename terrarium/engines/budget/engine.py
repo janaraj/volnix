@@ -157,15 +157,53 @@ class BudgetEngine(BaseEngine):
                     message="Budget exhausted: world_actions",
                 )
 
-        # Deduct 1 api_call (and 1 world_action for state-mutating actions)
-        cost = ActionCost(api_calls=1, world_actions=1)
+        # Check if spend_usd budget is exhausted BEFORE deducting
+        if "spend_usd" in budget_def and budget_def["spend_usd"] > 0:
+            if state["spend_usd_remaining"] <= 0:
+                event = BudgetExhaustedEvent(
+                    event_type="budget.exhausted",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    budget_type="spend_usd",
+                )
+                if self._is_ungoverned():
+                    return StepResult(
+                        step_name=self.step_name,
+                        verdict=StepVerdict.ALLOW,
+                        events=[event],
+                        message="ungoverned: budget exhausted but allowed",
+                    )
+                return StepResult(
+                    step_name=self.step_name,
+                    verdict=StepVerdict.DENY,
+                    events=[event],
+                    message="Budget exhausted: spend_usd",
+                )
+
+        # Extract domain spend from payload.
+        # Convention: packs use "amount" for spend-relevant values
+        # (same convention as http_method for read/write classification).
+        spend_amount = 0.0
+        raw_amount = ctx.input_data.get("amount")
+        if raw_amount is not None:
+            try:
+                spend_amount = max(0.0, float(raw_amount))
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Cannot extract spend_usd from payload amount=%r "
+                    "(actor=%s, action=%s)",
+                    raw_amount, ctx.actor_id, ctx.action,
+                )
+
+        # Deduct 1 api_call, 1 world_action, and any spend amount
+        cost = ActionCost(api_calls=1, world_actions=1, spend_usd=spend_amount)
         self._tracker.deduct(ctx.actor_id, cost)
 
         # Build events list
         events: list[Event] = []
-
-        # Deduction event
         state_after = self._tracker.get_budget(ctx.actor_id)
+
+        # Deduction events for each active dimension
         events.append(BudgetDeductionEvent(
             event_type="budget.deduction",
             timestamp=_now_timestamp(),
@@ -174,6 +212,15 @@ class BudgetEngine(BaseEngine):
             amount=1.0,
             remaining=float(state_after["api_calls_remaining"]),
         ))
+        if spend_amount > 0:
+            events.append(BudgetDeductionEvent(
+                event_type="budget.deduction",
+                timestamp=_now_timestamp(),
+                actor_id=ctx.actor_id,
+                budget_type="spend_usd",
+                amount=spend_amount,
+                remaining=float(state_after["spend_usd_remaining"]),
+            ))
 
         # Check thresholds
         threshold_events = self._tracker.check_thresholds(
@@ -208,12 +255,14 @@ class BudgetEngine(BaseEngine):
         api_calls: int = 0,
         llm_spend_usd: float = 0.0,
         world_actions: int = 0,
+        spend_usd: float = 0.0,
     ) -> BudgetState:
         """Directly deduct a cost from an actor's budget."""
         cost = ActionCost(
             api_calls=api_calls,
             llm_spend_usd=llm_spend_usd,
             world_actions=world_actions,
+            spend_usd=spend_usd,
         )
         self._tracker.deduct(actor_id, cost)
         state = self._tracker.get_budget_state(actor_id)
@@ -222,6 +271,7 @@ class BudgetEngine(BaseEngine):
                 api_calls_remaining=0, api_calls_total=0,
                 llm_spend_remaining_usd=0.0, llm_spend_total_usd=0.0,
                 world_actions_remaining=0, world_actions_total=0,
+                spend_usd_remaining=0.0, spend_usd_total=0.0,
             )
         return state
 
@@ -233,6 +283,7 @@ class BudgetEngine(BaseEngine):
                 api_calls_remaining=0, api_calls_total=0,
                 llm_spend_remaining_usd=0.0, llm_spend_total_usd=0.0,
                 world_actions_remaining=0, world_actions_total=0,
+                spend_usd_remaining=0.0, spend_usd_total=0.0,
             )
         return state
 
