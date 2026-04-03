@@ -1,39 +1,157 @@
-"""Phase E2: OpenAI function calling compatibility. Not implemented in E1.
+"""OpenAI function calling compatibility adapter.
 
-This adapter will translate OpenAI function-calling requests/responses
-into Terrarium ActionContexts, allowing agents using the OpenAI SDK to
-interact with a Terrarium world directly.
+Exposes Terrarium world tools in OpenAI's native function calling format.
+Agents using the OpenAI SDK can discover and call tools with zero
+Terrarium-specific code.
+
+Routes (mounted on the shared FastAPI app):
+  GET  /openai/v1/tools      — list tools in OpenAI function format
+  POST /openai/v1/tools/call  — execute a tool call
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any, ClassVar
 
-from terrarium.core import ActionContext, ActorId
+from starlette.requests import Request
+
+from terrarium.core.types import ToolName
+from terrarium.engines.adapter.protocols._auth import resolve_actor_id
+from terrarium.engines.adapter.protocols._response import unwrap_single_entity
 from terrarium.engines.adapter.protocols.base import ProtocolAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAICompatAdapter(ProtocolAdapter):
-    """OpenAI function calling compatible endpoint."""
+    """OpenAI function calling compatible endpoint.
+
+    Adds ``/openai/v1/tools`` and ``/openai/v1/tools/call`` routes to the
+    shared FastAPI app. Tools are served in OpenAI's ``{"type": "function",
+    "function": {...}}`` format via ``Gateway.get_tool_manifest(protocol="openai")``.
+    """
 
     protocol_name: ClassVar[str] = "openai"
 
-    async def translate_inbound(self, raw_request: Any) -> ActionContext:
-        """Translate an OpenAI function call into an ActionContext."""
-        ...
-
-    async def translate_outbound(self, ctx: ActionContext) -> Any:
-        """Translate an ActionContext result into an OpenAI response."""
-        ...
-
-    async def get_tool_manifest(self, actor_id: ActorId) -> list[dict[str, Any]]:
-        """Return tools in OpenAI function calling format."""
-        ...
+    def __init__(self, gateway: Any) -> None:
+        self._gateway = gateway
 
     async def start_server(self) -> None:
-        """Start the OpenAI-compatible server."""
-        ...
+        """Mount OpenAI compat routes on the HTTP adapter's FastAPI app."""
+        http_adapter = self._gateway._adapters.get("http")
+        if http_adapter is None or http_adapter.fastapi_app is None:
+            logger.warning("OpenAI compat: HTTP adapter not available, skipping")
+            return
+
+        app = http_adapter.fastapi_app
+        gateway = self._gateway
+        self._mount_routes(app, gateway)
+        logger.info("OpenAI compat routes mounted: /openai/v1/tools, /openai/v1/tools/call")
 
     async def stop_server(self) -> None:
-        """Stop the OpenAI-compatible server."""
-        ...
+        """No-op — routes live on the shared FastAPI app."""
+
+    async def translate_inbound(
+        self, tool_name: ToolName, raw_input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """OpenAI sends function arguments directly — pass through."""
+        return raw_input
+
+    async def translate_outbound(
+        self, tool_name: ToolName, internal_response: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Wrap response in OpenAI tool result format."""
+        is_error = isinstance(internal_response, dict) and "error" in internal_response
+        return {
+            "role": "tool",
+            "content": json.dumps(internal_response, default=str),
+            "is_error": is_error,
+        }
+
+    async def get_tool_manifest(self) -> list[dict[str, Any]]:
+        """Return tools in OpenAI function calling format."""
+        return await self._gateway.get_tool_manifest(protocol="openai")
+
+    @staticmethod
+    def _mount_routes(app: Any, gateway: Any) -> None:
+        """Add OpenAI compat routes to the FastAPI app via APIRouter."""
+        import fastapi
+        from starlette.responses import JSONResponse
+
+        router = fastapi.APIRouter(prefix="/openai/v1", tags=["openai-compat"])
+
+        @router.get("/tools")
+        async def list_tools_openai(
+            actor_id: str = fastapi.Query(default="openai-agent"),
+        ):
+            """List tools in OpenAI function calling format."""
+            return await gateway.get_tool_manifest(
+                actor_id=actor_id, protocol="openai",
+            )
+
+        @router.post("/tools/call")
+        async def call_tool_openai(request: Request):
+            """Execute a tool call in OpenAI format.
+
+            Request body::
+
+                {"name": "email_send", "arguments": {"to": "a@b.com"}, "actor_id": "agent-1"}
+
+            Response::
+
+                {"role": "tool", "content": "{...}", "is_error": false}
+            """
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": "Malformed JSON in request body"},
+                )
+
+            tool_name = body.get("name", "")
+            arguments = body.get("arguments", {})
+
+            if not tool_name:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Missing 'name' field in request body"},
+                )
+
+            if not isinstance(arguments, dict):
+                return JSONResponse(
+                    status_code=422,
+                    content={"error": "'arguments' must be a dict"},
+                )
+
+            # Resolve actor identity (same pattern as HTTP REST)
+            actor_id = resolve_actor_id(
+                request, body, default="openai-agent", gateway=gateway,
+            )
+            if actor_id is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Invalid or expired agent token"},
+                )
+
+            result = await gateway.handle_request(
+                actor_id=actor_id,
+                tool_name=tool_name,
+                input_data=arguments,
+            )
+
+            # Strip internal fields and unwrap single-entity wrappers
+            if isinstance(result, dict):
+                result.pop("_event", None)
+                result = unwrap_single_entity(result)
+
+            is_error = isinstance(result, dict) and "error" in result
+            return {
+                "role": "tool",
+                "content": json.dumps(result, default=str),
+                "is_error": is_error,
+            }
+
+        app.include_router(router)
