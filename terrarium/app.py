@@ -1209,8 +1209,9 @@ class TerrariumApp:
         await self.configure_animator(plan)
         await self.configure_agency(plan, result, internal_profile=internal_profile)
 
-        # Track active run
+        # Track active run + world
         self._current_run_id = str(run_id)
+        self._current_world_id = str(world_id)
         self._last_action_time = None
         await self._run_manager.start_run(run_id)
 
@@ -1334,6 +1335,8 @@ class TerrariumApp:
         }
 
         await self._run_manager.complete_run(run_id, summary=summary)
+        if self._current_run_id == str(run_id):
+            self._current_run_id = None
         return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
 
     async def _start_animator_bridge(self, behavior: str) -> None:

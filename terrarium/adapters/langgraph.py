@@ -35,6 +35,7 @@ async def langgraph_tools(
             "Install with: pip install langchain-core"
         )
 
+    from terrarium.adapters._schema import json_schema_to_pydantic
     from terrarium.sdk import get_tool_manifest
 
     tool_defs = await get_tool_manifest(url=url, fmt="mcp")
@@ -43,11 +44,14 @@ async def langgraph_tools(
     for td in tool_defs:
         name = td.get("name", "")
         desc = td.get("description", "")
+        schema = td.get("inputSchema", {})
         if not name:
             continue
 
-        # H3 fix: use execute_tool (stateless) to avoid leaked connections
-        # H1 fix: no persistent client to leak
+        # Build Pydantic model from JSON Schema (same as CrewAI adapter)
+        args_model = json_schema_to_pydantic(name, schema)
+
+        # Stateless tool call — each invocation is an independent HTTP request
         async def _invoke(
             _url: str = url,
             _name: str = name,
@@ -64,6 +68,7 @@ async def langgraph_tools(
         tools.append(StructuredTool(
             name=name,
             description=desc,
+            args_schema=args_model,
             coroutine=_invoke,
             func=lambda **kw: None,  # sync placeholder (required)
         ))

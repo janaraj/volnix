@@ -1,10 +1,13 @@
-import { useMemo } from 'react';
-import { Lightbulb } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { Lightbulb, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { QueryGuard } from '@/components/feedback/query-guard';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { useUrlState } from '@/hooks/use-url-state';
 import { useRuns } from '@/hooks/queries/use-runs';
+import { useWorlds } from '@/hooks/queries/use-worlds';
+import { useApiClient } from '@/providers/services-provider';
 import { PAGE_SIZE_RUNS } from '@/constants/defaults';
 import { RunFilters, FILTER_DEFAULTS } from '@/pages/run-list/run-filters';
 import { RunTable } from '@/pages/run-list/run-table';
@@ -29,15 +32,73 @@ function hasRunningRun(data: RunsListResponse | undefined): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Hint shown when there are no runs at all
+// New Run button with world selector
 // ---------------------------------------------------------------------------
 
-function NewRunHint() {
+function NewRunButton({ hasActiveRun }: { hasActiveRun: boolean }) {
+  const api = useApiClient();
+  const navigate = useNavigate();
+  const worldsQuery = useWorlds();
+  const [creating, setCreating] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+
+  const worlds = worldsQuery.data?.worlds ?? [];
+
+  async function handleNewRun(worldId?: string) {
+    if (hasActiveRun) {
+      const confirmed = window.confirm(
+        'The current active run will be completed and a scorecard generated. Start a new run?'
+      );
+      if (!confirmed) return;
+    }
+    setCreating(true);
+    setShowPicker(false);
+    try {
+      const result = await api.newRun(worldId);
+      navigate(`/runs/${result.run_id}/live`);
+    } catch {
+      // May fail if no world available
+    }
+    setCreating(false);
+  }
+
+  if (worlds.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+        <Lightbulb size={14} />
+        Start a new run from the CLI
+      </span>
+    );
+  }
+
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-      <Lightbulb size={14} />
-      Start a new run from the CLI
-    </span>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => worlds.length === 1 ? handleNewRun(worlds[0].world_id) : setShowPicker(!showPicker)}
+        disabled={creating}
+        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/80 disabled:opacity-50"
+      >
+        <Plus size={14} />
+        {creating ? 'Creating...' : 'New Run'}
+      </button>
+      {showPicker && worlds.length > 1 && (
+        <div className="absolute right-0 top-full z-10 mt-1 w-64 rounded-md border border-border bg-bg-surface shadow-lg">
+          <div className="p-2 text-xs font-medium text-text-muted">Select world</div>
+          {worlds.filter(w => w.status === 'generated').map((w) => (
+            <button
+              key={w.world_id}
+              type="button"
+              onClick={() => handleNewRun(w.world_id)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-bg-hover"
+            >
+              <span className="truncate font-medium">{w.name}</span>
+              <span className="ml-auto text-xs text-text-muted">{w.world_id.slice(0, 12)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -62,7 +123,7 @@ export function RunListPage() {
       <PageHeader
         title="Runs"
         subtitle={filters.world_id ? `Runs for world ${filters.world_id}` : 'All simulation runs'}
-        actions={<NewRunHint />}
+        actions={<NewRunButton hasActiveRun={hasRunningRun(runsQuery.data)} />}
       />
 
       {filters.world_id && (
