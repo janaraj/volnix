@@ -255,17 +255,18 @@ class TestFullLoopWithMockLLM:
                 {"actor_id": "cust-002", "action_type": "do_nothing", "reasoning": "Will wait"},
             ]
         }
+        from terrarium.llm.types import LLMResponse
         router = _mock_llm_router()
         # First call = batch (Tier 2), second call = individual (Tier 3)
         router.route = AsyncMock(side_effect=[
             # Tier 3 individual call (supervisor first since Tier 3 processed first)
-            type(router.route.return_value)(
+            LLMResponse(
                 content=json.dumps({"action_type": "tickets.update", "target_service": "tickets",
                                     "payload": {"id": "tck_001", "status": "open"}, "reasoning": "Reviewing"}),
                 provider="mock", model="mock", latency_ms=5.0,
             ),
             # Tier 2 batch call (customers)
-            type(router.route.return_value)(
+            LLMResponse(
                 content=json.dumps(batch_response),
                 provider="mock", model="mock", latency_ms=5.0,
             ),

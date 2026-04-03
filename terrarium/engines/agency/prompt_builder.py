@@ -125,13 +125,10 @@ class ActorPromptBuilder:
                 if member["role"] != actor.role:
                     team_lines.append(f"- **{member['role']}** (ID: {member['id']})")
             # Show team channel for autonomous agents
-            if actor.autonomous:
-                for sub in actor.subscriptions:
-                    if sub.service_id == "slack" and sub.filter.get("channel"):
-                        team_lines.append(
-                            f"\nTeam channel: `{sub.filter['channel']}`"
-                        )
-                        break
+            if actor.autonomous and actor.team_channel:
+                team_lines.append(
+                    f"\nTeam channel: `{actor.team_channel}`"
+                )
             sections.append("\n".join(team_lines))
 
         # --- 3. Instructions (before tools/state — shapes LLM intent early) ---
@@ -192,8 +189,12 @@ class ActorPromptBuilder:
         # --- 6. Output format ---
         sections.append(
             "## Output\n"
-            "Respond with ONE JSON action:\n"
-            f"```json\n{OUTPUT_EXAMPLE}\n```"
+            "Call one of the available tools to take action, or call `do_nothing` to skip.\n"
+            "Include `reasoning` to explain your choice.\n"
+            "Use `intended_for` to address teammates by role (e.g. ['analyst'] or ['all']).\n"
+            "Use `state_updates` to track your progress:\n"
+            "  - `goal_context`: updated notes on what you've learned\n"
+            "  - `pending_tasks`: remaining work items"
         )
 
         return "\n\n".join(sections)
@@ -226,7 +227,7 @@ class ActorPromptBuilder:
             "3. RESPOND to teammates. Messages marked [TO YOU] need your response.\n"
             "4. NO REPETITION. Check Your Action History. Don't re-query or re-state.\n"
             "5. Track progress via state_updates.pending_tasks and goal_context.\n"
-            "6. If nothing new to add: action_type 'do_nothing'.\n\n"
+            "6. If nothing new to add: call the `do_nothing` tool.\n\n"
             "For messages: only provide `text` in payload — the system auto-fills `channel_id`."
         )
 

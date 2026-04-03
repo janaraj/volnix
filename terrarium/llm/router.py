@@ -83,9 +83,7 @@ class LLMRouter:
             provider_name = routing.provider or self._config.defaults.type
             model = routing.model or self._config.defaults.default_model
             if routing.temperature is not None:
-                request = LLMRequest(
-                    **{**request.model_dump(), "temperature": routing.temperature}
-                )
+                request = request.model_copy(update={"temperature": routing.temperature})
         else:
             provider_name = self._config.defaults.type
             model = self._config.defaults.default_model
@@ -103,9 +101,7 @@ class LLMRouter:
             )
 
         if not request.model_override:
-            request = LLMRequest(
-                **{**request.model_dump(), "model_override": model}
-            )
+            request = request.model_copy(update={"model_override": model})
 
         # Use configured timeout from routing or defaults (not hardcoded)
         timeout = (

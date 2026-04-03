@@ -25,7 +25,7 @@ from terrarium.core.types import (
 )
 from terrarium.engines.agency.config import AgencyConfig
 from terrarium.engines.agency.prompt_builder import ActorPromptBuilder
-from terrarium.llm.types import LLMRequest
+from terrarium.llm.types import LLMRequest, ToolCall, ToolDefinition
 from terrarium.simulation.world_context import WorldContextBundle
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,8 @@ class AgencyEngine(BaseEngine):
         self._world_context: WorldContextBundle | None = None
         self._llm_router: Any = None
         self._available_actions: list[dict[str, Any]] = []
+        self._tool_definitions: list[ToolDefinition] = []
+        self._tool_name_map: dict[str, str] = {}  # sanitized API name → original action name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
 
     async def configure(
@@ -66,12 +68,92 @@ class AgencyEngine(BaseEngine):
         self._world_context = world_context
         self._prompt_builder = ActorPromptBuilder(world_context)
         self._available_actions = available_actions or []
+        self._tool_definitions = self._build_tool_definitions()
         self._llm_router = self._config.get("_llm_router")
 
         logger.info(
-            "AgencyEngine configured: %d internal actors",
-            len(self._actor_states),
+            "AgencyEngine configured: %d internal actors, %d tool definitions",
+            len(self._actor_states), len(self._tool_definitions),
         )
+
+    def _build_tool_definitions(self) -> list[ToolDefinition]:
+        """Convert available_actions to provider-agnostic ToolDefinitions.
+
+        Namespaces tool names as ``{service}__{name}`` to avoid collisions.
+        Adds shared metadata params (reasoning, intended_for, state_updates)
+        that the agency engine extracts before building ActionEnvelopes.
+        """
+        meta_params: dict[str, Any] = {
+            "reasoning": {"type": "string", "description": "Why you chose this action"},
+            "intended_for": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Teammate roles to address (e.g. ['analyst'] or ['all'])",
+            },
+            "state_updates": {
+                "type": "object",
+                "properties": {
+                    "goal_context": {
+                        "type": "string",
+                        "description": "Updated progress notes",
+                    },
+                    "pending_tasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Remaining tasks",
+                    },
+                },
+            },
+        }
+
+        tools: list[ToolDefinition] = []
+        self._tool_name_map = {}
+        for action in self._available_actions:
+            name = action.get("name", "")
+            service = action.get("service", "")
+            params = action.get("parameters", {})
+            properties = {**params.get("properties", {}), **meta_params}
+            required = list(params.get("required", [])) + ["reasoning"]
+
+            # Sanitize: OpenAI requires ^[a-zA-Z0-9_-]+$ — no dots allowed
+            sanitized = name.replace(".", "_")
+            api_name = f"{service}__{sanitized}" if service else sanitized
+
+            # Store reverse mapping: "slack__chat_postMessage" → "chat.postMessage"
+            self._tool_name_map[api_name] = name
+
+            tools.append(
+                ToolDefinition(
+                    name=api_name,
+                    service=service,
+                    description=f"[{service}] {action.get('description', '')}",
+                    parameters={
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                )
+            )
+
+        # do_nothing tool — agent skips this turn
+        tools.append(
+            ToolDefinition(
+                name="do_nothing",
+                service="",
+                description="Skip this turn — nothing useful to do right now.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Why you're skipping",
+                        }
+                    },
+                    "required": ["reasoning"],
+                },
+            )
+        )
+        return tools
 
     async def _handle_event(self, event: Event) -> None:
         """Handle bus events. WorldEvents trigger notify().
@@ -296,10 +378,11 @@ class AgencyEngine(BaseEngine):
         """Check for actors with scheduled actions that are due."""
         envelopes: list[ActionEnvelope] = []
         for actor in self._actor_states.values():
-            if actor.scheduled_action and actor.scheduled_action.logical_time <= current_time:
-                sa = actor.scheduled_action
-                actor.scheduled_action = None
-
+            due = [sa for sa in actor.scheduled_actions if sa.logical_time <= current_time]
+            actor.scheduled_actions = [
+                sa for sa in actor.scheduled_actions if sa.logical_time > current_time
+            ]
+            for sa in due:
                 if sa.action_type == "continue_work":
                     # Autonomous agent work loop — activate via LLM
                     env = await self._activate_autonomous_agent(actor)
@@ -325,17 +408,16 @@ class AgencyEngine(BaseEngine):
 
     def has_scheduled_actions(self) -> bool:
         """Return True if any actor has a scheduled action."""
-        return any(a.scheduled_action is not None for a in self._actor_states.values())
+        return any(len(a.scheduled_actions) > 0 for a in self._actor_states.values())
 
     def next_scheduled_time(self) -> float | None:
         """Earliest logical_time of any actor's scheduled action, or None."""
-        earliest: float | None = None
-        for actor in self._actor_states.values():
-            if actor.scheduled_action is not None:
-                t = actor.scheduled_action.logical_time
-                if earliest is None or t < earliest:
-                    earliest = t
-        return earliest
+        times = [
+            sa.logical_time
+            for a in self._actor_states.values()
+            for sa in a.scheduled_actions
+        ]
+        return min(times) if times else None
 
     async def generate_deliverable(
         self, actor_id: ActorId, payload: dict,
@@ -458,15 +540,17 @@ class AgencyEngine(BaseEngine):
             if (
                 actor.goal_context
                 and "synthesis_deadline" in (actor.goal_context or "")
-                and actor.scheduled_action
-                and actor.scheduled_action.action_type == "produce_deliverable"
-                and actor.scheduled_action.logical_time <= event_time
+                and any(
+                    sa.action_type == "produce_deliverable"
+                    and sa.logical_time <= event_time
+                    for sa in actor.scheduled_actions
+                )
             ):
                 activated.append((actor_id, "synthesis_deadline"))
                 continue
 
             # 5. Scheduled action due
-            if actor.scheduled_action and actor.scheduled_action.logical_time <= event_time:
+            if any(sa.logical_time <= event_time for sa in actor.scheduled_actions):
                 activated.append((actor_id, "scheduled"))
                 continue
 
@@ -626,7 +710,7 @@ class AgencyEngine(BaseEngine):
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                output_schema=None,  # We parse JSON from text
+                tools=self._tool_definitions or None,
                 temperature=0.7,
                 fresh_session=True,  # Each actor gets isolated ACP session
                 cache_system_prompt=True,  # System prompt is identical across actors
@@ -638,10 +722,12 @@ class AgencyEngine(BaseEngine):
             )
 
         logger.info(
-            "[AGENCY.individual] actor=%s, LLM response length=%d, preview=%s",
+            "[AGENCY.individual] actor=%s, LLM response length=%d, tool_calls=%s",
             actor.actor_id, len(response.content or ""),
-            (response.content or "")[:200],
+            len(response.tool_calls) if response.tool_calls else 0,
         )
+        if response.tool_calls:
+            return self._parse_tool_call(actor, response.tool_calls[0], reason, trigger_event)
         return self._parse_llm_action(actor, response.content, reason, trigger_event)
 
     async def _activate_autonomous_agent(
@@ -673,7 +759,7 @@ class AgencyEngine(BaseEngine):
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                output_schema=None,
+                tools=self._tool_definitions or None,
                 temperature=0.7,
                 fresh_session=True,
                 cache_system_prompt=True,
@@ -685,20 +771,30 @@ class AgencyEngine(BaseEngine):
             )
 
         logger.info(
-            "[AGENCY.autonomous] actor=%s, LLM response length=%d",
+            "[AGENCY.autonomous] actor=%s, LLM response length=%d, tool_calls=%s",
             actor.actor_id, len(response.content or ""),
+            len(response.tool_calls) if response.tool_calls else 0,
         )
-        env = self._parse_llm_action(actor, response.content, "autonomous_continue", None)
+        if response.tool_calls:
+            env = self._parse_tool_call(
+                actor, response.tool_calls[0], "autonomous_continue", None
+            )
+        else:
+            env = self._parse_llm_action(
+                actor, response.content, "autonomous_continue", None
+            )
 
         # Auto-reschedule: if the agent produced an action, schedule next tick
         if env is not None and actor.autonomous:
             tick_interval = self._typed_config.autonomous_tick_interval
-            actor.scheduled_action = ScheduledAction(
-                logical_time=self._get_current_time() + tick_interval,
-                action_type="continue_work",
-                description=f"Continue: {actor.current_goal or 'mission'}",
-                target_service=None,
-                payload={},
+            actor.scheduled_actions.append(
+                ScheduledAction(
+                    logical_time=self._get_current_time() + tick_interval,
+                    action_type="continue_work",
+                    description=f"Continue: {actor.current_goal or 'mission'}",
+                    target_service=None,
+                    payload={},
+                )
             )
 
         return env
@@ -830,6 +926,65 @@ class AgencyEngine(BaseEngine):
             },
         )
 
+    def _parse_tool_call(
+        self,
+        actor: ActorState,
+        tool_call: ToolCall,
+        reason: str,
+        trigger_event: WorldEvent | None,
+    ) -> ActionEnvelope | None:
+        """Parse a native tool call into ActionEnvelope. Returns None for do_nothing."""
+        if tool_call.name == "do_nothing":
+            return None
+
+        # Split namespaced name: "twitter__search_recent" → service, action
+        # Restore original name (with dots) from reverse map built in _build_tool_definitions
+        if "__" in tool_call.name:
+            service, sanitized_action = tool_call.name.split("__", 1)
+            action_type = self._tool_name_map.get(tool_call.name, sanitized_action)
+        else:
+            service = ""
+            action_type = self._tool_name_map.get(tool_call.name, tool_call.name)
+
+        args = dict(tool_call.arguments)
+
+        # Extract metadata from arguments
+        reasoning = args.pop("reasoning", "")
+        intended_for = args.pop("intended_for", [])
+        state_updates = args.pop("state_updates", {})
+
+        # Apply state updates (same as text-based path)
+        if state_updates:
+            self._apply_state_updates(actor, state_updates)
+
+        # Remaining args = action payload
+        payload = args
+
+        # Auto-fill communication context (channel_id etc.)
+        llm_data: dict[str, Any] = {"intended_for": intended_for}
+        if trigger_event is not None:
+            self._autofill_comm_context(payload, action_type, trigger_event, llm_data)
+        else:
+            self._autofill_autonomous_comm(payload, action_type, actor, llm_data)
+
+        parent_ids = [trigger_event.event_id] if trigger_event else []
+
+        return ActionEnvelope(
+            actor_id=actor.actor_id,
+            source=ActionSource.INTERNAL,
+            action_type=action_type,
+            target_service=ServiceId(service) if service else None,
+            payload=payload,
+            logical_time=self._get_current_time(),
+            priority=EnvelopePriority.INTERNAL,
+            parent_event_ids=parent_ids,
+            metadata={
+                "activation_reason": reason,
+                "activation_tier": 3,
+                "reasoning": reasoning,
+            },
+        )
+
     @staticmethod
     def _autofill_comm_context(
         payload: dict,
@@ -892,12 +1047,9 @@ class AgencyEngine(BaseEngine):
         if action_type not in comm_actions:
             return
 
-        # Use team channel from agent's subscriptions.
-        # Don't trust LLM's channel choice — system manages channel context.
-        for sub in actor.subscriptions:
-            if sub.service_id == "slack" and sub.filter.get("channel"):
-                payload["channel_id"] = sub.filter["channel"]
-                break
+        # Use team channel — the explicit channel set by configure_agency().
+        if actor.team_channel:
+            payload["channel_id"] = actor.team_channel
 
         if "channel" not in payload and payload.get("channel_id"):
             payload["channel"] = payload["channel_id"]
@@ -1014,18 +1166,24 @@ class AgencyEngine(BaseEngine):
                     1.0,
                     actor.frustration + config.frustration_increase_per_patience,
                 )
-                # Trigger escalation if defined
+                # Trigger escalation if defined (dedup: skip if already scheduled)
                 if actor.waiting_for.escalation_action:
-                    actor.scheduled_action = ScheduledAction(
-                        logical_time=committed_event.timestamp.tick + 1.0,
-                        action_type=actor.waiting_for.escalation_action,
-                        description=f"Escalation: {actor.waiting_for.description}",
-                        target_service=None,
-                        payload={
-                            "reason": "patience_expired",
-                            "original_wait": actor.waiting_for.description,
-                        },
-                    )
+                    esc_action = actor.waiting_for.escalation_action
+                    if not any(
+                        sa.action_type == esc_action for sa in actor.scheduled_actions
+                    ):
+                        actor.scheduled_actions.append(
+                            ScheduledAction(
+                                logical_time=committed_event.timestamp.tick + 1.0,
+                                action_type=esc_action,
+                                description=f"Escalation: {actor.waiting_for.description}",
+                                target_service=None,
+                                payload={
+                                    "reason": "patience_expired",
+                                    "original_wait": actor.waiting_for.description,
+                                },
+                            )
+                        )
 
         # Check if this event resolves what the actor was waiting for
         if actor.waiting_for and str(committed_event.actor_id) != str(actor.actor_id):
@@ -1094,12 +1252,16 @@ class AgencyEngine(BaseEngine):
         try:
             if "schedule_action" in updates and updates["schedule_action"]:
                 sa = updates["schedule_action"]
-                actor.scheduled_action = ScheduledAction(
-                    logical_time=float(sa.get("logical_time", self._get_current_time() + 60)),
-                    action_type=str(sa.get("action_type", "check_status")),
-                    description=str(sa.get("description", "")),
-                    target_service=sa.get("target_service"),
-                    payload=sa.get("payload", {}),
+                actor.scheduled_actions.append(
+                    ScheduledAction(
+                        logical_time=float(
+                            sa.get("logical_time", self._get_current_time() + 60)
+                        ),
+                        action_type=str(sa.get("action_type", "check_status")),
+                        description=str(sa.get("description", "")),
+                        target_service=sa.get("target_service"),
+                        payload=sa.get("payload", {}),
+                    )
                 )
         except (ValueError, TypeError, AttributeError):
             pass  # Skip invalid schedule_action

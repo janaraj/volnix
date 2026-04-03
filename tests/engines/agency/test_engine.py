@@ -51,7 +51,7 @@ def _make_actor(
     frustration: float = 0.0,
     waiting_for: WaitingFor | None = None,
     behavior_traits: ActorBehaviorTraits | None = None,
-    scheduled_action: ScheduledAction | None = None,
+    scheduled_actions: list[ScheduledAction] | None = None,
 ) -> ActorState:
     return ActorState(
         actor_id=ActorId(actor_id),
@@ -61,7 +61,7 @@ def _make_actor(
         frustration=frustration,
         waiting_for=waiting_for,
         behavior_traits=behavior_traits or ActorBehaviorTraits(),
-        scheduled_action=scheduled_action,
+        scheduled_actions=scheduled_actions or [],
         current_goal="Help users",
         goal_strategy="Be responsive",
     )
@@ -387,9 +387,9 @@ async def test_apply_state_updates_schedule():
         },
     )
 
-    assert actor.scheduled_action is not None
-    assert actor.scheduled_action.action_type == "follow_up"
-    assert actor.scheduled_action.logical_time == 100.0
+    assert len(actor.scheduled_actions) > 0
+    assert actor.scheduled_actions[-1].action_type == "follow_up"
+    assert actor.scheduled_actions[-1].logical_time == 100.0
 
 
 # -- Scheduled actions tests --
@@ -398,11 +398,11 @@ async def test_apply_state_updates_schedule():
 async def test_check_scheduled_actions_due():
     """Scheduled actions that are due produce envelopes."""
     actor = _make_actor(
-        scheduled_action=ScheduledAction(
+        scheduled_actions=[ScheduledAction(
             logical_time=5.0,
             action_type="send_reminder",
             description="Remind about SLA",
-        )
+        )]
     )
     engine = await _create_engine([actor])
 
@@ -410,24 +410,24 @@ async def test_check_scheduled_actions_due():
 
     assert len(envelopes) == 1
     assert envelopes[0].action_type == "send_reminder"
-    assert actor.scheduled_action is None  # cleared after execution
+    assert len(actor.scheduled_actions) == 0  # cleared after execution
 
 
 async def test_check_scheduled_actions_not_due():
     """Scheduled actions not yet due produce no envelopes."""
     actor = _make_actor(
-        scheduled_action=ScheduledAction(
+        scheduled_actions=[ScheduledAction(
             logical_time=100.0,
             action_type="send_reminder",
             description="Remind later",
-        )
+        )]
     )
     engine = await _create_engine([actor])
 
     envelopes = await engine.check_scheduled_actions(current_time=10.0)
 
     assert len(envelopes) == 0
-    assert actor.scheduled_action is not None  # still pending
+    assert len(actor.scheduled_actions) > 0  # still pending
 
 
 async def test_has_scheduled_actions():
@@ -435,11 +435,11 @@ async def test_has_scheduled_actions():
     actor1 = _make_actor(actor_id="a1")
     actor2 = _make_actor(
         actor_id="a2",
-        scheduled_action=ScheduledAction(
+        scheduled_actions=[ScheduledAction(
             logical_time=50.0,
             action_type="check",
             description="Check status",
-        ),
+        )],
     )
     engine = await _create_engine([actor1, actor2])
 
@@ -679,9 +679,9 @@ class TestErrorPaths:
             },
         )
 
-        assert actor.scheduled_action is not None
-        assert actor.scheduled_action.logical_time == -5.0
-        assert actor.scheduled_action.action_type == "follow_up"
+        assert len(actor.scheduled_actions) > 0
+        assert actor.scheduled_actions[-1].logical_time == -5.0
+        assert actor.scheduled_actions[-1].action_type == "follow_up"
 
     # GAP 1.6: Batch response with unknown actor_id
     async def test_parse_batch_response_unknown_actor_skipped(self):
@@ -995,9 +995,9 @@ class TestEdgeCases:
             },
         )
 
-        assert actor.scheduled_action is not None
-        assert actor.scheduled_action.target_service is None
-        assert actor.scheduled_action.action_type == "check_status"
+        assert len(actor.scheduled_actions) > 0
+        assert actor.scheduled_actions[-1].target_service is None
+        assert actor.scheduled_actions[-1].action_type == "check_status"
 
     # GAP 2.10: Urgency bounds checking
     async def test_apply_state_updates_urgency_bounds(self):
@@ -1054,11 +1054,12 @@ class TestEdgeCases:
         # Frustration should increase
         assert actor.frustration == pytest.approx(0.4)
         # Escalation action should be scheduled
-        assert actor.scheduled_action is not None
-        assert actor.scheduled_action.action_type == "escalate_ticket"
-        assert actor.scheduled_action.logical_time == 11.0  # tick + 1
-        assert "patience_expired" in actor.scheduled_action.payload.get("reason", "")
-        assert "Waiting for manager approval" in actor.scheduled_action.description
+        assert len(actor.scheduled_actions) > 0
+        esc = actor.scheduled_actions[-1]
+        assert esc.action_type == "escalate_ticket"
+        assert esc.logical_time == 11.0  # tick + 1
+        assert "patience_expired" in esc.payload.get("reason", "")
+        assert "Waiting for manager approval" in esc.description
 
 
 # ============================================================================
@@ -1093,18 +1094,18 @@ class TestStateConsistency:
     async def test_scheduled_action_idempotent(self) -> None:
         """Call check_scheduled_actions twice -> only first time produces envelope."""
         actor = _make_actor(
-            scheduled_action=ScheduledAction(
+            scheduled_actions=[ScheduledAction(
                 logical_time=5.0,
                 action_type="send_reminder",
                 description="Remind about SLA",
-            )
+            )]
         )
         engine = await _create_engine([actor])
 
         # First call: scheduled action is due and should produce an envelope
         envelopes_first = await engine.check_scheduled_actions(current_time=10.0)
         assert len(envelopes_first) == 1
-        assert actor.scheduled_action is None  # Cleared after first check
+        assert len(actor.scheduled_actions) == 0  # Cleared after first check
 
         # Second call: no more scheduled action -> no envelope
         envelopes_second = await engine.check_scheduled_actions(current_time=10.0)
@@ -1198,3 +1199,226 @@ class TestStateConsistency:
         state = engine.get_actor_state(ActorId("actor-busy"))
         assert state is not None
         assert len(state.pending_notifications) >= 1
+
+
+# ============================================================================
+# Native tool calling tests
+# ============================================================================
+
+
+class TestBuildToolDefinitions:
+    """Tests for _build_tool_definitions() — available_actions → ToolDefinition list."""
+
+    async def test_empty_actions_returns_do_nothing(self):
+        """Empty available_actions still produces a do_nothing tool."""
+        engine = await _create_engine([_make_actor()])
+        assert len(engine._tool_definitions) == 1
+        assert engine._tool_definitions[0].name == "do_nothing"
+
+    async def test_tool_namespacing(self):
+        """Tools are namespaced as {service}__{name}."""
+        actor = _make_actor()
+        engine = AgencyEngine()
+        await engine.initialize({}, bus=None)
+        ctx = WorldContextBundle(
+            world_description="Test", reality_summary="Ideal",
+        )
+        actions = [
+            {"name": "search_recent", "service": "twitter", "description": "Search tweets",
+             "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+             "http_method": "GET"},
+        ]
+        await engine.configure([actor], ctx, actions)
+
+        # Should have twitter__search_recent + do_nothing
+        assert len(engine._tool_definitions) == 2
+        tool = engine._tool_definitions[0]
+        assert tool.name == "twitter__search_recent"
+        assert tool.service == "twitter"
+        assert "[twitter]" in tool.description
+
+    async def test_metadata_params_added(self):
+        """Each tool gets reasoning, intended_for, state_updates params."""
+        actor = _make_actor()
+        engine = AgencyEngine()
+        await engine.initialize({}, bus=None)
+        ctx = WorldContextBundle(
+            world_description="Test", reality_summary="Ideal",
+        )
+        actions = [
+            {"name": "email_send", "service": "gmail", "description": "Send email",
+             "parameters": {"type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"]},
+             "http_method": "POST"},
+        ]
+        await engine.configure([actor], ctx, actions)
+
+        tool = engine._tool_definitions[0]
+        props = tool.parameters.get("properties", {})
+        assert "reasoning" in props
+        assert "intended_for" in props
+        assert "state_updates" in props
+        assert "to" in props  # Original param preserved
+        assert "reasoning" in tool.parameters.get("required", [])
+
+    async def test_no_mutation_of_original_actions(self):
+        """_build_tool_definitions does not mutate the input available_actions dicts."""
+        actor = _make_actor()
+        engine = AgencyEngine()
+        await engine.initialize({}, bus=None)
+        ctx = WorldContextBundle(
+            world_description="Test", reality_summary="Ideal",
+        )
+        original_params = {
+            "type": "object",
+            "properties": {"q": {"type": "string"}},
+            "required": ["q"],
+        }
+        actions = [
+            {"name": "search", "service": "twitter", "description": "Search",
+             "parameters": original_params, "http_method": "GET"},
+        ]
+        await engine.configure([actor], ctx, actions)
+
+        # Original params should NOT have reasoning/intended_for added
+        assert "reasoning" not in original_params.get("properties", {})
+
+
+class TestParseToolCall:
+    """Tests for _parse_tool_call() — ToolCall → ActionEnvelope."""
+
+    async def test_do_nothing_returns_none(self):
+        """do_nothing tool call returns None."""
+        from terrarium.llm.types import ToolCall
+
+        actor = _make_actor()
+        engine = await _create_engine([actor])
+        tc = ToolCall(name="do_nothing", arguments={"reasoning": "Nothing to do"})
+        result = engine._parse_tool_call(actor, tc, "autonomous_continue", None)
+        assert result is None
+
+    async def test_namespaced_tool_call(self):
+        """Namespaced tool call splits into service + action_type."""
+        from terrarium.llm.types import ToolCall
+
+        actor = _make_actor()
+        engine = await _create_engine([actor])
+        tc = ToolCall(
+            name="twitter__search_recent",
+            arguments={"query": "S&P 500", "reasoning": "Need market data"},
+        )
+        env = engine._parse_tool_call(actor, tc, "autonomous_continue", None)
+
+        assert env is not None
+        assert env.action_type == "search_recent"
+        assert str(env.target_service) == "twitter"
+        assert env.payload == {"query": "S&P 500"}
+        assert env.metadata["reasoning"] == "Need market data"
+
+    async def test_metadata_extracted_from_arguments(self):
+        """reasoning, intended_for, state_updates are extracted and not in payload."""
+        from terrarium.llm.types import ToolCall
+
+        actor = _make_actor()
+        engine = await _create_engine([actor])
+        tc = ToolCall(
+            name="slack__chat.postMessage",
+            arguments={
+                "text": "Hello team",
+                "reasoning": "Share findings",
+                "intended_for": ["analyst"],
+                "state_updates": {"goal_context": "Shared initial findings"},
+            },
+        )
+        env = engine._parse_tool_call(actor, tc, "subscription_match", None)
+
+        assert env is not None
+        # reasoning goes to metadata, not payload
+        assert "reasoning" not in env.payload
+        assert env.metadata["reasoning"] == "Share findings"
+        # state_updates extracted and applied, not in payload
+        assert "state_updates" not in env.payload
+        assert actor.goal_context == "Shared initial findings"
+        # intended_for stays in payload (needed for subscription matching in notify())
+        assert env.payload.get("intended_for") == ["analyst"]
+        # Action-specific params preserved
+        assert env.payload.get("text") == "Hello team"
+
+    async def test_tool_without_namespace(self):
+        """Tool names without __ separator still work."""
+        from terrarium.llm.types import ToolCall
+
+        actor = _make_actor()
+        engine = await _create_engine([actor])
+        tc = ToolCall(
+            name="custom_action",
+            arguments={"reasoning": "Testing"},
+        )
+        env = engine._parse_tool_call(actor, tc, "scheduled", None)
+
+        assert env is not None
+        assert env.action_type == "custom_action"
+        assert env.target_service is None  # No service from name
+
+    async def test_empty_arguments(self):
+        """Tool call with empty arguments doesn't crash."""
+        from terrarium.llm.types import ToolCall
+
+        actor = _make_actor()
+        engine = await _create_engine([actor])
+        tc = ToolCall(name="twitter__search_recent", arguments={})
+        env = engine._parse_tool_call(actor, tc, "autonomous_continue", None)
+
+        assert env is not None
+        assert env.action_type == "search_recent"
+        assert env.metadata["reasoning"] == ""
+
+
+class TestScheduledActionsList:
+    """Tests for the scheduled_actions list behavior."""
+
+    async def test_lead_gets_both_actions(self):
+        """Verify an actor can hold both continue_work and produce_deliverable."""
+        actor = _make_actor()
+        actor.scheduled_actions = [
+            ScheduledAction(logical_time=1.0, action_type="continue_work", description="Work"),
+            ScheduledAction(logical_time=27.0, action_type="produce_deliverable", description="Deliver"),
+        ]
+        assert len(actor.scheduled_actions) == 2
+        assert actor.scheduled_actions[0].action_type == "continue_work"
+        assert actor.scheduled_actions[1].action_type == "produce_deliverable"
+
+    async def test_due_items_removed_remaining_kept(self):
+        """check_scheduled_actions removes due items, keeps future ones."""
+        actor = _make_actor(
+            scheduled_actions=[
+                ScheduledAction(logical_time=5.0, action_type="send_reminder", description="Due"),
+                ScheduledAction(logical_time=100.0, action_type="produce_deliverable", description="Future"),
+            ]
+        )
+        engine = await _create_engine([actor])
+
+        envelopes = await engine.check_scheduled_actions(current_time=10.0)
+
+        assert len(envelopes) == 1
+        assert envelopes[0].action_type == "send_reminder"
+        # Future action should remain
+        assert len(actor.scheduled_actions) == 1
+        assert actor.scheduled_actions[0].action_type == "produce_deliverable"
+
+    async def test_both_due_at_same_time(self):
+        """When both actions are due at the same time, both fire."""
+        actor = _make_actor(
+            scheduled_actions=[
+                ScheduledAction(logical_time=5.0, action_type="check_status", description="Check"),
+                ScheduledAction(logical_time=5.0, action_type="send_report", description="Report"),
+            ]
+        )
+        engine = await _create_engine([actor])
+
+        envelopes = await engine.check_scheduled_actions(current_time=10.0)
+
+        assert len(envelopes) == 2
+        action_types = {e.action_type for e in envelopes}
+        assert "check_status" in action_types
+        assert "send_report" in action_types
+        assert len(actor.scheduled_actions) == 0

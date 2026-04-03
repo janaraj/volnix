@@ -768,6 +768,7 @@ class TerrariumApp:
                             "service": pack_name,
                             "required_params": params.get("required", []),
                             "http_method": tool_info.get("http_method", "POST"),
+                            "parameters": params,
                         }
                     )
         except KeyError:
@@ -873,6 +874,7 @@ class TerrariumApp:
             if team_channel:
                 for state in actor_states:
                     if state.autonomous:
+                        state.team_channel = team_channel
                         state.subscriptions.append(_AgentSub(
                             service_id="slack",
                             filter={"channel": team_channel},
@@ -978,34 +980,37 @@ class TerrariumApp:
                     f"you must produce a '{preset_name}' deliverable.\n\n"
                     f"{preset.get('prompt_instructions', '')}"
                 )
-                lead_state.scheduled_action = ScheduledAction(
-                    logical_time=float(deadline_tick * tick_interval),
-                    action_type="produce_deliverable",
-                    description=f"Produce {preset_name} deliverable",
-                    target_service=None,
-                    payload={
-                        "preset": preset_name,
-                        "schema": preset.get("schema", {}),
-                    },
+                lead_state.scheduled_actions.append(
+                    ScheduledAction(
+                        logical_time=float(deadline_tick * tick_interval),
+                        action_type="produce_deliverable",
+                        description=f"Produce {preset_name} deliverable",
+                        target_service=None,
+                        payload={
+                            "preset": preset_name,
+                            "schema": preset.get("schema", {}),
+                        },
+                    )
                 )
                 logger.info(
                     "Scheduled %s deliverable for %s at tick %d",
                     preset_name, lead_state.actor_id, deadline_tick,
                 )
 
-        # Schedule initial continue_work for autonomous agents (non-lead)
-        # so they start working after the kickstart fires.
-        # Lead agent keeps their produce_deliverable schedule.
+        # Schedule initial continue_work for ALL autonomous agents
+        # (including lead — lead works alongside team, not just at deadline).
         tick_interval = self._config.simulation_runner.tick_interval_seconds
         for state in actor_states:
-            if state.autonomous and state.scheduled_action is None:
+            if state.autonomous:
                 from terrarium.actors.state import ScheduledAction
-                state.scheduled_action = ScheduledAction(
-                    logical_time=tick_interval,  # Start at tick 1
-                    action_type="continue_work",
-                    description=f"Begin work on: {state.current_goal or 'mission'}",
-                    target_service=None,
-                    payload={},
+                state.scheduled_actions.append(
+                    ScheduledAction(
+                        logical_time=tick_interval,  # Start at tick 1
+                        action_type="continue_work",
+                        description=f"Begin work on: {state.current_goal or 'mission'}",
+                        target_service=None,
+                        payload={},
+                    )
                 )
 
         await agency.configure(actor_states, world_context, available_actions)
