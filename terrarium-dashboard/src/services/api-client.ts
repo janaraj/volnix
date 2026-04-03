@@ -107,6 +107,10 @@ export class ApiClient {
     return this.request('POST', `/api/v1/runs/${runId}/complete`);
   }
 
+  async newRun(worldId?: string): Promise<{ run_id: string; world_id: string }> {
+    return this.request('POST', '/api/v1/runs/new', worldId ? { world_id: worldId } : {});
+  }
+
   // ── Comparison ───────────────────────────────
   async getComparison(runIds: string[]): Promise<CompareResponse> {
     return this.request('GET', '/api/v1/compare', { runs: runIds.join(',') });

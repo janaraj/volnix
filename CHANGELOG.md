@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - REST API with 39 endpoints + WebSocket live event streaming
 - MCP server for agent integration (stdio and HTTP transports)
 - React dashboard for run observation, scorecards, deliverables, and comparison
-- 11 verified service packs: Gmail, Slack, Zendesk, Stripe, GitHub, Google Calendar, Twitter, Reddit, Alpaca, Browser
-- 8 official blueprints: customer support, incident response, open sandbox, market prediction, campaign brainstorm, climate research, feature prioritization, security assessment
+- 10 verified service packs: Gmail, Slack, Zendesk, Stripe, GitHub, Google Calendar, Twitter, Reddit, Alpaca, Browser
+- 15 official blueprints: customer support, incident response, open sandbox, market prediction, campaign brainstorm, climate research, feature prioritization, security assessment, support ticket triage, governance test, and 5 internal agent team templates
 - Multi-provider LLM routing: Anthropic, OpenAI, Google Gemini, Ollama, CLI-based, ACP-based
 - Reality dimensions: information quality, reliability, social friction, complexity, boundaries (with ideal/messy/hostile presets)
 - Behavior modes: static, reactive, dynamic

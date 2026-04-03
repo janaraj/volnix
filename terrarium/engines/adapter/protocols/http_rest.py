@@ -723,6 +723,64 @@ class HTTPRestAdapter(ProtocolAdapter):
                     content={"error": str(exc)},
                 )
 
+        @app.post("/api/v1/runs/new")
+        async def new_run_endpoint(request: StarletteRequest):
+            """Start a new run on a world.
+
+            If there is an active run, it is completed first (scorecard
+            generated). Then a fresh run is created.
+
+            Body (optional): ``{"world_id": "world_abc"}``
+            If no world_id provided, uses the current server world.
+            """
+            from starlette.responses import JSONResponse
+
+            from terrarium.core.types import RunId as _NRId, WorldId as _NWId
+
+            # Parse optional body
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+
+            # Complete current run if active
+            current = gateway._app._current_run_id
+            if current:
+                try:
+                    await gateway._app.end_run(_NRId(current))
+                except (KeyError, ValueError):
+                    pass  # Already completed
+
+            # Resolve world: body > current server world
+            world_id = body.get("world_id") or gateway._app._current_world_id
+            if not world_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "No world specified. Provide world_id or start the server with a world."
+                    },
+                )
+
+            plan = await gateway._app._world_manager.load_plan(
+                _NWId(world_id)
+            )
+            if plan is None:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"World {world_id} not found"},
+                )
+
+            run_id = await gateway._app.create_run(
+                plan, world_id=_NWId(world_id)
+            )
+            result: dict[str, Any] = {
+                "run_id": str(run_id),
+                "world_id": world_id,
+            }
+            if current:
+                result["completed_run_id"] = current
+            return result
+
         @app.get("/api/v1/runs/{run_id}/artifacts")
         async def list_artifacts_endpoint(run_id: str):
             """List artifacts saved for a run."""

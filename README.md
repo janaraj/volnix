@@ -14,7 +14,7 @@ Describe a world in natural language or YAML. Terrarium compiles it into a deep,
 - **10-engine governance architecture** — state, policy, permission, budget, responder, animator, agency, adapter, reporter, and feedback engines working in concert
 - **7-step governance pipeline** — every action flows through permission, policy, budget, capability, responder, validation, and commit checks
 - **Multi-agent simulation** — internal actors collaborate autonomously via LLM; external agents connect via standard protocols
-- **11 verified service packs** — Slack, Gmail, GitHub, Zendesk, Stripe, Google Calendar, Twitter, Reddit, Alpaca, and more — each with deterministic state machines
+- **10 verified service packs** — Slack, Gmail, GitHub, Zendesk, Stripe, Google Calendar, Twitter, Reddit, Alpaca, and more — each with deterministic state machines
 - **Reality dimensions** — tune information quality, reliability, social friction, complexity, and boundaries from ideal to hostile
 - **Protocol-native** — MCP server, REST API, OpenAI and Anthropic tool formats, Python SDK
 - **One-click agent integration** — `terrarium attach claude-desktop` patches your agent's config automatically
@@ -342,6 +342,13 @@ See `terrarium.toml` for the complete configuration reference.
 | `climate_research_station` | Research data generation and analysis |
 | `feature_prioritization` | Feature ranking with structured debate |
 | `security_posture_assessment` | Security audit simulation |
+| `support_ticket_triage` | Ticket routing and resolution |
+| `governance_test` | Policy enforcement testing |
+| `agents_market_analysts` | Internal agent team: market analysis |
+| `agents_climate_researchers` | Internal agent team: climate research |
+| `agents_campaign_creatives` | Internal agent team: campaign ideation |
+| `agents_feature_team` | Internal agent team: feature prioritization |
+| `agents_security_team` | Internal agent team: security assessment |
 
 ```bash
 # List all blueprints (including user-created)
