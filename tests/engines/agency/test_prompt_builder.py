@@ -236,8 +236,8 @@ def test_autonomous_prompt_has_team_and_instructions():
     )
 
     assert "#research" in prompt
-    assert "QUERY before you speak" in prompt
-    assert "SHARE facts, not plans" in prompt
+    assert "INVESTIGATE first" in prompt
+    assert "ACT on what you find" in prompt
     assert "Action History" in prompt
 
 

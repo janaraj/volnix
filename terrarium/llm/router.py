@@ -237,8 +237,8 @@ class LLMRouter:
                 "success": response.error is None,
                 "error": response.error,
                 "system_prompt": (
-                    request.system_prompt[:2000] + "..."
-                    if len(request.system_prompt) > 2000
+                    request.system_prompt[:10000] + "..."
+                    if len(request.system_prompt) > 10000
                     else request.system_prompt
                 ),
                 "user_content": request.user_content,

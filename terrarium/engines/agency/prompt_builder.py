@@ -217,17 +217,24 @@ class ActorPromptBuilder:
                 "- Use `intended_for` to address teammates by role or 'all'\n\n"
             )
 
+        steps = [
+            "INVESTIGATE first. Read relevant data before taking action.",
+            "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
+        ]
+        if team_size > 1:
+            steps.append("COORDINATE with your team. Share findings and status in the team channel.")
+            steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")
+        steps.append("NO REPETITION. Check Your Action History — don't re-query or re-do completed work.")
+        steps.append("Track progress via state_updates.pending_tasks and goal_context.")
+        steps.append("If nothing new to add: call the `do_nothing` tool.")
+
+        numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(steps))
+
         return (
             "## Instructions\n"
             f"{team_note}"
-            "The world's services contain real data generated during world creation.\n"
-            "Your job is to QUERY these services and share findings with the team.\n\n"
-            "1. QUERY before you speak. Use READ tools to find actual data from services.\n"
-            "2. SHARE facts, not plans. Post specific data you found (numbers, quotes, dates).\n"
-            "3. RESPOND to teammates. Messages marked [TO YOU] need your response.\n"
-            "4. NO REPETITION. Check Your Action History. Don't re-query or re-state.\n"
-            "5. Track progress via state_updates.pending_tasks and goal_context.\n"
-            "6. If nothing new to add: call the `do_nothing` tool.\n\n"
+            "The world's services contain real data. Use the available tools to carry out your mission.\n\n"
+            f"{numbered}\n\n"
             "For messages: only provide `text` in payload — the system auto-fills `channel_id`."
         )
 
@@ -253,12 +260,12 @@ class ActorPromptBuilder:
         for r in own:
             method = method_lookup.get(r.action, "POST")
             if method == "GET":
-                queries.append(r.action)
+                queries.append(r.summary)
             elif r.action in ("chat.postMessage", "chat.replyToThread",
                               "chat.update", "email_send"):
-                messages.append(r.action)
+                messages.append(r.summary)
             else:
-                other.append(r.action)
+                other.append(r.summary)
 
         lines = ["### Your Action History"]
         if queries:
