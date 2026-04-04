@@ -223,6 +223,8 @@ infer_on_missing = true
 
 [llm]
 llm_debug = true
+max_retries = 3
+retry_backoff_base = 1.0
 
 # ── Defaults ─────────────────────────────────────────────────
 
@@ -303,52 +305,55 @@ auth_method = ""                    # gemini uses its own credentials
 timeout_seconds = 300
 
 # ── Task-Specific Routing ────────────────────────────────────
+# provider: "gemini" | "openai" | "anthropic" | "gemini_openai" | "ollama"
+# model (gemini): "gemini-2.5-flash" | "gemini-2.5-pro" | "gemini-3-flash-preview"
+# model (openai): "gpt-5.4-nano" | "gpt-4.1-mini" | "gpt-4.1"
+# model (anthropic): "claude-sonnet-4-6" | "claude-haiku-4-5-20251001"
 
 [llm.routing.world_compiler]
-provider = "openai"
-model = "gpt-5.4-nano"
+provider = "gemini"                     # "openai" for OpenAI
+model = "gemini-2.5-flash"        # "gpt-5.4-nano" for OpenAI
 max_tokens = 16384
 temperature = 0
 
 [llm.routing.responder_tier2]
-provider = "openai"
-model = "gpt-4.1-mini"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
-provider = "openai"
-model = "gpt-4.1-mini"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.profile_infer]
-provider = "openai"
-model = "gpt-4.1-mini"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-4.1-mini"
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.animator]
-provider = "openai"
-model = "gpt-4.1-mini"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-4.1-mini"
 max_tokens = 2048
 temperature = 0.5
 
-
 [llm.routing.data_generator]
-provider = "openai"
-model = "gpt-5.4-nano"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-5.4-nano"
 max_tokens = 16384
 temperature = 0
 
 [llm.routing.agency_individual]
-provider = "openai"
-model = "gpt-5.4-nano"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-5.4-nano"
 max_tokens = 4096
 temperature = 0
 
 [llm.routing.agency_batch]
-provider = "openai"
-model = "gpt-5.4-nano"
+provider = "gemini"                     # "openai"
+model = "gemini-2.5-flash"        # "gpt-5.4-nano"
 max_tokens = 8192
 temperature = 0

@@ -14,6 +14,7 @@ OpenAI-compatible endpoint, including:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, ClassVar
@@ -82,6 +83,20 @@ class OpenAICompatibleProvider(LLMProvider):
                 kwargs["prompt_cache_key"] = hashlib.sha256(
                     request.system_prompt.encode()
                 ).hexdigest()[:16]
+
+            # Structured output: force valid JSON matching the schema.
+            # Uses response_format with json_schema type.
+            if request.output_schema:
+                kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "response",
+                        "schema": request.output_schema,
+                        "strict": False,
+                    },
+                }
+                schema_type = request.output_schema.get("type", "?")
+                logger.info("OpenAI structured output enabled (schema type=%s)", schema_type)
 
             # Native tool calling: pass tool definitions so the LLM returns
             # structured tool_calls instead of raw JSON text.
@@ -155,8 +170,19 @@ class OpenAICompatibleProvider(LLMProvider):
                     cached_tokens, usage.prompt_tokens,
                 )
 
+            # Parse structured output when schema was requested
+            parsed_structured = None
+            if request.output_schema and content:
+                try:
+                    parsed_structured = json.loads(content)
+                    items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
+                    logger.info("OpenAI structured output parsed: %d items, %d chars", items, len(content))
+                except json.JSONDecodeError:
+                    logger.warning("OpenAI structured output was not valid JSON (%d chars)", len(content))
+
             return LLMResponse(
                 content=content or "",
+                structured_output=parsed_structured,
                 tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,

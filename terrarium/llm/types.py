@@ -105,7 +105,7 @@ class LLMResponse(BaseModel, frozen=True):
     """
 
     content: str = ""
-    structured_output: dict | None = None
+    structured_output: dict | list | None = None
     tool_calls: list[ToolCall] | None = None  # Parsed native tool calls
     usage: LLMUsage = LLMUsage()
     model: str = ""

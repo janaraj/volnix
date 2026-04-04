@@ -1,0 +1,21 @@
+# External agent config for E-commerce demo
+# Two agents with different permissions — same tasks, different outcomes.
+
+agents:
+  - id: support-bot
+    role: support-bot
+    permissions:
+      read: [zendesk, stripe, slack]
+      write: [zendesk, slack]
+    budget:
+      api_calls: 50
+      spend_usd: 100
+
+  - id: admin
+    role: admin
+    permissions:
+      read: all
+      write: [stripe, zendesk, slack]
+    budget:
+      api_calls: 100
+      spend_usd: 500

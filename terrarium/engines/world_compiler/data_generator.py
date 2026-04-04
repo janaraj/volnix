@@ -21,6 +21,31 @@ from terrarium.llm.router import LLMRouter
 logger = logging.getLogger(__name__)
 
 
+def _strip_custom_extensions(schema: dict[str, Any]) -> dict[str, Any]:
+    """Strip x-terrarium-* keys from schema for structured output APIs.
+
+    Entity schemas contain internal extensions (x-terrarium-identity,
+    x-terrarium-ref) that structured output APIs may reject as unknown
+    JSON Schema keywords. The stripped version is only used for the
+    provider's schema enforcement; the original is still passed in the
+    prompt text for context.
+    """
+    cleaned: dict[str, Any] = {}
+    for k, v in schema.items():
+        if k.startswith("x-"):
+            continue
+        if isinstance(v, dict):
+            cleaned[k] = _strip_custom_extensions(v)
+        elif isinstance(v, list):
+            cleaned[k] = [
+                _strip_custom_extensions(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
 class EntityGenerationSpec(BaseModel, frozen=True):
     """Single deterministic generation request for one entity section."""
 
@@ -218,9 +243,18 @@ class WorldDataGenerator:
         # Build reference context string for the prompt
         existing_refs = json.dumps(ref_context, indent=2) if ref_context else "none"
 
+        # Build structured output schema: array of entities.
+        # Strip x-terrarium-* extensions that providers don't understand.
+        clean_schema = _strip_custom_extensions(schema)
+        array_schema: dict[str, Any] = {
+            "type": "array",
+            "items": clean_schema,
+        }
+
         response = await ENTITY_GENERATION.execute(
             self._router,
             _seed=self._seed,
+            _output_schema=array_schema,
             **base_vars,
             entity_type=entity_type,
             count=str(count),
