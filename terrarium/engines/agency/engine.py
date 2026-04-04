@@ -365,9 +365,19 @@ class AgencyEngine(BaseEngine):
 
                     break  # one match per actor per event
 
-        if not activated:
-            return []
+        # Self-continuation check: should the event actor continue its work?
+        # Must be checked before the early return since self-continuation
+        # can proceed even when no OTHER actors are activated.
+        event_actor = self._actor_states.get(committed_event.actor_id)
+        should_self_continue = (
+            event_actor is not None
+            and event_actor.autonomous
+            and not event_actor.is_lead
+            and committed_event.actor_id not in {aid for aid, _ in activated}
+        )
 
+        if not activated and not should_self_continue:
+            return []
 
         # Respect max activations per event
         activated = activated[: self._typed_config.max_activations_per_event]
@@ -423,6 +433,13 @@ class AgencyEngine(BaseEngine):
         if tier2_actors:
             batch_envs = await self._activate_batch(tier2_actors, committed_event)
             envelopes.extend(batch_envs)
+
+        # Self-continuation: re-activate non-lead autonomous agent after its
+        # own action commits (replaces timer-based rescheduling).
+        if should_self_continue:
+            env = await self._activate_autonomous_agent(event_actor)
+            if env is not None:
+                envelopes.append(env)
 
         # Respect max envelopes per event
         envelopes = envelopes[: self._typed_config.max_envelopes_per_event]
@@ -796,7 +813,10 @@ class AgencyEngine(BaseEngine):
             len(response.tool_calls) if response.tool_calls else 0,
         )
         if response.tool_calls:
-            return self._parse_tool_call(actor, response.tool_calls[0], reason, trigger_event)
+            env = self._parse_tool_call(actor, response.tool_calls[0], reason, trigger_event)
+            if env is not None:
+                actor.pending_actions.append(env.action_type)
+            return env
         # Native tools were sent — model should have returned tool_calls.
         # Don't fall through to text parsing which masks broken tool calling.
         logger.warning(
@@ -857,6 +877,8 @@ class AgencyEngine(BaseEngine):
             env = self._parse_tool_call(
                 actor, response.tool_calls[0], "autonomous_continue", None
             )
+            if env is not None:
+                actor.pending_actions.append(env.action_type)
         else:
             # Native tools were sent — model should have returned tool_calls.
             logger.warning(
@@ -866,19 +888,9 @@ class AgencyEngine(BaseEngine):
             )
             env = None
 
-        # Auto-reschedule: if the agent produced an action, schedule next tick
-        if env is not None and actor.autonomous:
-            tick_interval = self._typed_config.autonomous_tick_interval
-            actor.scheduled_actions.append(
-                ScheduledAction(
-                    logical_time=self._get_current_time() + tick_interval,
-                    action_type="continue_work",
-                    description=f"Continue: {actor.current_goal or 'mission'}",
-                    target_service=None,
-                    payload={},
-                )
-            )
-
+        # No self-rescheduling. Autonomous agents are re-activated by:
+        # - Self-continuation in notify() (non-lead agents)
+        # - Subscription events (lead, when team posts findings)
         return env
 
     # -- Tier 2: Batch LLM --
@@ -1251,6 +1263,14 @@ class AgencyEngine(BaseEngine):
                     actor.frustration - config.frustration_decrease_per_positive,
                 )
 
+        # Clear pending_actions for self-actions that have now committed
+        is_self = str(committed_event.actor_id) == str(actor.actor_id)
+        if is_self:
+            try:
+                actor.pending_actions.remove(committed_event.action)
+            except ValueError:
+                pass
+
         # Recent interactions (structured InteractionRecord)
         # Skip if already recorded via subscription notification in notify()
         event_id_str = str(committed_event.event_id)
@@ -1271,17 +1291,27 @@ class AgencyEngine(BaseEngine):
                     summary = f"{committed_event.action}({param_str})"
                 else:
                     summary = committed_event.action
+
+            # Include truncated response data so agents see what tool calls returned
+            response_summary = ""
+            if is_self and committed_event.response_body:
+                import json as _json
+                response_summary = _json.dumps(
+                    committed_event.response_body, default=str
+                )[:500]
+
             record = InteractionRecord(
                 tick=committed_event.timestamp.tick,
                 actor_id=str(committed_event.actor_id),
                 actor_role=self._get_actor_role(committed_event.actor_id),
                 action=committed_event.action,
                 summary=summary,
-                source="self" if str(committed_event.actor_id) == str(actor.actor_id) else "observed",
+                source="self" if is_self else "observed",
                 event_id=event_id_str,
                 reply_to=committed_event.input_data.get("reply_to_event_id"),
                 channel=committed_event.input_data.get("channel"),
                 intended_for=committed_event.input_data.get("intended_for", []),
+                response_summary=response_summary,
             )
             actor.recent_interactions.append(record)
         max_interactions = config.max_recent_interactions

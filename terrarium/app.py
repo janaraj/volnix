@@ -1019,15 +1019,16 @@ class TerrariumApp:
                     preset_name, lead_state.actor_id, deadline_tick,
                 )
 
-        # Schedule initial continue_work for ALL autonomous agents
-        # (including lead — lead works alongside team, not just at deadline).
+        # Only the lead starts autonomously. Non-lead agents are activated
+        # by subscriptions when the lead's delegation message arrives in the
+        # team channel. This ensures lead-first coordination.
         tick_interval = self._config.simulation_runner.tick_interval_seconds
         for state in actor_states:
-            if state.autonomous:
+            if state.autonomous and state.is_lead:
                 from terrarium.actors.state import ScheduledAction
                 state.scheduled_actions.append(
                     ScheduledAction(
-                        logical_time=tick_interval,  # Start at tick 1
+                        logical_time=tick_interval,
                         action_type="continue_work",
                         description=f"Begin work on: {state.current_goal or 'mission'}",
                         target_service=None,

@@ -274,7 +274,7 @@ class ActorPromptBuilder:
         }
 
         own = [r for r in actor.recent_interactions if r.source == "self"]
-        if not own:
+        if not own and not actor.pending_actions:
             return "### Your Action History\nNo actions taken yet."
 
         queries = []
@@ -282,8 +282,11 @@ class ActorPromptBuilder:
         other = []
         for r in own:
             method = method_lookup.get(r.action, "POST")
+            entry = r.summary
+            if r.response_summary:
+                entry += f" → {r.response_summary[:150]}"
             if method == "GET":
-                queries.append(r.summary)
+                queries.append(entry)
             elif r.action in ("chat.postMessage", "chat.replyToThread",
                               "chat.update", "email_send"):
                 messages.append(r.summary)
@@ -291,6 +294,8 @@ class ActorPromptBuilder:
                 other.append(r.summary)
 
         lines = ["### Your Action History"]
+        if actor.pending_actions:
+            lines.append(f"- In progress: {', '.join(actor.pending_actions)}")
         if queries:
             lines.append(f"- Queries: {len(queries)} ({', '.join(queries)})")
         if messages:
@@ -321,9 +326,12 @@ class ActorPromptBuilder:
                     addressed_tag = f" [to: {', '.join(record.intended_for)}]"
 
             if record.source == "self":
+                result_tag = ""
+                if record.response_summary:
+                    result_tag = f" → {record.response_summary[:200]}"
                 lines.append(
                     f"- [tick {record.tick}] You: "
-                    f'"{record.summary}"{channel_tag}{reply_tag}'
+                    f'"{record.summary}"{result_tag}{channel_tag}{reply_tag}'
                 )
             else:
                 lines.append(

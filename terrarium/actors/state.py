@@ -99,6 +99,7 @@ class InteractionRecord(BaseModel, frozen=True):
     reply_to: str | None = None
     channel: str | None = None
     intended_for: list[str] = Field(default_factory=list)
+    response_summary: str = ""  # Truncated service response (populated on commit)
 
 
 class ActorState(BaseModel):
@@ -141,6 +142,7 @@ class ActorState(BaseModel):
     subscriptions: list[Subscription] = Field(default_factory=list)
     team_channel: str | None = None  # Slack channel ID for team collaboration
     pending_tasks: list[str] = Field(default_factory=list)
+    pending_actions: list[str] = Field(default_factory=list)  # Submitted but not yet committed
     goal_context: str | None = None
     is_lead: bool = False
     batch_notification_count: int = 0
