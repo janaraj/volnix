@@ -215,29 +215,33 @@ async def handle_tickets_search(
     query = input_data["query"]
     tickets = list(state.get("tickets", []))
 
-    # Parse structured filters from query
-    filters: dict[str, str] = {}
+    # Parse structured filters from query.
+    # Supports OR: "status:new OR status:open" → match any value.
+    # Multiple values for the same key are collected into a set.
+    filters: dict[str, set[str]] = {}
     free_text_parts: list[str] = []
     for token in query.split():
+        if token.upper() in ("OR", "AND", "NOT"):
+            continue  # Strip boolean operators
         if ":" in token:
             key, value = token.split(":", 1)
-            filters[key] = value
+            filters.setdefault(key, set()).add(value)
         else:
             free_text_parts.append(token)
 
     free_text = " ".join(free_text_parts).lower()
 
-    # Apply structured filters
+    # Apply structured filters (multi-value uses "in")
     if "status" in filters:
-        tickets = [t for t in tickets if t.get("status") == filters["status"]]
+        tickets = [t for t in tickets if t.get("status") in filters["status"]]
     if "priority" in filters:
-        tickets = [t for t in tickets if t.get("priority") == filters["priority"]]
+        tickets = [t for t in tickets if t.get("priority") in filters["priority"]]
     if "assignee_id" in filters:
-        tickets = [t for t in tickets if t.get("assignee_id") == filters["assignee_id"]]
+        tickets = [t for t in tickets if t.get("assignee_id") in filters["assignee_id"]]
     if "requester_id" in filters:
-        tickets = [t for t in tickets if t.get("requester_id") == filters["requester_id"]]
+        tickets = [t for t in tickets if t.get("requester_id") in filters["requester_id"]]
     if "type" in filters:
-        tickets = [t for t in tickets if t.get("type") == filters["type"]]
+        tickets = [t for t in tickets if t.get("type") in filters["type"]]
 
     # Apply free-text search if present
     if free_text:
