@@ -6,10 +6,14 @@ using the Anthropic Messages API.
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 from typing import ClassVar
 
 from anthropic import AsyncAnthropic
+
+logger = logging.getLogger(__name__)
 
 from terrarium.llm.provider import LLMProvider
 from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ToolCall
@@ -59,6 +63,18 @@ class AnthropicProvider(LLMProvider):
                 system=system_param,
                 messages=[{"role": "user", "content": request.user_content}],
             )
+            # Structured output: force valid JSON matching the schema.
+            # Uses output_config with json_schema format.
+            if request.output_schema:
+                create_kwargs["output_config"] = {
+                    "format": {
+                        "type": "json_schema",
+                        "schema": request.output_schema,
+                    }
+                }
+                schema_type = request.output_schema.get("type", "?")
+                logger.info("Anthropic structured output enabled (schema type=%s)", schema_type)
+
             if request.tools:
                 create_kwargs["tools"] = [
                     {
@@ -93,8 +109,19 @@ class AnthropicProvider(LLMProvider):
                     model, message.usage.input_tokens, message.usage.output_tokens
                 ),
             )
+            # Parse structured output when schema was requested
+            parsed_structured = None
+            if request.output_schema and content:
+                try:
+                    parsed_structured = json.loads(content)
+                    items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
+                    logger.info("Anthropic structured output parsed: %d items, %d chars", items, len(content))
+                except json.JSONDecodeError:
+                    logger.warning("Anthropic structured output was not valid JSON (%d chars)", len(content))
+
             return LLMResponse(
                 content=content,
+                structured_output=parsed_structured,
                 tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,

@@ -56,6 +56,7 @@ class PromptTemplate:
         self,
         router: LLMRouter,
         _seed: int | None = None,
+        _output_schema: dict[str, Any] | None = None,
         **variables: Any,
     ) -> LLMResponse:
         """Render, send to LLM, return response."""
@@ -63,7 +64,7 @@ class PromptTemplate:
         request = LLMRequest(
             system_prompt=sys_prompt,
             user_content=user_prompt,
-            output_schema=self.output_schema,
+            output_schema=_output_schema or self.output_schema,
             seed=_seed,
         )
         return await router.route(request, self.engine_name, self.use_case)

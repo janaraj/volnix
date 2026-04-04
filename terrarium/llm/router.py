@@ -82,8 +82,13 @@ class LLMRouter:
         if routing:
             provider_name = routing.provider or self._config.defaults.type
             model = routing.model or self._config.defaults.default_model
+            updates: dict[str, Any] = {}
             if routing.temperature is not None:
-                request = request.model_copy(update={"temperature": routing.temperature})
+                updates["temperature"] = routing.temperature
+            if routing.max_tokens is not None:
+                updates["max_tokens"] = routing.max_tokens
+            if updates:
+                request = request.model_copy(update=updates)
         else:
             provider_name = self._config.defaults.type
             model = self._config.defaults.default_model
@@ -110,20 +115,43 @@ class LLMRouter:
             or 120.0
         )
 
-        async with self._semaphore:
-            try:
-                response = await asyncio.wait_for(
-                    provider.generate(request),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                logger.warning("LLM call timed out after %ds: %s/%s", int(timeout), engine_name, use_case)
-                response = LLMResponse(
-                    content="",
-                    provider=provider_name,
-                    model=model,
-                    error=f"LLM call timed out after {int(timeout)}s",
-                )
+        max_retries = self._config.max_retries
+        backoff_base = self._config.retry_backoff_base
+
+        for attempt in range(1 + max_retries):
+            async with self._semaphore:
+                try:
+                    response = await asyncio.wait_for(
+                        provider.generate(request),
+                        timeout=timeout,
+                    )
+                except asyncio.TimeoutError:
+                    response = LLMResponse(
+                        content="",
+                        provider=provider_name,
+                        model=model,
+                        error=f"LLM call timed out after {int(timeout)}s",
+                    )
+
+            # Determine if the response is retryable
+            is_retryable = False
+            if response.error:
+                is_retryable = self._is_transient_error(response.error)
+            elif not response.content and not response.tool_calls:
+                is_retryable = True  # Empty response with no error = transient
+
+            if not is_retryable or attempt >= max_retries:
+                break
+
+            delay = backoff_base * (2 ** attempt)
+            logger.warning(
+                "LLM call returned retryable result (attempt %d/%d), "
+                "retrying in %.1fs: %s/%s — %s",
+                attempt + 1, max_retries, delay,
+                engine_name, use_case,
+                response.error or "empty response",
+            )
+            await asyncio.sleep(delay)
 
         if self._tracker:
             await self._tracker.record(request, response, engine_name)
@@ -133,6 +161,16 @@ class LLMRouter:
             self._write_debug_response(engine_name, use_case, request, response)
 
         return response
+
+    _TRANSIENT_PATTERNS = (
+        "timeout", "timed out", "rate limit", "429",
+        "500", "502", "503", "504", "overloaded",
+    )
+
+    def _is_transient_error(self, error: str) -> bool:
+        """Check if an error message indicates a transient failure."""
+        error_lower = error.lower()
+        return any(p in error_lower for p in self._TRANSIENT_PATTERNS)
 
     def get_provider_for(
         self, engine_name: str, use_case: str = "default"

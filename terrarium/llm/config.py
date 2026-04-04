@@ -76,4 +76,6 @@ class LLMConfig(BaseModel):
     providers: dict[str, LLMProviderEntry] = {}
     routing: dict[str, LLMRoutingEntry] = {}
     max_concurrent: int = 10
+    max_retries: int = 3
+    retry_backoff_base: float = 1.0
     llm_debug: bool = False
