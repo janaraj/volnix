@@ -60,7 +60,7 @@ def _make_event() -> WorldEvent:
 
 
 def test_system_prompt_from_world_context():
-    """System prompt includes world, mission, seeds, services grouped by read/write."""
+    """System prompt includes world, mission, seeds — tools are in user prompt (per-actor)."""
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
 
@@ -72,12 +72,8 @@ def test_system_prompt_from_world_context():
     assert "Evaluate agent" in prompt
     assert "## World Scenarios" in prompt
     assert "VIP customer" in prompt
-    assert "## Available Tools" in prompt
-    assert "### helpdesk" in prompt
-    assert "action_type: \"list_tickets\"" in prompt
-    assert "action_type: \"reply_ticket\"" in prompt
-    assert "### email" in prompt
-    assert "action_type: \"email_search\"" in prompt
+    # Tools are NOT in system prompt — they're rendered per-actor in user prompt
+    assert "## Available Tools" not in prompt
 
 
 def test_system_prompt_minimal():

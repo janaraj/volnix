@@ -504,11 +504,8 @@ class AgencyEngine(BaseEngine):
             f"## DELIVERABLE REQUEST\n\n"
             f"{goal_context}\n\n"
             f"## TEAM CONVERSATION\n\n{conversation}\n\n"
-            f"## OUTPUT FORMAT\n\n"
-            f"Respond with ONLY a JSON object matching this schema:\n"
-            f"```json\n{json.dumps(schema, indent=2)}\n```\n\n"
-            f"Synthesize the team's discussion into this structured format. "
-            f"Be comprehensive and include all key findings, methodology, "
+            f"Synthesize the team's discussion into a comprehensive deliverable. "
+            f"Be thorough — include all key findings, methodology, "
             f"and any dissenting views from the conversation."
         )
 
@@ -516,6 +513,7 @@ class AgencyEngine(BaseEngine):
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
+                output_schema=schema,
                 temperature=0.3,
                 cache_system_prompt=True,
             )
@@ -524,8 +522,12 @@ class AgencyEngine(BaseEngine):
                 self._typed_config.llm_use_case_individual,
             )
 
+            # Structured output path (preferred)
+            if response.structured_output:
+                return response.structured_output
+
+            # Fallback: parse from content
             content = response.content.strip()
-            # Strip markdown code fences if present
             if content.startswith("```"):
                 lines = content.split("\n")
                 content = "\n".join(lines[1:])
@@ -747,18 +749,21 @@ class AgencyEngine(BaseEngine):
                 {"role": a.role, "id": str(a.actor_id)}
                 for a in self._actor_states.values()
             ]
+            actor_tools = self._get_tools_for_actor(str(actor.actor_id))
+            allowed_services = {t.service for t in actor_tools if t.service}
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
+                allowed_services=allowed_services or None,
             )
 
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                tools=self._get_tools_for_actor(str(actor.actor_id)) or None,
+                tools=actor_tools or None,
                 temperature=0.7,
                 fresh_session=True,  # Each actor gets isolated ACP session
                 cache_system_prompt=True,  # System prompt is identical across actors
@@ -796,18 +801,21 @@ class AgencyEngine(BaseEngine):
                 {"role": a.role, "id": str(a.actor_id)}
                 for a in self._actor_states.values()
             ]
+            actor_tools = self._get_tools_for_actor(str(actor.actor_id))
+            allowed_services = {t.service for t in actor_tools if t.service}
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=None,
                 activation_reason="autonomous_continue",
                 available_actions=self._available_actions,
                 team_roster=team_roster,
+                allowed_services=allowed_services or None,
             )
 
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                tools=self._get_tools_for_actor(str(actor.actor_id)) or None,
+                tools=actor_tools or None,
                 temperature=0.7,
                 fresh_session=True,
                 cache_system_prompt=True,

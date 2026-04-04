@@ -84,8 +84,12 @@ class ActorPromptBuilder:
         self._world_context = world_context
 
     def build_system_prompt(self) -> str:
-        """Return the shared world system prompt (layers 1-2)."""
-        return self._world_context.to_system_prompt()
+        """Return the shared world system prompt without tools.
+
+        Tools are rendered per-actor in the user prompt, filtered by
+        the actor's service permissions.
+        """
+        return self._world_context.to_system_prompt(include_tools=False)
 
     def build_individual_prompt(
         self,
@@ -94,6 +98,7 @@ class ActorPromptBuilder:
         activation_reason: str,
         available_actions: list[dict[str, Any]],
         team_roster: list[dict[str, str]] | None = None,
+        allowed_services: set[str] | None = None,
     ) -> str:
         """Build per-actor user prompt.
 
@@ -148,6 +153,15 @@ class ActorPromptBuilder:
                 "auto-fills `channel_id`.\n"
                 "Use `intended_for` to address teammates by role."
             )
+
+        # --- 3b. Per-actor filtered tools ---
+        if allowed_services is not None:
+            tools_text = self._world_context.render_tools_for_services(allowed_services)
+            if tools_text:
+                sections.append(tools_text)
+        elif self._world_context.available_services:
+            # Fallback: show all tools if no filtering
+            sections.append(self._world_context._render_services())
 
         # --- 4. Context ---
         context_parts = []
@@ -217,6 +231,14 @@ class ActorPromptBuilder:
                 "- Use `intended_for` to address teammates by role or 'all'\n\n"
             )
 
+        lead_note = ""
+        if actor.is_lead and team_size > 1:
+            lead_note = (
+                "**As the lead, your FIRST action must be to post a delegation message "
+                "in the team channel — assign specific tasks to each team member by name "
+                "based on their role. Then coordinate their work.**\n\n"
+            )
+
         steps = [
             "INVESTIGATE first. Read relevant data before taking action.",
             "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
@@ -233,6 +255,7 @@ class ActorPromptBuilder:
         return (
             "## Instructions\n"
             f"{team_note}"
+            f"{lead_note}"
             "The world's services contain real data. Use the available tools to carry out your mission.\n\n"
             f"{numbered}\n\n"
             "For messages: only provide `text` in payload — the system auto-fills `channel_id`."

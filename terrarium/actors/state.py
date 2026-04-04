@@ -142,6 +142,7 @@ class ActorState(BaseModel):
     team_channel: str | None = None  # Slack channel ID for team collaboration
     pending_tasks: list[str] = Field(default_factory=list)
     goal_context: str | None = None
+    is_lead: bool = False
     batch_notification_count: int = 0
     batch_threshold: int = 3
 

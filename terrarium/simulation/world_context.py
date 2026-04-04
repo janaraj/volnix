@@ -32,7 +32,7 @@ class WorldContextBundle(BaseModel, frozen=True):
     mission: str = ""
     seeds: list[str] = Field(default_factory=list)
 
-    def to_system_prompt(self) -> str:
+    def to_system_prompt(self, include_tools: bool = True) -> str:
         """Render the world context as an LLM system prompt string.
 
         Structure:
@@ -41,6 +41,10 @@ class WorldContextBundle(BaseModel, frozen=True):
         3. Reality summary
         4. Seeds (what scenarios/data exist in the world)
         5. Services grouped by service name, split into READ/WRITE tools
+
+        Args:
+            include_tools: Whether to include the tools section. Set to False
+                when tools are rendered per-actor (filtered by permissions).
         """
         sections = [f"## World\n{self.world_description}"]
 
@@ -60,10 +64,26 @@ class WorldContextBundle(BaseModel, frozen=True):
                 seed_lines.append(f"- {seed}")
             sections.append("\n".join(seed_lines))
 
-        if self.available_services:
+        if include_tools and self.available_services:
             sections.append(self._render_services())
 
         return "\n\n".join(sections)
+
+    def render_tools_for_services(self, allowed_services: set[str]) -> str:
+        """Render tools section filtered to specific services.
+
+        Args:
+            allowed_services: Set of service names to include.
+        """
+        filtered = [t for t in self.available_services if t.get("service", "") in allowed_services]
+        if not filtered:
+            return ""
+        # Temporarily swap available_services to render filtered list
+        original = self.available_services
+        object.__setattr__(self, "available_services", filtered)
+        result = self._render_services()
+        object.__setattr__(self, "available_services", original)
+        return result
 
     def _render_services(self) -> str:
         """Group tools by service name, split into READ and WRITE.
