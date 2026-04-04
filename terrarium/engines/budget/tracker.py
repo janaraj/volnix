@@ -39,6 +39,11 @@ class BudgetTracker:
         self._budgets: dict[str, dict[str, Any]] = {}
         self._warned: dict[str, set[str]] = {}  # actor_id -> set of warned thresholds
 
+    def reset(self) -> None:
+        """Clear all budget state. Called between runs."""
+        self._budgets.clear()
+        self._warned.clear()
+
     def initialize_budget(self, actor_id: ActorId, budget_def: dict[str, Any]) -> None:
         """Create initial budget state from an actor's YAML budget definition.
 

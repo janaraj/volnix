@@ -27,7 +27,7 @@ world:
     - name: "Block large refunds"
       trigger:
         action: "create_refund"
-        condition: "input.amount > 500"
+        condition: "input.amount > 50000"
       enforcement: block
       reason: "Refunds over $500 require finance team approval"
 
