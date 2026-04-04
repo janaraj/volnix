@@ -848,6 +848,13 @@ class TerrariumApp:
                         description=agent_def.personality_hint,
                     )
                 traits = extract_behavior_traits(agent_def)
+                # Set initial goal_context from personality so each agent
+                # starts with role-specific focus, not just the shared mission.
+                personality_text = agent_def.metadata.get("personality", "")
+                initial_goal = (
+                    f"Your role focus: {personality_text.strip()}"
+                    if personality_text else ""
+                )
                 state = ActorState(
                     actor_id=agent_def.id,
                     role=agent_def.role,
@@ -856,6 +863,7 @@ class TerrariumApp:
                     persona=personality.model_dump() if personality else {},
                     behavior_traits=traits,
                     current_goal=internal_profile.mission,
+                    goal_context=initial_goal,
                 )
                 actor_states.append(state)
 
@@ -976,12 +984,23 @@ class TerrariumApp:
                 deadline_tick = int(max_ticks * (1 - buffer_pct))
                 tick_interval = self._config.simulation_runner.tick_interval_seconds
 
-                lead_state.goal_context = (
-                    f"You are the designated lead for this collaboration. "
-                    f"After the team has discussed sufficiently (around tick {deadline_tick}), "
-                    f"you must produce a '{preset_name}' deliverable.\n\n"
-                    f"{preset.get('prompt_instructions', '')}"
-                )
+                if len(actor_states) > 1:
+                    lead_state.goal_context = (
+                        f"You are the designated lead for this collaboration. "
+                        f"Start by assigning specific tasks to each team member based on their role — "
+                        f"use their names and be explicit about who handles what. "
+                        f"Then coordinate progress. "
+                        f"After the team has worked sufficiently (around tick {deadline_tick}), "
+                        f"you must produce a '{preset_name}' deliverable.\n\n"
+                        f"{preset.get('prompt_instructions', '')}"
+                    )
+                else:
+                    lead_state.goal_context = (
+                        f"After you have investigated and acted on the mission "
+                        f"(around tick {deadline_tick}), "
+                        f"produce a '{preset_name}' deliverable.\n\n"
+                        f"{preset.get('prompt_instructions', '')}"
+                    )
                 lead_state.scheduled_actions.append(
                     ScheduledAction(
                         logical_time=float(deadline_tick * tick_interval),

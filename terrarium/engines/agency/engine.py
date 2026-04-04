@@ -155,6 +155,54 @@ class AgencyEngine(BaseEngine):
         )
         return tools
 
+    def _get_tools_for_actor(self, actor_id: str) -> list[ToolDefinition]:
+        """Filter tool definitions by actor's service permissions.
+
+        Uses the actor registry to check read/write permissions per service.
+        Agents only see tools for services they have access to.
+        """
+        registry = self._config.get("_actor_registry")
+        if not registry:
+            return self._tool_definitions
+
+        try:
+            actor_def = registry.get_or_none(ActorId(actor_id))
+        except Exception:
+            return self._tool_definitions
+        if not actor_def or not hasattr(actor_def, "permissions") or not actor_def.permissions:
+            return self._tool_definitions
+
+        perms = actor_def.permissions
+        read_services = set(perms.get("read", []))
+        write_services = set(perms.get("write", []))
+
+        # "all" means access to everything
+        all_services = {t.service for t in self._tool_definitions if t.service}
+        if "all" in read_services:
+            read_services = all_services
+        if "all" in write_services:
+            write_services = all_services
+
+        # Build lookup: original action name → http_method
+        method_lookup = {
+            a.get("name", ""): a.get("http_method", "POST").upper()
+            for a in self._available_actions
+        }
+
+        allowed = []
+        for tool in self._tool_definitions:
+            if not tool.service:
+                allowed.append(tool)  # do_nothing, etc.
+                continue
+            original_name = self._tool_name_map.get(tool.name, "")
+            method = method_lookup.get(original_name, "POST")
+            if method == "GET" and tool.service in read_services:
+                allowed.append(tool)
+            elif method != "GET" and tool.service in write_services:
+                allowed.append(tool)
+
+        return allowed
+
     async def _handle_event(self, event: Event) -> None:
         """Handle bus events. WorldEvents trigger notify().
 
@@ -710,7 +758,7 @@ class AgencyEngine(BaseEngine):
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                tools=self._tool_definitions or None,
+                tools=self._get_tools_for_actor(str(actor.actor_id)) or None,
                 temperature=0.7,
                 fresh_session=True,  # Each actor gets isolated ACP session
                 cache_system_prompt=True,  # System prompt is identical across actors
@@ -759,7 +807,7 @@ class AgencyEngine(BaseEngine):
             request = LLMRequest(
                 system_prompt=system_prompt,
                 user_content=user_prompt,
-                tools=self._tool_definitions or None,
+                tools=self._get_tools_for_actor(str(actor.actor_id)) or None,
                 temperature=0.7,
                 fresh_session=True,
                 cache_system_prompt=True,
@@ -1204,14 +1252,27 @@ class AgencyEngine(BaseEngine):
         already_recorded = any(r.event_id == event_id_str for r in actor.recent_interactions)
         if not already_recorded:
             text = committed_event.input_data.get("text", "")
-            summary = text[:300] if text else f"{committed_event.action}"
+            if text:
+                summary = text[:300]
+            else:
+                # Include key params so agents know what they already queried
+                key_params = {
+                    k: v for k, v in committed_event.input_data.items()
+                    if k in ("id", "charge", "query", "customer", "status", "channel_id")
+                    and v
+                }
+                if key_params:
+                    param_str = ", ".join(f"{k}={v}" for k, v in key_params.items())
+                    summary = f"{committed_event.action}({param_str})"
+                else:
+                    summary = committed_event.action
             record = InteractionRecord(
                 tick=committed_event.timestamp.tick,
                 actor_id=str(committed_event.actor_id),
                 actor_role=self._get_actor_role(committed_event.actor_id),
                 action=committed_event.action,
                 summary=summary,
-                source="observed",
+                source="self" if str(committed_event.actor_id) == str(actor.actor_id) else "observed",
                 event_id=event_id_str,
                 reply_to=committed_event.input_data.get("reply_to_event_id"),
                 channel=committed_event.input_data.get("channel"),

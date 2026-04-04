@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import time
 from typing import ClassVar
@@ -29,7 +30,7 @@ class GoogleNativeProvider(LLMProvider):
         self._client = genai.Client(api_key=api_key)
         self._default_model = default_model
         self._timeout = timeout
-        # Cache: hash(model:system_prompt) → cache.name for reuse
+        # Cache: hash(model:system_prompt:tools) → cache.name for reuse
         self._prompt_cache: dict[str, str] = {}
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
@@ -47,31 +48,63 @@ class GoogleNativeProvider(LLMProvider):
         model = request.model_override or self._default_model
         start = time.monotonic()
         try:
+            from google.genai import types
+
+            # Build tool declarations once — reused in cache creation and/or config.
+            tool_objects = None
+            tool_config_obj = None
+            if request.tools:
+                declarations = [
+                    types.FunctionDeclaration(
+                        name=t.name,
+                        description=t.description,
+                        parameters=t.parameters,
+                    )
+                    for t in request.tools
+                ]
+                tool_objects = [types.Tool(function_declarations=declarations)]
+                tool_config_obj = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                )
+
             # Explicit context caching for repeated system prompts.
-            # Creates a server-side cache on first call, reuses on subsequent calls.
-            # Supported on gemini-2.5-flash, gemini-2.5-pro, gemini-3-flash-preview, gemini-3-pro-preview.
+            # Per Gemini docs, tools/tool_config must be part of the cache
+            # creation — they cannot be passed separately in GenerateContent
+            # when using a cache. Cache key includes tool signature so
+            # different tool sets produce different caches.
             cached_content_name = None
             if request.cache_system_prompt and request.system_prompt:
+                tool_sig = (
+                    ",".join(sorted(t.name for t in request.tools))
+                    if request.tools else ""
+                )
                 cache_key = hashlib.sha256(
-                    f"{model}:{request.system_prompt}".encode()
+                    f"{model}:{request.system_prompt}:{tool_sig}".encode()
                 ).hexdigest()[:16]
 
                 if cache_key in self._prompt_cache:
                     cached_content_name = self._prompt_cache[cache_key]
                 else:
                     try:
-                        from google.genai import types
+                        cache_config: dict = {
+                            "system_instruction": request.system_prompt,
+                            "ttl": "3600s",
+                        }
+                        if tool_objects:
+                            cache_config["tools"] = tool_objects
+                            cache_config["tool_config"] = tool_config_obj
+
                         cache = await asyncio.to_thread(
                             self._client.caches.create,
                             model=f"models/{model}",
-                            config=types.CreateCachedContentConfig(
-                                system_instruction=request.system_prompt,
-                                ttl="3600s",  # 1 hour
-                            ),
+                            config=types.CreateCachedContentConfig(**cache_config),
                         )
                         cached_content_name = cache.name
                         self._prompt_cache[cache_key] = cached_content_name
-                        logger.info("Gemini cache created: %s for model %s", cache_key, model)
+                        logger.info(
+                            "Gemini cache created: %s for model %s (tools=%d)",
+                            cache_key, model, len(request.tools or []),
+                        )
                     except Exception as exc:
                         logger.warning("Gemini cache creation failed (non-fatal): %s", exc)
 
@@ -82,25 +115,20 @@ class GoogleNativeProvider(LLMProvider):
             if request.seed is not None:
                 config["seed"] = request.seed
 
-            if request.tools:
-                from google.genai import types
-
-                declarations = []
-                for t in request.tools:
-                    declarations.append(
-                        types.FunctionDeclaration(
-                            name=t.name,
-                            description=t.description,
-                            parameters=t.parameters,
-                        )
-                    )
-                config["tools"] = [types.Tool(function_declarations=declarations)]
-                config["tool_config"] = types.ToolConfig(
-                    function_calling_config=types.FunctionCallingConfig(mode="ANY")
+            # Structured output: force valid JSON matching the schema.
+            # Uses response_json_schema (accepts raw dict) rather than
+            # response_schema (requires google.genai.types.Schema object).
+            if request.output_schema:
+                config["response_mime_type"] = "application/json"
+                config["response_json_schema"] = request.output_schema
+                logger.info(
+                    "Gemini structured output enabled (schema type=%s)",
+                    request.output_schema.get("type", "?"),
                 )
 
             if cached_content_name:
-                # Use cached content — system prompt served from cache
+                # Use cached content — system prompt and tools served from cache.
+                # Do NOT add tools to config here; they are in the cache.
                 config["cached_content"] = cached_content_name
                 response = await asyncio.to_thread(
                     self._client.models.generate_content,
@@ -109,6 +137,11 @@ class GoogleNativeProvider(LLMProvider):
                     config=config,
                 )
             else:
+                # No cache — add tools to config directly.
+                if tool_objects:
+                    config["tools"] = tool_objects
+                    config["tool_config"] = tool_config_obj
+
                 prompt = (
                     f"{request.system_prompt}\n\n{request.user_content}"
                     if request.system_prompt
@@ -139,6 +172,22 @@ class GoogleNativeProvider(LLMProvider):
                         ]
                         break
 
+            # Parse structured output when schema was requested
+            parsed_structured = None
+            if request.output_schema and content:
+                try:
+                    parsed_structured = json.loads(content)
+                    items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
+                    logger.info(
+                        "Gemini structured output parsed: %d items, %d chars",
+                        items, len(content),
+                    )
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Gemini structured output was not valid JSON (%d chars)",
+                        len(content),
+                    )
+
             usage_meta = response.usage_metadata
             usage = LLMUsage(
                 prompt_tokens=(
@@ -153,6 +202,7 @@ class GoogleNativeProvider(LLMProvider):
             )
             return LLMResponse(
                 content=content,
+                structured_output=parsed_structured,
                 tool_calls=parsed_tool_calls,
                 usage=usage,
                 model=model,
@@ -219,6 +269,6 @@ class GoogleNativeProvider(LLMProvider):
             available_models=[
                 "gemini-3-flash-preview",
                 "gemini-2.5-pro",
-                "gemini-3-flash-preview",
+                "gemini-2.5-flash",
             ],
         )
