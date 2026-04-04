@@ -30,10 +30,12 @@ class ToolDefinition(BaseModel, frozen=True):
     - Anthropic: ``{"name": ..., "input_schema": {...}}``
     - Google: ``types.FunctionDeclaration(...)``
 
-    Tool names are namespaced as ``{service}__{tool}`` to avoid collisions.
+    Tool names use the simple sanitized action name (e.g. ``search_recent``).
+    A ``{service}__`` prefix is only added when two services share the same
+    action name (collision avoidance).
     """
 
-    name: str                                   # "twitter__search_recent"
+    name: str                                   # "search_recent"
     service: str = ""                           # "twitter"
     description: str = ""                       # "Search recent tweets"
     parameters: dict[str, Any] = Field(default_factory=dict)  # JSON Schema
@@ -46,7 +48,7 @@ class ToolCall(BaseModel, frozen=True):
     so callers don't need to know which provider was used.
     """
 
-    name: str                                   # "twitter__search_recent"
+    name: str                                   # "search_recent"
     arguments: dict[str, Any] = Field(default_factory=dict)  # {"query": "..."}
 
 

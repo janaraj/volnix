@@ -95,12 +95,12 @@ def _make_world_event(
 
 
 def _mock_llm_router(response_json: dict | list | None = None):
-    """Create a mock LLM router that returns format-appropriate JSON responses.
+    """Create a mock LLM router that returns native tool_calls.
 
-    Individual (Tier 3) calls get: {"action_type": ..., "reasoning": ...}
-    Batch (Tier 2) calls get: {"actor_actions": [{"actor_id": ..., "action_type": ...}]}
+    All calls (Tier 2 and Tier 3) now go through individual activation
+    with native tool calling — no batch text-based path.
     """
-    from terrarium.llm.types import LLMResponse
+    from terrarium.llm.types import LLMResponse, ToolCall
 
     individual_response = {
         "action_type": "email_send",
@@ -110,57 +110,15 @@ def _mock_llm_router(response_json: dict | list | None = None):
     }
 
     def _route_side_effect(request, engine_name="", use_case=""):
-        # If a custom response was provided, use it for individual calls
-        # AND derive batch response from it
-        if response_json and "batch" in use_case:
-            action_type = response_json.get("action_type", "do_nothing")
-            import re
-            prompt = request.user_content or ""
-            ids = re.findall(r"\(ID:\s*([^)]+)\)", prompt)
-            actor_actions = [
-                {"actor_id": aid.strip(), "action_type": action_type,
-                 "reasoning": response_json.get("reasoning", ""), **{
-                     k: v for k, v in response_json.items()
-                     if k not in ("action_type", "reasoning")
-                 }}
-                for aid in ids
-            ]
-            return LLMResponse(
-                content=json.dumps({"actor_actions": actor_actions}),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
-        if "batch" in use_case:
-            # Extract actor IDs from the prompt to build batch response
-            prompt = request.user_content or ""
-            # Build response for each actor mentioned
-            actor_actions = []
-            # Find actor IDs from batch prompt format: "(ID: customer-001)"
-            import re
-            ids = re.findall(r"\(ID:\s*([^)]+)\)", prompt)
-            if not ids:
-                ids = re.findall(r"Actor ID:\s*(\S+)", prompt)
-            for aid in ids:
-                aid = aid.strip("'\"`,")
-                actor_actions.append({
-                    "actor_id": aid,
-                    "action_type": "email_send",
-                    "target_service": "email",
-                    "payload": {"to": "agent@acme.com"},
-                    "reasoning": f"Actor {aid} wants update.",
-                })
-            # If no IDs found, return one generic action
-            if not actor_actions:
-                actor_actions = [{"actor_id": "unknown", "action_type": "do_nothing", "reasoning": "no context"}]
-
-            return LLMResponse(
-                content=json.dumps({"actor_actions": actor_actions}),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
-        else:
-            return LLMResponse(
-                content=json.dumps(response_json or individual_response),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
+        # All calls return native tool_calls
+        data = response_json or individual_response
+        tool_name = data.get("action_type", "do_nothing")
+        tool_args = {**data.get("payload", {}), "reasoning": data.get("reasoning", "")}
+        return LLMResponse(
+            content="",
+            provider="mock", model="mock", latency_ms=5.0,
+            tool_calls=[ToolCall(name=tool_name, arguments=tool_args)],
+        )
 
     router = AsyncMock()
     router.route = AsyncMock(side_effect=_route_side_effect)
@@ -247,28 +205,36 @@ class TestFullLoopWithMockLLM:
         customer2 = _make_actor_state("cust-002", watched=["tck_001"])
         supervisor = _make_actor_state("sup-001", role="supervisor", watched=["tck_001"], authority=0.8)
 
-        # Mock batch response for Tier 2 actors
-        batch_response = {
-            "actor_actions": [
-                {"actor_id": "cust-001", "action_type": "email_send", "target_service": "email",
-                 "payload": {}, "reasoning": "Checking status"},
-                {"actor_id": "cust-002", "action_type": "do_nothing", "reasoning": "Will wait"},
-            ]
-        }
-        from terrarium.llm.types import LLMResponse
+        # All actors go through individual native tool calls (Tier 2 and 3 alike)
+        from terrarium.llm.types import LLMResponse, ToolCall
         router = _mock_llm_router()
-        # First call = batch (Tier 2), second call = individual (Tier 3)
         router.route = AsyncMock(side_effect=[
-            # Tier 3 individual call (supervisor first since Tier 3 processed first)
+            # Tier 3: supervisor
             LLMResponse(
-                content=json.dumps({"action_type": "tickets.update", "target_service": "tickets",
-                                    "payload": {"id": "tck_001", "status": "open"}, "reasoning": "Reviewing"}),
+                content="",
                 provider="mock", model="mock", latency_ms=5.0,
+                tool_calls=[ToolCall(
+                    name="tickets_update",
+                    arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
+                )],
             ),
-            # Tier 2 batch call (customers)
+            # Tier 2: cust-001 (individual call via _activate_batch)
             LLMResponse(
-                content=json.dumps(batch_response),
+                content="",
                 provider="mock", model="mock", latency_ms=5.0,
+                tool_calls=[ToolCall(
+                    name="email_send",
+                    arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
+                )],
+            ),
+            # Tier 2: cust-002 (individual call via _activate_batch)
+            LLMResponse(
+                content="",
+                provider="mock", model="mock", latency_ms=5.0,
+                tool_calls=[ToolCall(
+                    name="do_nothing",
+                    arguments={"reasoning": "Will wait"},
+                )],
             ),
         ])
 
@@ -276,8 +242,7 @@ class TestFullLoopWithMockLLM:
         event = _make_world_event(target_entity="tck_001")
         envelopes = await engine.notify(event)
 
-        # Supervisor (Tier 3) + cust-001 (Tier 2, do action) = 2 envelopes
-        # cust-002 said do_nothing = skipped
+        # Supervisor + cust-001 = 2 envelopes. cust-002 = do_nothing = skipped
         assert len(envelopes) == 2
         actor_ids = {str(e.actor_id) for e in envelopes}
         assert "sup-001" in actor_ids

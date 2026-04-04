@@ -154,14 +154,14 @@ class ActorPromptBuilder:
                 "Use `intended_for` to address teammates by role."
             )
 
-        # --- 3b. Per-actor filtered tools ---
+        # --- 3b. Per-actor filtered tools (text prompt) ---
+        # Only rendered when explicitly requested via allowed_services.
+        # When native tool calling is used, tools are passed via ToolDefinition
+        # objects on the LLM request — not duplicated in the text prompt.
         if allowed_services is not None:
             tools_text = self._world_context.render_tools_for_services(allowed_services)
             if tools_text:
                 sections.append(tools_text)
-        elif self._world_context.available_services:
-            # Fallback: show all tools if no filtering
-            sections.append(self._world_context._render_services())
 
         # --- 4. Context ---
         context_parts = []
