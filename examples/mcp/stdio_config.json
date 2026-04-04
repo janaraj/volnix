@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "terrarium": {
+      "command": "terrarium",
+      "args": ["mcp", "customer_support"],
+      "transport": "stdio"
+    }
+  }
+}

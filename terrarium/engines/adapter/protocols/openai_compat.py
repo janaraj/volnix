@@ -37,6 +37,9 @@ class OpenAICompatAdapter(ProtocolAdapter):
 
     def __init__(self, gateway: Any) -> None:
         self._gateway = gateway
+        # Reverse map: sanitized name → original name (dots replaced with underscores)
+        # OpenAI requires tool names to match ^[a-zA-Z0-9_-]+$
+        self._name_map: dict[str, str] = {}
 
     async def start_server(self) -> None:
         """Mount OpenAI compat routes on the HTTP adapter's FastAPI app."""
@@ -74,12 +77,12 @@ class OpenAICompatAdapter(ProtocolAdapter):
         """Return tools in OpenAI function calling format."""
         return await self._gateway.get_tool_manifest(protocol="openai")
 
-    @staticmethod
-    def _mount_routes(app: Any, gateway: Any) -> None:
+    def _mount_routes(self, app: Any, gateway: Any) -> None:
         """Add OpenAI compat routes to the FastAPI app via APIRouter."""
         import fastapi
         from starlette.responses import JSONResponse
 
+        name_map = self._name_map
         router = fastapi.APIRouter(prefix="/openai/v1", tags=["openai-compat"])
 
         @router.get("/tools")
@@ -87,9 +90,20 @@ class OpenAICompatAdapter(ProtocolAdapter):
             actor_id: str = fastapi.Query(default="openai-agent"),
         ):
             """List tools in OpenAI function calling format."""
-            return await gateway.get_tool_manifest(
+            tools = await gateway.get_tool_manifest(
                 actor_id=actor_id, protocol="openai",
             )
+            # Sanitize tool names: OpenAI requires ^[a-zA-Z0-9_-]+$
+            # Build reverse map so /tools/call can restore original names
+            name_map.clear()
+            for t in tools:
+                func = t.get("function", {})
+                original = func.get("name", "")
+                sanitized = original.replace(".", "_")
+                if sanitized != original:
+                    name_map[sanitized] = original
+                    func["name"] = sanitized
+            return tools
 
         @router.post("/tools/call")
         async def call_tool_openai(request: Request):
@@ -111,7 +125,9 @@ class OpenAICompatAdapter(ProtocolAdapter):
                     content={"error": "Malformed JSON in request body"},
                 )
 
-            tool_name = body.get("name", "")
+            sanitized_name = body.get("name", "")
+            # Restore original tool name (with dots) from reverse map
+            tool_name = name_map.get(sanitized_name, sanitized_name)
             arguments = body.get("arguments", {})
 
             if not tool_name:

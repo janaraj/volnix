@@ -27,7 +27,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run tests
-        run: uv run pytest --cov=terrarium --cov-report=term-missing --cov-fail-under=80 -x -q
+        run: uv run pytest --cov=terrarium --cov-report=term-missing --cov-fail-under=90 -x -q
         env:
           TERRARIUM_RUN_REAL_API_TESTS: "0"
 

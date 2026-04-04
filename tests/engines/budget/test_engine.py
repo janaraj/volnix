@@ -395,3 +395,34 @@ class TestSpendUsdBudget:
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
         assert "ungoverned" in result.message
+
+
+class TestBudgetResetBetweenRuns:
+    """Budget tracker resets when a new run starts."""
+
+    @pytest.mark.asyncio
+    async def test_reset_restores_full_budget(self, engine):
+        """After reset, budget starts fresh from actor definition."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 5, "spend_usd": 100.0}))
+        engine._actor_registry = reg
+
+        # Use up some budget
+        for _ in range(4):
+            ctx = _make_ctx(input_data={"amount": 20})
+            await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 1
+        assert state.spend_usd_remaining == 20.0
+
+        # Reset (simulates new run)
+        engine._tracker.reset()
+
+        # Next call re-initializes from actor definition
+        ctx = _make_ctx(input_data={"amount": 10})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 4  # 5 - 1
+        assert state.spend_usd_remaining == 90.0  # 100 - 10

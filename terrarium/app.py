@@ -669,6 +669,8 @@ class TerrariumApp:
             permission_engine._world_mode = mode
         if hasattr(budget_engine, "_world_mode"):
             budget_engine._world_mode = mode
+        if hasattr(budget_engine, "_tracker"):
+            budget_engine._tracker.reset()
 
         # Filter gateway tools to only services defined in this world
         world_services = set(plan.services.keys()) if hasattr(plan, "services") else set()
