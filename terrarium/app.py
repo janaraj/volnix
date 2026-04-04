@@ -864,6 +864,7 @@ class TerrariumApp:
                     behavior_traits=traits,
                     current_goal=internal_profile.mission,
                     goal_context=initial_goal,
+                    is_lead=agent_def.metadata.get("lead", False),
                 )
                 actor_states.append(state)
 
