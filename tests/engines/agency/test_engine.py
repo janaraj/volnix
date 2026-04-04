@@ -538,25 +538,18 @@ async def test_notify_end_to_end_with_mock_llm():
     )
     engine = await _create_engine([actor])
 
-    # Mock the LLM router
+    # Mock the LLM router — returns native tool_calls
+    from terrarium.llm.types import ToolCall
     mock_router = AsyncMock()
     mock_router.route = AsyncMock(
         return_value=LLMResponse(
-            content=json.dumps(
-                {
-                    "actor_actions": [
-                        {
-                            "actor_id": "actor-support",
-                            "action_type": "reply_ticket",
-                            "target_service": "helpdesk",
-                            "payload": {"message": "On it!"},
-                            "reasoning": "Ticket needs attention",
-                        }
-                    ]
-                }
-            ),
+            content="",
             provider="mock",
             model="mock-model",
+            tool_calls=[ToolCall(
+                name="reply_ticket",
+                arguments={"message": "On it!", "reasoning": "Ticket needs attention"},
+            )],
         )
     )
     engine._llm_router = mock_router
@@ -855,24 +848,18 @@ class TestEdgeCases:
         ]
         engine = await _create_engine(actors)
 
-        # Mock LLM router for batch
+        # Mock LLM router — each actor gets individual native tool call
+        from terrarium.llm.types import ToolCall
         mock_router = AsyncMock()
         mock_router.route = AsyncMock(
             return_value=LLMResponse(
-                content=json.dumps(
-                    {
-                        "actor_actions": [
-                            {
-                                "actor_id": f"actor-{i}",
-                                "action_type": "do_nothing",
-                                "reasoning": "All quiet",
-                            }
-                            for i in range(3)
-                        ]
-                    }
-                ),
+                content="",
                 provider="mock",
                 model="mock-model",
+                tool_calls=[ToolCall(
+                    name="do_nothing",
+                    arguments={"reasoning": "All quiet"},
+                )],
             )
         )
         engine._llm_router = mock_router
@@ -880,8 +867,8 @@ class TestEdgeCases:
         event = _make_world_event(target_entity="ticket-shared")
         envelopes = await engine.notify(event)
 
-        # All 3 actors should be batched -> single LLM call (batch_size default is 5)
-        assert mock_router.route.call_count == 1
+        # Batch now delegates to individual calls — 3 actors = 3 LLM calls
+        assert mock_router.route.call_count == 3
         assert len(envelopes) == 0  # all do_nothing
 
     # GAP 2.4: Frustration boundary exact (0.7)
@@ -1215,8 +1202,8 @@ class TestBuildToolDefinitions:
         assert len(engine._tool_definitions) == 1
         assert engine._tool_definitions[0].name == "do_nothing"
 
-    async def test_tool_namespacing(self):
-        """Tools are namespaced as {service}__{name}."""
+    async def test_tool_simple_names(self):
+        """Tools use simple sanitized names (no service prefix) when no collision."""
         actor = _make_actor()
         engine = AgencyEngine()
         await engine.initialize({}, bus=None)
@@ -1230,12 +1217,40 @@ class TestBuildToolDefinitions:
         ]
         await engine.configure([actor], ctx, actions)
 
-        # Should have twitter__search_recent + do_nothing
+        # Should have search_recent + do_nothing (no prefix when no collision)
         assert len(engine._tool_definitions) == 2
         tool = engine._tool_definitions[0]
-        assert tool.name == "twitter__search_recent"
+        assert tool.name == "search_recent"
         assert tool.service == "twitter"
         assert "[twitter]" in tool.description
+        # Verify reverse maps
+        assert engine._tool_name_map["search_recent"] == "search_recent"
+        assert engine._tool_to_service["search_recent"] == "twitter"
+
+    async def test_tool_collision_keeps_prefix(self):
+        """When two services have same action name, prefix is added for both."""
+        actor = _make_actor()
+        engine = AgencyEngine()
+        await engine.initialize({}, bus=None)
+        ctx = WorldContextBundle(
+            world_description="Test", reality_summary="Ideal",
+        )
+        actions = [
+            {"name": "list", "service": "twitter", "description": "List tweets",
+             "parameters": {"type": "object", "properties": {}, "required": []},
+             "http_method": "GET"},
+            {"name": "list", "service": "slack", "description": "List channels",
+             "parameters": {"type": "object", "properties": {}, "required": []},
+             "http_method": "GET"},
+        ]
+        await engine.configure([actor], ctx, actions)
+
+        # Should have twitter__list, slack__list, do_nothing
+        assert len(engine._tool_definitions) == 3
+        names = {t.name for t in engine._tool_definitions}
+        assert "twitter__list" in names
+        assert "slack__list" in names
+        assert "do_nothing" in names
 
     async def test_metadata_params_added(self):
         """Each tool gets reasoning, intended_for, state_updates params."""

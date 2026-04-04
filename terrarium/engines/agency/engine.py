@@ -49,6 +49,7 @@ class AgencyEngine(BaseEngine):
         self._available_actions: list[dict[str, Any]] = []
         self._tool_definitions: list[ToolDefinition] = []
         self._tool_name_map: dict[str, str] = {}  # sanitized API name → original action name
+        self._tool_to_service: dict[str, str] = {}  # sanitized API name → service name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
 
     async def configure(
@@ -79,7 +80,10 @@ class AgencyEngine(BaseEngine):
     def _build_tool_definitions(self) -> list[ToolDefinition]:
         """Convert available_actions to provider-agnostic ToolDefinitions.
 
-        Namespaces tool names as ``{service}__{name}`` to avoid collisions.
+        Uses simple sanitized names (matching the external adapter format).
+        Only adds a ``{service}__`` prefix when two services share the same
+        action name (collision avoidance).
+
         Adds shared metadata params (reasoning, intended_for, state_updates)
         that the agency engine extracts before building ActionEnvelopes.
         """
@@ -106,8 +110,17 @@ class AgencyEngine(BaseEngine):
             },
         }
 
+        # First pass: detect collisions (two services with same sanitized name)
+        name_services: dict[str, set[str]] = {}
+        for action in self._available_actions:
+            sanitized = action.get("name", "").replace(".", "_")
+            name_services.setdefault(sanitized, set()).add(action.get("service", ""))
+        collisions = {n for n, svcs in name_services.items() if len(svcs) > 1}
+
+        # Second pass: build tool definitions
         tools: list[ToolDefinition] = []
         self._tool_name_map = {}
+        self._tool_to_service = {}
         for action in self._available_actions:
             name = action.get("name", "")
             service = action.get("service", "")
@@ -117,10 +130,14 @@ class AgencyEngine(BaseEngine):
 
             # Sanitize: OpenAI requires ^[a-zA-Z0-9_-]+$ — no dots allowed
             sanitized = name.replace(".", "_")
-            api_name = f"{service}__{sanitized}" if service else sanitized
+            # Only prefix when collision exists (two services share same action name)
+            if sanitized in collisions and service:
+                api_name = f"{service}__{sanitized}"
+            else:
+                api_name = sanitized
 
-            # Store reverse mapping: "slack__chat_postMessage" → "chat.postMessage"
-            self._tool_name_map[api_name] = name
+            self._tool_name_map[api_name] = name    # "chat_postMessage" → "chat.postMessage"
+            self._tool_to_service[api_name] = service  # "chat_postMessage" → "slack"
 
             tools.append(
                 ToolDefinition(
@@ -750,14 +767,13 @@ class AgencyEngine(BaseEngine):
                 for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
-            allowed_services = {t.service for t in actor_tools if t.service}
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
-                allowed_services=allowed_services or None,
+                # No allowed_services — tools come via native tool calling only
             )
 
             request = LLMRequest(
@@ -781,7 +797,14 @@ class AgencyEngine(BaseEngine):
         )
         if response.tool_calls:
             return self._parse_tool_call(actor, response.tool_calls[0], reason, trigger_event)
-        return self._parse_llm_action(actor, response.content, reason, trigger_event)
+        # Native tools were sent — model should have returned tool_calls.
+        # Don't fall through to text parsing which masks broken tool calling.
+        logger.warning(
+            "[AGENCY] actor=%s returned text instead of tool_calls (native tools were sent). "
+            "Content preview: %.200s",
+            actor.actor_id, response.content or "(empty)",
+        )
+        return None
 
     async def _activate_autonomous_agent(
         self, actor: ActorState,
@@ -802,14 +825,13 @@ class AgencyEngine(BaseEngine):
                 for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
-            allowed_services = {t.service for t in actor_tools if t.service}
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=None,
                 activation_reason="autonomous_continue",
                 available_actions=self._available_actions,
                 team_roster=team_roster,
-                allowed_services=allowed_services or None,
+                # No allowed_services — tools come via native tool calling only
             )
 
             request = LLMRequest(
@@ -836,9 +858,13 @@ class AgencyEngine(BaseEngine):
                 actor, response.tool_calls[0], "autonomous_continue", None
             )
         else:
-            env = self._parse_llm_action(
-                actor, response.content, "autonomous_continue", None
+            # Native tools were sent — model should have returned tool_calls.
+            logger.warning(
+                "[AGENCY] actor=%s returned text instead of tool_calls (native tools were sent). "
+                "Content preview: %.200s",
+                actor.actor_id, response.content or "(empty)",
             )
+            env = None
 
         # Auto-reschedule: if the agent produced an action, schedule next tick
         if env is not None and actor.autonomous:
@@ -862,49 +888,17 @@ class AgencyEngine(BaseEngine):
         actors_with_reasons: list[tuple[ActorState, str]],
         trigger_event: WorldEvent,
     ) -> list[ActionEnvelope]:
-        """Batch-generate actions for multiple actors in one LLM call."""
-        if not self._llm_router or not self._prompt_builder:
-            return []
+        """Activate batch actors via individual native tool-calling LLM calls.
 
-        # Group into batches of batch_size
-        batch_size = self._typed_config.batch_size
-        batches: list[list[tuple[ActorState, str]]] = []
-        for i in range(0, len(actors_with_reasons), batch_size):
-            batches.append(actors_with_reasons[i : i + batch_size])
-
+        Each actor gets its own call with native tool definitions — identical
+        to ``_activate_individual()``. The 'batch' label is kept for tier
+        classification and observability but execution uses native tools.
+        """
         envelopes: list[ActionEnvelope] = []
-        for batch in batches:
-            actors_triggers: list[tuple[ActorState, WorldEvent | None, str]] = [
-                (actor, trigger_event, reason) for actor, reason in batch
-            ]
-
-            async with self._llm_semaphore:
-                system_prompt = self._prompt_builder.build_system_prompt()
-                user_prompt = self._prompt_builder.build_batch_prompt(
-                    actors_with_triggers=actors_triggers,
-                    available_actions=self._available_actions,
-                )
-
-                request = LLMRequest(
-                    system_prompt=system_prompt,
-                    user_content=user_prompt,
-                    temperature=0.7,
-                    cache_system_prompt=True,  # System prompt is identical across batches
-                )
-                response = await self._llm_router.route(
-                    request,
-                    "agency",
-                    self._typed_config.llm_use_case_batch,
-                )
-
-            logger.info(
-                "[AGENCY.batch] LLM response length=%d, preview=%s",
-                len(response.content or ""),
-                (response.content or "")[:200],
-            )
-            batch_envs = self._parse_batch_response(batch, response.content, trigger_event)
-            envelopes.extend(batch_envs)
-
+        for actor, reason in actors_with_reasons:
+            env = await self._activate_individual(actor, reason, trigger_event)
+            if env is not None:
+                envelopes.append(env)
         return envelopes
 
     # -- Response parsing --
@@ -993,14 +987,17 @@ class AgencyEngine(BaseEngine):
         if tool_call.name == "do_nothing":
             return None
 
-        # Split namespaced name: "twitter__search_recent" → service, action
-        # Restore original name (with dots) from reverse map built in _build_tool_definitions
-        if "__" in tool_call.name:
+        # Look up original action name and service from build-time maps
+        if tool_call.name in self._tool_name_map:
+            action_type = self._tool_name_map[tool_call.name]
+            service = self._tool_to_service.get(tool_call.name, "")
+        elif "__" in tool_call.name:
+            # Collision-prefixed tools: "slack__list" when two services share "list"
             service, sanitized_action = tool_call.name.split("__", 1)
-            action_type = self._tool_name_map.get(tool_call.name, sanitized_action)
+            action_type = sanitized_action
         else:
             service = ""
-            action_type = self._tool_name_map.get(tool_call.name, tool_call.name)
+            action_type = tool_call.name
 
         args = dict(tool_call.arguments)
 
