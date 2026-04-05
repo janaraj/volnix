@@ -144,7 +144,7 @@ class ActorPromptBuilder:
                 "create, update, or delete anything. Only use read actions."
             )
         elif actor.autonomous:
-            sections.append(self._build_autonomous_instructions(
+            sections.append(self.build_autonomous_instructions(
                 actor, team_roster, activation_reason,
             ))
         else:
@@ -218,7 +218,7 @@ class ActorPromptBuilder:
     # -- Helper methods --
 
     @staticmethod
-    def _build_autonomous_instructions(
+    def build_autonomous_instructions(
         actor: ActorState,
         team_roster: list[dict[str, str]] | None,
         activation_reason: str = "",
