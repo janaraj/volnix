@@ -110,6 +110,7 @@ class SimulationRunner:
         self._deliverable_produced: bool = False
         self._deliverable_content: dict | None = None
         self._current_tick: int = 0
+        self._last_animator_tick: int = -1  # Track last tick animator.tick() ran
 
     @property
     def status(self) -> SimulationStatus:
@@ -237,13 +238,43 @@ class SimulationRunner:
                 self._status = SimulationStatus.COMPLETED
                 break
 
-            # Step 2: Animator scheduled events
+            # Step 2: Animator scheduled events + organic tick
             if self._animator is not None:
                 animator_envelopes = await self._animator.check_scheduled_events(
                     self._queue.current_time
                 )
                 for env in animator_envelopes or []:
                     self._queue.submit(env)
+
+                # Organic events (Layer 2): LLM-generated contextual world events.
+                # tick() is designed to be called once per simulation tick. The
+                # runner loop runs once per envelope, so gate on tick advancement.
+                from datetime import datetime, timezone
+                current_tick = int(
+                    self._queue.current_time / self._config.tick_interval_seconds
+                )
+                if current_tick > self._last_animator_tick:
+                    self._last_animator_tick = current_tick
+                    tick_time = datetime.fromtimestamp(
+                        self._queue.current_time, tz=timezone.utc
+                    ) if self._queue.current_time > 0 else datetime.now(timezone.utc)
+                    tick_results = await self._animator.tick(tick_time)
+                else:
+                    tick_results = []
+                if tick_results:
+                    self._total_events_processed += len(tick_results)
+                    logger.info(
+                        "[RUNNER] animator tick generated %d organic events",
+                        len(tick_results),
+                    )
+                    # Notify agency of committed events so agents can react
+                    if self._agency is not None:
+                        for result in tick_results:
+                            committed = result.get("_event") if isinstance(result, dict) else None
+                            if committed:
+                                response_envs = await self._agency.notify(committed)
+                                for env in (response_envs or []):
+                                    self._queue.submit(env)
 
             # Step 3: AgencyEngine scheduled actions
             if self._agency is not None:

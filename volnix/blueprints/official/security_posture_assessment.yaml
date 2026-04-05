@@ -40,8 +40,6 @@ world:
     - "Phishing attempt last month compromised one employee credential"
     - "New microservices deployment has no network segmentation yet"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

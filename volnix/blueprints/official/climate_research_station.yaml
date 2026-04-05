@@ -33,8 +33,6 @@ world:
     - "Ocean temperatures in the same region show unusual warming patterns"
     - "Previous studies on similar anomalies were inconclusive"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

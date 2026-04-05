@@ -80,8 +80,6 @@ world:
     into the ticketing system, assign ownership, and maintain clear
     customer communication until resolution.
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

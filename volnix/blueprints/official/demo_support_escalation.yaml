@@ -45,5 +45,3 @@ world:
   mode: governed
   behavior: dynamic
 
-compiler:
-  seed: 42

@@ -26,8 +26,6 @@ world:
 
   policies: []
 
-compiler:
-  seed: 42
   behavior: static
   fidelity: auto
   mode: ungoverned

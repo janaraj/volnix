@@ -44,5 +44,3 @@ world:
   mode: governed
   behavior: reactive
 
-compiler:
-  seed: 42

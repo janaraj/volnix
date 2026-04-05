@@ -50,6 +50,17 @@ class AnimatorContext:
         # and organic generators to produce valid actions only
         self.available_tools: list[dict[str, Any]] = available_tools or []
 
+        # Actors from world plan — used by organic generator to assign
+        # events to characters in the world (not "system")
+        self.actors: list[dict[str, Any]] = [
+            {
+                "role": spec.get("role", "unknown"),
+                "type": spec.get("type", "internal"),
+                "personality": spec.get("personality", ""),
+            }
+            for spec in (plan.actor_specs or [])
+        ]
+
     def for_organic_generation(
         self, recent_actions: list[dict[str, Any]] | None = None
     ) -> dict[str, str]:
@@ -84,6 +95,7 @@ class AnimatorContext:
             "behavior_description": self.behavior_description,
             "domain_description": self.domain,
             "available_tools": json.dumps(tool_info, indent=2),
+            "actors": json.dumps(self.actors, indent=2) if self.actors else "[]",
         }
 
     def get_probability(self, dimension: str, attribute: str) -> float:

@@ -20,8 +20,6 @@ world:
     - "#SPX500 trending on Twitter with mixed sentiment"
     - "Reddit r/wallstreetbets debate on whether market is overbought"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

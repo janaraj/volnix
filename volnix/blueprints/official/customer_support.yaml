@@ -51,8 +51,6 @@ world:
     - "New customer locked out of their account, filed ticket 2 hours ago"
     - "Billing dispute from a long-term customer about double charge"
 
-compiler:
-  seed: 42
   behavior: reactive
   fidelity: auto
   mode: governed

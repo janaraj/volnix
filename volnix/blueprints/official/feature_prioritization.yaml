@@ -30,8 +30,6 @@ world:
     - "Two enterprise customers threatened to churn without API v2"
     - "Mobile app usage from competitors shows 60% engagement lift"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed
