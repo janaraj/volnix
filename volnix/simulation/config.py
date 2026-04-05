@@ -56,3 +56,9 @@ class SimulationRunnerConfig(BaseModel):
 
     # Hard tick limit for internal-only worlds. Each committed event = 1 tick.
     max_ticks: int = 200
+
+    # ── Animator gating ───────────────────────────────────────────
+    # Minimum tick gap between animator.tick() calls. Prevents feedback loops
+    # where each organic event advances time and re-triggers tick().
+    # With budget=1 per tick and interval=5: ~6 organic events over 30 ticks.
+    animator_tick_interval: int = 5

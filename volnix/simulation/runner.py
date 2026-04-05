@@ -110,7 +110,10 @@ class SimulationRunner:
         self._deliverable_produced: bool = False
         self._deliverable_content: dict | None = None
         self._current_tick: int = 0
-        self._last_animator_tick: int = -1  # Track last tick animator.tick() ran
+        # Animator tick gating: fire at most once per animator_tick_interval ticks.
+        # Initial value ensures the first tick fires immediately.
+        self._last_animator_tick: int = -(self._config.animator_tick_interval)
+        self._organic_events_generated: int = 0  # Organic events (separate from agent budget)
 
     @property
     def status(self) -> SimulationStatus:
@@ -247,13 +250,14 @@ class SimulationRunner:
                     self._queue.submit(env)
 
                 # Organic events (Layer 2): LLM-generated contextual world events.
-                # tick() is designed to be called once per simulation tick. The
-                # runner loop runs once per envelope, so gate on tick advancement.
+                # tick() fires at most once per animator_tick_interval ticks.
+                # Prevents feedback loops where each organic event advances
+                # time and re-triggers tick().
                 from datetime import datetime, timezone
                 current_tick = int(
                     self._queue.current_time / self._config.tick_interval_seconds
                 )
-                if current_tick > self._last_animator_tick:
+                if current_tick >= self._last_animator_tick + self._config.animator_tick_interval:
                     self._last_animator_tick = current_tick
                     tick_time = datetime.fromtimestamp(
                         self._queue.current_time, tz=timezone.utc
@@ -262,7 +266,7 @@ class SimulationRunner:
                 else:
                     tick_results = []
                 if tick_results:
-                    self._total_events_processed += len(tick_results)
+                    self._organic_events_generated += len(tick_results)
                     logger.info(
                         "[RUNNER] animator tick generated %d organic events",
                         len(tick_results),

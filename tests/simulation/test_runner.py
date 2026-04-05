@@ -64,6 +64,7 @@ def _make_runner(
     agency_engine: AsyncMock | None = None,
     animator: AsyncMock | None = None,
     budget_checker: AsyncMock | None = None,
+    actor_specs: list[dict[str, str]] | None = None,
 ) -> SimulationRunner:
     """Build a SimulationRunner with sensible defaults for testing."""
     q = queue or EventQueue()
@@ -76,6 +77,7 @@ def _make_runner(
         animator=animator,
         budget_checker=budget_checker,
         config=cfg,
+        actor_specs=actor_specs,
     )
 
 
@@ -827,3 +829,125 @@ class TestRunawayProtectionFullLoop:
 
         # Only max_environment_reactions_per_window should have been processed
         assert runner.total_events_processed <= 10
+
+
+# ---------------------------------------------------------------------------
+# Animator gate tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnimatorGate:
+    """Tests for the animator tick interval gate that prevents feedback loops."""
+
+    async def test_animator_respects_tick_interval(self) -> None:
+        """tick() fires at most once per animator_tick_interval ticks.
+
+        With interval=5 and 10 events (= 10 ticks in INTERNAL_ONLY),
+        tick should fire at tick 0 and tick 5 = exactly 2 times.
+        """
+        q = EventQueue()
+        config = SimulationRunnerConfig(
+            max_total_events=10,
+            stop_on_empty_queue=False,
+            tick_interval_seconds=60.0,
+            animator_tick_interval=5,
+        )
+        executor = AsyncMock(return_value=_make_world_event())
+
+        animator = AsyncMock()
+        animator.tick = AsyncMock(return_value=[])  # No organic events
+        animator.check_scheduled_events = AsyncMock(return_value=[])
+        animator.notify_event = AsyncMock(return_value=[])
+
+        agency = AsyncMock()
+        agency.check_scheduled_actions = AsyncMock(return_value=[])
+        agency.notify = AsyncMock(return_value=[])
+        agency.update_states_for_event = AsyncMock()
+        agency.set_tool_executor = lambda ex: None
+
+        runner = _make_runner(
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            agency_engine=agency,
+            animator=animator,
+            actor_specs=[{"type": "internal"}],
+        )
+
+        # Submit 10 envelopes — each processes as 1 tick in INTERNAL_ONLY
+        for i in range(10):
+            q.submit(_make_envelope(
+                source=ActionSource.INTERNAL,
+                priority=EnvelopePriority.INTERNAL,
+            ))
+
+        await runner.run()
+
+        # tick() fires at tick 0 (>= -5+5=0) and tick 5 (>= 0+5=5) = 2 calls
+        assert animator.tick.call_count == 2
+        assert runner.total_events_processed == 10
+
+    async def test_organic_events_not_counted_in_total(self) -> None:
+        """Organic events from tick() should not count toward total_events_processed."""
+        q = EventQueue()
+        # Use stop_on_empty_queue (external-driven) to avoid INTERNAL_ONLY
+        # infinite loop.  Pre-submit 1 envelope to start the sim.
+        config = SimulationRunnerConfig(
+            max_total_events=20,
+            stop_on_empty_queue=True,
+            tick_interval_seconds=60.0,
+        )
+        executor = AsyncMock(return_value=_make_world_event())
+
+        # Animator returns 3 organic events
+        animator = AsyncMock()
+        organic_event = _make_world_event(actor_id="npc-1")
+        animator.tick = AsyncMock(return_value=[
+            {"_event": organic_event},
+            {"_event": organic_event},
+            {"_event": organic_event},
+        ])
+        animator.check_scheduled_events = AsyncMock(return_value=[])
+        animator.notify_event = AsyncMock(return_value=[])
+        animator.has_scheduled_events = lambda: False
+
+        # Agency returns 1 response envelope per organic event notification,
+        # but not for subsequent pipeline-committed events (to avoid cascading).
+        notify_call_count = {"n": 0}
+
+        async def _notify_side_effect(event: object) -> list[ActionEnvelope]:
+            notify_call_count["n"] += 1
+            if notify_call_count["n"] <= 3:
+                return [
+                    _make_envelope(
+                        actor_id="agent-1",
+                        source=ActionSource.INTERNAL,
+                        priority=EnvelopePriority.INTERNAL,
+                    ),
+                ]
+            return []
+
+        agency = AsyncMock()
+        agency.check_scheduled_actions = AsyncMock(return_value=[])
+        agency.notify = AsyncMock(side_effect=_notify_side_effect)
+        agency.update_states_for_event = AsyncMock()
+        agency.set_tool_executor = lambda ex: None
+        agency.has_scheduled_actions = lambda: False
+
+        runner = _make_runner(
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            agency_engine=agency,
+            animator=animator,
+        )
+
+        # Submit 1 initial envelope to kick off processing
+        q.submit(_make_envelope())
+
+        await runner.run()
+
+        # 3 organic events tracked separately (not in total_events_processed).
+        # total = 1 initial + 3 from notify responses = 4 pipeline events.
+        assert runner._organic_events_generated == 3
+        assert runner.total_events_processed == 4

@@ -499,3 +499,56 @@ async def test_reactivation_continues_conversation():
         if "Re-activation" in (m.get("content") or "")
     ]
     assert len(reactivation_msgs) >= 1
+
+
+async def test_reactivation_includes_lead_instructions() -> None:
+    """Lead re-activation messages must include 'do NOT re-delegate' instructions."""
+    # Create a lead actor with prior activation_messages (simulating re-activation)
+    lead = _make_actor(
+        actor_id=ActorId("lead-agent"),
+        role="supervisor",
+        is_lead=True,
+        autonomous=True,
+        activation_messages=[
+            {"role": "system", "content": "You are the lead."},
+            {"role": "user", "content": "Start investigation."},
+            {"role": "assistant", "content": "I'll delegate to the team."},
+            {"role": "user", "content": "[Activation complete.]"},
+        ],
+    )
+    # Need a teammate so team_size > 1 (prompt builder guard for lead note)
+    teammate = _make_actor(
+        actor_id=ActorId("senior-agent"),
+        role="senior_agent",
+        is_lead=False,
+        autonomous=True,
+    )
+    engine = await _create_engine(actors=[lead, teammate])
+
+    # Router returns text response (agent shares findings, terminates loop)
+    router = _make_sequential_router(
+        _make_text_response("Team findings look complete."),
+    )
+    engine._llm_router = router
+    engine._tool_executor = _make_tool_executor()
+
+    trigger = _make_world_event()
+    await engine._activate_with_tool_loop(lead, "continue_work", trigger)
+
+    # Verify the re-activation message includes lead-specific instructions.
+    # The last user message appended before the LLM call contains both
+    # autonomous instructions and re-activation context.
+    call_args = router.route.call_args_list[0][0][0]
+    # Find the message with re-activation content (last appended user message)
+    reactivation_msg = next(
+        (m for m in reversed(call_args.messages)
+         if m.get("role") == "user" and "Re-activation" in (m.get("content") or "")),
+        None,
+    )
+    assert reactivation_msg is not None, (
+        "Re-activation context should be present in messages"
+    )
+    content = reactivation_msg["content"]
+    assert "Do NOT re-delegate" in content, (
+        f"Re-activation message should include 'Do NOT re-delegate' for lead. Got: {content[:300]}"
+    )

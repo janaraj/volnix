@@ -821,8 +821,20 @@ class AgencyEngine(BaseEngine):
                 reactivation_ctx = self._build_reactivation_context(
                     actor, trigger_event, reason,
                 )
-                if reactivation_ctx:
-                    messages.append({"role": "user", "content": reactivation_ctx})
+                # Include updated instructions on re-activation.
+                # The prompt builder returns lead-specific "do NOT re-delegate"
+                # because is_reactivation=True when activation_messages exist.
+                if actor.autonomous:
+                    reactivation_instructions = ActorPromptBuilder.build_autonomous_instructions(
+                        actor=actor,
+                        team_roster=team_roster,
+                        activation_reason=reason,
+                    )
+                    combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
+                else:
+                    combined = reactivation_ctx
+                if combined:
+                    messages.append({"role": "user", "content": combined})
             else:
                 # First activation: build from scratch
                 messages: list[dict[str, Any]] = [
