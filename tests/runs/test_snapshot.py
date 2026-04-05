@@ -1,10 +1,10 @@
-"""Tests for terrarium.runs.snapshot — run-aware snapshot management."""
+"""Tests for volnix.runs.snapshot — run-aware snapshot management."""
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from terrarium.core.types import RunId, SnapshotId
-from terrarium.runs.config import RunConfig
-from terrarium.runs.snapshot import SnapshotManager
+from volnix.core.types import RunId, SnapshotId
+from volnix.runs.config import RunConfig
+from volnix.runs.snapshot import SnapshotManager
 
 
 def _make_manager(tmp_path) -> tuple[SnapshotManager, AsyncMock]:

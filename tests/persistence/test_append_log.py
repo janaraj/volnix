@@ -1,7 +1,7 @@
-"""Tests for terrarium.persistence.append_log — shared append-only log."""
+"""Tests for volnix.persistence.append_log — shared append-only log."""
 import pytest
-from terrarium.persistence.append_log import AppendOnlyLog
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.persistence.append_log import AppendOnlyLog
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

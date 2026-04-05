@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.engines.reporter.scorecard import ScorecardComputer
+from volnix.engines.reporter.scorecard import ScorecardComputer
 from tests.engines.reporter.conftest import (
     make_budget_exhausted,
     make_budget_warning,

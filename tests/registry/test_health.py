@@ -1,10 +1,10 @@
-"""Tests for terrarium.registry.health."""
+"""Tests for volnix.registry.health."""
 import pytest
 from unittest.mock import AsyncMock
-from terrarium.registry.registry import EngineRegistry
-from terrarium.registry.health import HealthAggregator
-from terrarium.registry.wiring import wire_engines
-from terrarium.config.schema import TerrariumConfig
+from volnix.registry.registry import EngineRegistry
+from volnix.registry.health import HealthAggregator
+from volnix.registry.wiring import wire_engines
+from volnix.config.schema import VolnixConfig
 from tests.registry.conftest import make_mock_engine, make_mock_bus
 
 
@@ -13,7 +13,7 @@ async def test_health_check_all():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state"))
     reg.register(make_mock_engine("policy", deps=["state"]))
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     health = HealthAggregator(reg)
     results = await health.check_all()
     assert len(results) == 2
@@ -25,7 +25,7 @@ async def test_health_check_all():
 async def test_health_check_single():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state"))
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     health = HealthAggregator(reg)
     result = await health.check_engine("state")
     assert result["engine"] == "state"
@@ -36,7 +36,7 @@ async def test_health_check_single():
 async def test_is_healthy_all_pass():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state"))
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     health = HealthAggregator(reg)
     await health.check_all()
     assert health.is_healthy() is True
@@ -47,7 +47,7 @@ async def test_is_healthy_one_fail():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state"))
     reg.register(make_mock_engine("policy", deps=["state"]))
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     reg.get("policy")._healthy = False
     health = HealthAggregator(reg)
     await health.check_all()

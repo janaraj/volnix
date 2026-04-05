@@ -1,12 +1,12 @@
-"""Tests for terrarium.packs.verified.twitter -- TwitterPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.twitter -- TwitterPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.errors import PackNotFoundError
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.twitter.pack import TwitterPack
-from terrarium.packs.verified.twitter.state_machines import (
+from volnix.core.context import ResponseProposal
+from volnix.core.errors import PackNotFoundError
+from volnix.core.types import ToolName
+from volnix.packs.verified.twitter.pack import TwitterPack
+from volnix.packs.verified.twitter.state_machines import (
     TWEET_STATES,
     TWEET_TRANSITIONS,
     TWITTER_USER_STATES,

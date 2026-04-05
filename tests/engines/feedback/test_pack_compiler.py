@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from terrarium.engines.feedback.pack_compiler import PackCompiler
+from volnix.engines.feedback.pack_compiler import PackCompiler
 
 
 async def test_compile_generates_files(make_profile, tmp_path):

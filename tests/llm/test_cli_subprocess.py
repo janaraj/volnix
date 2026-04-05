@@ -1,12 +1,12 @@
-"""Tests for terrarium.llm.providers.cli_subprocess -- CLI subprocess provider."""
+"""Tests for volnix.llm.providers.cli_subprocess -- CLI subprocess provider."""
 
 import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terrarium.llm.providers.cli_subprocess import CLISubprocessProvider
-from terrarium.llm.types import LLMRequest
+from volnix.llm.providers.cli_subprocess import CLISubprocessProvider
+from volnix.llm.types import LLMRequest
 
 
 def test_cli_subprocess_init():
@@ -39,7 +39,7 @@ async def test_cli_subprocess_generate_success():
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"The answer is 42", b""))
 
-    with patch("terrarium.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
+    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
         req = LLMRequest(user_content="What is the answer?")
         resp = await provider.generate(req)
 
@@ -70,7 +70,7 @@ async def test_cli_subprocess_error_exit():
     mock_proc.returncode = 1
     mock_proc.communicate = AsyncMock(return_value=(b"", b"something went wrong"))
 
-    with patch("terrarium.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
+    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
         resp = await provider.generate(LLMRequest(user_content="test"))
 
     assert resp.error is not None
@@ -86,8 +86,8 @@ async def test_cli_subprocess_timeout():
     mock_proc = AsyncMock()
     mock_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
 
-    with patch("terrarium.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
-        with patch("terrarium.llm.providers.cli_subprocess.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("volnix.llm.providers.cli_subprocess.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
             resp = await provider.generate(LLMRequest(user_content="test"))
 
     assert resp.error is not None
@@ -120,20 +120,20 @@ def test_cli_subprocess_get_info():
 import os
 import shutil
 
-RUN_REAL = os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
+RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
 
 HAS_CLAUDE = shutil.which("claude") is not None
 HAS_CODEX = shutil.which("codex") is not None
 HAS_GEMINI = shutil.which("gemini") is not None
 
 skipif_no_claude = pytest.mark.skipif(
-    not (HAS_CLAUDE and RUN_REAL), reason="claude CLI not installed or TERRARIUM_RUN_REAL_API_TESTS not set"
+    not (HAS_CLAUDE and RUN_REAL), reason="claude CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
 )
 skipif_no_codex = pytest.mark.skipif(
-    not (HAS_CODEX and RUN_REAL), reason="codex CLI not installed or TERRARIUM_RUN_REAL_API_TESTS not set"
+    not (HAS_CODEX and RUN_REAL), reason="codex CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
 )
 skipif_no_gemini = pytest.mark.skipif(
-    not (HAS_GEMINI and RUN_REAL), reason="gemini CLI not installed or TERRARIUM_RUN_REAL_API_TESTS not set"
+    not (HAS_GEMINI and RUN_REAL), reason="gemini CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
 )
 
 
@@ -144,9 +144,9 @@ async def test_real_claude_cli():
     provider = CLISubprocessProvider(
         command="claude", args=["-p"], default_model="claude-sonnet-4-6", timeout=60.0,
     )
-    resp = await provider.generate(LLMRequest(user_content="respond with only the word: terrarium"))
+    resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Claude CLI error: {resp.error}"
-    assert "terrarium" in resp.content.lower()
+    assert "volnix" in resp.content.lower()
     assert resp.latency_ms > 0
 
 
@@ -157,9 +157,9 @@ async def test_real_codex_cli():
     provider = CLISubprocessProvider(
         command="codex", args=["exec"], default_model="", timeout=60.0, model_flag="",
     )
-    resp = await provider.generate(LLMRequest(user_content="respond with only the word: terrarium"))
+    resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Codex CLI error: {resp.error}"
-    assert "terrarium" in resp.content.lower()
+    assert "volnix" in resp.content.lower()
     assert resp.latency_ms > 0
 
 
@@ -170,9 +170,9 @@ async def test_real_gemini_cli():
     provider = CLISubprocessProvider(
         command="gemini", args=[], default_model="", timeout=60.0, model_flag="",
     )
-    resp = await provider.generate(LLMRequest(user_content="respond with only the word: terrarium"))
+    resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Gemini CLI error: {resp.error}"
-    assert "terrarium" in resp.content.lower()
+    assert "volnix" in resp.content.lower()
     assert resp.latency_ms > 0
 
 
@@ -180,7 +180,7 @@ async def test_real_gemini_cli():
 @pytest.mark.asyncio
 async def test_real_claude_cli_multi_turn_via_conversation():
     """Real Claude CLI multi-turn: verify context retention through ConversationManager."""
-    from terrarium.llm.conversation import ConversationManager
+    from volnix.llm.conversation import ConversationManager
 
     class CLIRouter:
         def __init__(self):

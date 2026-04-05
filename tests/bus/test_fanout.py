@@ -1,12 +1,12 @@
-"""Tests for terrarium.bus.fanout — fan-out delivery and wildcard matching."""
+"""Tests for volnix.bus.fanout — fan-out delivery and wildcard matching."""
 import asyncio
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.fanout import TopicFanout
-from terrarium.bus.types import Subscription
-from terrarium.core.events import Event
-from terrarium.core.types import Timestamp
+from volnix.bus.fanout import TopicFanout
+from volnix.bus.types import Subscription
+from volnix.core.events import Event
+from volnix.core.types import Timestamp
 
 
 def _make_event(event_type: str = "test.event") -> Event:

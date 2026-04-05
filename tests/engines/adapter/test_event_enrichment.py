@@ -40,7 +40,7 @@ async def test_causal_child_ids_populated():
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -68,7 +68,7 @@ async def test_causal_child_ids_via_causes_field():
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -94,7 +94,7 @@ async def test_actor_role_from_world_def():
     }
     gateway = _make_gateway(run_data, events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -119,7 +119,7 @@ async def test_actor_role_empty_for_unknown():
     }
     gateway = _make_gateway(run_data, events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -143,7 +143,7 @@ async def test_enrichment_does_not_mutate_originals():
     run_data = {"run_id": "run-1", "world_def": {"actors": [{"id": "agent-1", "role": "x"}]}}
     gateway = _make_gateway(run_data, original_events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -174,7 +174,7 @@ async def test_multiple_children_collected():
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)
 
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()

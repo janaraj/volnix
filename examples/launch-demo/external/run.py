@@ -1,10 +1,10 @@
 """E-commerce External Demo — governed AI in 5 minutes.
 
 Two agents (support-bot, admin) handle the same tasks.
-Terrarium enforces different outcomes based on permissions and policies.
+Volnix enforces different outcomes based on permissions and policies.
 
 Prerequisites:
-    terrarium serve demo_ecommerce --agents examples/launch-demo/external/agents.yaml --port 8080
+    volnix serve demo_ecommerce --agents examples/launch-demo/external/agents.yaml --port 8080
 
 Usage:
     python run.py
@@ -18,12 +18,12 @@ from openai import OpenAI
 
 load_dotenv()
 
-TERRARIUM_URL = "http://localhost:8080"
+VOLNIX_URL = "http://localhost:8080"
 
 
 def run_agent(actor_id: str, task: str):
-    """Run an OpenAI agent with a specific Terrarium identity."""
-    tools = httpx.get(f"{TERRARIUM_URL}/openai/v1/tools").json()
+    """Run an OpenAI agent with a specific Volnix identity."""
+    tools = httpx.get(f"{VOLNIX_URL}/openai/v1/tools").json()
     client = OpenAI()
 
     messages = [{"role": "user", "content": task}]
@@ -52,7 +52,7 @@ def run_agent(actor_id: str, task: str):
             print(f"  → {tc.function.name}({args_str})")
 
             result = httpx.post(
-                f"{TERRARIUM_URL}/openai/v1/tools/call",
+                f"{VOLNIX_URL}/openai/v1/tools/call",
                 json={
                     "name": tc.function.name,
                     "arguments": json.loads(tc.function.arguments),
@@ -83,7 +83,7 @@ def run_agent(actor_id: str, task: str):
 
 def main():
     print("=" * 70)
-    print("TERRARIUM DEMO: E-commerce Order Management (External)")
+    print("VOLNIX DEMO: E-commerce Order Management (External)")
     print("World: demo_ecommerce (Stripe + Zendesk + Slack)")
     print("=" * 70)
 
@@ -114,8 +114,8 @@ def main():
     print("BUDGET STATUS")
     print(f"{'='*70}")
     for agent in ["support-bot", "admin"]:
-        run_id = httpx.get(f"{TERRARIUM_URL}/api/v1/runs?limit=1").json()["runs"][0]["run_id"]
-        actor = httpx.get(f"{TERRARIUM_URL}/api/v1/runs/{run_id}/actors/{agent}").json()
+        run_id = httpx.get(f"{VOLNIX_URL}/api/v1/runs?limit=1").json()["runs"][0]["run_id"]
+        actor = httpx.get(f"{VOLNIX_URL}/api/v1/runs/{run_id}/actors/{agent}").json()
         budget = actor.get("budget", {})
         actions = actor.get("action_count", 0)
         spend = budget.get("spend_usd_remaining", "n/a")

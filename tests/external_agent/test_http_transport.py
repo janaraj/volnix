@@ -1,7 +1,7 @@
-"""E2E tests: External agent connecting to Terrarium via HTTP transport.
+"""E2E tests: External agent connecting to Volnix via HTTP transport.
 
 Simulates what a real agent framework (agent-ecosystem, LangGraph, AutoGen)
-does when connecting to Terrarium's HTTP API:
+does when connecting to Volnix's HTTP API:
   1. GET /api/v1/tools → discover available tools
   2. POST /api/v1/actions/{name} with raw arguments → execute actions
   3. Parse envelope response → extract structured_content
@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 from tests.external_agent.conftest import _make_gateway_with_tools
-from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 
 class TestToolDiscovery:
@@ -48,7 +48,7 @@ class TestToolDiscovery:
             assert "inputSchema" in tool
 
     async def test_expected_tools_present(self, http_transport):
-        """Terrarium exposes the Zendesk/Gmail tools we need."""
+        """Volnix exposes the Zendesk/Gmail tools we need."""
         async with httpx.AsyncClient(
             transport=http_transport, base_url="http://test"
         ) as client:
@@ -101,9 +101,9 @@ class TestRawArgumentExecution:
         assert sc["subject"] == "Broken API integration"
         assert sc["status"] == "open"
 
-    async def test_error_response_sets_is_error(self, terrarium_http_adapter):
+    async def test_error_response_sets_is_error(self, volnix_http_adapter):
         """Pipeline errors set is_error=True in envelope."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value={"error": "Blocked by policy", "step": "policy"}
         )
@@ -120,9 +120,9 @@ class TestRawArgumentExecution:
         data = resp.json()
         assert data["is_error"] is True
 
-    async def test_multi_key_response_not_unwrapped(self, terrarium_http_adapter):
+    async def test_multi_key_response_not_unwrapped(self, volnix_http_adapter):
         """Multi-key responses (lists) are NOT unwrapped."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value={
                 "tickets": [{"id": "t-1"}, {"id": "t-2"}],
@@ -144,9 +144,9 @@ class TestRawArgumentExecution:
         assert "tickets" in data["structured_content"]
         assert data["structured_content"]["count"] == 2
 
-    async def test_actor_id_from_header(self, terrarium_http_adapter):
+    async def test_actor_id_from_header(self, volnix_http_adapter):
         """X-Actor-Id header sets the actor for pipeline execution."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
         async with httpx.AsyncClient(
@@ -165,9 +165,9 @@ class TestRawArgumentExecution:
 class TestBackwardCompatibility:
     """Existing SDK clients using wrapped format are unaffected."""
 
-    async def test_wrapped_format_returns_raw_response(self, http_transport, terrarium_http_adapter):
+    async def test_wrapped_format_returns_raw_response(self, http_transport, volnix_http_adapter):
         """Wrapped requests get raw response (no envelope)."""
-        _, gateway = terrarium_http_adapter
+        _, gateway = volnix_http_adapter
 
         async with httpx.AsyncClient(
             transport=http_transport, base_url="http://test"
@@ -185,9 +185,9 @@ class TestBackwardCompatibility:
         assert "ticket" in data
         assert "structured_content" not in data
 
-    async def test_wrapped_format_forwards_actor_id(self, http_transport, terrarium_http_adapter):
+    async def test_wrapped_format_forwards_actor_id(self, http_transport, volnix_http_adapter):
         """Wrapped requests use actor_id from body."""
-        _, gateway = terrarium_http_adapter
+        _, gateway = volnix_http_adapter
 
         async with httpx.AsyncClient(
             transport=http_transport, base_url="http://test"
@@ -287,9 +287,9 @@ class TestTriageWorkflowHTTP:
 class TestEdgeCasesAndFailures:
     """Edge cases, failure paths, and protocol boundary tests."""
 
-    async def test_raw_mode_gateway_returns_none(self, terrarium_http_adapter):
+    async def test_raw_mode_gateway_returns_none(self, volnix_http_adapter):
         """Gateway returning None → enveloped with is_error=True."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value=None
         )
@@ -307,9 +307,9 @@ class TestEdgeCasesAndFailures:
         assert data["structured_content"] is None
         assert data["is_error"] is True
 
-    async def test_raw_mode_gateway_returns_string(self, terrarium_http_adapter):
+    async def test_raw_mode_gateway_returns_string(self, volnix_http_adapter):
         """Gateway returning string → enveloped as structured_content."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value="plain text error"
         )
@@ -325,9 +325,9 @@ class TestEdgeCasesAndFailures:
         data = resp.json()
         assert data["structured_content"] == "plain text error"
 
-    async def test_unwrap_single_key_none_value(self, terrarium_http_adapter):
+    async def test_unwrap_single_key_none_value(self, volnix_http_adapter):
         """Single-key dict with None value → unwraps to None."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value={"ticket": None}
         )
@@ -344,9 +344,9 @@ class TestEdgeCasesAndFailures:
         # {"ticket": None} has one key, but value is not dict → no unwrap
         assert data["structured_content"] == {"ticket": None}
 
-    async def test_unwrap_single_key_list_value(self, terrarium_http_adapter):
+    async def test_unwrap_single_key_list_value(self, volnix_http_adapter):
         """Single-key dict with list value → NOT unwrapped (list, not dict)."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value={"items": [1, 2, 3]}
         )
@@ -363,9 +363,9 @@ class TestEdgeCasesAndFailures:
         # Single key but value is list, not dict → NOT unwrapped
         assert data["structured_content"] == {"items": [1, 2, 3]}
 
-    async def test_empty_dict_response(self, terrarium_http_adapter):
+    async def test_empty_dict_response(self, volnix_http_adapter):
         """Empty dict response → passed through as-is in envelope."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
             return_value={}
         )
@@ -382,9 +382,9 @@ class TestEdgeCasesAndFailures:
         assert data["structured_content"] == {}
         assert data["is_error"] is False
 
-    async def test_body_with_actor_id_field_uses_header(self, terrarium_http_adapter):
+    async def test_body_with_actor_id_field_uses_header(self, volnix_http_adapter):
         """Raw mode body containing 'actor_id' → header takes precedence."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
         async with httpx.AsyncClient(
@@ -399,9 +399,9 @@ class TestEdgeCasesAndFailures:
         call_kwargs = gateway.handle_request.call_args.kwargs
         assert call_kwargs["actor_id"] == "real-agent"
 
-    async def test_wrapped_with_extra_fields_still_wrapped(self, terrarium_http_adapter):
+    async def test_wrapped_with_extra_fields_still_wrapped(self, volnix_http_adapter):
         """Wrapped request with extra fields → still treated as wrapped."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
         async with httpx.AsyncClient(
@@ -420,9 +420,9 @@ class TestEdgeCasesAndFailures:
         # Wrapped mode: no envelope
         assert "structured_content" not in resp.json()
 
-    async def test_empty_body_raw_mode(self, terrarium_http_adapter):
+    async def test_empty_body_raw_mode(self, volnix_http_adapter):
         """Empty body {} → raw mode, default actor."""
-        adapter, gateway = terrarium_http_adapter
+        adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
         async with httpx.AsyncClient(

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from terrarium.actors.slot_binding import SlotBinding
-from terrarium.core.types import ActorId
+from volnix.actors.slot_binding import SlotBinding
+from volnix.core.types import ActorId
 
 
 class TestSlotBinding:

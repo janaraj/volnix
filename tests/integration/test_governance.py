@@ -1,14 +1,14 @@
 """E2E governance tests — permission, policy, and budget through the pipeline.
 
 These tests exercise the real governance engines wired into the full
-TerrariumApp pipeline, verifying that governance decisions flow correctly
+VolnixApp pipeline, verifying that governance decisions flow correctly
 from YAML-defined rules through to pipeline verdicts and events.
 """
 import pytest
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from terrarium.core.events import (
+from volnix.core.context import ActionContext
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.core.events import (
     BudgetDeductionEvent,
     BudgetExhaustedEvent,
     PermissionDeniedEvent,
@@ -16,8 +16,8 @@ from terrarium.core.events import (
     PolicyFlagEvent,
     PolicyHoldEvent,
 )
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
 
 
 def _register_actors(app, *actors):
@@ -421,7 +421,7 @@ async def test_full_governed_lifecycle_with_ledger_trace(app):
         assert "email_id" in result
 
     # Verify ledger: 7 pipeline steps per action × 2 actions = 14 entries
-    from terrarium.ledger.query import LedgerQuery
+    from volnix.ledger.query import LedgerQuery
     entries = await app.ledger.query(LedgerQuery(limit=100))
     pipeline_entries = [e for e in entries if e.entry_type == "pipeline_step"]
     assert len(pipeline_entries) >= 14, (

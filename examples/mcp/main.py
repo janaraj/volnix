@@ -1,11 +1,11 @@
-"""MCP + Terrarium integration example.
+"""MCP + Volnix integration example.
 
-Connects to a running Terrarium world via MCP (Streamable HTTP transport).
+Connects to a running Volnix world via MCP (Streamable HTTP transport).
 Works with any MCP client — Claude Desktop, Cursor, OpenClaw, or this script.
 
 Prerequisites:
     pip install mcp
-    terrarium serve --world <world_id> --port 8080
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -20,12 +20,12 @@ import json
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-TERRARIUM_URL = "http://localhost:8080/mcp"
+VOLNIX_URL = "http://localhost:8080/mcp"
 
 
 async def main():
-    # 1. Connect to Terrarium's MCP endpoint
-    async with streamablehttp_client(TERRARIUM_URL) as (read, write, _):
+    # 1. Connect to Volnix's MCP endpoint
+    async with streamablehttp_client(VOLNIX_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
 

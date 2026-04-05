@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.policy — PolicyEngine evaluation and hold resolution."""
+"""Tests for volnix.engines.policy — PolicyEngine evaluation and hold resolution."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.policy.engine import PolicyEngine
+from volnix.engines.policy.engine import PolicyEngine
 
 
 @pytest.mark.asyncio

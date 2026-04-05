@@ -1,8 +1,8 @@
-"""Tests for terrarium.engines.state.store -- EntityStore CRUD operations."""
+"""Tests for volnix.engines.state.store -- EntityStore CRUD operations."""
 import pytest
-from terrarium.core.types import EntityId
-from terrarium.core.errors import StateError, EntityNotFoundError
-from terrarium.engines.state.store import EntityStore
+from volnix.core.types import EntityId
+from volnix.core.errors import StateError, EntityNotFoundError
+from volnix.engines.state.store import EntityStore
 
 
 async def test_create_and_read(store):

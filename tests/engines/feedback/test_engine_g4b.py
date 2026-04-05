@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from terrarium.engines.feedback.engine import FeedbackEngine
+from volnix.engines.feedback.engine import FeedbackEngine
 
 
 async def test_signals_without_run_manager(mock_event_bus):

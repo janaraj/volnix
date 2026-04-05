@@ -1,12 +1,12 @@
-"""Tests for terrarium.actors.simple_generator -- SimpleActorGenerator."""
+"""Tests for volnix.actors.simple_generator -- SimpleActorGenerator."""
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.generator import ActorPersonalityGenerator
-from terrarium.actors.personality import FrictionProfile, Personality
-from terrarium.actors.simple_generator import SimpleActorGenerator
-from terrarium.reality.presets import load_preset
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.generator import ActorPersonalityGenerator
+from volnix.actors.personality import FrictionProfile, Personality
+from volnix.actors.simple_generator import SimpleActorGenerator
+from volnix.reality.presets import load_preset
 
 
 class TestSimpleActorGenerator:

@@ -1,7 +1,7 @@
 """Live Test: YAML Blueprint World Creation
 
 Simulates the user flow:
-    terrarium run acme_support.yaml --settings acme_compiler.yaml
+    volnix run acme_support.yaml --settings acme_compiler.yaml
 
 This test:
 1. User has pre-written YAML files (world definition + compiler settings)
@@ -25,15 +25,15 @@ import json
 
 import pytest
 
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 
 
 @pytest.mark.asyncio
 class TestYAMLBlueprintWorld:
-    """User provides YAML blueprint files → Terrarium compiles and generates."""
+    """User provides YAML blueprint files → Volnix compiles and generates."""
 
     async def test_acme_support_blueprint(self, live_app) -> None:
-        """terrarium run acme_support.yaml --settings acme_compiler.yaml"""
+        """volnix run acme_support.yaml --settings acme_compiler.yaml"""
         compiler = live_app.registry.get("world_compiler")
 
         print("\n" + "=" * 70)
@@ -104,7 +104,7 @@ class TestYAMLBlueprintWorld:
         assert result["snapshot_id"], "Snapshot should be taken"
 
     async def test_minimal_blueprint(self, live_app) -> None:
-        """terrarium run minimal_world.yaml (simplest possible world)"""
+        """volnix run minimal_world.yaml (simplest possible world)"""
         compiler = live_app.registry.get("world_compiler")
 
         print("\n" + "=" * 70)

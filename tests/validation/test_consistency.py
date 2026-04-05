@@ -1,4 +1,4 @@
-"""Tests for terrarium.validation.consistency -- referential integrity checks."""
+"""Tests for volnix.validation.consistency -- referential integrity checks."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from terrarium.core.errors import EntityNotFoundError
-from terrarium.core.types import EntityId, StateDelta, ValidationType
-from terrarium.validation.consistency import ConsistencyValidator
-from terrarium.validation.schema_contracts import normalize_entity_schema
+from volnix.core.errors import EntityNotFoundError
+from volnix.core.types import EntityId, StateDelta, ValidationType
+from volnix.validation.consistency import ConsistencyValidator
+from volnix.validation.schema_contracts import normalize_entity_schema
 
 # ---------------------------------------------------------------------------
 # Mock state engine
@@ -165,10 +165,10 @@ async def test_validate_entity_references_with_normalized_schema(validator):
     schema = normalize_entity_schema(
         {
             "type": "object",
-            "x-terrarium-identity": "ticket_id",
+            "x-volnix-identity": "ticket_id",
             "properties": {
                 "ticket_id": {"type": "string"},
-                "customer_id": {"type": "string", "x-terrarium-ref": "customer"},
+                "customer_id": {"type": "string", "x-volnix-ref": "customer"},
             },
         }
     )

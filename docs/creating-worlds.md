@@ -1,6 +1,6 @@
 # Creating Worlds
 
-This guide covers everything about defining, customizing, and compiling worlds in Terrarium.
+This guide covers everything about defining, customizing, and compiling worlds in Volnix.
 
 ---
 
@@ -8,10 +8,10 @@ This guide covers everything about defining, customizing, and compiling worlds i
 
 ### 1. Natural Language
 
-Describe what you want and Terrarium compiles it into a YAML definition:
+Describe what you want and Volnix compiles it into a YAML definition:
 
 ```bash
-terrarium create "A fintech startup's customer support team using Zendesk \
+volnix create "A fintech startup's customer support team using Zendesk \
   for tickets, Gmail for email, and Stripe for payments. The team has two \
   support agents and a supervisor who approves refunds over $100." \
   --reality messy \
@@ -25,7 +25,7 @@ The compiler uses an LLM to produce a structured world with services, actors, po
 Write the world definition directly for full control:
 
 ```bash
-terrarium run my_world.yaml
+volnix run my_world.yaml
 ```
 
 ---
@@ -359,37 +359,37 @@ reality:
 Or use the CLI:
 
 ```bash
-terrarium create "..." --reality messy --override reliability=rock_solid
+volnix create "..." --reality messy --override reliability=rock_solid
 ```
 
 ---
 
 ## Blueprints
 
-Blueprints are reusable world definitions. Terrarium ships with official blueprints, and you can create your own.
+Blueprints are reusable world definitions. Volnix ships with official blueprints, and you can create your own.
 
 ### Using Blueprints
 
 ```bash
 # List available blueprints
-terrarium blueprints
+volnix blueprints
 
 # Run a blueprint by name
-terrarium run customer_support
+volnix run customer_support
 
 # Run with overrides
-terrarium run customer_support --behavior static --mode ungoverned
+volnix run customer_support --behavior static --mode ungoverned
 ```
 
 ### Creating Custom Blueprints
 
-Save any YAML world definition to `~/.terrarium/blueprints/`:
+Save any YAML world definition to `~/.volnix/blueprints/`:
 
 ```bash
-terrarium create "My custom world description" --output ~/.terrarium/blueprints/my_world.yaml
+volnix create "My custom world description" --output ~/.volnix/blueprints/my_world.yaml
 ```
 
-It will appear in `terrarium blueprints` as a `USER` blueprint.
+It will appear in `volnix blueprints` as a `USER` blueprint.
 
 ---
 

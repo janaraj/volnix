@@ -3,7 +3,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
 import asyncio
-from terrarium.adapters.crewai import crewai_tools
+from volnix.adapters.crewai import crewai_tools
 
 from dotenv import load_dotenv
 load_dotenv()  # loads .env from current directory or parent
@@ -12,7 +12,7 @@ URL = "http://localhost:8080"
 _loop = asyncio.get_event_loop()
 
 # Each agent gets tools bound to its identity from the agent YAML.
-# Permissions and budgets are enforced per-agent by Terrarium.
+# Permissions and budgets are enforced per-agent by Volnix.
 ANALYST_TOOLS = _loop.run_until_complete(crewai_tools(URL, actor_id="financial-analyst"))
 RESEARCH_TOOLS = _loop.run_until_complete(crewai_tools(URL, actor_id="research-analyst"))
 ADVISOR_TOOLS = _loop.run_until_complete(crewai_tools(URL, actor_id="investment-advisor"))

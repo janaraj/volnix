@@ -14,7 +14,7 @@ Key implementation details or design decisions worth noting.
 
 - [ ] Tests added or updated
 - [ ] `uv run pytest` passes
-- [ ] `uv run ruff check terrarium/ tests/` passes
-- [ ] `uv run ruff format --check terrarium/ tests/` passes
-- [ ] `uv run mypy terrarium/` passes
+- [ ] `uv run ruff check volnix/ tests/` passes
+- [ ] `uv run ruff format --check volnix/ tests/` passes
+- [ ] `uv run mypy volnix/` passes
 - [ ] Documentation updated (if user-facing change)

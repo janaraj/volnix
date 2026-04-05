@@ -1,20 +1,20 @@
-"""Tests for terrarium.pipeline.dag -- DAG-based pipeline execution and short-circuiting."""
+"""Tests for volnix.pipeline.dag -- DAG-based pipeline execution and short-circuiting."""
 
 import asyncio
 
 import pytest
 import pytest_asyncio
 
-from terrarium.core.context import ActionContext, StepResult
-from terrarium.core.types import ActorId, ServiceId, StepVerdict
-from terrarium.pipeline.dag import PipelineDAG
-from terrarium.bus.bus import EventBus
-from terrarium.bus.config import BusConfig
-from terrarium.ledger.ledger import Ledger
-from terrarium.ledger.config import LedgerConfig
-from terrarium.ledger.entries import PipelineStepEntry
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.core.context import ActionContext, StepResult
+from volnix.core.types import ActorId, ServiceId, StepVerdict
+from volnix.pipeline.dag import PipelineDAG
+from volnix.bus.bus import EventBus
+from volnix.bus.config import BusConfig
+from volnix.ledger.ledger import Ledger
+from volnix.ledger.config import LedgerConfig
+from volnix.ledger.entries import PipelineStepEntry
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 # ---------------------------------------------------------------------------
@@ -221,8 +221,8 @@ async def test_ledger_recording(tmp_path):
 @pytest.mark.asyncio
 async def test_event_publishing(tmp_path):
     """Use real EventBus, verify events published via _publish_step_event."""
-    from terrarium.core.events import Event
-    from terrarium.core.types import Timestamp
+    from volnix.core.events import Event
+    from volnix.core.types import Timestamp
     from datetime import datetime, timezone
     import asyncio
 

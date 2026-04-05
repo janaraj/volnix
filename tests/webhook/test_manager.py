@@ -15,8 +15,8 @@ async def test_start_subscribes_to_bus(webhook_manager, mock_bus):
 
 async def test_start_disabled_does_nothing(mock_bus):
     """When disabled, start() doesn't subscribe."""
-    from terrarium.webhook.config import WebhookConfig
-    from terrarium.webhook.manager import WebhookManager
+    from volnix.webhook.config import WebhookConfig
+    from volnix.webhook.manager import WebhookManager
 
     config = WebhookConfig(enabled=False)
     manager = WebhookManager(config)
@@ -40,7 +40,7 @@ async def test_event_delivered_to_matching_webhook(
         "send",
         new_callable=AsyncMock,
     ) as mock_send:
-        from terrarium.webhook.delivery import DeliveryResult
+        from volnix.webhook.delivery import DeliveryResult
 
         mock_send.return_value = DeliveryResult(
             success=True, attempts=1, status_code=200
@@ -171,7 +171,7 @@ async def test_failed_delivery_tracked(
         "send",
         new_callable=AsyncMock,
     ) as mock_send:
-        from terrarium.webhook.delivery import DeliveryResult
+        from volnix.webhook.delivery import DeliveryResult
 
         mock_send.return_value = DeliveryResult(
             success=False, attempts=2, error="HTTP 500"

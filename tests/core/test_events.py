@@ -1,12 +1,12 @@
-"""Tests for terrarium.core.events — event dataclasses and serialization."""
+"""Tests for volnix.core.events — event dataclasses and serialization."""
 import pytest
-from terrarium.core.events import (
+from volnix.core.events import (
     Event, WorldEvent,
     PermissionDeniedEvent, PolicyBlockEvent, PolicyHoldEvent,
     BudgetExhaustedEvent, BudgetDeductionEvent, CapabilityGapEvent,
     EngineLifecycleEvent,
 )
-from terrarium.core.types import (
+from volnix.core.types import (
     Timestamp, ActorId, ServiceId, PolicyId, ToolName, EventId,
 )
 from datetime import datetime, timezone

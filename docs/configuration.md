@@ -1,6 +1,6 @@
 # Configuration
 
-Terrarium uses a layered TOML configuration system. This guide covers every configuration section and how to customize Terrarium for your needs.
+Volnix uses a layered TOML configuration system. This guide covers every configuration section and how to customize Volnix for your needs.
 
 ---
 
@@ -10,16 +10,16 @@ Configuration is loaded in order, with later layers overriding earlier ones:
 
 | Priority | File | Purpose |
 |----------|------|---------|
-| 1 (lowest) | `terrarium.toml` | Base defaults (shipped with the package) |
-| 2 | `terrarium.{env}.toml` | Environment overlay (e.g., `terrarium.production.toml`) |
-| 3 | `terrarium.local.toml` | Machine-specific overrides (git-ignored) |
-| 4 (highest) | `TERRARIUM__section__key` | Environment variable overrides |
+| 1 (lowest) | `volnix.toml` | Base defaults (shipped with the package) |
+| 2 | `volnix.{env}.toml` | Environment overlay (e.g., `volnix.production.toml`) |
+| 3 | `volnix.local.toml` | Machine-specific overrides (git-ignored) |
+| 4 (highest) | `VOLNIX__section__key` | Environment variable overrides |
 
 Select the environment with the `--env` flag:
 
 ```bash
-terrarium run world.yaml --env production    # loads terrarium.production.toml
-terrarium serve world.yaml --env staging     # loads terrarium.staging.toml
+volnix run world.yaml --env production    # loads volnix.production.toml
+volnix serve world.yaml --env staging     # loads volnix.staging.toml
 ```
 
 ---
@@ -39,7 +39,7 @@ ACP_CLAUDE_URL=http://localhost:3000
 ACP_CODEX_URL=http://localhost:3001
 
 # Testing (optional)
-TERRARIUM_RUN_REAL_API_TESTS=1
+VOLNIX_RUN_REAL_API_TESTS=1
 ```
 
 Copy `.env.example` to `.env` and fill in your keys. The `.env` file is git-ignored by default.
@@ -48,20 +48,20 @@ Any config key can be overridden via environment variables using double-undersco
 
 ```bash
 # Override simulation seed
-TERRARIUM__simulation__seed=123
+VOLNIX__simulation__seed=123
 
 # Override adapter port
-TERRARIUM__adapter__port=9000
+VOLNIX__adapter__port=9000
 ```
 
 ---
 
 ## Data Directory
 
-Terrarium stores all runtime data under `~/.terrarium/`:
+Volnix stores all runtime data under `~/.volnix/`:
 
 ```
-~/.terrarium/
+~/.volnix/
   data/
     bus.db              # Event bus persistence
     ledger.db           # Audit log
@@ -74,7 +74,7 @@ Terrarium stores all runtime data under `~/.terrarium/`:
   presets/              # User-created reality presets
 ```
 
-Override the base directory with the `TERRARIUM_HOME` environment variable.
+Override the base directory with the `VOLNIX_HOME` environment variable.
 
 ---
 
@@ -194,7 +194,7 @@ port = 8100
 host = "127.0.0.1"
 port = 8200
 enabled = false
-static_dir = "terrarium-dashboard/dist"
+static_dir = "volnix-dashboard/dist"
 ```
 
 ### Gateway
@@ -346,7 +346,7 @@ The routing key format is `{engine_name}_{use_case}`. The router resolves by che
 
 ### Environment-specific config
 
-Create `terrarium.production.toml` for production settings:
+Create `volnix.production.toml` for production settings:
 
 ```toml
 [logging]
@@ -362,7 +362,7 @@ max_total_events = 200
 
 ### Local overrides
 
-Create `terrarium.local.toml` (git-ignored) for your machine:
+Create `volnix.local.toml` (git-ignored) for your machine:
 
 ```toml
 [llm.defaults]

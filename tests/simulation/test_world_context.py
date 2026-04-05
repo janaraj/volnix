@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.simulation.world_context import WorldContextBundle
 
 
 def test_world_context_frozen():

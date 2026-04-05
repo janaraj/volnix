@@ -2,19 +2,19 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
-## What is Terrarium
+## What is Volnix
 
-Terrarium is a **world engine for AI agents**. It creates stateful, causal, observable realities where agents exist as participants — not as isolated prompt loops calling tools, but as actors inside a world that has places, institutions, other agents, budgets, policies, communication systems, and real consequences.
+Volnix is a **world engine for AI agents**. It creates stateful, causal, observable realities where agents exist as participants — not as isolated prompt loops calling tools, but as actors inside a world that has places, institutions, other agents, budgets, policies, communication systems, and real consequences.
 
-Users describe a world in natural language or YAML. Terrarium compiles it into a deep, reproducible simulation. Agents interact with the world through standard protocols (MCP, ACP, OpenAI function calling, Anthropic tool use, raw HTTP). Everything that happens is recorded, scored, and diffable.
+Users describe a world in natural language or YAML. Volnix compiles it into a deep, reproducible simulation. Agents interact with the world through standard protocols (MCP, ACP, OpenAI function calling, Anthropic tool use, raw HTTP). Everything that happens is recorded, scored, and diffable.
 
 ## Spec Documents
 
 For deep understanding of the system, read these internal docs in order:
 
-- `internal_docs/terrarium-full-spec.md` — Complete specification: all 10 engines, the runtime pipeline, fidelity tiers, validation framework, governed vs. ungoverned, multi-agent, world packs, CLI, and roadmap.
-- `internal_docs/terrarium-world-definition-and-compiler.md` — World definition YAML schema, reality dimensions (labels + per-attribute numbers), behavior modes, fidelity tiers, compiler settings, blueprints, reproducibility model, and the five user-facing concepts.
-- `internal_docs/terrarium-architecture.md` — The two-half architecture (deterministic engine vs. generative layer), three generation phases, fidelity tiers, world conditions, the self-improving loop, and the end-to-end flow diagram.
+- `internal_docs/volnix-full-spec.md` — Complete specification: all 10 engines, the runtime pipeline, fidelity tiers, validation framework, governed vs. ungoverned, multi-agent, world packs, CLI, and roadmap.
+- `internal_docs/volnix-world-definition-and-compiler.md` — World definition YAML schema, reality dimensions (labels + per-attribute numbers), behavior modes, fidelity tiers, compiler settings, blueprints, reproducibility model, and the five user-facing concepts.
+- `internal_docs/volnix-architecture.md` — The two-half architecture (deterministic engine vs. generative layer), three generation phases, fidelity tiers, world conditions, the self-improving loop, and the end-to-end flow diagram.
 - `DESIGN_PRINCIPLES.md` — Architectural principles, design rules (DOs/DON'Ts), patterns (event bus, ledger, pipeline, gateway, composition root), async flow, and enforcement mechanisms.
 
 ## Commands
@@ -33,17 +33,17 @@ uv run pytest tests/path/to/test_file.py
 uv run pytest tests/path/to/test_file.py::test_function_name -v
 
 # Run tests with coverage
-uv run pytest --cov=terrarium --cov-report=term-missing
+uv run pytest --cov=volnix --cov-report=term-missing
 
 # Lint
-uv run ruff check terrarium/ tests/
-uv run ruff format --check terrarium/ tests/
+uv run ruff check volnix/ tests/
+uv run ruff format --check volnix/ tests/
 
 # Type check
-uv run mypy terrarium/
+uv run mypy volnix/
 
-# CLI entry point (typer-based, entry point: terrarium/cli.py)
-uv run terrarium --help
+# CLI entry point (typer-based, entry point: volnix/cli.py)
+uv run volnix --help
 ```
 
 ## Architecture
@@ -78,7 +78,7 @@ Every engine inherits from `BaseEngine` (`core/engine.py`), which provides lifec
 
 ### 7-Step Governance Pipeline
 
-Every action flows through: **permission → policy → budget → capability → responder → validation → commit**. This pipeline IS the law of the world. Nothing bypasses it. Agent actions, animator events, side effects, and approval responses all flow through the same seven steps. Steps are configured in `terrarium.toml` under `[pipeline]`. Steps can short-circuit (e.g., policy blocks before reaching responder).
+Every action flows through: **permission → policy → budget → capability → responder → validation → commit**. This pipeline IS the law of the world. Nothing bypasses it. Agent actions, animator events, side effects, and approval responses all flow through the same seven steps. Steps are configured in `volnix.toml` under `[pipeline]`. Steps can short-circuit (e.g., policy blocks before reaching responder).
 
 ### Semantic Kernel (`kernel/`)
 
@@ -142,14 +142,14 @@ Three presets: `ideal` / `messy` (default) / `hostile`. Two-level config: labels
 
 ### Config System
 
-- `terrarium.toml` — base config
-- `terrarium.{env}.toml` — environment overrides (e.g., `terrarium.development.toml` uses `:memory:` DBs)
-- `terrarium.local.toml` — git-ignored local overrides
-- Root config schema: `config/schema.py` → `TerrariumConfig`. Each subsystem owns its own config model (SRP).
+- `volnix.toml` — base config
+- `volnix.{env}.toml` — environment overrides (e.g., `volnix.development.toml` uses `:memory:` DBs)
+- `volnix.local.toml` — git-ignored local overrides
+- Root config schema: `config/schema.py` → `VolnixConfig`. Each subsystem owns its own config model (SRP).
 
 ### LLM Router
 
-All LLM calls go through the router (`llm/router.py`), which handles provider selection, retry, budget tracking, and fallback. Never call provider SDKs directly. Task-specific routing is configured in `[llm.routing.*]` sections of `terrarium.toml`. Supports: Google (native), Anthropic (native), OpenAI-compatible (OpenAI, Gemini, Ollama, vLLM), CLI providers (Codex, codex, gemini), ACP providers (bidirectional JSON-RPC).
+All LLM calls go through the router (`llm/router.py`), which handles provider selection, retry, budget tracking, and fallback. Never call provider SDKs directly. Task-specific routing is configured in `[llm.routing.*]` sections of `volnix.toml`. Supports: Google (native), Anthropic (native), OpenAI-compatible (OpenAI, Gemini, Ollama, vLLM), CLI providers (Codex, codex, gemini), ACP providers (bidirectional JSON-RPC).
 
 ## Key Conventions
 

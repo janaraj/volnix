@@ -11,21 +11,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.engines.feedback.annotations import AnnotationStore
-from terrarium.engines.feedback.config import FeedbackConfig
-from terrarium.engines.feedback.models import (
+from volnix.engines.feedback.annotations import AnnotationStore
+from volnix.engines.feedback.config import FeedbackConfig
+from volnix.engines.feedback.models import (
     CapturedSurface,
     ObservedError,
     ObservedMutation,
     ObservedOperation,
 )
-from terrarium.packs.profile_schema import (
+from volnix.packs.profile_schema import (
     ProfileEntity,
     ProfileOperation,
     ProfileStateMachine,
     ServiceProfileData,
 )
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

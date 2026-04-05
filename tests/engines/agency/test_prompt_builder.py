@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from terrarium.actors.state import ActorState, InteractionRecord
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import ActorId, EntityId, ServiceId, Timestamp
-from terrarium.engines.agency.prompt_builder import (
+from volnix.actors.state import ActorState, InteractionRecord
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, ServiceId, Timestamp
+from volnix.engines.agency.prompt_builder import (
     ACTION_OUTPUT_SCHEMA,
     BATCH_OUTPUT_SCHEMA,
     ActorPromptBuilder,
 )
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.simulation.world_context import WorldContextBundle
 
 
 def _make_world_context() -> WorldContextBundle:
@@ -184,7 +184,7 @@ def test_individual_prompt_with_interactions():
 
 def test_individual_prompt_with_waiting():
     """Waiting_for is no longer rendered (internal engine state)."""
-    from terrarium.actors.state import WaitingFor
+    from volnix.actors.state import WaitingFor
 
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
@@ -209,7 +209,7 @@ def test_individual_prompt_with_waiting():
 
 def test_autonomous_prompt_has_team_and_instructions():
     """Autonomous agent prompt includes team channel and work instructions."""
-    from terrarium.actors.state import Subscription
+    from volnix.actors.state import Subscription
 
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)

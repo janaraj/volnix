@@ -1,8 +1,8 @@
-"""Tests for terrarium.engines.adapter.tool_manifest -- manifest generation."""
+"""Tests for volnix.engines.adapter.tool_manifest -- manifest generation."""
 import pytest
 from unittest.mock import MagicMock
 
-from terrarium.engines.adapter.tool_manifest import ToolManifestGenerator
+from volnix.engines.adapter.tool_manifest import ToolManifestGenerator
 
 
 def _make_pack_registry():

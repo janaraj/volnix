@@ -20,14 +20,14 @@ import pytest
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM + temp profiles dir."""
+    """VolnixApp with REAL codex-acp LLM + temp profiles dir."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -44,7 +44,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app, tmp_path
     await app.stop()
@@ -60,7 +60,7 @@ class TestOpenAPISource:
         print("TEST: OpenAPI Petstore Spec Parsing")
         print("=" * 70)
 
-        from terrarium.kernel.openapi_provider import OpenAPIProvider
+        from volnix.kernel.openapi_provider import OpenAPIProvider
 
         # Copy petstore spec to a temp spec directory
         spec_dir = tmp_path / "specs"
@@ -172,8 +172,8 @@ class TestLLMInference:
         print("TEST: Infer SendGrid Profile via LLM")
         print("=" * 70)
 
-        from terrarium.packs.profile_infer import ProfileInferrer
-        from terrarium.packs.profile_loader import ProfileLoader
+        from volnix.packs.profile_infer import ProfileInferrer
+        from volnix.packs.profile_loader import ProfileLoader
 
         inferrer = ProfileInferrer(
             llm_router=app._llm_router,
@@ -237,13 +237,13 @@ class TestFullLifecycle:
         print(f"  Jira profile: {len(jira.operations)} operations")
 
         # Step 2: Build a world plan with Jira as Tier 2 service
-        from terrarium.packs.profile_surface import profile_to_surface
+        from volnix.packs.profile_surface import profile_to_surface
         jira_surface = profile_to_surface(jira)
 
-        from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.gmail.pack import EmailPack
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.gmail.pack import EmailPack
+        from volnix.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
 
@@ -345,7 +345,7 @@ class TestContextHubSource:
         print("=" * 70)
 
         # Step 1: Verify Context Hub is available
-        from terrarium.kernel.context_hub import ContextHubProvider
+        from volnix.kernel.context_hub import ContextHubProvider
 
         hub = ContextHubProvider()
         if not await hub.is_available():
@@ -363,7 +363,7 @@ class TestContextHubSource:
         assert len(hub_data["raw_content"]) > 100, "Expected substantial docs"
 
         # Step 3: Infer Twilio profile using Context Hub docs
-        from terrarium.packs.profile_infer import ProfileInferrer
+        from volnix.packs.profile_infer import ProfileInferrer
 
         inferrer = ProfileInferrer(
             llm_router=app._llm_router,
@@ -392,7 +392,7 @@ class TestContextHubSource:
         assert len(profile.entities) >= 1, f"Expected >= 1 entity, got {len(profile.entities)}"
 
         # Step 4: Save + verify persistence
-        from terrarium.packs.profile_loader import ProfileLoader
+        from volnix.packs.profile_loader import ProfileLoader
 
         loader = ProfileLoader(tmp_path / "profiles")
         loader.save(profile)
@@ -417,14 +417,14 @@ class TestContextHubSource:
             responder._profile_registry.register(profile)
 
         # Step 6: Build world plan with twilio as Tier 2
-        from terrarium.packs.profile_surface import profile_to_surface
+        from volnix.packs.profile_surface import profile_to_surface
 
         twilio_surface = profile_to_surface(profile)
 
-        from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.gmail.pack import EmailPack
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.gmail.pack import EmailPack
+        from volnix.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
 

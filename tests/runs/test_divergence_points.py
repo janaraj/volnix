@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.core.types import RunId
-from terrarium.runs.comparison import RunComparator
+from volnix.core.types import RunId
+from volnix.runs.comparison import RunComparator
 
 
 def _make_event(event_type: str, actor_id: str, action: str, tick: int) -> dict:

@@ -1,29 +1,29 @@
 # Getting Started
 
-This guide walks you through installing Terrarium, running your first simulation, and connecting an AI agent.
+This guide walks you through installing Volnix, running your first simulation, and connecting an AI agent.
 
 ---
 
-## 1. Install Terrarium
+## 1. Install Volnix
 
 **Requirements:** Python 3.12+
 
 ```bash
 # With pip
-pip install terrarium
+pip install volnix
 
 # With uv (recommended for faster installs)
-uv pip install terrarium
+uv pip install volnix
 
 # From source (for development)
-git clone https://github.com/janaraj/terrarium.git
-cd terrarium
+git clone https://github.com/janaraj/volnix.git
+cd volnix
 uv sync --all-extras
 ```
 
 ## 2. Configure an LLM Provider
 
-Terrarium uses LLMs for world compilation (generating entities, data, actor personalities) and for internal actor responses. You need at least one provider configured.
+Volnix uses LLMs for world compilation (generating entities, data, actor personalities) and for internal actor responses. You need at least one provider configured.
 
 ```bash
 # Pick one (or more):
@@ -37,17 +37,17 @@ You can also use local providers like Ollama (no API key needed) or CLI-based pr
 **Verify your setup:**
 
 ```bash
-terrarium check
+volnix check
 ```
 
 This shows your Python version, installed packages, and which LLM providers are available.
 
 ## 3. Explore Built-in Blueprints
 
-Terrarium ships with pre-built world blueprints you can run immediately:
+Volnix ships with pre-built world blueprints you can run immediately:
 
 ```bash
-terrarium blueprints
+volnix blueprints
 ```
 
 You'll see blueprints like `customer_support`, `incident_response`, `open_sandbox`, `market_prediction_analysis`, and more.
@@ -56,10 +56,10 @@ You'll see blueprints like `customer_support`, `incident_response`, `open_sandbo
 
 ### Option A: Internal Agents (autonomous simulation)
 
-Internal agents are LLM-powered actors that collaborate within the world without external input. This is the fastest way to see Terrarium in action:
+Internal agents are LLM-powered actors that collaborate within the world without external input. This is the fastest way to see Volnix in action:
 
 ```bash
-terrarium run customer_support \
+volnix run customer_support \
   --preset brainstorm \
   --actors support-lead,support-agent,supervisor
 ```
@@ -68,24 +68,24 @@ This compiles the `customer_support` blueprint, creates internal actors for each
 
 ### Option B: External Agent (you connect an AI agent)
 
-Start Terrarium as a server and connect your own agent:
+Start Volnix as a server and connect your own agent:
 
 ```bash
 # Terminal 1: Start the server
-terrarium serve customer_support --port 8080
+volnix serve customer_support --port 8080
 ```
 
 ```bash
 # Terminal 2: Connect Claude Desktop (or Cursor, Windsurf)
-terrarium attach claude-desktop --port 8080
+volnix attach claude-desktop --port 8080
 ```
 
-Now open Claude Desktop and ask it to check emails, read tickets, or process a refund. Claude sees Terrarium's tools as MCP tools and interacts with the simulated world.
+Now open Claude Desktop and ask it to check emails, read tickets, or process a refund. Claude sees Volnix's tools as MCP tools and interacts with the simulated world.
 
 When you're done, detach:
 
 ```bash
-terrarium detach claude-desktop
+volnix detach claude-desktop
 ```
 
 ## 5. View Results
@@ -93,7 +93,7 @@ terrarium detach claude-desktop
 ### Terminal report
 
 ```bash
-terrarium report last
+volnix report last
 ```
 
 This prints a governance scorecard showing actions taken, policies triggered, budget usage, and capability gaps.
@@ -103,7 +103,7 @@ This prints a governance scorecard showing actions taken, policies triggered, bu
 For a richer view with event timelines, scorecards, and deliverable inspection:
 
 ```bash
-terrarium dashboard --port 8200
+volnix dashboard --port 8200
 ```
 
 Open `http://localhost:8200` in your browser. The dashboard shows all historical runs with filtering, search, and side-by-side comparison.
@@ -113,7 +113,7 @@ Open `http://localhost:8200` in your browser. The dashboard shows all historical
 ### From natural language
 
 ```bash
-terrarium create "An e-commerce customer service team using Zendesk for tickets, \
+volnix create "An e-commerce customer service team using Zendesk for tickets, \
   Gmail for email, and Stripe for payments. Include a supervisor who approves \
   refunds over $100." \
   --reality messy \
@@ -123,7 +123,7 @@ terrarium create "An e-commerce customer service team using Zendesk for tickets,
 This generates a YAML world definition. Review and customize it, then run:
 
 ```bash
-terrarium run my_world.yaml --serve --port 8080
+volnix run my_world.yaml --serve --port 8080
 ```
 
 ### From YAML directly
@@ -161,7 +161,7 @@ compiler:
 ```
 
 ```bash
-terrarium serve my_world.yaml --port 8080
+volnix serve my_world.yaml --port 8080
 ```
 
 ## 7. Next Steps

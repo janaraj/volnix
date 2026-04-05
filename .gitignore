@@ -1,13 +1,13 @@
 # ──────────────────────────────────────────────
-# Terrarium .gitignore
+# Volnix .gitignore
 # ──────────────────────────────────────────────
 
-# Terrarium local config & runtime data
-terrarium.local.toml
-terrarium.development.toml.bak
+# Volnix local config & runtime data
+volnix.local.toml
+volnix.development.toml.bak
 data/
 dev_data/
-terrarium_data/
+volnix_data/
 logs/
 reports/
 snapshots/

@@ -1,6 +1,6 @@
-"""Tests for terrarium.templates.registry — template registration and discovery."""
+"""Tests for volnix.templates.registry — template registration and discovery."""
 import pytest
-from terrarium.templates.registry import TemplateRegistry
+from volnix.templates.registry import TemplateRegistry
 
 
 def test_register_template():

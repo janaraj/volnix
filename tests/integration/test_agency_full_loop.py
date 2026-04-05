@@ -17,10 +17,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.actors.state import ActorBehaviorTraits, ActorState, WaitingFor
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import (
+from volnix.actors.state import ActorBehaviorTraits, ActorState, WaitingFor
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.events import WorldEvent
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EnvelopePriority,
@@ -29,12 +29,12 @@ from terrarium.core.types import (
     ServiceId,
     Timestamp,
 )
-from terrarium.engines.agency.config import AgencyConfig
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.simulation.config import SimulationRunnerConfig
-from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import SimulationRunner, SimulationStatus, StopReason
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.simulation.config import SimulationRunnerConfig
+from volnix.simulation.event_queue import EventQueue
+from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from volnix.simulation.world_context import WorldContextBundle
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -100,7 +100,7 @@ def _mock_llm_router(response_json: dict | list | None = None):
     All calls (Tier 2 and Tier 3) now go through individual activation
     with native tool calling — no batch text-based path.
     """
-    from terrarium.llm.types import LLMResponse, ToolCall
+    from volnix.llm.types import LLMResponse, ToolCall
 
     individual_response = {
         "action_type": "email_send",
@@ -225,7 +225,7 @@ class TestFullLoopWithMockLLM:
         # Multi-turn loop: each actor that makes a tool call consumes 2+ LLM
         # calls (action + follow-up do_nothing). Use per-actor responses keyed
         # by the messages content so ordering from asyncio.gather doesn't matter.
-        from terrarium.llm.types import LLMResponse, ToolCall
+        from volnix.llm.types import LLMResponse, ToolCall
 
         # Track how many calls each activation has made via call index per actor.
         actor_call_counts: dict[str, int] = {}

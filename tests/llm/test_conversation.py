@@ -2,9 +2,9 @@
 
 import pytest
 
-from terrarium.llm.conversation import ConversationManager, ConversationTurn, Session
-from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage
-from terrarium.llm.providers.mock import MockLLMProvider
+from volnix.llm.conversation import ConversationManager, ConversationTurn, Session
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
+from volnix.llm.providers.mock import MockLLMProvider
 
 
 class MockRouter:
@@ -360,7 +360,7 @@ async def test_five_turn_conversation():
 import os
 
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
-RUN_REAL = os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
+RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
 
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -368,15 +368,15 @@ GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
 
 skipif_no_real_openai = pytest.mark.skipif(
     not (OPENAI_KEY and RUN_REAL),
-    reason="OPENAI_API_KEY + TERRARIUM_RUN_REAL_API_TESTS required",
+    reason="OPENAI_API_KEY + VOLNIX_RUN_REAL_API_TESTS required",
 )
 skipif_no_real_anthropic = pytest.mark.skipif(
     not (ANTHROPIC_KEY and RUN_REAL),
-    reason="ANTHROPIC_API_KEY + TERRARIUM_RUN_REAL_API_TESTS required",
+    reason="ANTHROPIC_API_KEY + VOLNIX_RUN_REAL_API_TESTS required",
 )
 skipif_no_real_google = pytest.mark.skipif(
     not (GOOGLE_KEY and RUN_REAL),
-    reason="GOOGLE_API_KEY + TERRARIUM_RUN_REAL_API_TESTS required",
+    reason="GOOGLE_API_KEY + VOLNIX_RUN_REAL_API_TESTS required",
 )
 
 
@@ -389,7 +389,7 @@ async def _real_context_retention_test(router, engine_name: str):
 
     # Turn 1: tell it a secret
     resp1 = await conv.generate(
-        sid, router, "Remember this code: TERRARIUM42. Just confirm you remember it.",
+        sid, router, "Remember this code: VOLNIX42. Just confirm you remember it.",
         engine_name=engine_name, max_tokens=100,
     )
     assert resp1.error is None, f"Turn 1 failed: {resp1.error}"
@@ -401,7 +401,7 @@ async def _real_context_retention_test(router, engine_name: str):
         engine_name=engine_name, max_tokens=100,
     )
     assert resp2.error is None, f"Turn 2 failed: {resp2.error}"
-    assert "TERRARIUM42" in resp2.content.upper(), (
+    assert "VOLNIX42" in resp2.content.upper(), (
         f"LLM did not recall secret. Response: {resp2.content}"
     )
 
@@ -417,10 +417,10 @@ async def _real_context_retention_test(router, engine_name: str):
 @pytest.mark.asyncio
 async def test_real_openai_context_retention():
     """Real OpenAI: verify multi-turn context is retained."""
-    from terrarium.llm.providers.openai_compat import OpenAICompatibleProvider
-    from terrarium.llm.registry import ProviderRegistry
-    from terrarium.llm.router import LLMRouter
-    from terrarium.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
+    from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
+    from volnix.llm.registry import ProviderRegistry
+    from volnix.llm.router import LLMRouter
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
     registry.register("openai", OpenAICompatibleProvider(
@@ -439,10 +439,10 @@ async def test_real_openai_context_retention():
 @pytest.mark.asyncio
 async def test_real_anthropic_context_retention():
     """Real Anthropic: verify multi-turn context is retained via prompt caching."""
-    from terrarium.llm.providers.anthropic import AnthropicProvider
-    from terrarium.llm.registry import ProviderRegistry
-    from terrarium.llm.router import LLMRouter
-    from terrarium.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
+    from volnix.llm.providers.anthropic import AnthropicProvider
+    from volnix.llm.registry import ProviderRegistry
+    from volnix.llm.router import LLMRouter
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
     registry.register("anthropic", AnthropicProvider(
@@ -461,10 +461,10 @@ async def test_real_anthropic_context_retention():
 @pytest.mark.asyncio
 async def test_real_google_context_retention():
     """Real Google Gemini: verify multi-turn context is retained."""
-    from terrarium.llm.providers.google import GoogleNativeProvider
-    from terrarium.llm.registry import ProviderRegistry
-    from terrarium.llm.router import LLMRouter
-    from terrarium.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
+    from volnix.llm.providers.google import GoogleNativeProvider
+    from volnix.llm.registry import ProviderRegistry
+    from volnix.llm.router import LLMRouter
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
     registry.register("google", GoogleNativeProvider(

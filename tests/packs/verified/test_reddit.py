@@ -1,13 +1,13 @@
-"""Tests for terrarium.packs.verified.reddit -- RedditPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.reddit -- RedditPack through pack's own handle_action."""
 
 from __future__ import annotations
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.reddit.pack import RedditPack
-from terrarium.packs.verified.reddit.state_machines import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.reddit.pack import RedditPack
+from volnix.packs.verified.reddit.state_machines import (
     REDDIT_POST_TRANSITIONS,
     REDDIT_USER_TRANSITIONS,
     SUBREDDIT_TRANSITIONS,

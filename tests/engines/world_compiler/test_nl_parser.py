@@ -4,9 +4,9 @@ import json
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.core.errors import NLParseError
-from terrarium.engines.world_compiler.nl_parser import NLParser
-from terrarium.llm.types import LLMResponse
+from volnix.core.errors import NLParseError
+from volnix.engines.world_compiler.nl_parser import NLParser
+from volnix.llm.types import LLMResponse
 
 
 # ---------------------------------------------------------------------------

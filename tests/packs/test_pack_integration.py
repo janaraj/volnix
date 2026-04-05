@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.errors import ValidationError
-from terrarium.core.types import (
+from volnix.core.context import ResponseProposal
+from volnix.core.errors import ValidationError
+from volnix.core.types import (
     EntityId,
     FidelityMetadata,
     FidelitySource,
@@ -18,10 +18,10 @@ from terrarium.core.types import (
     StateDelta,
     ToolName,
 )
-from terrarium.packs.base import ServicePack
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.runtime import PackRuntime
-from terrarium.packs.verified.gmail.pack import EmailPack
+from volnix.packs.base import ServicePack
+from volnix.packs.registry import PackRegistry
+from volnix.packs.runtime import PackRuntime
+from volnix.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ class NotePack(ServicePack):
 
 @pytest.fixture
 def verified_dir():
-    return str(Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "verified")
+    return str(Path(__file__).resolve().parents[2] / "volnix" / "packs" / "verified")
 
 
 @pytest.fixture
@@ -274,19 +274,19 @@ class TestIntegrationExtensibility:
 
 class TestImportBoundaries:
     def test_email_pack_imports_only_core(self):
-        """Verify that the email pack modules import only from terrarium.core.
+        """Verify that the email pack modules import only from volnix.core.
 
         Packs must NEVER import from persistence/, engines/, or bus/.
         """
-        from terrarium.packs.verified.gmail import pack as pack_mod
-        from terrarium.packs.verified.gmail import handlers as handlers_mod
-        from terrarium.packs.verified.gmail import schemas as schemas_mod
-        from terrarium.packs.verified.gmail import state_machines as sm_mod
+        from volnix.packs.verified.gmail import pack as pack_mod
+        from volnix.packs.verified.gmail import handlers as handlers_mod
+        from volnix.packs.verified.gmail import schemas as schemas_mod
+        from volnix.packs.verified.gmail import state_machines as sm_mod
 
         forbidden_prefixes = (
-            "terrarium.persistence",
-            "terrarium.engines",
-            "terrarium.bus",
+            "volnix.persistence",
+            "volnix.engines",
+            "volnix.bus",
         )
 
         for mod in [pack_mod, handlers_mod, schemas_mod, sm_mod]:

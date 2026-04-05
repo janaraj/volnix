@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from terrarium.core.types import (
+from volnix.core.types import (
     ActorId,
     EntityId,
     EventId,
@@ -19,7 +19,7 @@ from terrarium.core.types import (
     Timestamp,
     ToolName,
 )
-from terrarium.core.events import (
+from volnix.core.events import (
     AnimatorEvent,
     BudgetExhaustedEvent,
     BudgetWarningEvent,

@@ -1,12 +1,12 @@
-"""Tests for terrarium.validation.temporal -- timestamp and ordering validation."""
+"""Tests for volnix.validation.temporal -- timestamp and ordering validation."""
 
 from datetime import datetime
 
 import pytest
 
-from terrarium.core.types import ValidationType
-from terrarium.validation.schema_contracts import TemporalOrderingRule
-from terrarium.validation.temporal import TemporalValidator
+from volnix.core.types import ValidationType
+from volnix.validation.schema_contracts import TemporalOrderingRule
+from volnix.validation.temporal import TemporalValidator
 
 
 @pytest.fixture

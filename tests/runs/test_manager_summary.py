@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from terrarium.core.types import RunId
-from terrarium.runs.config import RunConfig
-from terrarium.persistence.manager import ConnectionManager
+from volnix.core.types import RunId
+from volnix.runs.config import RunConfig
+from volnix.persistence.manager import ConnectionManager
 
 
 def _make_manager(tmp_path: Path):
     """Create a RunManager with a temp data dir."""
-    from terrarium.runs.manager import RunManager
+    from volnix.runs.manager import RunManager
     config = RunConfig(data_dir=str(tmp_path / "runs"))
     persistence = ConnectionManager.__new__(ConnectionManager)
     persistence._base_dir = tmp_path

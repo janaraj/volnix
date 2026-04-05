@@ -1,4 +1,4 @@
-"""Tests for terrarium.engines.animator.generator -- OrganicGenerator.
+"""Tests for volnix.engines.animator.generator -- OrganicGenerator.
 
 Covers: budget enforcement, LLM failure handling, event parsing.
 """
@@ -11,11 +11,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.engines.animator.config import AnimatorConfig
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.engines.animator.generator import OrganicGenerator
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.llm.types import LLMResponse
+from volnix.engines.animator.config import AnimatorConfig
+from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.animator.generator import OrganicGenerator
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.llm.types import LLMResponse
 
 
 def _utc():

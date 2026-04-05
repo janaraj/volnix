@@ -1,7 +1,7 @@
 """Tests for ScorecardComputer -- per-actor and aggregate metrics."""
 import pytest
 
-from terrarium.engines.reporter.scorecard import ScorecardComputer
+from volnix.engines.reporter.scorecard import ScorecardComputer
 from tests.engines.reporter.conftest import (
     make_budget_exhausted,
     make_budget_warning,
@@ -383,8 +383,8 @@ async def test_sla_adherence_per_actor_not_global():
     # a1 has a ticket action and an SLA breach
     # a2 has a ticket action and NO SLA breach
     from tests.engines.reporter.conftest import make_ts, make_world_event
-    from terrarium.core.events import WorldEvent
-    from terrarium.core.types import ActorId, ServiceId
+    from volnix.core.events import WorldEvent
+    from volnix.core.types import ActorId, ServiceId
 
     events = [
         make_world_event(actor_id="a1", action="ticket_resolve", tick=1),

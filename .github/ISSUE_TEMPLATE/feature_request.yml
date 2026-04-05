@@ -21,7 +21,7 @@ body:
     attributes:
       label: Proposed Solution
       description: How would you like this to work?
-      placeholder: It would be great if Terrarium could ...
+      placeholder: It would be great if Volnix could ...
     validations:
       required: true
 
@@ -35,7 +35,7 @@ body:
     id: area
     attributes:
       label: Area
-      description: Which part of Terrarium does this relate to?
+      description: Which part of Volnix does this relate to?
       options:
         - CLI
         - World Compiler

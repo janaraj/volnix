@@ -1,8 +1,8 @@
-"""Tests for terrarium.registry.registry — EngineRegistry."""
+"""Tests for volnix.registry.registry — EngineRegistry."""
 import pytest
-from terrarium.registry.registry import EngineRegistry
-from terrarium.core.errors import EngineDependencyError
-from terrarium.core.protocols import PipelineStep
+from volnix.registry.registry import EngineRegistry
+from volnix.core.errors import EngineDependencyError
+from volnix.core.protocols import PipelineStep
 from tests.registry.conftest import make_mock_engine
 
 

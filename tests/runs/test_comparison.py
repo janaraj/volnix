@@ -1,10 +1,10 @@
-"""Tests for terrarium.runs.comparison — run-to-run comparison and scoring."""
+"""Tests for volnix.runs.comparison — run-to-run comparison and scoring."""
 import pytest
 
-from terrarium.core.types import RunId
-from terrarium.runs.artifacts import ArtifactStore
-from terrarium.runs.comparison import RunComparator
-from terrarium.runs.config import RunConfig
+from volnix.core.types import RunId
+from volnix.runs.artifacts import ArtifactStore
+from volnix.runs.comparison import RunComparator
+from volnix.runs.config import RunConfig
 
 
 def _make_comparator(tmp_path) -> tuple[RunComparator, ArtifactStore]:

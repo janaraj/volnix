@@ -1,7 +1,7 @@
 """Live Test: Natural Language World Creation
 
 Simulates the user flow:
-    terrarium create "A support team with email for 10 customers" --reality messy
+    volnix create "A support team with email for 10 customers" --reality messy
 
 This test:
 1. Takes an NL description (like CLI would receive)
@@ -25,15 +25,15 @@ import json
 import pytest
 import yaml
 
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 
 
 @pytest.mark.asyncio
 class TestNLCreateWorld:
-    """User describes a world in natural language → Terrarium creates it."""
+    """User describes a world in natural language → Volnix creates it."""
 
     async def test_nl_support_team(self, live_app) -> None:
-        """terrarium create 'A support team with email, 10 customers, some frustrated'"""
+        """volnix create 'A support team with email, 10 customers, some frustrated'"""
         compiler = live_app.registry.get("world_compiler")
 
         print("\n" + "=" * 70)
@@ -85,7 +85,7 @@ class TestNLCreateWorld:
         assert plan.source == "nl"
 
     async def test_nl_ecommerce_world(self, live_app) -> None:
-        """terrarium create 'An e-commerce store with payments and order management'"""
+        """volnix create 'An e-commerce store with payments and order management'"""
         compiler = live_app.registry.get("world_compiler")
 
         print("\n" + "=" * 70)

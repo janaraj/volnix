@@ -1,11 +1,11 @@
-"""Tests for terrarium.kernel.resolver -- ServiceResolver resolution chain."""
+"""Tests for volnix.kernel.resolver -- ServiceResolver resolution chain."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.kernel.registry import SemanticRegistry
-from terrarium.kernel.resolver import ServiceResolver
-from terrarium.kernel.surface import APIOperation, ServiceSurface
+from volnix.kernel.registry import SemanticRegistry
+from volnix.kernel.resolver import ServiceResolver
+from volnix.kernel.surface import APIOperation, ServiceSurface
 
 
 @pytest.fixture

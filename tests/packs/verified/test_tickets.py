@@ -1,14 +1,14 @@
-"""Tests for terrarium.packs.verified.zendesk -- TicketsPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.zendesk -- TicketsPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.zendesk.pack import TicketsPack
-from terrarium.packs.verified.zendesk.schemas import ORGANIZATION_ENTITY_SCHEMA
-from terrarium.packs.verified.zendesk.state_machines import TICKET_STATES, TICKET_TRANSITIONS
-from terrarium.validation.schema import SchemaValidator
-from terrarium.validation.state_machine import StateMachineValidator
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.zendesk.pack import TicketsPack
+from volnix.packs.verified.zendesk.schemas import ORGANIZATION_ENTITY_SCHEMA
+from volnix.packs.verified.zendesk.state_machines import TICKET_STATES, TICKET_TRANSITIONS
+from volnix.validation.schema import SchemaValidator
+from volnix.validation.state_machine import StateMachineValidator
 
 
 @pytest.fixture
@@ -266,7 +266,7 @@ class TestTicketsPackMetadata:
         assert "details" in props
         assert "notes" in props
         assert "group_id" in props
-        assert ORGANIZATION_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert ORGANIZATION_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
 
 class TestTicketsPackActions:

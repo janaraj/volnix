@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from terrarium.core.types import ActorId, EntityId
+from volnix.core.types import ActorId, EntityId
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ def _make_permission_engine(
     entities: dict[str, list[dict[str, Any]]] | None = None,
 ) -> Any:
     """Create a PermissionEngine with mock state engine."""
-    from terrarium.engines.permission.engine import PermissionEngine
+    from volnix.engines.permission.engine import PermissionEngine
 
     engine = PermissionEngine()
 
@@ -277,18 +277,18 @@ class TestVisibilityHarness:
     """Catch regressions if visibility system is modified."""
 
     def test_protocol_defines_both_methods(self):
-        from terrarium.core.protocols import PermissionEngineProtocol
+        from volnix.core.protocols import PermissionEngineProtocol
         assert hasattr(PermissionEngineProtocol, "get_visible_entities")
         assert hasattr(PermissionEngineProtocol, "has_visibility_rules")
 
     def test_permission_engine_implements_both(self):
-        from terrarium.engines.permission.engine import PermissionEngine
+        from volnix.engines.permission.engine import PermissionEngine
         assert hasattr(PermissionEngine, "get_visible_entities")
         assert hasattr(PermissionEngine, "has_visibility_rules")
         assert hasattr(PermissionEngine, "_resolve_self_ref")
 
     def test_visibility_rule_type_exists(self):
-        from terrarium.core.types import VisibilityRule
+        from volnix.core.types import VisibilityRule
         rule = VisibilityRule(
             id="test", actor_role="test", target_entity_type="test",
         )
@@ -297,12 +297,12 @@ class TestVisibilityHarness:
         assert rule.include_unmatched is False
 
     def test_config_has_visibility_rule_entity_type(self):
-        from terrarium.engines.permission.config import PermissionConfig
+        from volnix.engines.permission.config import PermissionConfig
         config = PermissionConfig()
         assert config.visibility_rule_entity_type == "visibility_rule"
 
     def test_visibility_rule_is_frozen(self):
-        from terrarium.core.types import VisibilityRule
+        from volnix.core.types import VisibilityRule
         rule = VisibilityRule(
             id="test", actor_role="test", target_entity_type="test",
         )

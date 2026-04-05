@@ -1,16 +1,16 @@
-"""Tests for terrarium.llm.router -- model routing per engine and default fallback."""
+"""Tests for volnix.llm.router -- model routing per engine and default fallback."""
 
 import time
 
 import pytest
 
-from terrarium.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
-from terrarium.llm.provider import LLMProvider
-from terrarium.llm.providers.mock import MockLLMProvider
-from terrarium.llm.registry import ProviderRegistry
-from terrarium.llm.router import LLMRouter
-from terrarium.llm.tracker import UsageTracker
-from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
+from volnix.llm.provider import LLMProvider
+from volnix.llm.providers.mock import MockLLMProvider
+from volnix.llm.registry import ProviderRegistry
+from volnix.llm.router import LLMRouter
+from volnix.llm.tracker import UsageTracker
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 
 
 def _make_router(

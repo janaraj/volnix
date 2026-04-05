@@ -1,7 +1,7 @@
 """Tests for WorldChallengeAnalyzer -- world-to-agent observation."""
 import pytest
 
-from terrarium.engines.reporter.world_challenges import (
+from volnix.engines.reporter.world_challenges import (
     ChallengeResponse,
     WorldChallengeAnalyzer,
     WorldChallengeEntry,

@@ -1,27 +1,27 @@
 # External Demo: E-commerce Order Management
 
-From zero to governed AI in 5 minutes. Two external agents connect via OpenAI SDK — Terrarium enforces governance automatically.
+From zero to governed AI in 5 minutes. Two external agents connect via OpenAI SDK — Volnix enforces governance automatically.
 
 ## Quick start
 
 ```bash
 # All-in-one: compiles world, starts server, runs agents
-cd /path/to/terrarium
+cd /path/to/volnix
 bash examples/launch-demo/external/run.sh
 ```
 
 Or step by step:
 
 ```bash
-# Terminal 1: Start Terrarium
-uv run terrarium serve demo_ecommerce \
+# Terminal 1: Start Volnix
+uv run volnix serve demo_ecommerce \
   --agents examples/launch-demo/external/agents.yaml --port 8080
 
 # Terminal 2: Run agents
 uv run python examples/launch-demo/external/run.py
 
 # Terminal 3: Dashboard
-cd terrarium-dashboard && npm run dev
+cd volnix-dashboard && npm run dev
 ```
 
 ## The world (20 lines of YAML)
@@ -63,13 +63,13 @@ Same tasks, different governance outcomes. The support-bot can't write to Stripe
 ## How it works
 
 1. **YAML blueprint** defines the world: services, policies, seeds, reality
-2. **`terrarium serve`** compiles the world (generates entities from seeds) and starts the server
-3. **Agents connect** via standard OpenAI SDK — zero Terrarium imports needed
+2. **`volnix serve`** compiles the world (generates entities from seeds) and starts the server
+3. **Agents connect** via standard OpenAI SDK — zero Volnix imports needed
 4. **Governance enforced** automatically: permission → policy → budget → responder → commit
 5. **Dashboard** shows everything: events, scorecard, entities, budget status
 
 ## Files
 
-- World: `terrarium/blueprints/official/demo_ecommerce.yaml`
+- World: `volnix/blueprints/official/demo_ecommerce.yaml`
 - Agents: `examples/launch-demo/external/agents.yaml`
 - Script: `examples/launch-demo/external/run.py`

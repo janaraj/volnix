@@ -1,15 +1,15 @@
-"""Tests for terrarium.bus.bus — EventBus publish/subscribe and metrics."""
+"""Tests for volnix.bus.bus — EventBus publish/subscribe and metrics."""
 import asyncio
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.bus import EventBus
-from terrarium.bus.config import BusConfig
-from terrarium.bus.middleware import LoggingMiddleware, MetricsMiddleware
-from terrarium.bus.types import BusMetrics
-from terrarium.core.events import Event
-from terrarium.core.types import EventId, Timestamp
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.bus.bus import EventBus
+from volnix.bus.config import BusConfig
+from volnix.bus.middleware import LoggingMiddleware, MetricsMiddleware
+from volnix.bus.types import BusMetrics
+from volnix.core.events import Event
+from volnix.core.types import EventId, Timestamp
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 def _make_event(event_type: str = "test.event") -> Event:

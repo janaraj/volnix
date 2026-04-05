@@ -1,13 +1,13 @@
-"""AutoGen + Terrarium integration example.
+"""AutoGen + Volnix integration example.
 
 Based on the official AutoGen teams tutorial:
   python/docs/src/user-guide/agentchat-user-guide/tutorial/teams.ipynb
 
-The ONLY change: tools come from Terrarium instead of local Python functions.
+The ONLY change: tools come from Volnix instead of local Python functions.
 
 Prerequisites:
-    pip install autogen-agentchat autogen-ext[openai] terrarium
-    terrarium serve --world <world_id> --port 8080
+    pip install autogen-agentchat autogen-ext[openai] volnix
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -21,11 +21,11 @@ from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from dotenv import load_dotenv
 
-from terrarium.adapters.autogen import autogen_tools
+from volnix.adapters.autogen import autogen_tools
 
 load_dotenv()  # loads .env from current directory or parent
 
-TERRARIUM_URL = "http://localhost:8080"
+VOLNIX_URL = "http://localhost:8080"
 
 
 async def main():
@@ -33,17 +33,17 @@ async def main():
     # BEFORE (from AutoGen tutorial):
     #   tools = [increment_number]  # local Python function
     #
-    # AFTER: Each agent gets tools bound to its Terrarium identity.
+    # AFTER: Each agent gets tools bound to its Volnix identity.
     # Permissions + budgets are defined in the agent YAML profile
-    # and enforced by Terrarium's governance pipeline.
-    researcher_tools = await autogen_tools(url=TERRARIUM_URL, actor_id="research-analyst")
-    advisor_tools = await autogen_tools(url=TERRARIUM_URL, actor_id="investment-advisor")
-    print(f"Discovered {len(researcher_tools)} tools from Terrarium")
+    # and enforced by Volnix's governance pipeline.
+    researcher_tools = await autogen_tools(url=VOLNIX_URL, actor_id="research-analyst")
+    advisor_tools = await autogen_tools(url=VOLNIX_URL, actor_id="investment-advisor")
+    print(f"Discovered {len(researcher_tools)} tools from Volnix")
     # ──────────────────────────────────────────────────────────────
 
     tool_model = OpenAIChatCompletionClient(model="gpt-4.1-mini", parallel_tool_calls=False)
 
-    # Multi-agent team — each agent has its own Terrarium identity
+    # Multi-agent team — each agent has its own Volnix identity
     researcher = AssistantAgent(
         "researcher",
         model_client=tool_model,

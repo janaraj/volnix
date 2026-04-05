@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Terrarium ACP Server Launcher
+# Volnix ACP Server Launcher
 # Starts ACP server adapters for locally-installed CLI tools.
-# Called by: terrarium setup (CLI command, Phase H1)
+# Called by: volnix setup (CLI command, Phase H1)
 #
 # Prerequisites:
 #   - Node.js + npx installed
@@ -53,7 +53,7 @@ start_codex_acp() {
 }
 
 echo "══════════════════════════════════════════════════════════"
-echo "  Terrarium — ACP Server Launcher"
+echo "  Volnix — ACP Server Launcher"
 echo "══════════════════════════════════════════════════════════"
 echo ""
 

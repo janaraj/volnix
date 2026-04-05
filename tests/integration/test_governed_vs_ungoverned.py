@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.core.types import RunId
-from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.packs.verified.gmail.pack import EmailPack
-from terrarium.reality.presets import load_preset
-from terrarium.runs.comparison import RunComparator
+from volnix.core.types import RunId
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+from volnix.kernel.surface import ServiceSurface
+from volnix.packs.verified.gmail.pack import EmailPack
+from volnix.reality.presets import load_preset
+from volnix.runs.comparison import RunComparator
 
 
 def _make_email_plan(mode: str = "governed") -> WorldPlan:

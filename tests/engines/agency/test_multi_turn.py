@@ -16,13 +16,13 @@ import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
-from terrarium.actors.state import ActorState
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import ActorId, EntityId, ServiceId, Timestamp
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.engines.agency.prompt_builder import ActorPromptBuilder
-from terrarium.llm.types import LLMResponse, ToolCall, ToolDefinition
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.actors.state import ActorState
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, ServiceId, Timestamp
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.llm.types import LLMResponse, ToolCall, ToolDefinition
+from volnix.simulation.world_context import WorldContextBundle
 
 
 # ---------------------------------------------------------------------------

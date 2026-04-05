@@ -1,0 +1,72 @@
+# ══════════════════════════════════════════════════════════════
+# Volnix Development Overrides
+# ══════════════════════════════════════════════════════════════
+# Layered on top of volnix.toml in development environment.
+# Uses in-memory databases and local paths for fast iteration.
+
+[simulation]
+seed = 1
+mode = "governed"
+
+[bus]
+db_path = ":memory:"
+queue_size = 100
+
+[ledger]
+db_path = ":memory:"
+retention_days = 7
+
+[persistence]
+base_dir = "./dev_data"
+
+[state]
+db_path = "./dev_data/state.db"
+snapshot_dir = "./dev_data/snapshots"
+
+[policy]
+condition_timeout_ms = 2000         # generous timeout for debugging
+
+[budget]
+warning_threshold_pct = 90          # relaxed thresholds for dev
+critical_threshold_pct = 99
+
+[responder]
+max_retries = 1                     # fail fast in dev
+fallback_enabled = false
+
+[animator]
+enabled = false                     # disabled by default in dev
+
+[reporter]
+output_dir = "./dev_data/reports"
+
+[feedback]
+# annotations_db_path removed — DB path managed by ConnectionManager
+
+[dashboard]
+host = "127.0.0.1"
+port = 8200
+enabled = true                      # enabled for dev
+
+[gateway]
+host = "127.0.0.1"
+port = 8000
+middleware = ["audit_log"]          # minimal middleware in dev
+
+[runs]
+data_dir = "./dev_data/runs"
+snapshot_on_complete = false
+
+[logging]
+level = "DEBUG"
+format = "text"                     # "text" for readability, "json" for production
+
+# ── LLM: use Ollama locally when available ───────────────────
+
+[llm.defaults]
+provider = "gemini"
+model = "gemini-3-flash-preview"
+max_tokens = 2048
+temperature = 0.7
+timeout_seconds = 120               # longer timeout for local models
+max_retries = 1

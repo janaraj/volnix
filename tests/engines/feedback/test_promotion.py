@@ -1,8 +1,8 @@
 """Tests for TierPromoter -- fidelity tier promotion evaluation and execution."""
 from __future__ import annotations
 
-from terrarium.engines.feedback.promotion import TierPromoter
-from terrarium.packs.profile_loader import ProfileLoader
+from volnix.engines.feedback.promotion import TierPromoter
+from volnix.packs.profile_loader import ProfileLoader
 
 
 async def test_evaluate_eligible(
@@ -52,7 +52,7 @@ async def test_evaluate_not_eligible_few_operations(
     """Service with < 3 operations is NOT eligible."""
     await annotation_store.add("twilio", "Reviewed", "user")
 
-    from terrarium.engines.feedback.models import ObservedOperation
+    from volnix.engines.feedback.models import ObservedOperation
 
     captured = make_captured_surface(
         operations=[
@@ -134,7 +134,7 @@ async def test_evaluate_high_error_rate(
     """M7: Service with high error rate is NOT eligible."""
     await annotation_store.add("twilio", "Reviewed", "user")
 
-    from terrarium.engines.feedback.models import ObservedOperation
+    from volnix.engines.feedback.models import ObservedOperation
 
     captured = make_captured_surface(
         operations=[

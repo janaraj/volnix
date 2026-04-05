@@ -1,6 +1,6 @@
-"""E2E tests: External agent connecting to Terrarium via MCP transport.
+"""E2E tests: External agent connecting to Volnix via MCP transport.
 
-Simulates what a real MCP client does when connecting to Terrarium's
+Simulates what a real MCP client does when connecting to Volnix's
 MCP server:
   1. list_tools() → discover available tools
   2. call_tool(name, args) → execute actions
@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from tests.external_agent.conftest import _make_gateway_with_tools
-from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
+from volnix.engines.adapter.protocols.mcp_server import MCPServerAdapter
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ class TestMCPToolExecution:
         )
 
         # Simulate what MCPServerAdapter does: unwrap + serialize
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 
@@ -89,7 +89,7 @@ class TestMCPToolExecution:
             input_data={},
         )
 
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 
@@ -112,7 +112,7 @@ class TestMCPToolExecution:
             input_data={"id": "t-1", "status": "closed"},
         )
 
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 
@@ -127,7 +127,7 @@ class TestMCPTriageWorkflow:
         """Complete triage cycle through MCP adapter."""
         adapter, gateway = mcp_adapter
 
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 
@@ -191,7 +191,7 @@ class TestMCPEdgeCases:
 
     async def test_unwrap_single_key_none_value(self):
         """{"ticket": None} → NOT unwrapped (value is not dict)."""
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 
@@ -201,7 +201,7 @@ class TestMCPEdgeCases:
 
     async def test_unwrap_empty_dict(self):
         """{} → passes through unchanged."""
-        from terrarium.engines.adapter.protocols._response import (
+        from volnix.engines.adapter.protocols._response import (
             unwrap_single_entity,
         )
 

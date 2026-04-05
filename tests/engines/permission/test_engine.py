@@ -1,12 +1,12 @@
 """Tests for the PermissionEngine — real permission checks."""
 import pytest
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from terrarium.core.events import PermissionDeniedEvent
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.engines.permission.engine import PermissionEngine
+from volnix.core.context import ActionContext
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.core.events import PermissionDeniedEvent
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.engines.permission.engine import PermissionEngine
 
 
 def _make_ctx(

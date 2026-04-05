@@ -5,12 +5,12 @@ A 3-agent support team handles a messy queue autonomously. The world is dynamic 
 ## Quick start
 
 ```bash
-# Start Terrarium with internal agents (compiles world automatically)
-cd /path/to/terrarium
+# Start Volnix with internal agents (compiles world automatically)
+cd /path/to/volnix
 bash examples/launch-demo/internal/run.sh
 
 # Start dashboard in another terminal
-cd terrarium-dashboard && npm run dev
+cd volnix-dashboard && npm run dev
 ```
 
 ## What happens
@@ -41,5 +41,5 @@ Three agents with different roles and permissions work together:
 
 ## Files
 
-- World: `terrarium/blueprints/official/demo_support_escalation.yaml`
-- Agents: `terrarium/blueprints/official/agents_support_team.yaml`
+- World: `volnix/blueprints/official/demo_support_escalation.yaml`
+- Agents: `volnix/blueprints/official/agents_support_team.yaml`

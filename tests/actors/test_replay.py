@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from terrarium.actors.replay import ReplayEntry, ReplayLog
+from volnix.actors.replay import ReplayEntry, ReplayLog
 
 
 def _make_entry(**kwargs) -> ReplayEntry:

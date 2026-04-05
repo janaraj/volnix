@@ -2,21 +2,21 @@
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.bus import EventBus
-from terrarium.bus.config import BusConfig
-from terrarium.core.events import Event
-from terrarium.core.types import ActorId, Timestamp
-from terrarium.ledger.config import LedgerConfig
-from terrarium.ledger.entries import (
+from volnix.bus.bus import EventBus
+from volnix.bus.config import BusConfig
+from volnix.core.events import Event
+from volnix.core.types import ActorId, Timestamp
+from volnix.ledger.config import LedgerConfig
+from volnix.ledger.entries import (
     EngineLifecycleEntry,
     LLMCallEntry,
     PipelineStepEntry,
 )
-from terrarium.ledger.ledger import Ledger
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.persistence.manager import ConnectionManager
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.ledger.ledger import Ledger
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.config import PersistenceConfig
+from volnix.persistence.manager import ConnectionManager
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 def _make_event(event_type: str = "test.event") -> Event:

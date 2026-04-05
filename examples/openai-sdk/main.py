@@ -1,11 +1,11 @@
-"""OpenAI SDK + Terrarium integration example.
+"""OpenAI SDK + Volnix integration example.
 
-Zero Terrarium imports. Uses the OpenAI compat endpoint to discover
-and execute tools against a running Terrarium world.
+Zero Volnix imports. Uses the OpenAI compat endpoint to discover
+and execute tools against a running Volnix world.
 
 Prerequisites:
     pip install openai httpx
-    terrarium serve --world <world_id> --port 8080
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -20,14 +20,14 @@ from openai import OpenAI
 
 load_dotenv()  # loads .env from current directory or parent
 
-TERRARIUM_URL = "http://localhost:8080"
+VOLNIX_URL = "http://localhost:8080"
 ACTOR_ID = "financial-analyst"
 
 
 def main():
-    # 1. Discover tools from Terrarium (OpenAI function calling format)
-    tools = httpx.get(f"{TERRARIUM_URL}/openai/v1/tools").json()
-    print(f"Discovered {len(tools)} tools from Terrarium")
+    # 1. Discover tools from Volnix (OpenAI function calling format)
+    tools = httpx.get(f"{VOLNIX_URL}/openai/v1/tools").json()
+    print(f"Discovered {len(tools)} tools from Volnix")
 
     # 2. Create OpenAI client (uses OPENAI_API_KEY from env)
     client = OpenAI()
@@ -68,12 +68,12 @@ def main():
         # Add assistant message with tool calls
         messages.append(message)
 
-        # 4. Execute each tool call against Terrarium world
+        # 4. Execute each tool call against Volnix world
         for tc in message.tool_calls:
             print(f"  Tool call: {tc.function.name}({tc.function.arguments[:80]}...)")
 
             result = httpx.post(
-                f"{TERRARIUM_URL}/openai/v1/tools/call",
+                f"{VOLNIX_URL}/openai/v1/tools/call",
                 json={
                     "name": tc.function.name,
                     "arguments": json.loads(tc.function.arguments),

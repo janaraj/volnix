@@ -1,18 +1,18 @@
-"""Tests for terrarium.packs.verified.alpaca -- TradingPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.alpaca -- TradingPack through pack's own handle_action."""
 
 from __future__ import annotations
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.base import ServicePack
-from terrarium.packs.verified.alpaca.handlers import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.base import ServicePack
+from volnix.packs.verified.alpaca.handlers import (
     SLIPPAGE_BPS,
     _compute_fill_price,
 )
-from terrarium.packs.verified.alpaca.pack import TradingPack
-from terrarium.packs.verified.alpaca.state_machines import (
+from volnix.packs.verified.alpaca.pack import TradingPack
+from volnix.packs.verified.alpaca.state_machines import (
     ORDER_TRANSITIONS,
 )
 
@@ -228,7 +228,7 @@ def sample_state():
                 "author": "Reuters",
                 "created_at": "2026-03-24T16:05:00Z",
                 "summary": "NVIDIA reported quarterly earnings above expectations.",
-                "url": "https://terrarium.sim/news/001",
+                "url": "https://volnix.sim/news/001",
                 "symbols": ["NVDA"],
                 "source": "reuters",
                 "factual_accuracy": 0.95,
@@ -241,7 +241,7 @@ def sample_state():
                 "author": "SocialPost",
                 "created_at": "2026-03-24T09:30:00Z",
                 "summary": "Unverified social post claims Apple will miss.",
-                "url": "https://terrarium.sim/news/002",
+                "url": "https://volnix.sim/news/002",
                 "symbols": ["AAPL"],
                 "source": "social",
                 "factual_accuracy": 0.1,

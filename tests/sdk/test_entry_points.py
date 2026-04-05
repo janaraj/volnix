@@ -1,4 +1,4 @@
-"""Tests for terrarium.sdk public entry points."""
+"""Tests for volnix.sdk public entry points."""
 from __future__ import annotations
 
 import httpx

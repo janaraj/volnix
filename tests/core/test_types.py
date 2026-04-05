@@ -1,6 +1,6 @@
-"""Tests for terrarium.core.types — NewType aliases, enums, and frozen dataclasses."""
+"""Tests for volnix.core.types — NewType aliases, enums, and frozen dataclasses."""
 import pytest
-from terrarium.core.types import (
+from volnix.core.types import (
     EntityId, ActorId, ServiceId, EventId, ToolName, RunId,
     FidelityTier, FidelitySource, FidelityMode, RealityPreset,
     BehaviorMode,

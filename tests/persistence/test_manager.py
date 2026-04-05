@@ -1,7 +1,7 @@
-"""Tests for terrarium.persistence.manager — database connection management."""
+"""Tests for volnix.persistence.manager — database connection management."""
 import pytest
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.persistence.manager import ConnectionManager
+from volnix.persistence.config import PersistenceConfig
+from volnix.persistence.manager import ConnectionManager
 
 
 async def test_connection_manager_initialize(tmp_path):

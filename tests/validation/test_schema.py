@@ -1,9 +1,9 @@
-"""Tests for terrarium.validation.schema -- response schema validation."""
+"""Tests for volnix.validation.schema -- response schema validation."""
 
 import pytest
 
-from terrarium.core.types import ValidationType
-from terrarium.validation.schema import SchemaValidator, ValidationResult
+from volnix.core.types import ValidationType
+from volnix.validation.schema import SchemaValidator, ValidationResult
 
 
 # ---------------------------------------------------------------------------

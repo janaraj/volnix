@@ -10,12 +10,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from terrarium.core.types import ActorId, ActorType, StepVerdict
+from volnix.core.types import ActorId, ActorType, StepVerdict
 
 
 def _make_observer_engine(actor_type: str = "observer") -> tuple:
     """Create PermissionEngine with mock actor of given type."""
-    from terrarium.engines.permission.engine import PermissionEngine
+    from volnix.engines.permission.engine import PermissionEngine
 
     engine = PermissionEngine()
 
@@ -103,14 +103,14 @@ class TestObserverHarness:
 
     def test_config_has_read_prefixes(self):
         """PermissionConfig must define observer_read_prefixes."""
-        from terrarium.engines.permission.config import PermissionConfig
+        from volnix.engines.permission.config import PermissionConfig
         config = PermissionConfig()
         assert isinstance(config.observer_read_prefixes, list)
         assert len(config.observer_read_prefixes) > 0
 
     def test_common_read_actions_in_prefixes(self):
         """Basic read prefixes must be present."""
-        from terrarium.engines.permission.config import PermissionConfig
+        from volnix.engines.permission.config import PermissionConfig
         config = PermissionConfig()
         required = {"list", "get", "search", "read", "query"}
         actual = set(config.observer_read_prefixes)

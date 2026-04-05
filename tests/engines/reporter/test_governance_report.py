@@ -12,7 +12,7 @@ def _make_generator() -> tuple:
 
     Uses AsyncMock so tests catch missing await keywords.
     """
-    from terrarium.engines.reporter.governance_report import GovernanceReportGenerator
+    from volnix.engines.reporter.governance_report import GovernanceReportGenerator
 
     scorecard = AsyncMock()
     scorecard.compute.return_value = {
@@ -93,13 +93,13 @@ class TestGovernanceReportHarness:
     """Structural contracts."""
 
     def test_governance_report_in_artifact_types(self):
-        from terrarium.runs.artifacts import _ALLOWED_ARTIFACT_TYPES
+        from volnix.runs.artifacts import _ALLOWED_ARTIFACT_TYPES
         assert "governance_report" in _ALLOWED_ARTIFACT_TYPES
 
     def test_reporter_has_governance_method(self):
-        from terrarium.engines.reporter.engine import ReportGeneratorEngine
+        from volnix.engines.reporter.engine import ReportGeneratorEngine
         assert hasattr(ReportGeneratorEngine, "generate_governance_report")
 
     def test_governance_generator_exists(self):
-        from terrarium.engines.reporter.governance_report import GovernanceReportGenerator
+        from volnix.engines.reporter.governance_report import GovernanceReportGenerator
         assert GovernanceReportGenerator is not None

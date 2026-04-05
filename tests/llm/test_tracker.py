@@ -1,12 +1,12 @@
-"""Tests for terrarium.llm.tracker -- LLM usage tracking and cost accounting."""
+"""Tests for volnix.llm.tracker -- LLM usage tracking and cost accounting."""
 
 from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.core.types import ActorId
-from terrarium.llm.tracker import UsageTracker
-from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage
+from volnix.core.types import ActorId
+from volnix.llm.tracker import UsageTracker
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
 
 
 def _make_response(

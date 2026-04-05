@@ -2,9 +2,9 @@
 import pytest
 import yaml
 
-from terrarium.core.errors import YAMLParseError
-from terrarium.engines.world_compiler.yaml_parser import YAMLParser
-from terrarium.reality.dimensions import WorldConditions
+from volnix.core.errors import YAMLParseError
+from volnix.engines.world_compiler.yaml_parser import YAMLParser
+from volnix.reality.dimensions import WorldConditions
 
 
 # ---------------------------------------------------------------------------

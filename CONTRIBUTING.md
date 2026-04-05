@@ -1,6 +1,6 @@
-# Contributing to Terrarium
+# Contributing to Volnix
 
-Thank you for your interest in contributing to Terrarium. This guide covers the development setup, code standards, and process for submitting changes.
+Thank you for your interest in contributing to Volnix. This guide covers the development setup, code standards, and process for submitting changes.
 
 ---
 
@@ -9,8 +9,8 @@ Thank you for your interest in contributing to Terrarium. This guide covers the 
 1. Fork the repository on GitHub
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/terrarium.git
-   cd terrarium
+   git clone https://github.com/YOUR_USERNAME/volnix.git
+   cd volnix
    ```
 3. Install dependencies (requires Python 3.12+):
    ```bash
@@ -19,8 +19,8 @@ Thank you for your interest in contributing to Terrarium. This guide covers the 
 4. Verify your setup:
    ```bash
    uv run pytest tests/simulation/test_runner.py -v
-   uv run ruff check terrarium/
-   uv run mypy terrarium/
+   uv run ruff check volnix/
+   uv run mypy volnix/
    ```
 
 ---
@@ -36,9 +36,9 @@ Thank you for your interest in contributing to Terrarium. This guide covers the 
 4. Run the full check suite:
    ```bash
    uv run pytest
-   uv run ruff check terrarium/ tests/
-   uv run ruff format --check terrarium/ tests/
-   uv run mypy terrarium/
+   uv run ruff check volnix/ tests/
+   uv run ruff format --check volnix/ tests/
+   uv run mypy volnix/
    ```
 5. Commit and push to your fork
 6. Open a pull request against `main`
@@ -58,10 +58,10 @@ uv run pytest tests/simulation/test_runner.py -v
 uv run pytest tests/simulation/test_runner.py::TestEndConditions::test_empty_queue_stops -v
 
 # Run with coverage
-uv run pytest --cov=terrarium --cov-report=term-missing
+uv run pytest --cov=volnix --cov-report=term-missing
 ```
 
-Coverage minimum is **80%**. Tests that hit live LLM APIs are isolated in `tests/live/` and skipped by default. They only run when `TERRARIUM_RUN_REAL_API_TESTS=1` is set.
+Coverage minimum is **80%**. Tests that hit live LLM APIs are isolated in `tests/live/` and skipped by default. They only run when `VOLNIX_RUN_REAL_API_TESTS=1` is set.
 
 Tests use `pytest-asyncio` with `asyncio_mode = "auto"` -- no `@pytest.mark.asyncio` decorators needed. Shared fixtures are in `tests/conftest.py`.
 
@@ -69,7 +69,7 @@ Tests use `pytest-asyncio` with `asyncio_mode = "auto"` -- no `@pytest.mark.asyn
 
 ## Code Standards
 
-Terrarium follows strict architectural principles. Read [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for the full picture. Here are the essentials:
+Volnix follows strict architectural principles. Read [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for the full picture. Here are the essentials:
 
 ### Async everywhere
 All I/O is async. Use `aiosqlite`, `httpx`, async SDK methods. Wrap sync libraries with `asyncio.to_thread()`.
@@ -110,12 +110,12 @@ Thresholds, timeouts, limits, and provider names come from TOML config. Engine c
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/janaraj/terrarium/issues) with:
+Open a [GitHub Issue](https://github.com/janaraj/volnix/issues) with:
 
 - What you expected to happen
 - What actually happened
 - Steps to reproduce
-- Terrarium version (`terrarium --version`)
+- Volnix version (`volnix --version`)
 - Python version
 - OS and platform
 
@@ -123,7 +123,7 @@ Open a [GitHub Issue](https://github.com/janaraj/terrarium/issues) with:
 
 ## Proposing Features
 
-Open a [GitHub Issue](https://github.com/janaraj/terrarium/issues) with:
+Open a [GitHub Issue](https://github.com/janaraj/volnix/issues) with:
 
 - The problem or use case you're trying to solve
 - Your proposed solution

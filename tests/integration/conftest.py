@@ -1,6 +1,6 @@
 """Shared fixtures for integration tests.
 
-Bootstraps a full TerrariumApp with temporary databases so that E2E
+Bootstraps a full VolnixApp with temporary databases so that E2E
 tests exercise the real pipeline, real packs, real state engine, and
 real bus/ledger -- no mocks except the LLM router (which requires a
 real API key unavailable in the test environment).
@@ -13,10 +13,10 @@ import os
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.config.schema import TerrariumConfig
-from terrarium.llm.types import LLMResponse
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.engines.state.config import StateConfig
+from volnix.config.schema import VolnixConfig
+from volnix.llm.types import LLMResponse
+from volnix.persistence.config import PersistenceConfig
+from volnix.engines.state.config import StateConfig
 
 
 # ── Mock LLM helpers ─────────────────────────────────────────────
@@ -540,16 +540,16 @@ def inject_mock_llm(app) -> AsyncMock:
 
 @pytest.fixture
 async def app(tmp_path):
-    """Fully bootstrapped TerrariumApp with tmp databases.
+    """Fully bootstrapped VolnixApp with tmp databases.
 
     Overrides persistence base_dir and state db_path so every test run
     uses isolated temporary storage.  Yields the running app and shuts
     it down on teardown.
     """
-    from terrarium.app import TerrariumApp
+    from volnix.app import VolnixApp
 
-    config = TerrariumConfig()
-    # TerrariumConfig is frozen -- use model_copy to override fields
+    config = VolnixConfig()
+    # VolnixConfig is frozen -- use model_copy to override fields
     config = config.model_copy(update={
         "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
         "state": StateConfig(
@@ -558,7 +558,7 @@ async def app(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -566,14 +566,14 @@ async def app(tmp_path):
 
 @pytest.fixture
 async def app_with_mock_llm(tmp_path):
-    """TerrariumApp with a mock LLM router injected into the compiler.
+    """VolnixApp with a mock LLM router injected into the compiler.
 
     Use this fixture for tests that call generate_world() but do not
     have a real GOOGLE_API_KEY in the environment.
     """
-    from terrarium.app import TerrariumApp
+    from volnix.app import VolnixApp
 
-    config = TerrariumConfig()
+    config = VolnixConfig()
     config = config.model_copy(update={
         "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
         "state": StateConfig(
@@ -582,7 +582,7 @@ async def app_with_mock_llm(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     inject_mock_llm(app)
     yield app
@@ -591,7 +591,7 @@ async def app_with_mock_llm(tmp_path):
 
 @pytest.fixture
 async def live_app(tmp_path):
-    """TerrariumApp with a REAL LLM router — requires GOOGLE_API_KEY.
+    """VolnixApp with a REAL LLM router — requires GOOGLE_API_KEY.
 
     Skips the test if no API key is available.  Use for integration
     tests that exercise the actual LLM pipeline.
@@ -600,9 +600,9 @@ async def live_app(tmp_path):
     if not api_key:
         pytest.skip("GOOGLE_API_KEY not set — skipping live LLM test")
 
-    from terrarium.app import TerrariumApp
+    from volnix.app import VolnixApp
 
-    config = TerrariumConfig()
+    config = VolnixConfig()
     config = config.model_copy(update={
         "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
         "state": StateConfig(
@@ -611,7 +611,7 @@ async def live_app(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()

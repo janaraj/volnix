@@ -14,16 +14,16 @@ from typing import get_type_hints
 import pytest
 import yaml
 
-from terrarium.actors.state import ActorState, InteractionRecord, Subscription
-from terrarium.engines.adapter.protocols.http_rest import COMMUNICATION_ACTIONS
-from terrarium.engines.agency.config import AgencyConfig
-from terrarium.engines.agency.prompt_builder import ActorPromptBuilder
-from terrarium.ledger.entries import (
+from volnix.actors.state import ActorState, InteractionRecord, Subscription
+from volnix.engines.adapter.protocols.http_rest import COMMUNICATION_ACTIONS
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.ledger.entries import (
     ENTRY_REGISTRY,
     CollaborationNotificationEntry,
     SubscriptionMatchEntry,
 )
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.simulation.world_context import WorldContextBundle
 
 
 # ---------------------------------------------------------------------------
@@ -107,8 +107,8 @@ class TestInteractionRecordFieldsRenderedInPrompt:
             recent_interactions=[record],
         )
 
-        from terrarium.core.events import WorldEvent
-        from terrarium.core.types import ActorId, ServiceId, Timestamp
+        from volnix.core.events import WorldEvent
+        from volnix.core.types import ActorId, ServiceId, Timestamp
         from datetime import UTC, datetime
 
         now = datetime.now(UTC)
@@ -148,7 +148,7 @@ class TestDeliverablePresetsAllValid:
 
     def test_deliverable_presets_all_valid(self):
         """All YAML files in deliverable_presets/ parse as valid presets."""
-        presets_dir = Path(__file__).parent.parent / "terrarium" / "deliverable_presets"
+        presets_dir = Path(__file__).parent.parent / "volnix" / "deliverable_presets"
         yaml_files = list(presets_dir.glob("*.yaml"))
 
         assert len(yaml_files) > 0, "No YAML files found in deliverable_presets/"
@@ -191,7 +191,7 @@ class TestSubscriptionSensitivityLevelsAllHandled:
         expected_levels = {"immediate", "batch", "passive"}
 
         # Read the source of notify() and check that each level is referenced
-        from terrarium.engines.agency.engine import AgencyEngine
+        from volnix.engines.agency.engine import AgencyEngine
         source = inspect.getsource(AgencyEngine.notify)
 
         for level in expected_levels:
@@ -206,13 +206,13 @@ class TestSubscriptionSensitivityLevelsAllHandled:
 
 
 class TestCollaborationConfigMatchesToml:
-    """All AgencyConfig collaboration fields must exist in terrarium.toml."""
+    """All AgencyConfig collaboration fields must exist in volnix.toml."""
 
     def test_collaboration_config_matches_toml(self):
         """Verify TOML [agency] section contains all collaboration config fields."""
-        toml_path = Path(__file__).parent.parent / "terrarium.toml"
+        toml_path = Path(__file__).parent.parent / "volnix.toml"
         if not toml_path.exists():
-            pytest.skip("terrarium.toml not found")
+            pytest.skip("volnix.toml not found")
 
         # Read the TOML file
         try:
@@ -235,7 +235,7 @@ class TestCollaborationConfigMatchesToml:
 
         missing = [f for f in collaboration_fields if f not in agency_section]
         assert not missing, (
-            f"AgencyConfig collaboration fields missing from terrarium.toml [agency]: {missing}"
+            f"AgencyConfig collaboration fields missing from volnix.toml [agency]: {missing}"
         )
 
 

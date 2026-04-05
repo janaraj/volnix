@@ -1,12 +1,12 @@
-"""Tests for terrarium.actors.registry -- ActorRegistry with generic query()."""
+"""Tests for volnix.actors.registry -- ActorRegistry with generic query()."""
 
 import pytest
 
-from terrarium.core.types import ActorId, ActorType
-from terrarium.core.errors import ActorNotFoundError, DuplicateActorError
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import FrictionProfile
-from terrarium.actors.registry import ActorRegistry
+from volnix.core.types import ActorId, ActorType
+from volnix.core.errors import ActorNotFoundError, DuplicateActorError
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.personality import FrictionProfile
+from volnix.actors.registry import ActorRegistry
 
 
 def _make_actor(

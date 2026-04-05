@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.zendesk -- ticket lifecycle and SLA tracking.
+"""Tests for volnix.packs.verified.zendesk -- ticket lifecycle and SLA tracking.
 
 Full test suite lives in tests/packs/verified/test_tickets.py.
 This module verifies backward-compatible import and basic smoke checks.
@@ -6,8 +6,8 @@ This module verifies backward-compatible import and basic smoke checks.
 
 import pytest
 
-from terrarium.packs.verified.zendesk.pack import TicketsPack
-from terrarium.packs.verified.zendesk.state_machines import TICKET_STATES
+from volnix.packs.verified.zendesk.pack import TicketsPack
+from volnix.packs.verified.zendesk.state_machines import TICKET_STATES
 
 
 def test_ticket_pack_tools():
@@ -23,14 +23,14 @@ def test_ticket_lifecycle_states():
 
 
 def test_ticket_valid_transitions():
-    from terrarium.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
+    from volnix.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
 
     assert "open" in TICKET_TRANSITIONS["new"]
     assert "solved" in TICKET_TRANSITIONS["open"]
 
 
 def test_ticket_invalid_transitions():
-    from terrarium.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
+    from volnix.packs.verified.zendesk.state_machines import TICKET_TRANSITIONS
 
     # closed has no valid transitions
     assert TICKET_TRANSITIONS["closed"] == []
@@ -39,7 +39,7 @@ def test_ticket_invalid_transitions():
 @pytest.mark.asyncio
 async def test_ticket_sla_tracking():
     """Smoke test: creating a ticket returns a valid proposal."""
-    from terrarium.core.types import ToolName
+    from volnix.core.types import ToolName
 
     pack = TicketsPack()
     proposal = await pack.handle_action(

@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.core.protocols import (
+from volnix.core.protocols import (
     AdapterProtocol,
     BudgetEngineProtocol,
     GatewayProtocol,
     PolicyEngineProtocol,
     StateEngineProtocol,
 )
-from terrarium.core.types import EntityId, StateDelta, ValidationType
-from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
-from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
-from terrarium.engines.budget.engine import BudgetEngine
-from terrarium.engines.policy.engine import PolicyEngine
-from terrarium.engines.state.engine import StateEngine
-from terrarium.gateway.gateway import Gateway
-from terrarium.validation.consistency import ConsistencyValidator
+from volnix.core.types import EntityId, StateDelta, ValidationType
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
+from volnix.engines.adapter.protocols.mcp_server import MCPServerAdapter
+from volnix.engines.budget.engine import BudgetEngine
+from volnix.engines.policy.engine import PolicyEngine
+from volnix.engines.state.engine import StateEngine
+from volnix.gateway.gateway import Gateway
+from volnix.validation.consistency import ConsistencyValidator
 from tests.architecture.helpers import assert_method_signature_matches_protocol
 from tests.helpers.guardrails import staged_guardrail
 
@@ -92,7 +92,7 @@ class StrictStateEngine:
     async def get_entity(self, entity_type: str, entity_id: EntityId) -> dict:
         key = (entity_type, str(entity_id))
         if key not in self._existing:
-            from terrarium.core.errors import EntityNotFoundError
+            from volnix.core.errors import EntityNotFoundError
 
             raise EntityNotFoundError(f"{entity_type}/{entity_id}")
         return self._existing[key]

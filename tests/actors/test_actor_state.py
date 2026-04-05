@@ -1,18 +1,18 @@
-"""Tests for terrarium.actors.state and ActorRegistry state management."""
+"""Tests for volnix.actors.state and ActorRegistry state management."""
 
 import pytest
 from pydantic import ValidationError
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.actors.state import (
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.actors.state import (
     ActorBehaviorTraits,
     ActorState,
     InteractionRecord,
     ScheduledAction,
     WaitingFor,
 )
-from terrarium.core.types import ActorId, ActorType, EntityId
+from volnix.core.types import ActorId, ActorType, EntityId
 
 
 class TestActorStateCreation:

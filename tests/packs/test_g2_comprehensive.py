@@ -21,18 +21,18 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import (
+from volnix.core.context import ActionContext
+from volnix.core.types import (
     ActorId,
     FidelityTier,
     ServiceId,
 )
-from terrarium.engines.responder.tier2 import Tier2Generator
-from terrarium.llm.types import LLMResponse
-from terrarium.packs.profile_infer import ProfileInferrer
-from terrarium.packs.profile_loader import ProfileLoader
-from terrarium.packs.profile_registry import ProfileRegistry
-from terrarium.packs.profile_schema import (
+from volnix.engines.responder.tier2 import Tier2Generator
+from volnix.llm.types import LLMResponse
+from volnix.packs.profile_infer import ProfileInferrer
+from volnix.packs.profile_loader import ProfileLoader
+from volnix.packs.profile_registry import ProfileRegistry
+from volnix.packs.profile_schema import (
     ProfileEntity,
     ProfileOperation,
     ServiceProfileData,
@@ -42,7 +42,7 @@ from terrarium.packs.profile_schema import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_PROFILES_DIR = Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "profiles"
+_PROFILES_DIR = Path(__file__).resolve().parents[2] / "volnix" / "packs" / "profiles"
 
 
 def _make_yaml_response(data: dict) -> str:

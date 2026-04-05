@@ -6,7 +6,7 @@ Creates a trading world where:
 - A trading agent places orders, monitors positions, reads news
 - Animator generates price updates, breaking news, sentiment shifts
 
-Requires: codex-acp binary available (uses terrarium.toml routing)
+Requires: codex-acp binary available (uses volnix.toml routing)
 
 Run with:
     uv run pytest tests/live/test_trading_simulation.py -v -s
@@ -20,19 +20,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from terrarium.core.types import RunId
+from volnix.core.types import RunId
 
 
 @pytest.fixture
 async def trading_app(tmp_path):
-    """TerrariumApp with codex-acp for trading simulation."""
+    """VolnixApp with codex-acp for trading simulation."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found — skipping live test")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -44,7 +44,7 @@ async def trading_app(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -66,13 +66,13 @@ class TestTradingSimulation:
         print("STEP 1: BUILD TRADING WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import (
+        from volnix.engines.world_compiler.plan import (
             ServiceResolution,
             WorldPlan,
         )
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.alpaca.pack import TradingPack
-        from terrarium.reality.presets import load_preset
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.alpaca.pack import TradingPack
+        from volnix.reality.presets import load_preset
 
         trading_surface = ServiceSurface.from_pack(TradingPack())
 

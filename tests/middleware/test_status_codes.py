@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import httpx
 
-from terrarium.middleware.config import MiddlewareConfig
-from terrarium.middleware.status_codes import StatusCodeMiddleware
+from volnix.middleware.config import MiddlewareConfig
+from volnix.middleware.status_codes import StatusCodeMiddleware
 
 
 def _make_app(config: MiddlewareConfig, response_body: dict):
@@ -154,7 +154,7 @@ async def test_non_200_passes_through():
     config = MiddlewareConfig(status_codes_enabled=True)
     app = fastapi.FastAPI()
 
-    from terrarium.middleware.status_codes import StatusCodeMiddleware
+    from volnix.middleware.status_codes import StatusCodeMiddleware
 
     app.add_middleware(StatusCodeMiddleware, config=config)
 

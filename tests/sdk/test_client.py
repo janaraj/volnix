@@ -1,12 +1,12 @@
-"""Tests for TerrariumClient."""
+"""Tests for VolnixClient."""
 from __future__ import annotations
 
-from terrarium.sdk import TerrariumClient
+from volnix.sdk import VolnixClient
 
 
 async def test_client_list_tools(test_adapter, transport):
-    """TerrariumClient.tools() returns tool list."""
-    async with TerrariumClient(
+    """VolnixClient.tools() returns tool list."""
+    async with VolnixClient(
         url="http://test", _transport=transport
     ) as terra:
         tools = await terra.tools()
@@ -16,8 +16,8 @@ async def test_client_list_tools(test_adapter, transport):
 
 
 async def test_client_call_tool(test_adapter, transport):
-    """TerrariumClient.call() returns action result."""
-    async with TerrariumClient(
+    """VolnixClient.call() returns action result."""
+    async with VolnixClient(
         url="http://test", _transport=transport
     ) as terra:
         result = await terra.call(
@@ -28,8 +28,8 @@ async def test_client_call_tool(test_adapter, transport):
 
 
 async def test_client_custom_actor_id(test_adapter, transport, mock_gateway):
-    """TerrariumClient uses custom actor_id in requests."""
-    async with TerrariumClient(
+    """VolnixClient uses custom actor_id in requests."""
+    async with VolnixClient(
         url="http://test",
         actor_id="my-custom-agent",
         _transport=transport,
@@ -42,8 +42,8 @@ async def test_client_custom_actor_id(test_adapter, transport, mock_gateway):
 
 
 async def test_client_context_manager(test_adapter, transport):
-    """TerrariumClient works as async context manager."""
-    terra = TerrariumClient(url="http://test", _transport=transport)
+    """VolnixClient works as async context manager."""
+    terra = VolnixClient(url="http://test", _transport=transport)
     async with terra:
         tools = await terra.tools()
     assert isinstance(tools, list)

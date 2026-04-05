@@ -1,6 +1,6 @@
 """Test harness for SDK, adapters, and config export.
 
-Provides reusable fixtures for testing the Terrarium SDK layer
+Provides reusable fixtures for testing the Volnix SDK layer
 against mocked HTTP servers.
 """
 from __future__ import annotations
@@ -67,7 +67,7 @@ def mock_gateway():
 @pytest.fixture
 async def test_adapter(mock_gateway):
     """Running HTTP adapter with mock gateway."""
-    from terrarium.engines.adapter.protocols.http_rest import (
+    from volnix.engines.adapter.protocols.http_rest import (
         HTTPRestAdapter,
     )
 

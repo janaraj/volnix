@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import httpx
 
-from terrarium.middleware.auth import AuthMiddleware
-from terrarium.middleware.config import MiddlewareConfig
+from volnix.middleware.auth import AuthMiddleware
+from volnix.middleware.config import MiddlewareConfig
 
 
 def _make_app(config: MiddlewareConfig):

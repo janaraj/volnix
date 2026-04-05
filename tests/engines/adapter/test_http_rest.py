@@ -1,4 +1,4 @@
-"""Tests for terrarium.engines.adapter.protocols.http_rest -- HTTP/REST endpoints.
+"""Tests for volnix.engines.adapter.protocols.http_rest -- HTTP/REST endpoints.
 
 Tests use REAL httpx.AsyncClient with ASGITransport against the FastAPI app.
 No server is started -- httpx connects directly to the ASGI app.
@@ -10,13 +10,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 from starlette.testclient import TestClient
 
-from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 
 def _make_mock_gateway(tools=None, handle_result=None, entity_result=None):
     """Create a mock Gateway for testing HTTP adapter."""
-    from terrarium.core.context import StepResult
-    from terrarium.core.types import StepVerdict
+    from volnix.core.context import StepResult
+    from volnix.core.types import StepVerdict
 
     gateway = MagicMock()
 

@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.budget — budget tracking, deduction, and thresholds."""
+"""Tests for volnix.engines.budget — budget tracking, deduction, and thresholds."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.budget.engine import BudgetEngine
+from volnix.engines.budget.engine import BudgetEngine
 
 
 @pytest.mark.asyncio

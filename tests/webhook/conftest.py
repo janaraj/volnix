@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.webhook.config import WebhookConfig
-from terrarium.webhook.manager import WebhookManager
-from terrarium.webhook.registry import WebhookRegistry
+from volnix.webhook.config import WebhookConfig
+from volnix.webhook.manager import WebhookManager
+from volnix.webhook.registry import WebhookRegistry
 
 
 @pytest.fixture

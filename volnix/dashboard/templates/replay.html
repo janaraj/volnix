@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Replay - Volnix{% endblock %}
+
+{% block content %}
+<h1>Run Replay</h1>
+<div id="timeline">
+    <!-- Timeline scrubber rendered here -->
+</div>
+<div id="controls">
+    <button hx-post="/replay/play-pause" hx-vals='{"action": "play"}'>Play</button>
+    <button hx-post="/replay/play-pause" hx-vals='{"action": "pause"}'>Pause</button>
+</div>
+<div id="replay-state">
+    <!-- Replay state rendered here -->
+</div>
+{% endblock %}

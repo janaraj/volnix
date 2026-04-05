@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.permission — permission checks, visibility, and authority."""
+"""Tests for volnix.engines.permission — permission checks, visibility, and authority."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.permission.engine import PermissionEngine
+from volnix.engines.permission.engine import PermissionEngine
 
 
 @pytest.mark.asyncio

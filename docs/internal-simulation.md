@@ -1,6 +1,6 @@
 # Internal Simulation
 
-This guide covers Terrarium's internal agent mode: how LLM-powered actors collaborate autonomously within a world, how they activate, communicate, and produce deliverables.
+This guide covers Volnix's internal agent mode: how LLM-powered actors collaborate autonomously within a world, how they activate, communicate, and produce deliverables.
 
 ---
 
@@ -9,7 +9,7 @@ This guide covers Terrarium's internal agent mode: how LLM-powered actors collab
 In internal-only simulations, all actors are LLM-driven. They collaborate through the world's communication services (Slack, email, etc.), respond to each other's messages, and work toward a deliverable. No external agent is needed.
 
 ```bash
-terrarium run market_prediction_analysis \
+volnix run market_prediction_analysis \
   --preset prediction \
   --actors economist,data-analyst,strategist
 ```
@@ -130,7 +130,7 @@ Deliverables are structured outputs produced at the end of a simulation. The lea
 
 ### Presets
 
-Terrarium includes built-in deliverable presets:
+Volnix includes built-in deliverable presets:
 
 | Preset | Output Schema |
 |--------|--------------|
@@ -142,7 +142,7 @@ Terrarium includes built-in deliverable presets:
 | `synthesis` | General summary with key themes and takeaways |
 
 ```bash
-terrarium run climate_research_station \
+volnix run climate_research_station \
   --preset assessment \
   --actors lead-researcher,climate-scientist,data-analyst
 ```
@@ -159,7 +159,7 @@ terrarium run climate_research_station \
 
 ```bash
 # Terminal
-terrarium report last
+volnix report last
 
 # API
 curl http://localhost:8080/api/v1/runs/{run_id}/deliverable
@@ -202,7 +202,7 @@ If actors produce `do_nothing` actions for `idle_stop_ticks` consecutive ticks (
 Key settings for internal simulations:
 
 ```toml
-# terrarium.toml
+# volnix.toml
 
 [simulation_runner]
 max_ticks = 30                      # Hard tick limit
@@ -223,14 +223,14 @@ max_recent_interactions = 20        # Conversation history per actor
 ### Basic
 
 ```bash
-terrarium run customer_support \
+volnix run customer_support \
   --actors support-lead,agent-1,supervisor
 ```
 
 ### With Deliverable
 
 ```bash
-terrarium run market_prediction_analysis \
+volnix run market_prediction_analysis \
   --preset prediction \
   --actors economist,analyst,strategist
 ```
@@ -238,7 +238,7 @@ terrarium run market_prediction_analysis \
 ### With Server (observe via dashboard)
 
 ```bash
-terrarium run market_prediction_analysis \
+volnix run market_prediction_analysis \
   --preset prediction \
   --actors economist,analyst,strategist \
   --serve --port 8080
@@ -247,13 +247,13 @@ terrarium run market_prediction_analysis \
 Then open the dashboard:
 
 ```bash
-terrarium dashboard --port 8200
+volnix dashboard --port 8200
 ```
 
 ### With Custom Reality
 
 ```bash
-terrarium run feature_prioritization \
+volnix run feature_prioritization \
   --preset decision \
   --actors product-lead,engineer,designer \
   --behavior dynamic
