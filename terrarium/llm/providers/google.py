@@ -63,8 +63,10 @@ class GoogleNativeProvider(LLMProvider):
                     for t in request.tools
                 ]
                 tool_objects = [types.Tool(function_declarations=declarations)]
+                mode_map = {"auto": "AUTO", "required": "ANY", "none": "NONE"}
+                tc_mode = mode_map.get(request.tool_choice or "required", "ANY")
                 tool_config_obj = types.ToolConfig(
-                    function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                    function_calling_config=types.FunctionCallingConfig(mode=tc_mode)
                 )
 
             # Explicit context caching for repeated system prompts.
@@ -142,11 +144,31 @@ class GoogleNativeProvider(LLMProvider):
                     config["tools"] = tool_objects
                     config["tool_config"] = tool_config_obj
 
-                prompt = (
-                    f"{request.system_prompt}\n\n{request.user_content}"
-                    if request.system_prompt
-                    else request.user_content
-                )
+                if request.messages:
+                    # Multi-turn: concatenate all message contents
+                    parts = []
+                    for msg in request.messages:
+                        role = msg.get("role", "")
+                        text = msg.get("content", "") or ""
+                        if role == "system":
+                            parts.append(text)
+                        elif role == "tool":
+                            parts.append(f"[Tool Result] {text}")
+                        elif role == "assistant":
+                            tc = msg.get("tool_calls")
+                            if tc:
+                                parts.append(f"[Tool Call] {tc[0].get('function', {}).get('name', '')}")
+                            elif text:
+                                parts.append(text)
+                        else:
+                            parts.append(text)
+                    prompt = "\n\n".join(parts)
+                else:
+                    prompt = (
+                        f"{request.system_prompt}\n\n{request.user_content}"
+                        if request.system_prompt
+                        else request.user_content
+                    )
                 response = await asyncio.to_thread(
                     self._client.models.generate_content,
                     model=model,
@@ -168,6 +190,7 @@ class GoogleNativeProvider(LLMProvider):
                             ToolCall(
                                 name=fc.name,
                                 arguments=dict(fc.args) if fc.args else {},
+                                id=getattr(fc, "id", "") or "",
                             )
                         ]
                         break

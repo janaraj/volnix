@@ -56,12 +56,21 @@ class AnthropicProvider(LLMProvider):
             else:
                 system_param = system_content
 
+            if request.messages:
+                sys_msgs = [m for m in request.messages if m.get("role") == "system"]
+                other_msgs = [m for m in request.messages if m.get("role") != "system"]
+                msg_system = sys_msgs[0]["content"] if sys_msgs else system_param
+                msg_list = other_msgs if other_msgs else [{"role": "user", "content": ""}]
+            else:
+                msg_system = system_param
+                msg_list = [{"role": "user", "content": request.user_content}]
+
             create_kwargs: dict = dict(
                 model=model,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
-                system=system_param,
-                messages=[{"role": "user", "content": request.user_content}],
+                system=msg_system,
+                messages=msg_list,
             )
             # Structured output: force valid JSON matching the schema.
             # Uses output_config with json_schema format.
@@ -84,7 +93,8 @@ class AnthropicProvider(LLMProvider):
                     }
                     for t in request.tools
                 ]
-                create_kwargs["tool_choice"] = {"type": "any"}
+                tc_map = {"auto": {"type": "auto"}, "required": {"type": "any"}, "none": {"type": "none"}}
+                create_kwargs["tool_choice"] = tc_map.get(request.tool_choice or "required", {"type": "any"})
 
             message = await self._client.messages.create(**create_kwargs)
             latency = (time.monotonic() - start) * 1000
@@ -99,7 +109,7 @@ class AnthropicProvider(LLMProvider):
                     if parsed_tool_calls is None:
                         parsed_tool_calls = []
                     parsed_tool_calls.append(
-                        ToolCall(name=block.name, arguments=block.input)
+                        ToolCall(name=block.name, arguments=block.input, id=getattr(block, "id", ""))
                     )
             usage = LLMUsage(
                 prompt_tokens=message.usage.input_tokens,

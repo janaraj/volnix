@@ -80,6 +80,9 @@ class SimulationRunner:
         self._queue = event_queue
         self._execute_pipeline = pipeline_executor
         self._agency = agency_engine
+        # Wire pipeline executor into agency for inline tool execution
+        if self._agency and hasattr(self._agency, "set_tool_executor"):
+            self._agency.set_tool_executor(self._execute_pipeline)
         self._animator = animator
         self._budget_checker = budget_checker
         self._config = config or SimulationRunnerConfig()

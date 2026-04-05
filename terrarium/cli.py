@@ -424,6 +424,10 @@ async def _setup_simulation(terrarium: Any, compiled_plan: Any) -> tuple[Any, An
         actor_specs=plan_actors,
     )
 
+    # Also wire executor directly for when agency is used outside runner
+    if agency and hasattr(agency, "set_tool_executor"):
+        agency.set_tool_executor(pipeline_executor)
+
     mission = getattr(compiled_plan, "mission", None)
     if mission:
         runner.set_mission(mission)

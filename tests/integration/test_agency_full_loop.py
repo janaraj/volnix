@@ -125,6 +125,20 @@ def _mock_llm_router(response_json: dict | list | None = None):
     return router
 
 
+def _mock_tool_executor():
+    """Create a mock tool executor that returns a committed WorldEvent mock.
+
+    The tool_executor is ``async callable(ActionEnvelope) -> WorldEvent | None``.
+    It runs the full governance pipeline; in tests we return a mock committed event.
+    """
+    committed_event = AsyncMock()
+    committed_event.response_body = {"status": "ok"}
+    committed_event.event_id = EventId("evt-mock-committed")
+
+    executor = AsyncMock(return_value=committed_event)
+    return executor
+
+
 async def _create_agency_engine(
     actor_states: list[ActorState],
     world_context: WorldContextBundle | None = None,
@@ -138,6 +152,9 @@ async def _create_agency_engine(
     }
     bus = AsyncMock()
     await engine.initialize(config, bus)
+
+    # Set tool executor for multi-turn activation loop
+    engine.set_tool_executor(_mock_tool_executor())
 
     # Configure with actor states
     ctx = world_context or _make_world_context()
@@ -205,38 +222,73 @@ class TestFullLoopWithMockLLM:
         customer2 = _make_actor_state("cust-002", watched=["tck_001"])
         supervisor = _make_actor_state("sup-001", role="supervisor", watched=["tck_001"], authority=0.8)
 
-        # All actors go through individual native tool calls (Tier 2 and 3 alike)
+        # Multi-turn loop: each actor that makes a tool call consumes 2+ LLM
+        # calls (action + follow-up do_nothing). Use per-actor responses keyed
+        # by the messages content so ordering from asyncio.gather doesn't matter.
         from terrarium.llm.types import LLMResponse, ToolCall
-        router = _mock_llm_router()
-        router.route = AsyncMock(side_effect=[
-            # Tier 3: supervisor
-            LLMResponse(
-                content="",
-                provider="mock", model="mock", latency_ms=5.0,
-                tool_calls=[ToolCall(
-                    name="tickets_update",
-                    arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
-                )],
-            ),
-            # Tier 2: cust-001 (individual call via _activate_batch)
-            LLMResponse(
-                content="",
-                provider="mock", model="mock", latency_ms=5.0,
-                tool_calls=[ToolCall(
-                    name="email_send",
-                    arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
-                )],
-            ),
-            # Tier 2: cust-002 (individual call via _activate_batch)
-            LLMResponse(
-                content="",
-                provider="mock", model="mock", latency_ms=5.0,
-                tool_calls=[ToolCall(
-                    name="do_nothing",
-                    arguments={"reasoning": "Will wait"},
-                )],
-            ),
-        ])
+
+        # Track how many calls each activation has made via call index per actor.
+        actor_call_counts: dict[str, int] = {}
+
+        async def _route_per_actor(request, engine_name="", use_case=""):
+            # Identify actor from the identity line "## You are: ... (ID: xxx)"
+            # in the user prompt. Must match "ID: xxx)" to avoid matching
+            # teammate IDs listed in the team roster section.
+            messages = request.messages or []
+            actor_id = "unknown"
+            # Check user prompt message (index 1) for identity
+            if len(messages) >= 2:
+                user_content = messages[1].get("content", "") or ""
+                # Identity is first line: "## You are: role (ID: actor-id)"
+                first_line = user_content.split("\n")[0] if user_content else ""
+                for aid in ("sup-001", "cust-001", "cust-002"):
+                    if aid in first_line:
+                        actor_id = aid
+                        break
+
+            call_idx = actor_call_counts.get(actor_id, 0)
+            actor_call_counts[actor_id] = call_idx + 1
+
+            if actor_id == "sup-001" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="tickets_update",
+                        arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
+                    )],
+                )
+            elif actor_id == "cust-001" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="email_send",
+                        arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
+                    )],
+                )
+            elif actor_id == "cust-002" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="do_nothing",
+                        arguments={"reasoning": "Will wait"},
+                    )],
+                )
+            else:
+                # Follow-up calls: terminate the loop
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="do_nothing",
+                        arguments={"reasoning": "Done"},
+                    )],
+                )
+
+        router = AsyncMock()
+        router.route = _route_per_actor
 
         engine = await _create_agency_engine([customer1, customer2, supervisor], llm_router=router)
         event = _make_world_event(target_entity="tck_001")

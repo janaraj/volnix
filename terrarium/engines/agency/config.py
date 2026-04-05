@@ -62,3 +62,9 @@ class AgencyConfig(BaseModel):
     autonomous_tick_interval: float = 60.0
     # (Future) Auto-add chat service subscription for all internal actors.
     # auto_include_chat: bool = True  -- not yet enforced
+
+    # ── Multi-turn tool loop ───────────��──────────────────────
+    # Max tool calls within a single agent activation loop.
+    max_tool_calls_per_activation: int = 10
+    # LLM tool_choice mode for agent activations: "auto" allows text responses.
+    tool_choice_mode: str = "auto"

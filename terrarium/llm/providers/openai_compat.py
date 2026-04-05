@@ -64,10 +64,13 @@ class OpenAICompatibleProvider(LLMProvider):
         model = request.model_override or self._default_model
         start = time.monotonic()
         try:
-            messages: list[dict[str, str]] = []
-            if request.system_prompt:
-                messages.append({"role": "system", "content": request.system_prompt})
-            messages.append({"role": "user", "content": request.user_content})
+            if request.messages:
+                messages: list[dict[str, Any]] = [dict(m) for m in request.messages]
+            else:
+                messages: list[dict[str, Any]] = []
+                if request.system_prompt:
+                    messages.append({"role": "system", "content": request.system_prompt})
+                messages.append({"role": "user", "content": request.user_content})
 
             kwargs: dict[str, Any] = {
                 "model": model,
@@ -112,7 +115,7 @@ class OpenAICompatibleProvider(LLMProvider):
                     }
                     for t in request.tools
                 ]
-                kwargs["tool_choice"] = "required"
+                kwargs["tool_choice"] = request.tool_choice or "required"
 
             # Newer OpenAI models (gpt-5.x, o-series) use max_completion_tokens
             # instead of max_tokens. Try the new parameter first, fall back to old.
@@ -128,11 +131,16 @@ class OpenAICompatibleProvider(LLMProvider):
 
             latency = (time.monotonic() - start) * 1000
             message = response.choices[0].message if response.choices else None
-            content = message.content if message and message.content else ""
+            # Check content, then refusal (model may refuse via refusal field)
+            content = ""
+            if message:
+                content = message.content or getattr(message, "refusal", None) or ""
 
-            # Parse native tool calls from response
+            # Parse native tool calls from response.
+            # Note: message.tool_calls can be [] (empty list) which is falsy —
+            # we must check explicitly for None vs empty.
             parsed_tool_calls = None
-            if message and message.tool_calls:
+            if message and message.tool_calls is not None and len(message.tool_calls) > 0:
                 import json as _json
                 from terrarium.llm.types import ToolCall
                 parsed_tool_calls = []
@@ -146,8 +154,22 @@ class OpenAICompatibleProvider(LLMProvider):
                     except _json.JSONDecodeError:
                         args = {}
                     parsed_tool_calls.append(
-                        ToolCall(name=tc.function.name, arguments=args)
+                        ToolCall(name=tc.function.name, arguments=args, id=tc.id or "")
                     )
+
+            # Log unexpected empty: model generated tokens but we captured nothing
+            if not content and not parsed_tool_calls and message:
+                comp_tokens = response.usage.completion_tokens if response.usage else 0
+                finish = response.choices[0].finish_reason if response.choices else "?"
+                refusal = getattr(message, "refusal", None)
+                raw_tc = message.tool_calls
+                logger.warning(
+                    "OpenAI response empty despite %d completion tokens: "
+                    "finish_reason=%s, refusal=%s, raw_tool_calls=%s, "
+                    "content=%r",
+                    comp_tokens, finish, refusal, raw_tc,
+                    message.content,
+                )
 
             usage_data = response.usage
 

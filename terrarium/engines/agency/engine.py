@@ -51,6 +51,16 @@ class AgencyEngine(BaseEngine):
         self._tool_name_map: dict[str, str] = {}  # sanitized API name → original action name
         self._tool_to_service: dict[str, str] = {}  # sanitized API name → service name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
+        self._tool_executor: Any = None
+
+    def set_tool_executor(self, executor: Any) -> None:
+        """Set the pipeline executor for inline tool execution in multi-turn loops.
+
+        The executor is ``async callable(ActionEnvelope) -> WorldEvent | None``.
+        It runs the full 7-step governance pipeline. Returns the committed
+        WorldEvent on success, or None if the pipeline blocked the action.
+        """
+        self._tool_executor = executor
 
     async def configure(
         self,
@@ -338,6 +348,14 @@ class AgencyEngine(BaseEngine):
 
                     if should_activate:
                         activated.append((actor_id, activation_reason))
+                        # Capture delegation text as goal_context so agent
+                        # remembers its assignment across multi-turn loop
+                        text = committed_event.input_data.get("text", "")
+                        if text and (
+                            "all" in intended_for
+                            or actor.role in intended_for
+                        ):
+                            actor.goal_context = text[:500]
 
                     # Record subscription match to ledger (non-blocking)
                     from terrarium.ledger.entries import (
@@ -365,18 +383,7 @@ class AgencyEngine(BaseEngine):
 
                     break  # one match per actor per event
 
-        # Self-continuation check: should the event actor continue its work?
-        # Must be checked before the early return since self-continuation
-        # can proceed even when no OTHER actors are activated.
-        event_actor = self._actor_states.get(committed_event.actor_id)
-        should_self_continue = (
-            event_actor is not None
-            and event_actor.autonomous
-            and not event_actor.is_lead
-            and committed_event.actor_id not in {aid for aid, _ in activated}
-        )
-
-        if not activated and not should_self_continue:
+        if not activated:
             return []
 
         # Respect max activations per event
@@ -423,23 +430,31 @@ class AgencyEngine(BaseEngine):
 
         envelopes: list[ActionEnvelope] = []
 
-        # Tier 3: individual LLM calls
-        for actor, reason in tier3_actors:
-            env = await self._activate_individual(actor, reason, committed_event)
-            if env is not None:
-                envelopes.append(env)
+        # Tier 3: parallel multi-turn activations
+        if tier3_actors:
+            tasks = [
+                self._activate_with_tool_loop(actor, reason, committed_event)
+                for actor, reason in tier3_actors
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, list):
+                    envelopes.extend(result)
+                elif isinstance(result, Exception):
+                    logger.error("[AGENCY] activation failed: %s", result)
 
-        # Tier 2: batch LLM call
+        # Tier 2: parallel multi-turn activations (same path as Tier 3)
         if tier2_actors:
-            batch_envs = await self._activate_batch(tier2_actors, committed_event)
-            envelopes.extend(batch_envs)
-
-        # Self-continuation: re-activate non-lead autonomous agent after its
-        # own action commits (replaces timer-based rescheduling).
-        if should_self_continue:
-            env = await self._activate_autonomous_agent(event_actor)
-            if env is not None:
-                envelopes.append(env)
+            tasks = [
+                self._activate_with_tool_loop(actor, reason, committed_event)
+                for actor, reason in tier2_actors
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, list):
+                    envelopes.extend(result)
+                elif isinstance(result, Exception):
+                    logger.error("[AGENCY] activation failed: %s", result)
 
         # Respect max envelopes per event
         envelopes = envelopes[: self._typed_config.max_envelopes_per_event]
@@ -466,19 +481,17 @@ class AgencyEngine(BaseEngine):
             ]
             for sa in due:
                 if sa.action_type == "continue_work":
-                    # Autonomous agent work loop — activate via LLM
-                    env = await self._activate_autonomous_agent(actor)
-                    if env is not None:
-                        envelopes.append(env)
+                    # Autonomous agent work loop — activate via multi-turn loop
+                    envs = await self._activate_with_tool_loop(actor, "continue_work", None)
+                    envelopes.extend(envs)
                 elif sa.action_type == "request_findings":
                     # Lead asks team to share findings (buffer period reached)
                     actor.goal_context = (
                         "WRAP-UP: Ask each team member to share their findings and "
                         "conclusions in the team channel NOW. Address each by role."
                     )
-                    env = await self._activate_autonomous_agent(actor)
-                    if env is not None:
-                        envelopes.append(env)
+                    envs = await self._activate_with_tool_loop(actor, "request_findings", None)
+                    envelopes.extend(envs)
                 else:
                     # Standard scheduled action (produce_deliverable, etc.)
                     env = ActionEnvelope(
@@ -773,21 +786,46 @@ class AgencyEngine(BaseEngine):
             return 3
         return 2
 
-    # -- Tier 3: Individual LLM --
+    # -- Multi-Turn Tool Loop (replaces _activate_individual + _activate_autonomous_agent) --
 
-    async def _activate_individual(
+    async def _activate_with_tool_loop(
         self,
         actor: ActorState,
         reason: str,
-        trigger_event: WorldEvent,
-    ) -> ActionEnvelope | None:
-        """Generate action for a single actor via individual LLM call."""
+        trigger_event: WorldEvent | None,
+    ) -> list[ActionEnvelope]:
+        """Activate an agent with a multi-turn tool-calling loop.
+
+        The agent maintains a conversation (messages array) across tool calls
+        within this single activation. Each tool call goes through the full
+        governance pipeline. The loop terminates when:
+        - Agent responds with text (findings) → auto-posted to team channel
+        - Agent calls do_nothing
+        - max_tool_calls_per_activation reached
+
+        Returns:
+            List of ActionEnvelopes produced during this activation.
+        """
         if not self._llm_router or not self._prompt_builder:
-            return None
+            return []
+        if not self._tool_executor:
+            logger.warning(
+                "[AGENCY] No tool_executor set — cannot run multi-turn loop for %s",
+                actor.actor_id,
+            )
+            return []
+
+        import time as _time
+        import uuid
+
+        from terrarium.ledger.entries import ActivationCompleteEntry, ToolLoopStepEntry
+
+        activation_id = str(uuid.uuid4())[:12]
+        max_calls = self._typed_config.max_tool_calls_per_activation
+        tool_choice = self._typed_config.tool_choice_mode
 
         async with self._llm_semaphore:
             system_prompt = self._prompt_builder.build_system_prompt()
-            # Build team roster for intended_for tagging
             team_roster = [
                 {"role": a.role, "id": str(a.actor_id)}
                 for a in self._actor_states.values()
@@ -799,128 +837,203 @@ class AgencyEngine(BaseEngine):
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
-                # No allowed_services — tools come via native tool calling only
             )
 
-            request = LLMRequest(
-                system_prompt=system_prompt,
-                user_content=user_prompt,
-                tools=actor_tools or None,
-                temperature=0.7,
-                fresh_session=True,  # Each actor gets isolated ACP session
-                cache_system_prompt=True,  # System prompt is identical across actors
-            )
-            response = await self._llm_router.route(
-                request,
-                "agency",
-                self._typed_config.llm_use_case_individual,
-            )
+            # Build initial messages array — this IS the agent's context
+            messages: list[dict[str, Any]] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            envelopes: list[ActionEnvelope] = []
+            terminated_by = "max_tool_calls"
+
+            for step_idx in range(max_calls):
+                step_start = _time.monotonic()
+
+                request = LLMRequest(
+                    messages=messages,
+                    tools=actor_tools or None,
+                    tool_choice=tool_choice,
+                    cache_system_prompt=True,
+                )
+                response = await self._llm_router.route(
+                    request, "agency",
+                    self._typed_config.llm_use_case_individual,
+                )
+                step_latency = (_time.monotonic() - step_start) * 1000
+
+                if response.tool_calls:
+                    tc = response.tool_calls[0]
+
+                    # do_nothing terminates the loop
+                    if tc.name == "do_nothing":
+                        terminated_by = "do_nothing"
+                        self._record_to_ledger(ToolLoopStepEntry(
+                            actor_id=actor.actor_id,
+                            activation_id=activation_id,
+                            step_index=step_idx,
+                            tool_name="do_nothing",
+                            llm_latency_ms=step_latency,
+                        ))
+                        break
+
+                    # Parse tool call into ActionEnvelope
+                    env = self._parse_tool_call(actor, tc, reason, trigger_event)
+                    if env is None:
+                        terminated_by = "do_nothing"
+                        break
+
+                    # Execute through governance pipeline INLINE
+                    committed_event = await self._tool_executor(env)
+
+                    if committed_event is None:
+                        # Pipeline blocked — tell the agent
+                        messages.append({
+                            "role": "assistant",
+                            "tool_calls": [{
+                                "id": tc.id or f"call_{step_idx}",
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": json.dumps(tc.arguments),
+                                },
+                            }],
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id or f"call_{step_idx}",
+                            "content": "BLOCKED: This action was not permitted by the governance pipeline.",
+                        })
+                        self._record_to_ledger(ToolLoopStepEntry(
+                            actor_id=actor.actor_id,
+                            activation_id=activation_id,
+                            step_index=step_idx,
+                            tool_name=tc.name,
+                            tool_arguments=tc.arguments,
+                            blocked=True,
+                            llm_latency_ms=step_latency,
+                        ))
+                        continue
+
+                    # Success — record envelope and add result to messages
+                    envelopes.append(env)
+
+                    result_body = json.dumps(
+                        committed_event.response_body or {}, default=str,
+                    )[:2000]
+
+                    tc_id = tc.id or f"call_{step_idx}"
+                    messages.append({
+                        "role": "assistant",
+                        "tool_calls": [{
+                            "id": tc_id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments),
+                            },
+                        }],
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": result_body,
+                    })
+
+                    self._record_to_ledger(ToolLoopStepEntry(
+                        actor_id=actor.actor_id,
+                        activation_id=activation_id,
+                        step_index=step_idx,
+                        tool_name=tc.name,
+                        tool_arguments=tc.arguments,
+                        event_id=committed_event.event_id,
+                        llm_latency_ms=step_latency,
+                        response_preview=result_body[:200],
+                    ))
+
+                elif response.content:
+                    # Text response — agent is sharing findings
+                    terminated_by = "text_response"
+                    text = response.content.strip()
+
+                    # Update agent's goal_context with findings
+                    actor.goal_context = text[:500]
+
+                    # Auto-post findings to team channel
+                    if actor.team_channel:
+                        post_env = self._create_channel_post(
+                            actor, text, reason, trigger_event,
+                        )
+                        if post_env:
+                            committed = await self._tool_executor(post_env)
+                            if committed:
+                                envelopes.append(post_env)
+                    break
+
+                else:
+                    # Empty response — model returned neither content nor tool_calls.
+                    # Treat as do_nothing (agent has nothing to contribute).
+                    terminated_by = "do_nothing"
+                    logger.info(
+                        "[AGENCY.loop] actor=%s step=%d: empty response "
+                        "(completion_tokens=%d), treating as do_nothing",
+                        actor.actor_id, step_idx,
+                        response.usage.completion_tokens if response.usage else 0,
+                    )
+                    break
+
+            # Record activation completion
+            self._record_to_ledger(ActivationCompleteEntry(
+                actor_id=actor.actor_id,
+                activation_id=activation_id,
+                activation_reason=reason,
+                total_tool_calls=len([
+                    e for e in envelopes if e.action_type != "chat.postMessage"
+                ]),
+                total_envelopes=len(envelopes),
+                terminated_by=terminated_by,
+                final_text=(actor.goal_context or "")[:200],
+            ))
 
         logger.info(
-            "[AGENCY.individual] actor=%s, LLM response length=%d, tool_calls=%s",
-            actor.actor_id, len(response.content or ""),
-            len(response.tool_calls) if response.tool_calls else 0,
+            "[AGENCY.loop] actor=%s reason=%s envelopes=%d terminated=%s",
+            actor.actor_id, reason, len(envelopes), terminated_by,
         )
-        if response.tool_calls:
-            env = self._parse_tool_call(actor, response.tool_calls[0], reason, trigger_event)
-            if env is not None:
-                actor.pending_actions.append(env.action_type)
-            return env
-        # Native tools were sent — model should have returned tool_calls.
-        # Don't fall through to text parsing which masks broken tool calling.
-        logger.warning(
-            "[AGENCY] actor=%s returned text instead of tool_calls (native tools were sent). "
-            "Content preview: %.200s",
-            actor.actor_id, response.content or "(empty)",
-        )
-        return None
+        return envelopes
 
-    async def _activate_autonomous_agent(
-        self, actor: ActorState,
+    def _create_channel_post(
+        self,
+        actor: ActorState,
+        text: str,
+        reason: str,
+        trigger_event: WorldEvent | None,
     ) -> ActionEnvelope | None:
-        """Activate an autonomous agent to continue their work loop.
-
-        The agent sees their full context including recent_interactions
-        (messages from teammates received via event bus subscriptions).
-        They decide what to do next: research, share findings, or do_nothing.
-        """
-        if not self._llm_router or not self._prompt_builder:
+        """Create an ActionEnvelope to post text to the agent's team channel."""
+        if not actor.team_channel:
             return None
 
-        async with self._llm_semaphore:
-            system_prompt = self._prompt_builder.build_system_prompt()
-            team_roster = [
-                {"role": a.role, "id": str(a.actor_id)}
-                for a in self._actor_states.values()
-            ]
-            actor_tools = self._get_tools_for_actor(str(actor.actor_id))
-            user_prompt = self._prompt_builder.build_individual_prompt(
-                actor=actor,
-                trigger_event=None,
-                activation_reason="autonomous_continue",
-                available_actions=self._available_actions,
-                team_roster=team_roster,
-                # No allowed_services — tools come via native tool calling only
-            )
+        parent_ids = [trigger_event.event_id] if trigger_event else []
 
-            request = LLMRequest(
-                system_prompt=system_prompt,
-                user_content=user_prompt,
-                tools=actor_tools or None,
-                temperature=0.7,
-                fresh_session=True,
-                cache_system_prompt=True,
-            )
-            response = await self._llm_router.route(
-                request,
-                "agency",
-                self._typed_config.llm_use_case_individual,
-            )
-
-        logger.info(
-            "[AGENCY.autonomous] actor=%s, LLM response length=%d, tool_calls=%s",
-            actor.actor_id, len(response.content or ""),
-            len(response.tool_calls) if response.tool_calls else 0,
+        return ActionEnvelope(
+            actor_id=actor.actor_id,
+            source=ActionSource.INTERNAL,
+            action_type="chat.postMessage",
+            target_service=ServiceId("slack"),
+            payload={
+                "text": text,
+                "channel": actor.team_channel,
+            },
+            logical_time=self._get_current_time(),
+            priority=EnvelopePriority.INTERNAL,
+            parent_event_ids=parent_ids,
+            metadata={
+                "activation_reason": reason,
+                "activation_tier": 3,
+                "reasoning": "Sharing investigation findings with team",
+                "intended_for": ["all"],
+            },
         )
-        if response.tool_calls:
-            env = self._parse_tool_call(
-                actor, response.tool_calls[0], "autonomous_continue", None
-            )
-            if env is not None:
-                actor.pending_actions.append(env.action_type)
-        else:
-            # Native tools were sent — model should have returned tool_calls.
-            logger.warning(
-                "[AGENCY] actor=%s returned text instead of tool_calls (native tools were sent). "
-                "Content preview: %.200s",
-                actor.actor_id, response.content or "(empty)",
-            )
-            env = None
-
-        # No self-rescheduling. Autonomous agents are re-activated by:
-        # - Self-continuation in notify() (non-lead agents)
-        # - Subscription events (lead, when team posts findings)
-        return env
-
-    # -- Tier 2: Batch LLM --
-
-    async def _activate_batch(
-        self,
-        actors_with_reasons: list[tuple[ActorState, str]],
-        trigger_event: WorldEvent,
-    ) -> list[ActionEnvelope]:
-        """Activate batch actors via individual native tool-calling LLM calls.
-
-        Each actor gets its own call with native tool definitions — identical
-        to ``_activate_individual()``. The 'batch' label is kept for tier
-        classification and observability but execution uses native tools.
-        """
-        envelopes: list[ActionEnvelope] = []
-        for actor, reason in actors_with_reasons:
-            env = await self._activate_individual(actor, reason, trigger_event)
-            if env is not None:
-                envelopes.append(env)
-        return envelopes
 
     # -- Response parsing --
 

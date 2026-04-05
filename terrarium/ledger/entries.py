@@ -408,6 +408,34 @@ class CollaborationNotificationEntry(LedgerEntry):
     sensitivity: str = "immediate"
 
 
+class ToolLoopStepEntry(LedgerEntry):
+    """Records one tool call step within a multi-turn activation."""
+
+    entry_type: str = "tool_loop_step"
+    actor_id: ActorId
+    activation_id: str
+    step_index: int
+    tool_name: str
+    tool_arguments: dict[str, Any] = Field(default_factory=dict)
+    event_id: EventId | None = None
+    blocked: bool = False
+    llm_latency_ms: float = 0.0
+    response_preview: str = ""  # First 200 chars of LLM response (tool result or text)
+
+
+class ActivationCompleteEntry(LedgerEntry):
+    """Records completion of a multi-turn agent activation."""
+
+    entry_type: str = "activation_complete"
+    actor_id: ActorId
+    activation_id: str
+    activation_reason: str
+    total_tool_calls: int
+    total_envelopes: int
+    terminated_by: str  # "text_response" | "do_nothing" | "max_tool_calls" | "error"
+    final_text: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
@@ -432,6 +460,8 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "profile_inference": ProfileInferenceEntry,
     "subscription_match": SubscriptionMatchEntry,
     "collaboration_notification": CollaborationNotificationEntry,
+    "tool_loop_step": ToolLoopStepEntry,
+    "activation_complete": ActivationCompleteEntry,
 }
 
 

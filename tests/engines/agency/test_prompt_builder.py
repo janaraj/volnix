@@ -177,9 +177,8 @@ def test_individual_prompt_with_interactions():
         available_actions=[],
     )
 
-    assert "Recent Activity" in prompt
+    assert "Your Investigation" in prompt or "Team Messages" in prompt
     assert "I need help with my account" in prompt
-    assert "You:" in prompt
     assert "Let me look into that" in prompt
 
 

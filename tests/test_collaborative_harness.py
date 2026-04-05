@@ -128,12 +128,14 @@ class TestInteractionRecordFieldsRenderedInPrompt:
             available_actions=[],
         )
 
-        # Verify that the user-visible fields appear in the rendered prompt
+        # Verify that the user-visible fields appear in the rendered prompt.
+        # Note: reply_to is no longer rendered in the new split format
+        # (Your Investigation / Team Messages) — threading info is omitted.
         assert "tester" in prompt, "actor_role not rendered"
         assert "This is a test message" in prompt, "summary not rendered"
         assert "#testing" in prompt, "channel not rendered"
-        assert "evt-parent-000" in prompt, "reply_to not rendered"
         assert "tick" in prompt.lower(), "tick not rendered"
+        assert "Team Messages" in prompt, "team section header not rendered"
 
 
 # ---------------------------------------------------------------------------
