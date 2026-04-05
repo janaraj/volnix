@@ -17,8 +17,6 @@ world:
     - "Competitors are focused on productivity guilt messaging"
     - "Beta users say the app feels like putting on noise-canceling headphones for your brain"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

@@ -49,8 +49,6 @@ world:
     - "SEV2 alert: API latency spike affecting 15% of requests"
     - "Database connection pool exhaustion warning from monitoring"
 
-compiler:
-  seed: 42
   behavior: dynamic
   fidelity: auto
   mode: governed

@@ -58,11 +58,11 @@ class YAMLParser:
         deliverable_config = world.get("deliverable", {})
         collaboration_config = world.get("collaboration", {})
 
-        # Process reality via D1 ConditionExpander
-        conditions, reality_ctx = self._extract_reality(compiler)
+        # Process reality — read from world section, fall back to compiler
+        conditions, reality_ctx = self._extract_reality(world, compiler)
 
-        # Compiler metadata
-        meta = self._extract_compiler_metadata(compiler)
+        # World + compiler metadata
+        meta = self._extract_compiler_metadata(world, compiler)
 
         plan = WorldPlan(
             name=world.get("name", "Unnamed World"),
@@ -80,7 +80,7 @@ class YAMLParser:
             mission=mission,
             deliverable_config=deliverable_config,
             collaboration_config=collaboration_config,
-            animator_settings=compiler.get("animator", {}),
+            animator_settings=world.get("animator", {}) or compiler.get("animator", {}),
             source="yaml",
         )
         return plan, service_specs
@@ -115,9 +115,9 @@ class YAMLParser:
         """Extract actor specs, preserving ALL YAML fields."""
         return [copy.deepcopy(a) for a in actors] if actors else []
 
-    def _extract_reality(self, compiler: dict) -> tuple[Any, dict]:
+    def _extract_reality(self, world: dict, compiler: dict) -> tuple[Any, dict]:
         """Extract reality section → (WorldConditions, prompt_context)."""
-        reality = compiler.get("reality", {})
+        reality = world.get("reality", {}) or compiler.get("reality", {})
         preset = reality.get("preset", "messy")
 
         # Warn about unknown reality keys
@@ -138,11 +138,16 @@ class YAMLParser:
 
         return conditions, prompt_ctx
 
-    def _extract_compiler_metadata(self, compiler: dict) -> dict[str, Any]:
-        """Extract seed, behavior, fidelity, mode."""
+    def _extract_compiler_metadata(self, world: dict, compiler: dict) -> dict[str, Any]:
+        """Extract seed, behavior, fidelity, mode.
+
+        Reads from world section first (where blueprints define them),
+        falls back to compiler section for backward compatibility.
+        Seed stays in compiler — it's a compilation parameter.
+        """
         return {
             "seed": compiler.get("seed", 42),
-            "behavior": compiler.get("behavior", "dynamic"),
-            "fidelity": compiler.get("fidelity", "auto"),
-            "mode": compiler.get("mode", "governed"),
+            "behavior": world.get("behavior") or compiler.get("behavior", "dynamic"),
+            "fidelity": world.get("fidelity") or compiler.get("fidelity", "auto"),
+            "mode": world.get("mode") or compiler.get("mode", "governed"),
         }

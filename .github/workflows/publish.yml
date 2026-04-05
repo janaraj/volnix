@@ -1,0 +1,46 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"   # Only triggers on version tags like v0.1.0, v1.2.3
+
+jobs:
+  publish:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for trusted publishing (no API token needed)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run tests
+        run: uv run pytest --cov=volnix --cov-fail-under=90 -x -q
+        env:
+          VOLNIX_RUN_REAL_API_TESTS: "0"
+
+      - name: Lint
+        run: uv run ruff check volnix/ tests/
+
+      - name: Type check
+        run: uv run mypy volnix/
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

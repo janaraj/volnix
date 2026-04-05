@@ -971,6 +971,24 @@ class AgencyEngine(BaseEngine):
                     )
                     break
 
+            # Inject closure message so the agent knows what happened on re-activation.
+            # Without this, max_tool_calls termination leaves the conversation
+            # looking incomplete and the model repeats work.
+            actions_taken = [e.action_type for e in envelopes]
+            if terminated_by == "max_tool_calls":
+                closure = (
+                    f"[Your activation ended — you used all {len(envelopes)} tool calls. "
+                    f"Actions taken: {', '.join(actions_taken[:5])}. "
+                    "Do NOT repeat these actions on your next activation.]"
+                )
+            elif terminated_by == "text_response":
+                closure = "[You shared your findings. Activation complete.]"
+            elif terminated_by == "do_nothing":
+                closure = "[Nothing to do. Activation complete.]"
+            else:
+                closure = f"[Activation ended: {terminated_by}.]"
+            messages.append({"role": "user", "content": closure})
+
             # Persist conversation for future re-activations
             actor.activation_messages = messages
 

@@ -497,6 +497,12 @@ Name: {section_name}
 ## Failing Payload
 {failing_payload}
 
+## Repair Rules
+- If an entity references a missing entity (e.g. "comment.author_id references missing user"),
+  ADD the missing entity to entities_to_create with a valid schema
+- If a field has an invalid value, fix the value
+- Do not remove entities — fix their references instead
+
 Output ONLY the repaired payload as valid JSON. No markdown, no explanation.""",
     user="Repair this failing {section_kind} section: {section_name}",
     engine_name="world_compiler",
@@ -522,6 +528,9 @@ Generate organic world events that happen between agent turns.
 ## Domain
 {domain_description}
 
+## Actors in the World
+{actors}
+
 ## Recent Agent Actions
 {recent_actions}
 
@@ -535,13 +544,14 @@ Escalation on inaction: {escalation_on_inaction}
 ## Rules
 - Generate up to {budget} events as a JSON array
 - Each event:
-  {{"actor_id": "system", "service_id": "service_name", "action": "tool_name_from_list_above",
-    "input_data": {{}}, "sub_type": "organic"}}
-- You MUST use action names from the Available Tools list above — do NOT invent actions
-- Use "system" as actor_id for environment events
+  {{"actor_id": "<role from actors list>", "service_id": "service_name",
+    "action": "tool_name_from_list_above", "input_data": {{}}, "sub_type": "organic"}}
+- Use actor roles from the Actors list — events come FROM characters in the world
+- If no actors are defined, use "system" as actor_id
+- You MUST use action names from the Available Tools list — do NOT invent actions
 - Use the service name from the tool's "service" field as service_id
 - Reality dimensions shape what happens (messy = things go wrong, hostile = active opposition)
-- Events go through the governance pipeline -- they CAN be blocked by policies
+- Events go through the governance pipeline — they CAN be blocked by policies
 
 Output ONLY valid JSON array.""",
     user="Generate up to {budget} world events.",

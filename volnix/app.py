@@ -801,42 +801,45 @@ class VolnixApp:
                 if eid:
                     all_entity_ids.append(str(eid))
 
-        # Create ActorState for each internal actor
+        # Create ActorState for world-plan actors ONLY when no --internal agents.
+        # When --internal is provided, world-plan actors are NPCs driven by the
+        # Animator — the --internal agents are the real actors (added below).
         actor_states: list[ActorState] = []
-        for actor_def in actors:
-            if str(actor_def.type) in ("human", "system", "observer"):
-                traits = extract_behavior_traits(actor_def)
-                state = ActorState(
-                    actor_id=actor_def.id,
-                    role=actor_def.role,
-                    actor_type="observer" if str(actor_def.type) == "observer" else "internal",
-                    persona=(
-                        actor_def.personality.model_dump()
-                        if actor_def.personality
-                        else {}
-                    ),
-                    behavior_traits=traits,
-                    current_goal=actor_def.metadata.get("goal"),
-                    goal_strategy=actor_def.metadata.get("goal_strategy"),
-                )
-
-                # Populate watched_entities: each actor watches a
-                # deterministic ~30% subset of generated entities so
-                # activation triggers when relevant entities change.
-                if all_entity_ids:
-                    actor_hash = int(
-                        hashlib.md5(  # noqa: S324
-                            str(actor_def.id).encode(),
-                        ).hexdigest(),
-                        16,
+        if not internal_profile:
+            for actor_def in actors:
+                if str(actor_def.type) in ("human", "system", "observer"):
+                    traits = extract_behavior_traits(actor_def)
+                    state = ActorState(
+                        actor_id=actor_def.id,
+                        role=actor_def.role,
+                        actor_type="observer" if str(actor_def.type) == "observer" else "internal",
+                        persona=(
+                            actor_def.personality.model_dump()
+                            if actor_def.personality
+                            else {}
+                        ),
+                        behavior_traits=traits,
+                        current_goal=actor_def.metadata.get("goal"),
+                        goal_strategy=actor_def.metadata.get("goal_strategy"),
                     )
-                    state.watched_entities = [
-                        e
-                        for i, e in enumerate(all_entity_ids)
-                        if (actor_hash + i) % 3 == 0
-                    ][:15]
 
-                actor_states.append(state)
+                    # Populate watched_entities: each actor watches a
+                    # deterministic ~30% subset of generated entities so
+                    # activation triggers when relevant entities change.
+                    if all_entity_ids:
+                        actor_hash = int(
+                            hashlib.md5(  # noqa: S324
+                                str(actor_def.id).encode(),
+                            ).hexdigest(),
+                            16,
+                        )
+                        state.watched_entities = [
+                            e
+                            for i, e in enumerate(all_entity_ids)
+                            if (actor_hash + i) % 3 == 0
+                        ][:15]
+
+                    actor_states.append(state)
 
         # Create ActorState for internal agents from --internal profile
         if internal_profile:
