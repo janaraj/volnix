@@ -239,15 +239,20 @@ class ActorPromptBuilder:
         if actor.is_lead and team_size > 1:
             if not is_reactivation:
                 lead_note = (
-                    "**As the lead, your FIRST action must be to post a delegation message "
-                    "in the team channel — assign specific tasks to each team member by name "
-                    "based on their role. Then coordinate their work.**\n\n"
+                    "**As the lead, start by posting a delegation message in the "
+                    "team channel — assign specific tasks to each team member by "
+                    "role. After delegating, you may do your own investigation "
+                    "to get an overview of the situation.**\n\n"
                 )
             else:
                 lead_note = (
-                    "**You have already delegated. Review team updates above, "
-                    "synthesize new findings, and coordinate next steps. "
-                    "Do NOT re-delegate.**\n\n"
+                    "**You have already delegated. Do NOT re-delegate. "
+                    "Your job now is to actively coordinate:\n"
+                    "- Review what your team has shared\n"
+                    "- Ask follow-up questions if findings are incomplete\n"
+                    "- Investigate areas the team hasn't covered yet\n"
+                    "- Synthesize findings into an updated analysis\n"
+                    "- If the team has covered everything, share your synthesis**\n\n"
                 )
 
         steps = [

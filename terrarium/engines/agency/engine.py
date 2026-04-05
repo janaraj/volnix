@@ -51,6 +51,7 @@ class AgencyEngine(BaseEngine):
         self._tool_name_map: dict[str, str] = {}  # sanitized API name → original action name
         self._tool_to_service: dict[str, str] = {}  # sanitized API name → service name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
+        self._pipeline_lock = asyncio.Lock()  # Serializes pipeline execution across parallel agents
         self._tool_executor: Any = None
 
     def set_tool_executor(self, executor: Any) -> None:
@@ -869,7 +870,9 @@ class AgencyEngine(BaseEngine):
                         break
 
                     # Execute through governance pipeline INLINE
-                    committed_event = await self._tool_executor(env)
+                    # Lock serializes pipeline access across parallel agents
+                    async with self._pipeline_lock:
+                        committed_event = await self._tool_executor(env)
 
                     if committed_event is None:
                         # Pipeline blocked — tell the agent
@@ -950,7 +953,8 @@ class AgencyEngine(BaseEngine):
                             actor, text, reason, trigger_event,
                         )
                         if post_env:
-                            committed = await self._tool_executor(post_env)
+                            async with self._pipeline_lock:
+                                committed = await self._tool_executor(post_env)
                             if committed:
                                 envelopes.append(post_env)
                     break
