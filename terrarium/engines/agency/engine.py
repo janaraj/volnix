@@ -102,7 +102,7 @@ class AgencyEngine(BaseEngine):
             "intended_for": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Teammate roles to address (e.g. ['analyst'] or ['all'])",
+                "description": "Teammate roles to address (e.g. ['analyst', 'researcher']). Use specific roles, not 'all'.",
             },
             "state_updates": {
                 "type": "object",
@@ -286,26 +286,26 @@ class AgencyEngine(BaseEngine):
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
 
-        # Subscription-based activation (collaborative communication)
+        # Subscription-based recording and activation (separated concerns).
+        # RECORDING: agent sees event in recent_interactions if subscribed to service.
+        # ACTIVATION: agent starts multi-turn loop only if intended_for includes them.
         if self._typed_config.collaboration_enabled:
             already_activated = {aid for aid, _ in activated}
+            intended_for = committed_event.input_data.get("intended_for", [])
+            event_service = str(committed_event.service_id)
+
             for actor_id, actor in self._actor_states.items():
                 if str(actor_id) == str(committed_event.actor_id):
-                    continue  # don't notify yourself
+                    continue  # don't record/activate from own events
                 if actor_id in already_activated:
-                    continue  # already activated by tier1
+                    continue
 
-                for sub in actor.subscriptions:
-                    # When intended_for includes "all", only require service match
-                    # (not specific channel/filter) — broadcast to all listeners
-                    intended_for = committed_event.input_data.get("intended_for", [])
-                    if "all" in intended_for:
-                        if str(committed_event.service_id) != sub.service_id:
-                            continue
-                    elif not self._matches_subscription(committed_event, sub):
-                        continue
-
-                    # Build structured interaction record
+                # STEP 1: RECORDING — does this agent subscribe to this service?
+                service_match = any(
+                    event_service == sub.service_id
+                    for sub in actor.subscriptions
+                )
+                if service_match:
                     record = self._build_interaction_record(
                         committed_event, actor, source="notified"
                     )
@@ -315,49 +315,25 @@ class AgencyEngine(BaseEngine):
                             -actor.max_recent_interactions :
                         ]
 
-                    # Check intended_for tagging (token efficiency)
-                    collab_mode = self._typed_config.collaboration_mode
-                    intended_for = committed_event.input_data.get("intended_for", [])
+                # STEP 2: ACTIVATION — does intended_for include this agent?
+                # The sender controls who reacts via intended_for.
+                should_activate = False
+                if intended_for and (
+                    "all" in intended_for
+                    or actor.role in intended_for
+                    or str(actor_id) in intended_for
+                ):
+                    should_activate = True
 
-                    should_activate = False
-                    activation_reason = ""
-                    logger.info(
-                        "[AGENCY.notify] %s sub matched: svc=%s sensitivity=%s",
-                        actor_id, sub.service_id, sub.sensitivity,
-                    )
+                if should_activate:
+                    activated.append((actor_id, "subscription_match"))
+                    # Capture delegation text as goal_context
+                    text = committed_event.input_data.get("text", "")
+                    if text:
+                        actor.goal_context = text[:500]
 
-                    if collab_mode == "tagged" and intended_for:
-                        # Only activate if actor is tagged or "all"
-                        if (
-                            "all" in intended_for
-                            or actor.role in intended_for
-                            or str(actor_id) in intended_for
-                        ):
-                            # V2: batch/passive sensitivity gating
-                            should_activate = True
-                            activation_reason = "subscription_match"
-                    elif collab_mode == "open":
-                        # V2: batch/passive sensitivity gating
-                        should_activate = True
-                        activation_reason = "subscription_match"
-                    elif not intended_for:
-                        # No intended_for specified — treat as open
-                        # V2: batch/passive sensitivity gating
-                        should_activate = True
-                        activation_reason = "subscription_match"
-
-                    if should_activate:
-                        activated.append((actor_id, activation_reason))
-                        # Capture delegation text as goal_context so agent
-                        # remembers its assignment across multi-turn loop
-                        text = committed_event.input_data.get("text", "")
-                        if text and (
-                            "all" in intended_for
-                            or actor.role in intended_for
-                        ):
-                            actor.goal_context = text[:500]
-
-                    # Record subscription match to ledger (non-blocking)
+                # Record to ledger (non-blocking)
+                if service_match or should_activate:
                     from terrarium.ledger.entries import (
                         CollaborationNotificationEntry,
                         SubscriptionMatchEntry,
@@ -366,10 +342,10 @@ class AgencyEngine(BaseEngine):
                         SubscriptionMatchEntry(
                             actor_id=actor_id,
                             event_id=committed_event.event_id,
-                            service_id=sub.service_id,
-                            sensitivity=sub.sensitivity,
+                            service_id=event_service,
+                            sensitivity="immediate",
                             activated=should_activate,
-                            reason=activation_reason or "passive",
+                            reason="subscription_match" if should_activate else "passive",
                         ),
                         CollaborationNotificationEntry(
                             recipient_actor_id=actor_id,
@@ -377,11 +353,9 @@ class AgencyEngine(BaseEngine):
                             event_id=committed_event.event_id,
                             channel=committed_event.input_data.get("channel"),
                             intended_for=intended_for,
-                            sensitivity=sub.sensitivity,
+                            sensitivity="immediate",
                         ),
                     )
-
-                    break  # one match per actor per event
 
         if not activated:
             return []
@@ -839,11 +813,21 @@ class AgencyEngine(BaseEngine):
                 team_roster=team_roster,
             )
 
-            # Build initial messages array — this IS the agent's context
-            messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
+            # Build messages: continue from persisted conversation or start fresh
+            if actor.activation_messages:
+                # Re-activation: continue prior conversation with new context
+                messages: list[dict[str, Any]] = list(actor.activation_messages)
+                reactivation_ctx = self._build_reactivation_context(
+                    actor, trigger_event, reason,
+                )
+                if reactivation_ctx:
+                    messages.append({"role": "user", "content": reactivation_ctx})
+            else:
+                # First activation: build from scratch
+                messages: list[dict[str, Any]] = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ]
 
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
@@ -983,6 +967,9 @@ class AgencyEngine(BaseEngine):
                     )
                     break
 
+            # Persist conversation for future re-activations
+            actor.activation_messages = messages
+
             # Record activation completion
             self._record_to_ledger(ActivationCompleteEntry(
                 actor_id=actor.actor_id,
@@ -1023,6 +1010,9 @@ class AgencyEngine(BaseEngine):
             payload={
                 "text": text,
                 "channel": actor.team_channel,
+                "channel_id": actor.team_channel,
+                # No intended_for — auto-posts are passive recordings.
+                # LLM-generated tool calls control who gets activated.
             },
             logical_time=self._get_current_time(),
             priority=EnvelopePriority.INTERNAL,
@@ -1031,9 +1021,47 @@ class AgencyEngine(BaseEngine):
                 "activation_reason": reason,
                 "activation_tier": 3,
                 "reasoning": "Sharing investigation findings with team",
-                "intended_for": ["all"],
             },
         )
+
+    def _build_reactivation_context(
+        self,
+        actor: ActorState,
+        trigger_event: WorldEvent | None,
+        reason: str,
+    ) -> str:
+        """Build context update for a re-activated agent.
+
+        Shows new team messages accumulated since the last activation
+        so the agent can pick up where it left off.
+        """
+        parts: list[str] = [f"## Re-activation ({reason})"]
+
+        # New team messages from recent_interactions
+        team_msgs = [
+            r for r in actor.recent_interactions
+            if isinstance(r, InteractionRecord) and r.source != "self"
+        ]
+        if team_msgs:
+            parts.append("### New team messages")
+            for r in team_msgs[-5:]:
+                tag = ""
+                if r.intended_for:
+                    if actor.role in r.intended_for or "all" in r.intended_for:
+                        tag = " [TO YOU]"
+                parts.append(f'- [{r.actor_role}]{tag}: "{r.summary}"')
+
+        if trigger_event:
+            parts.append(
+                f"\nTriggered by: {trigger_event.actor_id} → {trigger_event.action}"
+            )
+
+        parts.append(
+            "\nContinue your work based on the new information above. "
+            "Check your prior messages — do NOT repeat actions you already took."
+        )
+
+        return "\n".join(parts)
 
     # -- Response parsing --
 

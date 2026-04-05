@@ -147,6 +147,7 @@ class ActorState(BaseModel):
     is_lead: bool = False
     batch_notification_count: int = 0
     batch_threshold: int = 3
+    activation_messages: list[dict[str, Any]] = Field(default_factory=list)  # Persisted multi-turn conversation
 
     # Configuration
     max_recent_interactions: int = 20

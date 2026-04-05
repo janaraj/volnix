@@ -476,7 +476,9 @@ class TerrariumApp:
                 "channel_id": channel_id,
                 "channel": channel_id,  # subscription filters match on "channel"
                 "text": f"[MISSION] {mission}",
-                "intended_for": ["all"],
+                # No intended_for — kickstart is passive. Lead activates via
+                # continue_work scheduled action. Non-lead agents activate when
+                # lead's delegation arrives with intended_for.
             },
             logical_time=0.0,
             priority=EnvelopePriority.ENVIRONMENT,

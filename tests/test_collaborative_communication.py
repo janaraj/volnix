@@ -391,8 +391,8 @@ class TestIntendedForTagged:
         # Alice (the tagged one) should have notifications
         assert len(alice.pending_notifications) > 0
 
-    async def test_no_intended_for_treated_as_open(self):
-        """When intended_for is absent, all subscribed actors activate (open behavior)."""
+    async def test_no_intended_for_records_passively(self):
+        """When intended_for is absent, interactions are recorded but agents don't activate."""
         alice = _make_actor(
             actor_id="actor-alice",
             role="researcher",
@@ -421,9 +421,11 @@ class TestIntendedForTagged:
 
         await engine.notify(event)
 
-        # Both should activate when intended_for is absent (treated as open)
-        assert len(alice.pending_notifications) > 0
-        assert len(bob.pending_notifications) > 0
+        # Interactions recorded (passive), but NOT activated (no pending_notifications)
+        assert len(alice.recent_interactions) > 0
+        assert len(bob.recent_interactions) > 0
+        assert len(alice.pending_notifications) == 0
+        assert len(bob.pending_notifications) == 0
 
 
 # =========================================================================
@@ -434,8 +436,8 @@ class TestIntendedForTagged:
 class TestOpenMode:
     """Test collaboration in open mode."""
 
-    async def test_all_subscribed_actors_activate(self):
-        """In open mode, all subscribed actors activate regardless of intended_for."""
+    async def test_all_subscribed_actors_activate_with_intended_for_all(self):
+        """With intended_for=["all"], all subscribed actors activate."""
         alice = _make_actor(
             actor_id="actor-alice",
             role="researcher",
@@ -458,13 +460,13 @@ class TestOpenMode:
             input_data={
                 "channel": "#research",
                 "text": "Data update",
-                "intended_for": ["researcher"],  # Even though only researcher tagged
+                "intended_for": ["all"],  # Broadcast activates everyone
             },
         )
 
         await engine.notify(event)
 
-        # In open mode, both should activate
+        # Both should activate when intended_for includes "all"
         assert len(alice.pending_notifications) > 0
         assert len(bob.pending_notifications) > 0
 
@@ -478,7 +480,7 @@ class TestSensitivityLevels:
     """Test immediate, batch, and passive sensitivity handling."""
 
     async def test_immediate_activates_same_tick(self):
-        """Immediate sensitivity triggers activation on the same event."""
+        """Immediate sensitivity with intended_for triggers activation on the same event."""
         alice = _make_actor(
             actor_id="actor-alice",
             role="researcher",
@@ -492,14 +494,14 @@ class TestSensitivityLevels:
         )
         engine = await _create_engine(
             [alice],
-            config_overrides={"collaboration_mode": "open", "collaboration_enabled": True},
+            config_overrides={"collaboration_mode": "tagged", "collaboration_enabled": True},
         )
 
         event = _make_world_event(
             actor_id="agent-external",
             service_id="chat",
             action="chat.postMessage",
-            input_data={"channel": "#research", "text": "Urgent data"},
+            input_data={"channel": "#research", "text": "Urgent data", "intended_for": ["researcher"]},
         )
 
         await engine.notify(event)
