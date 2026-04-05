@@ -131,6 +131,9 @@ class WorldAnimatorEngine(BaseEngine):
                 config=self._typed_config,
             )
 
+        # Track recent organic events across ticks so LLM can vary actors/actions
+        self._recent_organic_events: list[dict[str, str]] = []
+
         logger.info(
             "Animator configured: behavior=%s, creativity=%s, budget=%d",
             self._behavior,
@@ -178,12 +181,22 @@ class WorldAnimatorEngine(BaseEngine):
                     "Animator organic generation: budget=%d, behavior=%s, recent_actions=%d",
                     budget, self._behavior, len(recent or []),
                 )
-                organic = await self._generator.generate(world_time, budget, recent)
+                organic = await self._generator.generate(
+                    world_time, budget, recent,
+                    recent_organic=self._recent_organic_events,
+                )
                 logger.info("Animator organic generated %d events", len(organic))
                 for event_def in organic:
                     result = await self._execute_event(event_def, world_time)
                     results.append(result)
                     self._creativity_used_this_tick += 1
+                    # Track for next tick's context (keep last 10)
+                    self._recent_organic_events.append({
+                        "actor": event_def.get("actor_id", "system"),
+                        "action": event_def.get("action", ""),
+                        "service": event_def.get("service_id", ""),
+                    })
+                    self._recent_organic_events = self._recent_organic_events[-10:]
         elif not self._generator and self._behavior != "static":
             logger.warning("Animator: no organic generator available (LLM router missing?)")
 

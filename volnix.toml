@@ -196,7 +196,7 @@ collaboration_mode = "tagged"
 collaboration_enabled = true
 batch_threshold_default = 3
 synthesis_buffer_pct = 0.10
-max_tool_calls_per_activation = 10
+max_tool_calls_per_activation = 20
 tool_choice_mode = "auto"
 
 # ── External Agent Slots ───────────────────────────────────

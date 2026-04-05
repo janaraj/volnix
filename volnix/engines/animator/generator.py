@@ -43,6 +43,7 @@ class OrganicGenerator:
         world_time: datetime,
         budget: int,
         recent_actions: list[dict[str, Any]] | None = None,
+        recent_organic: list[dict[str, str]] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate organic events within the remaining creativity budget.
 
@@ -50,6 +51,7 @@ class OrganicGenerator:
             world_time: Current simulation time.
             budget: Maximum number of events to generate.
             recent_actions: Optional recent agent actions for reactive mode.
+            recent_organic: Recent organic events from previous ticks (for variety).
 
         Returns:
             List of event definition dicts, capped at budget.
@@ -60,6 +62,12 @@ class OrganicGenerator:
         # Get template variables from AnimatorContext (NOT rebuilding)
         base_vars = self._context.for_organic_generation(recent_actions)
 
+        # Build recent organic history for LLM context
+        organic_history = ""
+        if recent_organic:
+            lines = [f"- {e['actor']}: {e['action']} ({e['service']})" for e in recent_organic]
+            organic_history = "Recent organic events (vary the actor and action):\n" + "\n".join(lines)
+
         try:
             response = await ANIMATOR_EVENT.execute(
                 self._router,
@@ -68,6 +76,7 @@ class OrganicGenerator:
                 event_frequency=self._config.event_frequency,
                 escalation_on_inaction=str(self._config.escalation_on_inaction),
                 recent_actions=json.dumps(recent_actions or [], default=str)[:1000],
+                recent_organic=organic_history,
                 budget=str(budget),
             )
 

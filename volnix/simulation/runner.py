@@ -282,6 +282,11 @@ class SimulationRunner:
 
             # Step 3: AgencyEngine scheduled actions
             if self._agency is not None:
+                if hasattr(self._agency, "set_simulation_progress"):
+                    self._agency.set_simulation_progress(
+                        self._total_events_processed,
+                        self._config.max_total_events,
+                    )
                 agency_envelopes = await self._agency.check_scheduled_actions(
                     self._queue.current_time
                 )
