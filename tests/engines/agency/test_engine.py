@@ -538,7 +538,7 @@ async def test_notify_end_to_end_with_mock_llm():
     )
     engine = await _create_engine([actor])
 
-    # Mock the LLM router — returns native tool_calls
+    # Mock the LLM router — returns native tool_calls then text
     from terrarium.llm.types import ToolCall
     mock_router = AsyncMock()
     mock_router.route = AsyncMock(
@@ -549,15 +549,25 @@ async def test_notify_end_to_end_with_mock_llm():
             tool_calls=[ToolCall(
                 name="reply_ticket",
                 arguments={"message": "On it!", "reasoning": "Ticket needs attention"},
+                id="call_1",
             )],
         )
     )
     engine._llm_router = mock_router
 
+    # Mock tool executor — required for multi-turn loop
+    mock_executor = AsyncMock()
+    # WorldEvent is frozen, so we create a mock that behaves like one
+    committed = AsyncMock()
+    committed.response_body = {"ok": True}
+    committed.event_id = "evt-committed"
+    mock_executor.return_value = committed
+    engine.set_tool_executor(mock_executor)
+
     event = _make_world_event(target_entity="ticket-1")
     envelopes = await engine.notify(event)
 
-    assert len(envelopes) == 1
+    assert len(envelopes) >= 1
     assert envelopes[0].action_type == "reply_ticket"
     assert envelopes[0].actor_id == ActorId("actor-support")
 
@@ -804,6 +814,7 @@ class TestEdgeCases:
     # GAP 2.2: All actors classify as Tier 3
     async def test_notify_all_actors_tier3(self):
         """All actors with high frustration -> all classify as Tier 3 (individual LLM calls)."""
+        from terrarium.llm.types import ToolCall
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -814,18 +825,21 @@ class TestEdgeCases:
         ]
         engine = await _create_engine(actors)
 
-        # Mock LLM router
+        # Mock LLM router — returns do_nothing tool call
         mock_router = AsyncMock()
         mock_router.route = AsyncMock(
             return_value=LLMResponse(
-                content=json.dumps(
-                    {"action_type": "do_nothing", "reasoning": "No action needed"}
-                ),
+                content="",
                 provider="mock",
                 model="mock-model",
+                tool_calls=[ToolCall(name="do_nothing", arguments={"reasoning": "No action needed"})],
             )
         )
         engine._llm_router = mock_router
+
+        # Mock tool executor for multi-turn loop
+        mock_executor = AsyncMock()
+        engine.set_tool_executor(mock_executor)
 
         event = _make_world_event(target_entity="ticket-shared")
         envelopes = await engine.notify(event)
@@ -837,7 +851,8 @@ class TestEdgeCases:
 
     # GAP 2.3: All actors classify as Tier 2
     async def test_notify_all_actors_tier2(self):
-        """Low frustration actors -> all batch together in a single Tier 2 call."""
+        """Low frustration actors -> all use multi-turn loop (same as Tier 3)."""
+        from terrarium.llm.types import ToolCall
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -848,8 +863,7 @@ class TestEdgeCases:
         ]
         engine = await _create_engine(actors)
 
-        # Mock LLM router — each actor gets individual native tool call
-        from terrarium.llm.types import ToolCall
+        # Mock LLM router — returns do_nothing tool call
         mock_router = AsyncMock()
         mock_router.route = AsyncMock(
             return_value=LLMResponse(
@@ -864,10 +878,14 @@ class TestEdgeCases:
         )
         engine._llm_router = mock_router
 
+        # Mock tool executor for multi-turn loop
+        mock_executor = AsyncMock()
+        engine.set_tool_executor(mock_executor)
+
         event = _make_world_event(target_entity="ticket-shared")
         envelopes = await engine.notify(event)
 
-        # Batch now delegates to individual calls — 3 actors = 3 LLM calls
+        # All 3 actors use multi-turn loop — 3 LLM calls
         assert mock_router.route.call_count == 3
         assert len(envelopes) == 0  # all do_nothing
 

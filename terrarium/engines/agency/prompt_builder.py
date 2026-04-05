@@ -307,39 +307,46 @@ class ActorPromptBuilder:
 
     @staticmethod
     def _build_recent_activity(actor: ActorState) -> str:
-        """Build recent interaction history with full text and addressing."""
-        lines = ["### Recent Activity"]
-        for record in actor.recent_interactions[-10:]:
-            if not isinstance(record, InteractionRecord):
-                lines.append(f"- {record}")
-                continue
+        """Build recent interaction history split into own work and team messages."""
+        records = actor.recent_interactions[-10:]
+        if not records:
+            return ""
 
-            channel_tag = f" in {record.channel}" if record.channel else ""
-            reply_tag = f" (reply to {record.reply_to})" if record.reply_to else ""
+        own = [r for r in records if isinstance(r, InteractionRecord) and r.source == "self"]
+        team = [r for r in records if isinstance(r, InteractionRecord) and r.source != "self"]
+        other = [r for r in records if not isinstance(r, InteractionRecord)]
 
-            # Show if addressed to this agent
-            addressed_tag = ""
-            if record.intended_for:
-                if actor.role in record.intended_for or "all" in record.intended_for:
-                    addressed_tag = " [TO YOU]"
-                else:
-                    addressed_tag = f" [to: {', '.join(record.intended_for)}]"
+        lines: list[str] = []
 
-            if record.source == "self":
+        # Backward compat: plain strings from older code paths
+        for r in other:
+            lines.append(f"- {r}")
+
+        if own:
+            lines.append("### Your Investigation")
+            for r in own:
                 result_tag = ""
-                if record.response_summary:
-                    result_tag = f" → {record.response_summary[:200]}"
+                if r.response_summary:
+                    result_tag = f"\n  → {r.response_summary[:200]}"
+                lines.append(f"- [tick {r.tick}] {r.action}: {r.summary}{result_tag}")
+
+        if team:
+            lines.append("### Team Messages")
+            for r in team:
+                addressed_tag = ""
+                if r.intended_for:
+                    if actor.role in r.intended_for or "all" in r.intended_for:
+                        addressed_tag = " [TO YOU]"
+                    else:
+                        addressed_tag = f" [to: {', '.join(r.intended_for)}]"
+                channel_tag = f" in {r.channel}" if r.channel else ""
+                reply_tag = f" (reply to {r.reply_to})" if r.reply_to else ""
                 lines.append(
-                    f"- [tick {record.tick}] You: "
-                    f'"{record.summary}"{result_tag}{channel_tag}{reply_tag}'
+                    f"- [tick {r.tick}] {r.actor_role}:{addressed_tag} "
+                    f'"{r.summary}"{channel_tag}{reply_tag}'
                 )
-            else:
-                lines.append(
-                    f"- [tick {record.tick}] {record.actor_role}: "
-                    f'"{record.summary}"{channel_tag}'
-                    f"{addressed_tag}{reply_tag}"
-                )
-        return "\n".join(lines)
+
+        return "\n".join(lines) if lines else ""
 
     @staticmethod
     def _build_trigger(trigger_event: WorldEvent) -> str:

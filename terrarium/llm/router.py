@@ -225,6 +225,22 @@ class LLMRouter:
             self._LLM_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
             ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
             filename = f"{ts}_{engine_name}_{use_case}.json"
+            # Build message summary for multi-turn conversations
+            messages_summary = None
+            if request.messages:
+                messages_summary = [
+                    {"role": m.get("role", "?"), "length": len(m.get("content", "") or "")}
+                    for m in request.messages
+                ]
+
+            # Capture tool calls from response
+            tool_calls_data = None
+            if response.tool_calls:
+                tool_calls_data = [
+                    {"name": tc.name, "id": tc.id, "args_keys": list(tc.arguments.keys())}
+                    for tc in response.tool_calls
+                ]
+
             payload = {
                 "timestamp": ts,
                 "engine": engine_name,
@@ -242,7 +258,10 @@ class LLMRouter:
                     else request.system_prompt
                 ),
                 "user_content": request.user_content,
+                "messages_summary": messages_summary,
+                "tool_choice": request.tool_choice,
                 "response_content": response.content,
+                "response_tool_calls": tool_calls_data,
             }
             (self._LLM_DEBUG_DIR / filename).write_text(
                 json.dumps(payload, indent=2, default=str)

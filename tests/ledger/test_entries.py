@@ -165,6 +165,7 @@ def test_entry_serialization_roundtrip():
 def test_entry_registry_all_types():
     """ENTRY_REGISTRY should contain all concrete entry types."""
     from terrarium.ledger.entries import (
+        ActivationCompleteEntry,
         FeedbackAnnotationEntry,
         FeedbackCaptureEntry,
         FeedbackPromotionEntry,
@@ -175,6 +176,7 @@ def test_entry_registry_all_types():
         ProfileInferenceEntry,
         SubscriptionMatchEntry,
         CollaborationNotificationEntry,
+        ToolLoopStepEntry,
     )
 
     expected = {
@@ -197,6 +199,8 @@ def test_entry_registry_all_types():
         "profile_inference": ProfileInferenceEntry,
         "subscription_match": SubscriptionMatchEntry,
         "collaboration_notification": CollaborationNotificationEntry,
+        "tool_loop_step": ToolLoopStepEntry,
+        "activation_complete": ActivationCompleteEntry,
     }
     assert ENTRY_REGISTRY == expected
 
