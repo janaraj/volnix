@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.core.types import ActorId, ActorType
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
-from terrarium.reality.presets import load_preset
+from volnix.actors.definition import ActorDefinition
+from volnix.core.types import ActorId, ActorType
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.reality.presets import load_preset
 
 
 def _ensure_agent(app, agent_id: str):
@@ -58,7 +58,7 @@ async def test_run_produces_valid_report(app_with_mock_llm):
     result = await compiler.generate_world(plan)
     report = result["report"]
 
-    assert "TERRARIUM WORLD GENERATION REPORT" in report
+    assert "VOLNIX WORLD GENERATION REPORT" in report
     assert "GENERATED ENTITIES:" in report
     assert "ACTORS:" in report
     assert "STATUS:" in report

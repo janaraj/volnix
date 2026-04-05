@@ -1,11 +1,11 @@
 """Shared fixtures for state engine tests."""
 import pytest
-from terrarium.persistence.sqlite import SQLiteDatabase
-from terrarium.persistence.migrations import MigrationRunner
-from terrarium.engines.state.migrations import STATE_MIGRATIONS
-from terrarium.engines.state.store import EntityStore
-from terrarium.engines.state.event_log import EventLog
-from terrarium.engines.state.causal_graph import CausalGraph
+from volnix.persistence.sqlite import SQLiteDatabase
+from volnix.persistence.migrations import MigrationRunner
+from volnix.engines.state.migrations import STATE_MIGRATIONS
+from volnix.engines.state.store import EntityStore
+from volnix.engines.state.event_log import EventLog
+from volnix.engines.state.causal_graph import CausalGraph
 
 
 @pytest.fixture

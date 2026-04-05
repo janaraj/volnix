@@ -14,9 +14,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
-from terrarium.scheduling.scheduler import WorldScheduler
+from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.scheduling.scheduler import WorldScheduler
 
 
 @pytest.mark.asyncio
@@ -72,7 +72,7 @@ class TestAnimatorLive:
                     print(f"    Event {i+1}: {json.dumps(evt, default=str)[:150]}")
 
         # 6. Check ledger
-        from terrarium.ledger.query import LedgerQuery
+        from volnix.ledger.query import LedgerQuery
         entries = await live_app.ledger.query(LedgerQuery(limit=500))
         by_type = {}
         for e in entries:

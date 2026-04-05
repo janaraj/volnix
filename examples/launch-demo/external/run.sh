@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  TERRARIUM DEMO: E-commerce Order Management (External)     ║"
+echo "║  VOLNIX DEMO: E-commerce Order Management (External)     ║"
 echo "║                                                             ║"
 echo "║  2 agents • reactive world • governed • messy reality       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
@@ -19,8 +19,8 @@ echo ""
 
 cd "$(dirname "$0")/../../.."
 
-echo "Step 1: Starting Terrarium server (compiles if needed)..."
-uv run terrarium serve demo_ecommerce \
+echo "Step 1: Starting Volnix server (compiles if needed)..."
+uv run volnix serve demo_ecommerce \
   --agents examples/launch-demo/external/agents.yaml \
   --port 8080 &
 SERVER_PID=$!
@@ -34,7 +34,7 @@ for i in $(seq 1 30); do
 done
 
 echo ""
-echo "Step 2: Running agents (OpenAI SDK, zero Terrarium imports)..."
+echo "Step 2: Running agents (OpenAI SDK, zero Volnix imports)..."
 echo ""
 uv run python examples/launch-demo/external/run.py
 

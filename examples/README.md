@@ -1,17 +1,17 @@
-# Terrarium Integration Examples
+# Volnix Integration Examples
 
-Each folder contains a working example of connecting an AI agent framework to a Terrarium world. All examples have been tested E2E against the Stock Analysis world (Alpaca service).
+Each folder contains a working example of connecting an AI agent framework to a Volnix world. All examples have been tested E2E against the Stock Analysis world (Alpaca service).
 
 ## Prerequisites
 
-1. **Terrarium installed and a world compiled:**
+1. **Volnix installed and a world compiled:**
    ```bash
-   cd /path/to/terrarium
+   cd /path/to/volnix
    uv sync --all-extras
-   terrarium serve customer_support --port 8080
+   volnix serve customer_support --port 8080
    ```
 
-2. **API keys** in a `.env` file (needed by the agent's LLM, not by Terrarium):
+2. **API keys** in a `.env` file (needed by the agent's LLM, not by Volnix):
    ```
    OPENAI_API_KEY=sk-...
    ANTHROPIC_API_KEY=sk-ant-...
@@ -20,7 +20,7 @@ Each folder contains a working example of connecting an AI agent framework to a 
 
 3. **Dashboard** (optional, to watch events live):
    ```bash
-   cd terrarium-dashboard && npm run dev
+   cd volnix-dashboard && npm run dev
    # Open http://localhost:3000
    ```
 
@@ -28,14 +28,14 @@ Each folder contains a working example of connecting an AI agent framework to a 
 
 ## Examples
 
-| Framework | Folder | Connection | Terrarium Imports |
+| Framework | Folder | Connection | Volnix Imports |
 |-----------|--------|-----------|-------------------|
 | **OpenAI SDK** | `openai-sdk/` | HTTP compat (`/openai/v1/`) | None |
 | **Anthropic SDK** | `anthropic-sdk/` | HTTP compat (`/anthropic/v1/`) | None |
 | **Gemini SDK** | `gemini-sdk/` | HTTP compat (`/gemini/v1/`) | None |
-| **CrewAI** | `crewai/` | Adapter (`terrarium.adapters.crewai`) | 1 import |
-| **LangGraph** | `langgraph/` | Adapter (`terrarium.adapters.langgraph`) | 1 import |
-| **AutoGen** | `autogen/` | Adapter (`terrarium.adapters.autogen`) | 1 import |
+| **CrewAI** | `crewai/` | Adapter (`volnix.adapters.crewai`) | 1 import |
+| **LangGraph** | `langgraph/` | Adapter (`volnix.adapters.langgraph`) | 1 import |
+| **AutoGen** | `autogen/` | Adapter (`volnix.adapters.autogen`) | 1 import |
 | **MCP** | `mcp/` | MCP Streamable HTTP (`/mcp/`) | None |
 | **PydanticAI** | `pydanticai/` | MCP (native) | None |
 
@@ -45,7 +45,7 @@ Each folder contains a working example of connecting an AI agent framework to a 
 
 ### OpenAI SDK
 
-Zero Terrarium imports. Uses the `/openai/v1/` compat endpoint.
+Zero Volnix imports. Uses the `/openai/v1/` compat endpoint.
 
 ```bash
 mkdir my-openai-agent && cd my-openai-agent
@@ -56,7 +56,7 @@ cp /path/to/examples/openai-sdk/main.py .
 uv run python main.py
 ```
 
-**What it does:** Fetches tools from Terrarium in OpenAI function format, runs a standard tool-calling loop, executes tool calls against the Terrarium world.
+**What it does:** Fetches tools from Volnix in OpenAI function format, runs a standard tool-calling loop, executes tool calls against the Volnix world.
 
 **Integration code (the only change to your existing agent):**
 ```python
@@ -70,7 +70,7 @@ tools = httpx.get("http://localhost:8080/openai/v1/tools").json()
 
 ### Anthropic SDK
 
-Zero Terrarium imports. Uses the `/anthropic/v1/` compat endpoint.
+Zero Volnix imports. Uses the `/anthropic/v1/` compat endpoint.
 
 ```bash
 mkdir my-anthropic-agent && cd my-anthropic-agent
@@ -92,7 +92,7 @@ tools = httpx.get("http://localhost:8080/anthropic/v1/tools").json()
 
 ### Gemini SDK
 
-Zero Terrarium imports. Uses the `/gemini/v1/` compat endpoint.
+Zero Volnix imports. Uses the `/gemini/v1/` compat endpoint.
 
 ```bash
 mkdir my-gemini-agent && cd my-gemini-agent
@@ -116,12 +116,12 @@ declarations = [types.FunctionDeclaration(**t) for t in tool_defs]
 
 ### CrewAI
 
-Uses the Terrarium adapter. Install terrarium as editable from source.
+Uses the Volnix adapter. Install volnix as editable from source.
 
 ```bash
 # From your CrewAI project directory:
 uv venv --python 3.12
-uv pip install -e /path/to/terrarium    # editable install
+uv pip install -e /path/to/volnix    # editable install
 uv pip install crewai[tools] python-dotenv
 ```
 
@@ -133,7 +133,7 @@ tools = [SomeSearchTool()]
 
 # AFTER:
 import asyncio
-from terrarium.adapters.crewai import crewai_tools
+from volnix.adapters.crewai import crewai_tools
 tools = asyncio.get_event_loop().run_until_complete(
     crewai_tools("http://localhost:8080", actor_id="financial-analyst")
 )
@@ -144,12 +144,12 @@ tools = asyncio.get_event_loop().run_until_complete(
 
 ### LangGraph
 
-Uses the Terrarium adapter. Install terrarium as editable from source.
+Uses the Volnix adapter. Install volnix as editable from source.
 
 ```bash
 mkdir my-langgraph-agent && cd my-langgraph-agent
 uv venv --python 3.12
-uv pip install -e /path/to/terrarium
+uv pip install -e /path/to/volnix
 uv pip install langchain-core langchain-openai langgraph python-dotenv
 ```
 
@@ -161,7 +161,7 @@ tools = [TavilySearchResults(max_results=1)]
 
 # AFTER:
 import asyncio
-from terrarium.adapters.langgraph import langgraph_tools
+from volnix.adapters.langgraph import langgraph_tools
 tools = asyncio.get_event_loop().run_until_complete(
     langgraph_tools("http://localhost:8080", actor_id="research-analyst")
 )
@@ -172,19 +172,19 @@ tools = asyncio.get_event_loop().run_until_complete(
 ```bash
 # Set API keys in environment
 export OPENAI_API_KEY=sk-...
-uv run python terrarium_agent.py
+uv run python volnix_agent.py
 ```
 
 ---
 
 ### AutoGen
 
-Uses the Terrarium adapter. Install terrarium as editable from source.
+Uses the Volnix adapter. Install volnix as editable from source.
 
 ```bash
 mkdir my-autogen-agent && cd my-autogen-agent
 uv venv --python 3.12
-uv pip install -e /path/to/terrarium
+uv pip install -e /path/to/volnix
 uv pip install autogen-agentchat "autogen-ext[openai]" python-dotenv
 cp /path/to/examples/autogen/main.py .
 ```
@@ -195,7 +195,7 @@ cp /path/to/examples/autogen/main.py .
 tools = [increment_number]  # local Python function
 
 # AFTER:
-from terrarium.adapters.autogen import autogen_tools
+from volnix.adapters.autogen import autogen_tools
 tools = await autogen_tools(url="http://localhost:8080", actor_id="research-analyst")
 # Pass to AssistantAgent(tools=tools) — rest unchanged
 ```
@@ -212,13 +212,13 @@ uv run python main.py
 
 No code needed. Just add config and connect.
 
-**Option 1: Streamable HTTP (remote — Terrarium serving on a port):**
+**Option 1: Streamable HTTP (remote — Volnix serving on a port):**
 
 Add to your Claude Desktop / Cursor MCP config:
 ```json
 {
   "mcpServers": {
-    "terrarium": {
+    "volnix": {
       "url": "http://localhost:8080/mcp/",
       "transport": "streamable-http"
     }
@@ -226,12 +226,12 @@ Add to your Claude Desktop / Cursor MCP config:
 }
 ```
 
-**Option 2: stdio (local — Terrarium compiles + serves inline):**
+**Option 2: stdio (local — Volnix compiles + serves inline):**
 ```json
 {
   "mcpServers": {
-    "terrarium": {
-      "command": "terrarium",
+    "volnix": {
+      "command": "volnix",
       "args": ["mcp", "customer_support"],
       "transport": "stdio"
     }
@@ -241,8 +241,8 @@ Add to your Claude Desktop / Cursor MCP config:
 
 **Option 3: Python MCP client (programmatic):**
 ```bash
-# Uses terrarium's own venv (mcp package already installed)
-cd /path/to/terrarium
+# Uses volnix's own venv (mcp package already installed)
+cd /path/to/volnix
 uv run python examples/mcp/main.py
 ```
 
@@ -250,7 +250,7 @@ uv run python examples/mcp/main.py
 
 ### PydanticAI
 
-Zero Terrarium imports. Connects directly via MCP (PydanticAI has native MCP support).
+Zero Volnix imports. Connects directly via MCP (PydanticAI has native MCP support).
 
 ```bash
 mkdir my-pydanticai-agent && cd my-pydanticai-agent
@@ -281,7 +281,7 @@ uv run python main.py
 
 ## Connection Paths
 
-Terrarium exposes tools through multiple protocols. Choose based on your framework:
+Volnix exposes tools through multiple protocols. Choose based on your framework:
 
 ```
 Your Agent Framework
@@ -290,7 +290,7 @@ Your Agent Framework
     ├── HTTP Compat ──── /openai/v1/         (OpenAI SDK — zero imports)
     │                    /anthropic/v1/      (Anthropic SDK — zero imports)
     │                    /gemini/v1/         (Gemini SDK — zero imports)
-    ├── Adapter ──────── terrarium.adapters  (CrewAI, LangGraph, AutoGen)
+    ├── Adapter ──────── volnix.adapters  (CrewAI, LangGraph, AutoGen)
     └── HTTP REST ────── /api/v1/            (Any HTTP client)
 ```
 
@@ -319,7 +319,7 @@ agents:
       spend_usd: 1000
 ```
 
-Start with: `terrarium serve --world <world_id> --agents agents.yaml --port 8080`
+Start with: `volnix serve --world <world_id> --agents agents.yaml --port 8080`
 
 Then each agent uses its own `actor_id`:
 ```python
@@ -327,4 +327,4 @@ researcher_tools = await crewai_tools(url, actor_id="research-analyst")
 advisor_tools = await crewai_tools(url, actor_id="investment-advisor")
 ```
 
-Terrarium enforces permissions and budgets per agent through the governance pipeline.
+Volnix enforces permissions and budgets per agent through the governance pipeline.

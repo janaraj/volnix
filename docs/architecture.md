@@ -1,6 +1,6 @@
 # Architecture
 
-This document covers Terrarium's architectural design: the two-half model, the 10 engines, the governance pipeline, and the key patterns that hold the system together.
+This document covers Volnix's architectural design: the two-half model, the 10 engines, the governance pipeline, and the key patterns that hold the system together.
 
 For the full design rules and enforcement mechanisms, see [DESIGN_PRINCIPLES.md](../DESIGN_PRINCIPLES.md).
 
@@ -8,7 +8,7 @@ For the full design rules and enforcement mechanisms, see [DESIGN_PRINCIPLES.md]
 
 ## The Two Halves
 
-Terrarium separates **structure** from **content**:
+Volnix separates **structure** from **content**:
 
 **World Law (Deterministic Engine)** owns state, events, the causal graph, permissions, policy enforcement, budget accounting, time, visibility, mutation validation, and replay. The engine never guesses, never generates text, never decides what a service "would probably do." It enforces structure.
 
@@ -121,7 +121,7 @@ Permission --> Policy --> Budget --> Capability --> Responder --> Validation -->
 | **Validation** | Checks the response for state consistency and schema conformance |
 | **Commit** | Writes the event to state, updates the causal graph, publishes to the event bus |
 
-Steps can short-circuit: if policy blocks an action, the pipeline stops before reaching the responder. The pipeline is configured in `terrarium.toml` under `[pipeline]`.
+Steps can short-circuit: if policy blocks an action, the pipeline stops before reaching the responder. The pipeline is configured in `volnix.toml` under `[pipeline]`.
 
 ---
 

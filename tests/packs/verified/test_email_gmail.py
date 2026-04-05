@@ -1,10 +1,10 @@
-"""Tests for Gmail-aligned handlers in terrarium.packs.verified.gmail."""
+"""Tests for Gmail-aligned handlers in volnix.packs.verified.gmail."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.gmail.pack import EmailPack
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.gmail.pack import EmailPack
 
 
 @pytest.fixture

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.engines.feedback.drift import DriftReport
-from terrarium.engines.feedback.proposer import ProfileUpdateProposer
-from terrarium.engines.feedback.sync import ExternalSyncChecker
+from volnix.engines.feedback.drift import DriftReport
+from volnix.engines.feedback.proposer import ProfileUpdateProposer
+from volnix.engines.feedback.sync import ExternalSyncChecker
 
 
 async def test_check_drift_single(make_profile):
@@ -107,14 +107,14 @@ async def test_propose_update(make_profile):
 
 async def test_apply_update(make_profile, tmp_path):
     """M7: apply_update saves to disk and registers updated profile."""
-    from terrarium.packs.profile_loader import ProfileLoader
+    from volnix.packs.profile_loader import ProfileLoader
 
     profile = make_profile()
     loader = ProfileLoader(tmp_path / "profiles")
     registry = MagicMock()
     registry.get_profile = MagicMock(return_value=profile)
 
-    from terrarium.engines.feedback.proposer import (
+    from volnix.engines.feedback.proposer import (
         ProfileUpdateProposal,
         ProposedChange,
     )

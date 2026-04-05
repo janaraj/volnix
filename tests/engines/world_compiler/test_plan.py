@@ -1,9 +1,9 @@
 """Tests for WorldPlan and ServiceResolution models (D4a)."""
 import pytest
 
-from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
-from terrarium.kernel.surface import ServiceSurface, APIOperation
-from terrarium.reality.dimensions import WorldConditions
+from volnix.engines.world_compiler.plan import WorldPlan, ServiceResolution
+from volnix.kernel.surface import ServiceSurface, APIOperation
+from volnix.reality.dimensions import WorldConditions
 
 
 # ---------------------------------------------------------------------------

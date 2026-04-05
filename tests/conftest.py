@@ -1,4 +1,4 @@
-"""Shared test fixtures for Terrarium test suite."""
+"""Shared test fixtures for Volnix test suite."""
 
 import os
 from datetime import UTC, datetime
@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from terrarium.core.context import ActionContext
-from terrarium.core.events import WorldEvent
+from volnix.core.context import ActionContext
+from volnix.core.events import WorldEvent
 
 # Import core types
-from terrarium.core.types import (
+from volnix.core.types import (
     ActorId,
     ServiceId,
     Timestamp,
@@ -32,7 +32,7 @@ def _guardrails_strict(config: pytest.Config) -> bool:
     if config.getoption("--guardrails-strict"):
         return True
 
-    value = os.environ.get("TERRARIUM_GUARDRAILS_STRICT", "")
+    value = os.environ.get("VOLNIX_GUARDRAILS_STRICT", "")
     return value.lower() not in {"", "0", "false", "no"}
 
 
@@ -95,7 +95,7 @@ def stub_state_engine():
     async def _get_entity(entity_type, entity_id):
         key = (entity_type, str(entity_id))
         if key not in engine._entities:
-            from terrarium.core.errors import EntityNotFoundError
+            from volnix.core.errors import EntityNotFoundError
             raise EntityNotFoundError(f"{entity_type}/{entity_id}")
         return engine._entities[key]
 
@@ -115,7 +115,7 @@ def stub_state_engine():
 @pytest.fixture
 def mock_llm_provider():
     """Mock LLM provider returning deterministic responses."""
-    from terrarium.llm.types import LLMResponse
+    from volnix.llm.types import LLMResponse
 
     provider = AsyncMock()
     provider.complete = AsyncMock(return_value=LLMResponse(
@@ -129,9 +129,9 @@ def mock_llm_provider():
 
 @pytest.fixture
 def test_config():
-    """Minimal valid TerrariumConfig for testing."""
-    from terrarium.config.schema import TerrariumConfig
-    return TerrariumConfig()
+    """Minimal valid VolnixConfig for testing."""
+    from volnix.config.schema import VolnixConfig
+    return VolnixConfig()
 
 
 @pytest.fixture
@@ -176,7 +176,7 @@ def make_world_event():
 @pytest.fixture
 async def temp_sqlite_db(tmp_path):
     """Create a temporary SQLite database for integration tests."""
-    from terrarium.persistence.sqlite import SQLiteDatabase
+    from volnix.persistence.sqlite import SQLiteDatabase
 
     db = SQLiteDatabase(str(tmp_path / "test.db"))
     await db.connect()

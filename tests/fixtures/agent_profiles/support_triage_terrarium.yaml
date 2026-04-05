@@ -1,5 +1,5 @@
-# Agent profile for support_triage agent targeting Terrarium.
-# Maps semantic capabilities to Terrarium's Zendesk/Gmail tool names.
+# Agent profile for support_triage agent targeting Volnix.
+# Maps semantic capabilities to Volnix's Zendesk/Gmail tool names.
 # Used by: agent-ecosystem's support_triage workflow.
 name: support-triage-agent
 mission: >

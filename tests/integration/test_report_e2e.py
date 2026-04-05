@@ -1,17 +1,17 @@
 """End-to-end integration tests for the report generator.
 
 Tests that the reporter engine works correctly when wired into the
-full TerrariumApp system.
+full VolnixApp system.
 """
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.core.types import ActorId, EventId, WorldId
-from terrarium.core.events import (
+from volnix.core.types import ActorId, EventId, WorldId
+from volnix.core.events import (
     PermissionDeniedEvent,
     WorldEvent,
 )
-from terrarium.engines.reporter.engine import ReportGeneratorEngine
+from volnix.engines.reporter.engine import ReportGeneratorEngine
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_permission_denied,

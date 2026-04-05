@@ -1,9 +1,9 @@
-"""Tests for terrarium.registry.wiring."""
+"""Tests for volnix.registry.wiring."""
 import pytest
 from unittest.mock import AsyncMock
-from terrarium.registry.registry import EngineRegistry
-from terrarium.registry.wiring import wire_engines, inject_dependencies, shutdown_engines
-from terrarium.config.schema import TerrariumConfig
+from volnix.registry.registry import EngineRegistry
+from volnix.registry.wiring import wire_engines, inject_dependencies, shutdown_engines
+from volnix.config.schema import VolnixConfig
 from tests.registry.conftest import make_mock_engine, make_mock_bus
 
 
@@ -13,7 +13,7 @@ async def test_wire_engines():
     reg.register(make_mock_engine("state"))
     reg.register(make_mock_engine("policy", deps=["state"]))
     bus = make_mock_bus()
-    config = TerrariumConfig()
+    config = VolnixConfig()
     await wire_engines(reg, bus, config)
     for name in reg.list_engines():
         engine = reg.get(name)
@@ -43,7 +43,7 @@ async def test_wire_respects_order():
 
     reg.register(state)
     reg.register(policy)
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     assert init_order.index("state") < init_order.index("policy")
 
 
@@ -51,7 +51,7 @@ async def test_wire_respects_order():
 async def test_wire_config_extraction():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state"))
-    config = TerrariumConfig()
+    config = VolnixConfig()
     await wire_engines(reg, make_mock_bus(), config)
     engine = reg.get("state")
     # StateConfig has db_path field
@@ -63,7 +63,7 @@ async def test_wire_bus_subscriptions():
     reg = EngineRegistry()
     reg.register(make_mock_engine("state", subs=["world", "simulation"]))
     bus = make_mock_bus()
-    await wire_engines(reg, bus, TerrariumConfig())
+    await wire_engines(reg, bus, VolnixConfig())
     topics = [call.args[0] for call in bus.subscribe.call_args_list]
     assert "world" in topics
     assert "simulation" in topics
@@ -75,7 +75,7 @@ async def test_wire_missing_config_graceful():
     reg = EngineRegistry()
     engine = make_mock_engine("nonexistent_engine")
     reg.register(engine)
-    await wire_engines(reg, make_mock_bus(), TerrariumConfig())
+    await wire_engines(reg, make_mock_bus(), VolnixConfig())
     assert engine._config == {}
 
 
@@ -106,7 +106,7 @@ async def test_shutdown_engines():
     reg.register(make_mock_engine("state"))
     reg.register(make_mock_engine("policy", deps=["state"]))
     bus = make_mock_bus()
-    await wire_engines(reg, bus, TerrariumConfig())
+    await wire_engines(reg, bus, VolnixConfig())
     # All started
     assert reg.get("state")._started is True
     assert reg.get("policy")._started is True

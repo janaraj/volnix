@@ -1,4 +1,4 @@
-"""Comprehensive CLI test suite for Terrarium.
+"""Comprehensive CLI test suite for Volnix.
 
 Tests all 20 CLI commands using Typer's CliRunner.
 Commands that require the full app context are tested with mocked app_context.
@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from terrarium.cli import app
+from volnix.cli import app
 
 runner = CliRunner()
 
@@ -56,7 +56,7 @@ class TestHelpAndBasics:
     """Tests for --help output and basic CLI structure."""
 
     def test_help_shows_all_commands(self):
-        """terrarium --help lists all 20 commands."""
+        """volnix --help lists all 20 commands."""
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         for cmd in ALL_COMMANDS:
@@ -71,7 +71,7 @@ class TestHelpAndBasics:
         assert len(result.output) > 20, f"Help for '{command}' is suspiciously short"
 
     def test_no_args_shows_help(self):
-        """Running terrarium with no args shows help (no_args_is_help=True)."""
+        """Running volnix with no args shows help (no_args_is_help=True)."""
         result = runner.invoke(app, [])
         # Typer uses exit code 0 or 2 for no_args_is_help depending on version
         assert result.exit_code in (0, 2)
@@ -147,7 +147,7 @@ class TestCheckCommand:
         """check exits 0 and shows system check output."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-        assert "Terrarium System Check" in result.output
+        assert "Volnix System Check" in result.output
 
     def test_check_output_contains_python(self):
         """check output includes Python version info."""
@@ -187,19 +187,19 @@ class TestCheckCommand:
 # ===================================================================
 
 
-def _make_mock_terrarium():
-    """Build a mock TerrariumApp with common sub-mocks."""
-    terrarium = AsyncMock()
+def _make_mock_volnix():
+    """Build a mock VolnixApp with common sub-mocks."""
+    volnix = AsyncMock()
 
     # Run manager
-    terrarium.run_manager = AsyncMock()
-    terrarium.run_manager.list_runs = AsyncMock(return_value=[])
-    terrarium.run_manager.get_run = AsyncMock(return_value=None)
+    volnix.run_manager = AsyncMock()
+    volnix.run_manager.list_runs = AsyncMock(return_value=[])
+    volnix.run_manager.get_run = AsyncMock(return_value=None)
 
     # Artifact store
-    terrarium.artifact_store = AsyncMock()
-    terrarium.artifact_store.load_artifact = AsyncMock(return_value=None)
-    terrarium.artifact_store.list_artifacts = AsyncMock(return_value=[])
+    volnix.artifact_store = AsyncMock()
+    volnix.artifact_store.load_artifact = AsyncMock(return_value=None)
+    volnix.artifact_store.list_artifacts = AsyncMock(return_value=[])
 
     # Registry
     registry_engines = {
@@ -214,39 +214,39 @@ def _make_mock_terrarium():
         "reporter": AsyncMock(),
         "feedback": AsyncMock(),
     }
-    terrarium.registry = MagicMock()
-    terrarium.registry.get = MagicMock(side_effect=lambda name: registry_engines.get(name))
-    terrarium.registry.list_engines = MagicMock(return_value=list(registry_engines.keys()))
+    volnix.registry = MagicMock()
+    volnix.registry.get = MagicMock(side_effect=lambda name: registry_engines.get(name))
+    volnix.registry.list_engines = MagicMock(return_value=list(registry_engines.keys()))
 
     # Gateway
-    terrarium.gateway = AsyncMock()
-    terrarium.gateway.get_tool_manifest = AsyncMock(return_value=[])
+    volnix.gateway = AsyncMock()
+    volnix.gateway.get_tool_manifest = AsyncMock(return_value=[])
 
     # Ledger
-    terrarium.ledger = AsyncMock()
-    terrarium.ledger.query = AsyncMock(return_value=[])
+    volnix.ledger = AsyncMock()
+    volnix.ledger.query = AsyncMock(return_value=[])
 
     # Health (public property)
     health_mock = AsyncMock()
     health_mock.check_all = AsyncMock(return_value={})
     health_mock.is_healthy = MagicMock(return_value=True)
-    terrarium.health = health_mock
+    volnix.health = health_mock
 
     # Actor registry (public property)
-    terrarium.actor_registry = None
+    volnix.actor_registry = None
 
-    return terrarium, registry_engines
+    return volnix, registry_engines
 
 
-def _patch_app_context(terrarium_mock):
+def _patch_app_context(volnix_mock):
     """Return a patch for cli_helpers.app_context that yields the mock."""
     from contextlib import asynccontextmanager
 
     @asynccontextmanager
     async def _mock_app_context():
-        yield terrarium_mock
+        yield volnix_mock
 
-    return patch("terrarium.cli.app_context", _mock_app_context)
+    return patch("volnix.cli.app_context", _mock_app_context)
 
 
 # ===================================================================
@@ -259,15 +259,15 @@ class TestCreateCommand:
 
     def test_create_generates_yaml(self, tmp_path: Path):
         """create writes a YAML file from a description."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_plan = MagicMock()
         mock_plan.warnings = []
         mock_plan.model_dump = MagicMock(return_value={"world": "test"})
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
         # PlanReviewer is imported inside the async function, so patch at source
-        with _patch_app_context(terrarium), patch(
-            "terrarium.engines.world_compiler.plan_reviewer.PlanReviewer"
+        with _patch_app_context(volnix), patch(
+            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
         ) as MockReviewer:
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="world:\n  name: test\n")
@@ -285,13 +285,13 @@ class TestCreateCommand:
 
     def test_create_with_reality_option(self, tmp_path: Path):
         """create respects the --reality option."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_plan = MagicMock()
         mock_plan.warnings = []
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.engines.world_compiler.plan_reviewer.PlanReviewer"
+        with _patch_app_context(volnix), patch(
+            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
         ) as MockReviewer:
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="reality: hostile\n")
@@ -319,13 +319,13 @@ class TestCreateCommand:
 
     def test_create_output_path(self, tmp_path: Path):
         """create respects a custom --output path."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_plan = MagicMock()
         mock_plan.warnings = []
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.engines.world_compiler.plan_reviewer.PlanReviewer"
+        with _patch_app_context(volnix), patch(
+            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
         ) as MockReviewer:
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="custom: true\n")
@@ -344,15 +344,15 @@ class TestCreateCommand:
             assert "custom" in custom_path.read_text()
 
     def test_create_handles_compiler_error(self):
-        """create exits 1 when the compiler raises TerrariumError."""
-        from terrarium.core.errors import TerrariumError
+        """create exits 1 when the compiler raises VolnixError."""
+        from volnix.core.errors import VolnixError
 
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         engines["world_compiler"].compile_from_nl = AsyncMock(
-            side_effect=TerrariumError("Compilation failed")
+            side_effect=VolnixError("Compilation failed")
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["create", "broken world"])
             assert result.exit_code == 1
             assert "Error" in result.output
@@ -368,18 +368,18 @@ class TestListCommand:
 
     def test_list_runs_empty(self):
         """list runs shows empty table when no runs exist."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.list_runs = AsyncMock(return_value=[])
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.list_runs = AsyncMock(return_value=[])
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "runs"])
             assert result.exit_code == 0
             assert "Runs" in result.output
 
     def test_list_runs_with_data(self):
         """list runs shows run data when runs exist."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.list_runs = AsyncMock(
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.list_runs = AsyncMock(
             return_value=[
                 {
                     "run_id": "run-001",
@@ -391,14 +391,14 @@ class TestListCommand:
             ]
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "runs"])
             assert result.exit_code == 0
             assert "run-001" in result.output
 
     def test_list_tools(self):
         """list tools shows tools table."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_pack_registry = MagicMock()
         mock_pack_registry.list_tools = MagicMock(
             return_value=[
@@ -408,7 +408,7 @@ class TestListCommand:
         )
         engines["responder"].pack_registry = mock_pack_registry
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "tools"])
             assert result.exit_code == 0
             assert "Tools" in result.output
@@ -416,7 +416,7 @@ class TestListCommand:
 
     def test_list_services(self):
         """list services shows services table."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_pack_registry = MagicMock()
         mock_pack_registry.list_packs = MagicMock(
             return_value=[
@@ -426,44 +426,44 @@ class TestListCommand:
         )
         engines["responder"].pack_registry = mock_pack_registry
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "services"])
             assert result.exit_code == 0
             assert "Services" in result.output
 
     def test_list_engines(self):
         """list engines shows all registered engines."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "engines"])
             assert result.exit_code == 0
             assert "Engines" in result.output
 
     def test_list_invalid_resource(self):
         """list with unknown resource type exits with error."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "unicorns"])
             assert result.exit_code == 1
             assert "Unknown resource" in result.output
 
     def test_list_artifacts_requires_run_id(self):
         """list artifacts without --run exits with error."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "artifacts"])
             assert result.exit_code == 1
             assert "--run" in result.output
 
     def test_list_runs_json_format(self):
         """list runs --format json produces JSON output."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.list_runs = AsyncMock(return_value=[])
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.list_runs = AsyncMock(return_value=[])
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "runs", "--format", "json"])
             assert result.exit_code == 0
 
@@ -478,27 +478,27 @@ class TestReportDiffCommands:
 
     def test_report_no_run(self):
         """report exits with error when the run doesn't exist."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.get_run = AsyncMock(return_value=None)
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.get_run = AsyncMock(return_value=None)
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["report", "nonexistent-run"])
             assert result.exit_code == 1
             assert "not found" in result.output.lower() or "Error" in result.output
 
     def test_report_with_existing_run(self):
         """report shows report data when run exists."""
-        terrarium, engines = _make_mock_terrarium()
-        terrarium.run_manager.get_run = AsyncMock(
+        volnix, engines = _make_mock_volnix()
+        volnix.run_manager.get_run = AsyncMock(
             return_value={"run_id": "run-001", "tag": "test"}
         )
-        terrarium.artifact_store.load_artifact = AsyncMock(
+        volnix.artifact_store.load_artifact = AsyncMock(
             side_effect=lambda rid, atype: (
                 {"summary": "All clear"} if atype == "report" else {"score": 95}
             )
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["report", "run-001"])
             assert result.exit_code == 0
 
@@ -506,9 +506,9 @@ class TestReportDiffCommands:
         """diff exits with error when fewer than 2 runs given."""
         # diff requires at least 2 positional arguments
         # Typer will parse single arg as a list of 1
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["diff", "only-one-run"])
             assert result.exit_code == 1
             assert "2" in result.output or "error" in result.output.lower()
@@ -522,12 +522,12 @@ class TestReportDiffCommands:
 
     def test_diff_with_two_runs(self):
         """diff with two run IDs calls diff_runs."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.diff_runs = AsyncMock(
+        volnix, _ = _make_mock_volnix()
+        volnix.diff_runs = AsyncMock(
             return_value={"differences": [], "summary": "No differences"}
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["diff", "run-001", "run-002"])
             assert result.exit_code == 0
 
@@ -542,9 +542,9 @@ class TestInspectCommand:
 
     def test_inspect_entities_without_type(self):
         """inspect entities without --type shows guidance."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "entities"])
             assert result.exit_code == 0
             assert "type" in result.output.lower()
@@ -559,16 +559,16 @@ class TestInspectCommand:
 
     def test_inspect_unknown_resource(self):
         """inspect with unknown resource exits with error."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "galaxies"])
             assert result.exit_code == 1
             assert "Unknown resource" in result.output
 
     def test_inspect_entities_with_type(self):
         """inspect entities --type email returns entity table."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         state_engine = engines["state"]
         state_engine.query_entities = AsyncMock(
             return_value=[
@@ -576,25 +576,25 @@ class TestInspectCommand:
             ]
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "entities", "--type", "email"])
             assert result.exit_code == 0
 
     def test_inspect_policies(self):
         """inspect policies shows policy list."""
-        terrarium, engines = _make_mock_terrarium()
-        from terrarium.core.types import PolicyId
+        volnix, engines = _make_mock_volnix()
+        from volnix.core.types import PolicyId
         engines["policy"].get_active_policies = AsyncMock(
             return_value=[PolicyId("budget_check"), PolicyId("rate_limit")]
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "policies"])
             assert result.exit_code == 0
 
     def test_inspect_services(self):
         """inspect services shows service packs."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         # Use a plain MagicMock for responder to avoid AsyncMock coroutine issues
         responder = MagicMock()
         mock_pack_registry = MagicMock()
@@ -604,16 +604,16 @@ class TestInspectCommand:
         responder.pack_registry = mock_pack_registry
         engines["responder"] = responder
         # Update registry.get to return the plain MagicMock for responder
-        original_get = terrarium.registry.get.side_effect
+        original_get = volnix.registry.get.side_effect
 
         def patched_get(name):
             if name == "responder":
                 return responder
             return original_get(name)
 
-        terrarium.registry.get = MagicMock(side_effect=patched_get)
+        volnix.registry.get = MagicMock(side_effect=patched_get)
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "services"])
             assert result.exit_code == 0
             assert "Services" in result.output
@@ -664,27 +664,27 @@ class TestShowCommand:
 
     def test_show_unknown_resource_type(self):
         """show with unknown resource type exits with error."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "unknown_thing", "some-id"])
             assert result.exit_code == 1
             assert "Unknown resource" in result.output
 
     def test_show_run_not_found(self):
         """show run with nonexistent ID exits with error."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.get_run = AsyncMock(return_value=None)
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.get_run = AsyncMock(return_value=None)
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "run", "nonexistent"])
             assert result.exit_code == 1
             assert "not found" in result.output.lower()
 
     def test_show_run_found(self):
         """show run with existing ID displays details."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.get_run = AsyncMock(
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.get_run = AsyncMock(
             return_value={
                 "run_id": "run-001",
                 "tag": "test",
@@ -693,7 +693,7 @@ class TestShowCommand:
             }
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "run", "run-001"])
             assert result.exit_code == 0
             assert "run-001" in result.output
@@ -729,20 +729,20 @@ class TestSnapshotReplayCommands:
 
     def test_snapshot_creates(self):
         """snapshot with a label creates a snapshot."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         engines["state"].snapshot = AsyncMock(return_value="snap-abc123")
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["snapshot", "my-snapshot"])
             assert result.exit_code == 0
             assert "snap-abc123" in result.output
 
     def test_replay_nonexistent_run(self):
         """replay with a nonexistent run ID exits with error."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.run_manager.get_run = AsyncMock(return_value=None)
+        volnix, _ = _make_mock_volnix()
+        volnix.run_manager.get_run = AsyncMock(return_value=None)
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["replay", "nonexistent-run"])
             assert result.exit_code == 1
             assert "not found" in result.output.lower()
@@ -767,11 +767,11 @@ class TestLedgerCommand:
 
     def test_ledger_basic(self):
         """ledger runs without crash and shows table."""
-        terrarium, _ = _make_mock_terrarium()
-        terrarium.ledger.query = AsyncMock(return_value=[])
+        volnix, _ = _make_mock_volnix()
+        volnix.ledger.query = AsyncMock(return_value=[])
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.ledger.query.LedgerQueryBuilder"
+        with _patch_app_context(volnix), patch(
+            "volnix.ledger.query.LedgerQueryBuilder"
         ) as MockBuilder:
             builder_instance = MagicMock()
             builder_instance.limit = MagicMock(return_value=builder_instance)
@@ -787,7 +787,7 @@ class TestLedgerCommand:
 
     def test_ledger_with_entries(self):
         """ledger shows formatted entries when data exists."""
-        terrarium, _ = _make_mock_terrarium()
+        volnix, _ = _make_mock_volnix()
         mock_entries = [
             {
                 "entry_id": "entry-001",
@@ -797,10 +797,10 @@ class TestLedgerCommand:
                 "details": "Permission check passed",
             }
         ]
-        terrarium.ledger.query = AsyncMock(return_value=mock_entries)
+        volnix.ledger.query = AsyncMock(return_value=mock_entries)
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.ledger.query.LedgerQueryBuilder"
+        with _patch_app_context(volnix), patch(
+            "volnix.ledger.query.LedgerQueryBuilder"
         ) as MockBuilder:
             builder_instance = MagicMock()
             builder_instance.limit = MagicMock(return_value=builder_instance)
@@ -828,12 +828,12 @@ class TestInitCommand:
 
     def test_init_with_yaml(self, tmp_path: Path):
         """init compiles a YAML file successfully."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_plan = MagicMock()
         engines["world_compiler"].compile_from_yaml = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.engines.world_compiler.plan_reviewer.PlanReviewer"
+        with _patch_app_context(volnix), patch(
+            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
         ) as MockReviewer:
             reviewer_instance = MagicMock()
             reviewer_instance.validate_plan = MagicMock(return_value=[])
@@ -862,13 +862,13 @@ class TestPlanCommand:
 
     def test_plan_from_description(self):
         """plan generates a plan from a description."""
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         mock_plan = MagicMock()
         mock_plan.model_dump = MagicMock(return_value={"world": "test"})
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(terrarium), patch(
-            "terrarium.engines.world_compiler.plan_reviewer.PlanReviewer"
+        with _patch_app_context(volnix), patch(
+            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
         ) as MockReviewer:
             reviewer_instance = MagicMock()
             reviewer_instance.format_plan = MagicMock(return_value="World Plan Output")
@@ -899,14 +899,14 @@ class TestRunCommand:
 
     def test_run_nonexistent_world(self):
         """run exits with error for a missing world file (non-YAML string)."""
-        terrarium, engines = _make_mock_terrarium()
-        from terrarium.core.errors import TerrariumError
+        volnix, engines = _make_mock_volnix()
+        from volnix.core.errors import VolnixError
 
         engines["world_compiler"].compile_from_nl = AsyncMock(
-            side_effect=TerrariumError("Cannot compile: invalid description")
+            side_effect=VolnixError("Cannot compile: invalid description")
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["run", "nonexistent_world.txt"])
             assert result.exit_code == 1
 
@@ -929,14 +929,14 @@ class TestServeCommand:
 
     def test_serve_compilation_error(self):
         """serve exits with error when compilation fails."""
-        from terrarium.core.errors import TerrariumError
+        from volnix.core.errors import VolnixError
 
-        terrarium, engines = _make_mock_terrarium()
+        volnix, engines = _make_mock_volnix()
         engines["world_compiler"].compile_from_yaml = AsyncMock(
-            side_effect=TerrariumError("Invalid world YAML")
+            side_effect=VolnixError("Invalid world YAML")
         )
 
-        with _patch_app_context(terrarium):
+        with _patch_app_context(volnix):
             result = runner.invoke(app, ["serve", "bad_world.yaml"])
             assert result.exit_code == 1
 
@@ -977,14 +977,14 @@ class TestCLIHelpers:
     """Tests for cli_helpers.py formatting functions."""
 
     def test_format_run_table_empty(self):
-        from terrarium.cli_helpers import format_run_table
+        from volnix.cli_helpers import format_run_table
 
         table = format_run_table([])
         assert table.title == "Runs"
         assert table.row_count == 0
 
     def test_format_run_table_with_data(self):
-        from terrarium.cli_helpers import format_run_table
+        from volnix.cli_helpers import format_run_table
 
         runs = [
             {
@@ -999,7 +999,7 @@ class TestCLIHelpers:
         assert table.row_count == 1
 
     def test_format_entity_table(self):
-        from terrarium.cli_helpers import format_entity_table
+        from volnix.cli_helpers import format_entity_table
 
         entities = [{"id": "e1", "name": "Test Entity"}]
         table = format_entity_table(entities, "test")
@@ -1007,14 +1007,14 @@ class TestCLIHelpers:
         assert table.row_count == 1
 
     def test_format_ledger_table_empty(self):
-        from terrarium.cli_helpers import format_ledger_table
+        from volnix.cli_helpers import format_ledger_table
 
         table = format_ledger_table([])
         assert table.title == "Ledger Entries"
         assert table.row_count == 0
 
     def test_format_scorecard(self):
-        from terrarium.cli_helpers import format_scorecard
+        from volnix.cli_helpers import format_scorecard
 
         scorecard = {
             "governance": {"compliance": 0.95, "total_actions": 42},
@@ -1024,7 +1024,7 @@ class TestCLIHelpers:
         assert panel.title == "Scorecard"
 
     def test_format_health_table(self):
-        from terrarium.cli_helpers import format_health_table
+        from volnix.cli_helpers import format_health_table
 
         results = {
             "state": {"started": True, "healthy": True, "error": ""},
@@ -1034,7 +1034,7 @@ class TestCLIHelpers:
         assert table.row_count == 2
 
     def test_format_event_line(self):
-        from terrarium.cli_helpers import format_event_line
+        from volnix.cli_helpers import format_event_line
 
         event = {
             "timestamp": "2026-01-01T00:00:00.000Z",
@@ -1047,7 +1047,7 @@ class TestCLIHelpers:
         assert "actor-1" in line
 
     def test_format_diff_fallback(self):
-        from terrarium.cli_helpers import format_diff
+        from volnix.cli_helpers import format_diff
 
         comparison = {"changes": ["a", "b"]}
         output = format_diff(comparison)
@@ -1057,14 +1057,14 @@ class TestCLIHelpers:
         assert len(output) > 0
 
     def test_write_output_to_file(self, tmp_path: Path):
-        from terrarium.cli_helpers import write_output
+        from volnix.cli_helpers import write_output
 
         outfile = tmp_path / "output.txt"
         write_output("hello world", outfile)
         assert outfile.read_text() == "hello world"
 
     def test_write_output_to_stdout(self, capsys):
-        from terrarium.cli_helpers import write_output
+        from volnix.cli_helpers import write_output
 
         # When output_path is None, prints to console
         write_output("hello stdout", None)

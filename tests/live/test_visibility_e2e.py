@@ -9,7 +9,7 @@ Tests the full flow:
   6. Verify: agent sees assigned + unassigned
   7. Verify: supervisor sees all
 
-Requires: TERRARIUM_RUN_REAL_API_TESTS=1 + OPENAI_API_KEY
+Requires: VOLNIX_RUN_REAL_API_TESTS=1 + OPENAI_API_KEY
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import pytest
 
-from terrarium.core.types import ActorId, EntityId, ToolName
+from volnix.core.types import ActorId, EntityId, ToolName
 
 
 @pytest.fixture
@@ -43,13 +43,13 @@ class TestVisibilityScopingE2E:
         print("STEP 1: BUILD CUSTOMER SUPPORT WORLD")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import (
+        from volnix.engines.world_compiler.plan import (
             ServiceResolution,
             WorldPlan,
         )
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.zendesk.pack import TicketsPack
-        from terrarium.reality.presets import load_preset
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.zendesk.pack import TicketsPack
+        from volnix.reality.presets import load_preset
 
         zendesk_surface = ServiceSurface.from_pack(TicketsPack())
 
@@ -170,9 +170,9 @@ class TestVisibilityScopingE2E:
         print("=" * 70)
 
         # Register actors
-        from terrarium.actors.definition import ActorDefinition
-        from terrarium.actors.registry import ActorRegistry
-        from terrarium.core.types import ActorType
+        from volnix.actors.definition import ActorDefinition
+        from volnix.actors.registry import ActorRegistry
+        from volnix.core.types import ActorType
 
         actor_registry = app._actor_registry
         if actor_registry is None:

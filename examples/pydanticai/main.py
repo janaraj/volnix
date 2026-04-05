@@ -1,14 +1,14 @@
-"""PydanticAI + Terrarium integration example.
+"""PydanticAI + Volnix integration example.
 
-Zero Terrarium imports. PydanticAI connects directly via MCP —
-Terrarium's tools appear as native PydanticAI toolsets.
+Zero Volnix imports. PydanticAI connects directly via MCP —
+Volnix's tools appear as native PydanticAI toolsets.
 
 Based on PydanticAI MCP client docs:
   https://ai.pydantic.dev/mcp/client/
 
 Prerequisites:
     pip install pydantic-ai[openai]
-    terrarium serve --world <world_id> --port 8080
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -22,12 +22,12 @@ from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 load_dotenv()  # loads .env from current directory or parent
 
-TERRARIUM_MCP = "http://localhost:8080/mcp/"
+VOLNIX_MCP = "http://localhost:8080/mcp/"
 
 
 async def main():
-    # Connect to Terrarium via MCP — zero Terrarium imports
-    server = MCPServerStreamableHTTP(TERRARIUM_MCP)
+    # Connect to Volnix via MCP — zero Volnix imports
+    server = MCPServerStreamableHTTP(VOLNIX_MCP)
     agent = Agent("openai:gpt-4.1-mini", toolsets=[server])
 
     async with agent:

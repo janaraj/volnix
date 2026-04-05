@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from terrarium.webhook.delivery import WebhookDelivery
+from volnix.webhook.delivery import WebhookDelivery
 
 
 async def test_successful_delivery():
@@ -15,7 +15,7 @@ async def test_successful_delivery():
     mock_response = AsyncMock()
     mock_response.status_code = 200
 
-    with patch("terrarium.webhook.delivery.httpx.AsyncClient") as mock_cls:
+    with patch("volnix.webhook.delivery.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -40,7 +40,7 @@ async def test_4xx_no_retry():
     mock_response = AsyncMock()
     mock_response.status_code = 404
 
-    with patch("terrarium.webhook.delivery.httpx.AsyncClient") as mock_cls:
+    with patch("volnix.webhook.delivery.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -64,7 +64,7 @@ async def test_connection_error_retries():
         max_retries=2, backoff_base=0.01, timeout=1.0
     )
 
-    with patch("terrarium.webhook.delivery.httpx.AsyncClient") as mock_cls:
+    with patch("volnix.webhook.delivery.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(
             side_effect=httpx.ConnectError("refused")
@@ -83,7 +83,7 @@ async def test_connection_error_retries():
 
 
 async def test_hmac_signature():
-    """Secret adds X-Terrarium-Signature header."""
+    """Secret adds X-Volnix-Signature header."""
     delivery = WebhookDelivery(
         max_retries=0, backoff_base=0.01, timeout=2.0
     )
@@ -96,7 +96,7 @@ async def test_hmac_signature():
         captured_headers.update(headers)
         return mock_response
 
-    with patch("terrarium.webhook.delivery.httpx.AsyncClient") as mock_cls:
+    with patch("volnix.webhook.delivery.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.post = capture_post
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -109,8 +109,8 @@ async def test_hmac_signature():
             secret="my_secret_key",
         )
 
-    assert "X-Terrarium-Signature" in captured_headers
-    assert len(captured_headers["X-Terrarium-Signature"]) == 64  # SHA256 hex
+    assert "X-Volnix-Signature" in captured_headers
+    assert len(captured_headers["X-Volnix-Signature"]) == 64  # SHA256 hex
 
 
 async def test_max_retries_exhausted():
@@ -121,7 +121,7 @@ async def test_max_retries_exhausted():
         max_retries=1, backoff_base=0.01, timeout=1.0
     )
 
-    with patch("terrarium.webhook.delivery.httpx.AsyncClient") as mock_cls:
+    with patch("volnix.webhook.delivery.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(
             side_effect=httpx.TimeoutException("timeout")

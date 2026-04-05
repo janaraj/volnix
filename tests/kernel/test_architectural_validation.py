@@ -6,7 +6,7 @@ representations, response schemas, and entity definitions.
 """
 
 import pytest
-from terrarium.kernel.surface import APIOperation, ServiceSurface
+from volnix.kernel.surface import APIOperation, ServiceSurface
 
 
 def _email_operations() -> list[APIOperation]:

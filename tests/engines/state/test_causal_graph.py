@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.state.causal_graph -- CausalGraph DAG operations."""
+"""Tests for volnix.engines.state.causal_graph -- CausalGraph DAG operations."""
 import pytest
-from terrarium.core.types import EventId
-from terrarium.engines.state.causal_graph import CausalGraph
+from volnix.core.types import EventId
+from volnix.engines.state.causal_graph import CausalGraph
 
 
 async def test_add_and_get_causes(graph):

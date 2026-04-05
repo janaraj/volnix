@@ -1,7 +1,7 @@
 """Tests for ServiceCapture -- extract behavioral fingerprint from runs."""
 from __future__ import annotations
 
-from terrarium.engines.feedback.capture import ServiceCapture
+from volnix.engines.feedback.capture import ServiceCapture
 
 
 async def test_capture_from_event_log(mock_artifact_store, annotation_store):

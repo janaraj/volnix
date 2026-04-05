@@ -1,4 +1,4 @@
-"""Tests for terrarium.simulation.runner.SimulationRunner."""
+"""Tests for volnix.simulation.runner.SimulationRunner."""
 
 from __future__ import annotations
 
@@ -6,18 +6,18 @@ import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import (
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.events import WorldEvent
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EnvelopePriority,
     ServiceId,
     Timestamp,
 )
-from terrarium.simulation.config import SimulationRunnerConfig
-from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import (
+from volnix.simulation.config import SimulationRunnerConfig
+from volnix.simulation.event_queue import EventQueue
+from volnix.simulation.runner import (
     SimulationRunner,
     SimulationStatus,
     SimulationType,

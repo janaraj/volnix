@@ -10,7 +10,7 @@ import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +120,8 @@ SAMPLE_RUN = {
 
 def _make_dashboard_gateway():
     """Create a mock gateway wired for dashboard endpoint testing."""
-    from terrarium.core.context import StepResult
-    from terrarium.core.types import StepVerdict
+    from volnix.core.context import StepResult
+    from volnix.core.types import StepVerdict
 
     gateway = MagicMock()
     gateway.get_tool_manifest = AsyncMock(return_value=[])

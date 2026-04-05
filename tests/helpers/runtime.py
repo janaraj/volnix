@@ -8,7 +8,7 @@ from typing import Any
 
 async def start_http_adapter(app: Any) -> Any:
     """Start adapters on a real app and return the HTTP adapter."""
-    from terrarium.kernel.surface import ServiceSurface
+    from volnix.kernel.surface import ServiceSurface
 
     adapter = app.gateway._adapters["http"]
     original_get_tool_manifest = app.gateway.get_tool_manifest

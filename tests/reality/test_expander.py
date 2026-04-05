@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.expander -- ConditionExpander logic.
+"""Tests for volnix.reality.expander -- ConditionExpander logic.
 
 Tests the expander's ability to expand presets with overrides, build
 LLM prompt context, produce summaries, and merge overrides. Also verifies
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.reality.dimensions import WorldConditions
-from terrarium.reality.expander import ConditionExpander
+from volnix.reality.dimensions import WorldConditions
+from volnix.reality.expander import ConditionExpander
 
 
 class TestExpandMessy:
@@ -187,7 +187,7 @@ class TestAllDescriptionsCovered:
     """Verify all 25 dimension+label combinations have non-fallback descriptions."""
 
     def test_all_25_descriptions_non_fallback(self) -> None:
-        from terrarium.reality.labels import LABEL_SCALES, resolve_label
+        from volnix.reality.labels import LABEL_SCALES, resolve_label
         expander = ConditionExpander()
         for dim_name, labels in LABEL_SCALES.items():
             for label in labels:

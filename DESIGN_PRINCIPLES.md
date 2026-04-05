@@ -1,12 +1,12 @@
-# Terrarium Design Principles
+# Volnix Design Principles
 
-This document defines the architectural principles, design rules, patterns, and enforcement mechanisms that govern all Terrarium development. Every contributor must read and follow these principles. Code reviews must verify compliance.
+This document defines the architectural principles, design rules, patterns, and enforcement mechanisms that govern all Volnix development. Every contributor must read and follow these principles. Code reviews must verify compliance.
 
 ---
 
 ## Architecture Principles
 
-1. **Every module is isolated.** No module imports another module's internals. Cross-module communication is via events (bus) or protocol-typed references (dependency injection). If you find yourself writing `from terrarium.engines.state.internals import ...` in another engine, stop. You are violating isolation.
+1. **Every module is isolated.** No module imports another module's internals. Cross-module communication is via events (bus) or protocol-typed references (dependency injection). If you find yourself writing `from volnix.engines.state.internals import ...` in another engine, stop. You are violating isolation.
 
 2. **All inter-engine communication goes through the event bus.** No direct function calls between engines. The bus is the nervous system. Engines publish events and subscribe to event types. There is no other pathway.
 
@@ -36,7 +36,7 @@ This document defines the architectural principles, design rules, patterns, and 
 
 - **DO write tests alongside every module** — no untested code. Tests are not an afterthought. They are written as part of the module, not bolted on later.
 
-- **DO use config values from the config registry** — never hardcode thresholds, timeouts, limits, or provider names. If a value might change between environments or deployments, it belongs in `terrarium.toml`.
+- **DO use config values from the config registry** — never hardcode thresholds, timeouts, limits, or provider names. If a value might change between environments or deployments, it belongs in `volnix.toml`.
 
 - **DO use typed IDs (`EntityId`, `ActorId`, etc.)** — never pass raw strings for domain identifiers. Typed IDs prevent accidentally swapping an entity ID for an actor ID. They are cheap (`NewType` wrappers) and the type checker enforces them.
 

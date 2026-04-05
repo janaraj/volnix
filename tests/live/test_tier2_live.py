@@ -19,14 +19,14 @@ import pytest
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM."""
+    """VolnixApp with REAL codex-acp LLM."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -38,7 +38,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -84,7 +84,7 @@ class TestTier2ProfileRuntime:
             print(f"  Action lookup 'jira_create_issue': {lookup.service_name}")
 
             # Convert to surface
-            from terrarium.packs.profile_surface import profile_to_surface
+            from volnix.packs.profile_surface import profile_to_surface
             surface = profile_to_surface(jira_profile)
             print(f"  Surface operations: {len(surface.operations)}")
             print(f"  Surface entity_schemas: {list(surface.entity_schemas.keys())}")
@@ -120,7 +120,7 @@ class TestTier2InferLive:
         print("TEST: Infer Twilio Profile via LLM")
         print("=" * 70)
 
-        from terrarium.packs.profile_infer import ProfileInferrer
+        from volnix.packs.profile_infer import ProfileInferrer
 
         # Create inferrer with real LLM
         inferrer = ProfileInferrer(
@@ -164,7 +164,7 @@ class TestTier2InferLive:
         assert profile.confidence >= 0.2, f"Confidence too low: {profile.confidence}"
 
         # Save to temp directory
-        from terrarium.packs.profile_loader import ProfileLoader
+        from volnix.packs.profile_loader import ProfileLoader
         loader = ProfileLoader(tmp_path / "profiles")
         saved_path = loader.save(profile)
         print(f"\n  Saved to: {saved_path}")
@@ -177,7 +177,7 @@ class TestTier2InferLive:
         print(f"  Reloaded: {reloaded.service_name} with {len(reloaded.operations)} operations")
 
         # Convert to surface
-        from terrarium.packs.profile_surface import profile_to_surface
+        from volnix.packs.profile_surface import profile_to_surface
         surface = profile_to_surface(profile)
         print(f"  Surface: {len(surface.operations)} operations, tier={surface.fidelity_tier}")
 

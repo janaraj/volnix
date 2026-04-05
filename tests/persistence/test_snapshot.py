@@ -1,9 +1,9 @@
-"""Tests for terrarium.persistence.snapshot — state snapshot save/load."""
+"""Tests for volnix.persistence.snapshot — state snapshot save/load."""
 import pytest
-from terrarium.core.types import RunId, SnapshotId
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.persistence.snapshot import SnapshotStore
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.core.types import RunId, SnapshotId
+from volnix.persistence.config import PersistenceConfig
+from volnix.persistence.snapshot import SnapshotStore
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

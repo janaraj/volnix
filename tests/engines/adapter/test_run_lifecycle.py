@@ -35,9 +35,9 @@ class TestEndRunClearsCurrentId:
 
     async def test_end_run_clears_matching_id(self):
         """_current_run_id is cleared when it matches the completed run."""
-        from terrarium.app import TerrariumApp
+        from volnix.app import VolnixApp
 
-        app = TerrariumApp.__new__(TerrariumApp)
+        app = VolnixApp.__new__(VolnixApp)
         app._current_run_id = "run_abc"
 
         # Simulate end_run's clearing logic directly (same code as app.py)
@@ -49,9 +49,9 @@ class TestEndRunClearsCurrentId:
 
     async def test_end_run_does_not_clear_different_id(self):
         """_current_run_id is NOT cleared when it doesn't match."""
-        from terrarium.app import TerrariumApp
+        from volnix.app import VolnixApp
 
-        app = TerrariumApp.__new__(TerrariumApp)
+        app = VolnixApp.__new__(VolnixApp)
         app._current_run_id = "run_xyz"
 
         run_id = "run_abc"
@@ -76,7 +76,7 @@ class TestNewRunEndpoint:
         # Simulate the endpoint inline (matching http_rest.py pattern)
         @app.post("/api/v1/runs/new")
         async def new_run():
-            from terrarium.core.types import RunId as _R, WorldId as _W
+            from volnix.core.types import RunId as _R, WorldId as _W
 
             current = gw._app._current_run_id
             if current:
@@ -143,7 +143,7 @@ class TestNewRunEndpoint:
 
         @app.post("/api/v1/runs/new")
         async def new_run():
-            from terrarium.core.types import RunId as _R, WorldId as _W
+            from volnix.core.types import RunId as _R, WorldId as _W
 
             current = gw._app._current_run_id
             if current:

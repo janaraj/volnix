@@ -1,7 +1,7 @@
 """Tests for PrefixRouter — service-prefixed URL aliases."""
 from __future__ import annotations
 
-from terrarium.middleware.prefix_router import mount_service_prefixes
+from volnix.middleware.prefix_router import mount_service_prefixes
 
 
 def test_mount_returns_count():

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from terrarium.engines.feedback.signals import (
+from volnix.engines.feedback.signals import (
     SIGNAL_REGISTRY,
     ServiceUsageSignal,
     SignalAggregator,
@@ -81,7 +81,7 @@ async def test_service_usage_signal():
 
 async def test_capability_gap_signal():
     """CapabilityGapSignal aggregates missing tool requests."""
-    from terrarium.engines.feedback.signals import CapabilityGapSignal
+    from volnix.engines.feedback.signals import CapabilityGapSignal
 
     ctx = _make_context()
     signal = CapabilityGapSignal()
@@ -99,7 +99,7 @@ async def test_capability_gap_signal():
 
 async def test_template_insight_signal():
     """TemplateInsightSignal counts template reuse."""
-    from terrarium.engines.feedback.signals import TemplateInsightSignal
+    from volnix.engines.feedback.signals import TemplateInsightSignal
 
     ctx = _make_context()
     signal = TemplateInsightSignal()
@@ -181,7 +181,7 @@ async def test_empty_runs():
 
 async def test_bootstrap_failure_signal():
     """M6: BootstrapFailureSignal finds bootstrapped services with errors."""
-    from terrarium.engines.feedback.signals import BootstrapFailureSignal
+    from volnix.engines.feedback.signals import BootstrapFailureSignal
 
     ctx = _make_context(
         event_logs={

@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.seeds -- Seed model.
+"""Tests for volnix.reality.seeds -- Seed model.
 
 Tests creation, immutability, and default values for the generic Seed model.
 The Seed model uses description + entity_hints + actor_hints (no domain-specific fields).
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.reality.seeds import Seed
+from volnix.reality.seeds import Seed
 
 
 class TestSeedCreation:

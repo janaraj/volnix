@@ -1,12 +1,12 @@
 # Agent Integration
 
-This guide covers how to connect external AI agents to Terrarium using MCP, REST API, Python SDK, or framework adapters.
+This guide covers how to connect external AI agents to Volnix using MCP, REST API, Python SDK, or framework adapters.
 
 ---
 
 ## Overview
 
-Terrarium exposes world tools through multiple protocols. Your agent connects to a running Terrarium server and interacts with the simulated world as if it were real services.
+Volnix exposes world tools through multiple protocols. Your agent connects to a running Volnix server and interacts with the simulated world as if it were real services.
 
 ```
 Your Agent (Claude, GPT, custom)
@@ -17,7 +17,7 @@ Your Agent (Claude, GPT, custom)
   |-- OpenAI / Anthropic tool format (framework adapters)
   |
   v
-Terrarium Server
+Volnix Server
   |
   v
 7-Step Governance Pipeline --> Simulated World State
@@ -27,20 +27,20 @@ Terrarium Server
 
 ## Starting the Server
 
-Before connecting an agent, start Terrarium with a world:
+Before connecting an agent, start Volnix with a world:
 
 ```bash
 # From a blueprint
-terrarium serve customer_support --port 8080
+volnix serve customer_support --port 8080
 
 # From a YAML file
-terrarium serve my_world.yaml --port 8080
+volnix serve my_world.yaml --port 8080
 
 # From natural language
-terrarium serve "A support team with Zendesk and Slack" --port 8080
+volnix serve "A support team with Zendesk and Slack" --port 8080
 
 # Re-serve an existing run (instant, no compilation)
-terrarium serve --run run_64ca8171df83 --port 8080
+volnix serve --run run_64ca8171df83 --port 8080
 ```
 
 The server exposes:
@@ -58,10 +58,10 @@ The recommended integration for Claude Desktop, Cursor, and Windsurf.
 
 ```bash
 # Start server
-terrarium serve customer_support --port 8080
+volnix serve customer_support --port 8080
 
 # Patch your agent's config (creates a backup first)
-terrarium attach claude-desktop --port 8080
+volnix attach claude-desktop --port 8080
 ```
 
 Supported agents: `claude-desktop`, `cursor`, `windsurf`
@@ -69,7 +69,7 @@ Supported agents: `claude-desktop`, `cursor`, `windsurf`
 To disconnect:
 
 ```bash
-terrarium detach claude-desktop
+volnix detach claude-desktop
 ```
 
 ### Manual Config
@@ -77,7 +77,7 @@ terrarium detach claude-desktop
 If you prefer to configure manually, export the config snippet:
 
 ```bash
-terrarium config --export claude-desktop --port 8080
+volnix config --export claude-desktop --port 8080
 ```
 
 Output (paste into your agent's MCP config):
@@ -85,7 +85,7 @@ Output (paste into your agent's MCP config):
 ```json
 {
   "mcpServers": {
-    "terrarium": {
+    "volnix": {
       "url": "http://localhost:8080/mcp",
       "transport": "streamable-http"
     }
@@ -100,10 +100,10 @@ Config file locations:
 
 ### MCP Stdio Mode
 
-For agents that spawn Terrarium as a subprocess:
+For agents that spawn Volnix as a subprocess:
 
 ```bash
-terrarium mcp customer_support
+volnix mcp customer_support
 ```
 
 This starts an MCP server on stdio (stdin/stdout). The agent sends JSON-RPC requests on stdin and receives responses on stdout.
@@ -188,7 +188,7 @@ curl -X POST http://localhost:8080/api/v1/agents/register \
   -d '{"agent_id": "my-agent", "role": "support-agent"}'
 ```
 
-Or let Terrarium auto-assign by setting `allow_unregistered_access = true` in config (the default).
+Or let Volnix auto-assign by setting `allow_unregistered_access = true` in config (the default).
 
 ### Key Endpoints
 
@@ -211,9 +211,9 @@ Or let Terrarium auto-assign by setting `allow_unregistered_access = true` in co
 For Python agents and scripts:
 
 ```python
-from terrarium.sdk import TerrariumClient
+from volnix.sdk import VolnixClient
 
-async with TerrariumClient(
+async with VolnixClient(
     url="http://localhost:8080",
     actor_id="my-agent",
 ) as terra:
@@ -245,7 +245,7 @@ async with TerrariumClient(
 For one-off calls without a client context:
 
 ```python
-from terrarium.sdk import get_tool_manifest, execute_tool
+from volnix.sdk import get_tool_manifest, execute_tool
 
 tools = await get_tool_manifest(url="http://localhost:8080", fmt="openai")
 
@@ -260,14 +260,14 @@ result = await execute_tool(
 ### Error Handling
 
 ```python
-from terrarium.sdk import TerrariumClient, TerrariumConnectionError, TerrariumAPIError
+from volnix.sdk import VolnixClient, VolnixConnectionError, VolnixAPIError
 
 try:
-    async with TerrariumClient(url="http://localhost:8080") as terra:
+    async with VolnixClient(url="http://localhost:8080") as terra:
         result = await terra.call("email_send", to="user@example.com")
-except TerrariumConnectionError:
-    print("Could not connect to Terrarium server")
-except TerrariumAPIError as e:
+except VolnixConnectionError:
+    print("Could not connect to Volnix server")
+except VolnixAPIError as e:
     print(f"API error: {e}")
 ```
 
@@ -280,7 +280,7 @@ Export tool definitions for popular agent frameworks:
 ### OpenAI Function Calling
 
 ```bash
-terrarium config --export openai-tools --port 8080
+volnix config --export openai-tools --port 8080
 ```
 
 Returns JSON array of OpenAI function definitions. Pass these as `tools` to the OpenAI Chat Completions API.
@@ -288,7 +288,7 @@ Returns JSON array of OpenAI function definitions. Pass these as `tools` to the 
 ### Anthropic Tool Use
 
 ```bash
-terrarium config --export anthropic-tools --port 8080
+volnix config --export anthropic-tools --port 8080
 ```
 
 Returns JSON array of Anthropic tool definitions. Pass these as `tools` to the Anthropic Messages API.
@@ -296,27 +296,27 @@ Returns JSON array of Anthropic tool definitions. Pass these as `tools` to the A
 ### LangGraph
 
 ```bash
-terrarium config --export langgraph --port 8080
+volnix config --export langgraph --port 8080
 ```
 
-Returns a Python code snippet for integrating Terrarium tools into a LangGraph agent.
+Returns a Python code snippet for integrating Volnix tools into a LangGraph agent.
 
 ### CrewAI
 
 ```bash
-terrarium config --export crewai --port 8080
+volnix config --export crewai --port 8080
 ```
 
 ### AutoGen
 
 ```bash
-terrarium config --export autogen --port 8080
+volnix config --export autogen --port 8080
 ```
 
 ### Docker Compose
 
 ```bash
-terrarium config --export docker-compose --port 8080
+volnix config --export docker-compose --port 8080
 ```
 
 Returns a `docker-compose.yml` snippet with network aliases matching the simulated services.
@@ -342,12 +342,12 @@ Events include actions, policy triggers, budget warnings, and state changes.
 
 ## Authentication
 
-By default, Terrarium accepts unauthenticated requests (`auth_enabled = false`).
+By default, Volnix accepts unauthenticated requests (`auth_enabled = false`).
 
 To enable authentication:
 
 ```toml
-# terrarium.local.toml
+# volnix.local.toml
 [middleware]
 auth_enabled = true
 ```
@@ -355,7 +355,7 @@ auth_enabled = true
 With auth enabled, agents must register and use Bearer tokens:
 
 ```bash
-curl -H "Authorization: Bearer terr_abc123" \
+curl -H "Authorization: Bearer volnix_abc123" \
   http://localhost:8080/api/v1/actions/email_list
 ```
 
@@ -363,7 +363,7 @@ curl -H "Authorization: Bearer terr_abc123" \
 
 ## Tips
 
-- **Start simple**: Use `terrarium attach` for the fastest setup. Manual config is only needed for custom workflows.
+- **Start simple**: Use `volnix attach` for the fastest setup. Manual config is only needed for custom workflows.
 - **Check available tools**: Run `curl http://localhost:8080/api/v1/tools?format=openai | python -m json.tool` to see what your agent can do.
-- **Watch the dashboard**: Run `terrarium dashboard --port 8200` in another terminal to observe your agent's actions in real time.
-- **Review the report**: After a session, run `terrarium report last` to see governance scores and capability gaps.
+- **Watch the dashboard**: Run `volnix dashboard --port 8200` in another terminal to observe your agent's actions in real time.
+- **Review the report**: After a session, run `volnix report last` to see governance scores and capability gaps.

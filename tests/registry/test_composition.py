@@ -1,8 +1,8 @@
-"""Tests for terrarium.registry.composition."""
+"""Tests for volnix.registry.composition."""
 import pytest
-from terrarium.registry.composition import create_default_registry
-from terrarium.registry.registry import EngineRegistry
-from terrarium.core.protocols import PipelineStep, StateEngineProtocol
+from volnix.registry.composition import create_default_registry
+from volnix.registry.registry import EngineRegistry
+from volnix.core.protocols import PipelineStep, StateEngineProtocol
 
 
 def test_create_default_registry():

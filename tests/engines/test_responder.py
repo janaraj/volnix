@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.responder — tiered response dispatch and fallback."""
+"""Tests for volnix.engines.responder — tiered response dispatch and fallback."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.responder.engine import WorldResponderEngine
+from volnix.engines.responder.engine import WorldResponderEngine
 
 
 @pytest.mark.asyncio

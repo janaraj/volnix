@@ -1,12 +1,12 @@
-"""Tests for terrarium.kernel.context_hub -- Context Hub via npx integration."""
+"""Tests for volnix.kernel.context_hub -- Context Hub via npx integration."""
 
 import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terrarium.kernel.context_hub import ContextHubProvider
-from terrarium.kernel.external_spec import ExternalSpecProvider
+from volnix.kernel.context_hub import ContextHubProvider
+from volnix.kernel.external_spec import ExternalSpecProvider
 
 # Real output captured from ``npx @aisuite/chub search twilio``
 _TWILIO_SEARCH_OUTPUT = """\
@@ -60,13 +60,13 @@ def _mock_subprocess(stdout: str, returncode: int = 0):
 
 async def test_is_available_npx_missing():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value=None):
         assert await provider.is_available() is False
 
 
 async def test_is_available_npx_found():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         assert await provider.is_available() is True
 
 
@@ -76,7 +76,7 @@ async def test_is_available_npx_found():
 async def test_supports_found():
     provider = ContextHubProvider()
     proc = _mock_subprocess(_TWILIO_SEARCH_OUTPUT)
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch("asyncio.create_subprocess_exec", return_value=proc):
             assert await provider.supports("twilio") is True
 
@@ -84,14 +84,14 @@ async def test_supports_found():
 async def test_supports_not_found():
     provider = ContextHubProvider()
     proc = _mock_subprocess(_EMPTY_SEARCH_OUTPUT, returncode=0)
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch("asyncio.create_subprocess_exec", return_value=proc):
             assert await provider.supports("totally_unknown_xyz") is False
 
 
 async def test_supports_npx_missing():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value=None):
         assert await provider.supports("twilio") is False
 
 
@@ -114,7 +114,7 @@ async def test_fetch_success():
             return search_proc
         return get_proc
 
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
             result = await provider.fetch("twilio")
 
@@ -130,7 +130,7 @@ async def test_fetch_success():
 async def test_fetch_not_found():
     provider = ContextHubProvider()
     proc = _mock_subprocess(_EMPTY_SEARCH_OUTPUT)
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch("asyncio.create_subprocess_exec", return_value=proc):
             result = await provider.fetch("totally_unknown_xyz")
     assert result is None
@@ -138,14 +138,14 @@ async def test_fetch_not_found():
 
 async def test_fetch_npx_missing():
     provider = ContextHubProvider()
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value=None):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value=None):
         result = await provider.fetch("twilio")
     assert result is None
 
 
 async def test_fetch_timeout():
     provider = ContextHubProvider(timeout=0.001)
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch(
             "asyncio.create_subprocess_exec",
             side_effect=asyncio.TimeoutError,
@@ -231,7 +231,7 @@ async def test_search_cache():
         call_count += 1
         return proc
 
-    with patch("terrarium.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
+    with patch("volnix.kernel.context_hub.shutil.which", return_value="/usr/local/bin/npx"):
         with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
             await provider.supports("twilio")
             await provider.supports("twilio")

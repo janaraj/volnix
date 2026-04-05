@@ -29,7 +29,7 @@ def _make_gateway(run_data):
 
 async def test_list_actors_returns_actors():
     """GET /runs/{id}/actors should return actors from world_def."""
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     run_data = {
         "run_id": "run-1",
@@ -61,7 +61,7 @@ async def test_list_actors_returns_actors():
 
 async def test_list_actors_missing_run():
     """GET /runs/{id}/actors with missing run -> 404."""
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     gateway = _make_gateway(None)
     adapter = HTTPRestAdapter(gateway)
@@ -77,7 +77,7 @@ async def test_list_actors_missing_run():
 
 async def test_list_actors_no_actors():
     """GET /runs/{id}/actors with no actors -> empty list."""
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     run_data = {
         "run_id": "run-1",
@@ -101,7 +101,7 @@ async def test_list_actors_no_actors():
 
 async def test_list_actors_preserves_actor_fields():
     """All actor definition fields should be preserved in the response."""
-    from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+    from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
     run_data = {
         "run_id": "run-2",

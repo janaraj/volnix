@@ -1,8 +1,8 @@
 """Tests for PackVerifier -- validate Tier 1 pack structure."""
 from __future__ import annotations
 
-from terrarium.engines.feedback.pack_compiler import PackCompiler
-from terrarium.engines.feedback.pack_verifier import PackVerifier
+from volnix.engines.feedback.pack_compiler import PackCompiler
+from volnix.engines.feedback.pack_verifier import PackVerifier
 
 
 async def test_verify_compiled_pack(make_profile, tmp_path):
@@ -70,7 +70,7 @@ async def test_verify_existing_email_pack():
 
     pack_dir = (
         Path(__file__).resolve().parents[3]
-        / "terrarium"
+        / "volnix"
         / "packs"
         / "verified"
         / "gmail"

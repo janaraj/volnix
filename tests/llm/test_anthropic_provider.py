@@ -1,21 +1,21 @@
-"""Tests for terrarium.llm.providers.anthropic -- Anthropic Claude provider."""
+"""Tests for volnix.llm.providers.anthropic -- Anthropic Claude provider."""
 
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from terrarium.llm.providers.anthropic import AnthropicProvider
-from terrarium.llm.types import LLMRequest
+from volnix.llm.providers.anthropic import AnthropicProvider
+from volnix.llm.types import LLMRequest
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
 skipif_no_anthropic = pytest.mark.skipif(
     not ANTHROPIC_KEY, reason="ANTHROPIC_API_KEY not set"
 )
 
-# Toggle: TERRARIUM_RUN_REAL_API_TESTS=1 to enable expensive real API tests
-RUN_REAL = os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
-skipif_no_real = pytest.mark.skipif(not RUN_REAL, reason="TERRARIUM_RUN_REAL_API_TESTS not enabled")
+# Toggle: VOLNIX_RUN_REAL_API_TESTS=1 to enable expensive real API tests
+RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
+skipif_no_real = pytest.mark.skipif(not RUN_REAL, reason="VOLNIX_RUN_REAL_API_TESTS not enabled")
 
 
 def test_anthropic_provider_init():
@@ -74,16 +74,16 @@ def test_anthropic_provider_cost_estimation():
 @skipif_no_real
 @pytest.mark.asyncio
 async def test_anthropic_real_generate():
-    """Real Anthropic API call -- enable with TERRARIUM_RUN_REAL_API_TESTS=1."""
+    """Real Anthropic API call -- enable with VOLNIX_RUN_REAL_API_TESTS=1."""
     provider = AnthropicProvider(api_key=ANTHROPIC_KEY)
     resp = await provider.generate(
         LLMRequest(
-            system_prompt="Reply with exactly the word 'terrarium'",
+            system_prompt="Reply with exactly the word 'volnix'",
             user_content="What word?",
             max_tokens=50,
         )
     )
     assert resp.error is None
-    assert "terrarium" in resp.content.lower()
+    assert "volnix" in resp.content.lower()
     assert resp.usage.prompt_tokens > 0
     assert resp.usage.completion_tokens > 0

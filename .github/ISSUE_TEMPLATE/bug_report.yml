@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in Terrarium
+description: Report a bug in Volnix
 labels: ["bug"]
 body:
   - type: markdown
@@ -22,7 +22,7 @@ body:
       label: Steps to Reproduce
       description: How can we reproduce this?
       placeholder: |
-        1. Run `terrarium serve customer_support --port 8080`
+        1. Run `volnix serve customer_support --port 8080`
         2. Connect an agent
         3. Call `email_send` with ...
         4. See error
@@ -47,8 +47,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Terrarium Version
-      description: Output of `terrarium --version`
+      label: Volnix Version
+      description: Output of `volnix --version`
       placeholder: "0.1.0"
 
   - type: input

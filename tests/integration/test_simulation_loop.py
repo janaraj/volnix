@@ -12,12 +12,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.reality.dimensions import (
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.reality.dimensions import (
     ReliabilityDimension,
     WorldConditions,
 )
-from terrarium.scheduling.scheduler import WorldScheduler
+from volnix.scheduling.scheduler import WorldScheduler
 
 
 def _utc(**kwargs):
@@ -50,7 +50,7 @@ def _make_plan(behavior: str = "dynamic", conditions=None, animator_settings=Non
 @pytest.mark.asyncio
 async def test_static_mode_zero_animator_events():
     """Static mode: animator produces no events on tick."""
-    from terrarium.engines.animator.engine import WorldAnimatorEngine
+    from volnix.engines.animator.engine import WorldAnimatorEngine
 
     engine = WorldAnimatorEngine()
     bus = AsyncMock()
@@ -79,7 +79,7 @@ async def test_static_mode_zero_animator_events():
 @pytest.mark.asyncio
 async def test_dynamic_mode_scheduled_events_executed():
     """Dynamic mode: scheduled events are picked up and executed through app."""
-    from terrarium.engines.animator.engine import WorldAnimatorEngine
+    from volnix.engines.animator.engine import WorldAnimatorEngine
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
@@ -120,7 +120,7 @@ async def test_dynamic_mode_scheduled_events_executed():
     # AnimatorEvent was published
     bus.publish.assert_called()
     published = bus.publish.call_args_list[0][0][0]
-    from terrarium.core.events import AnimatorEvent
+    from volnix.core.events import AnimatorEvent
     assert isinstance(published, AnimatorEvent)
     assert published.sub_type == "scheduled"
 
@@ -128,7 +128,7 @@ async def test_dynamic_mode_scheduled_events_executed():
 @pytest.mark.asyncio
 async def test_dynamic_mode_without_llm_no_events():
     """Dynamic mode without LLM: no events (probabilistic removed, organic needs LLM)."""
-    from terrarium.engines.animator.engine import WorldAnimatorEngine
+    from volnix.engines.animator.engine import WorldAnimatorEngine
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
@@ -162,7 +162,7 @@ async def test_dynamic_mode_without_llm_no_events():
 @pytest.mark.asyncio
 async def test_scheduler_shared_across_engines():
     """WorldScheduler can receive events from any source and animator ticks them."""
-    from terrarium.engines.animator.engine import WorldAnimatorEngine
+    from volnix.engines.animator.engine import WorldAnimatorEngine
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})

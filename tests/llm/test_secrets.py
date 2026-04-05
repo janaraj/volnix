@@ -1,6 +1,6 @@
-"""Tests for terrarium.llm.secrets -- secret resolution for API keys."""
+"""Tests for volnix.llm.secrets -- secret resolution for API keys."""
 
-from terrarium.llm.secrets import (
+from volnix.llm.secrets import (
     ChainResolver,
     EnvVarResolver,
     FileResolver,

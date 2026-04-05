@@ -1,23 +1,23 @@
-# Terrarium
+# Volnix
 
 **Programmable worlds for AI agents.**
 
-Terrarium creates stateful, causal, observable realities where AI agents exist as participants — not as isolated prompt loops calling tools, but as actors inside a world that has places, institutions, other agents, budgets, policies, communication systems, and real consequences.
+Volnix creates stateful, causal, observable realities where AI agents exist as participants — not as isolated prompt loops calling tools, but as actors inside a world that has places, institutions, other agents, budgets, policies, communication systems, and real consequences.
 
-Describe a world in natural language or YAML. Terrarium compiles it into a deep, reproducible simulation. Agents interact through standard protocols (MCP, REST, OpenAI function calling, Anthropic tool use). Everything that happens is recorded, scored, and diffable.
+Describe a world in natural language or YAML. Volnix compiles it into a deep, reproducible simulation. Agents interact through standard protocols (MCP, REST, OpenAI function calling, Anthropic tool use). Everything that happens is recorded, scored, and diffable.
 
 ---
 
 ## Key Features
 
-- **Natural language world creation** — describe a scenario and Terrarium compiles it into a runnable world with entities, actors, services, policies, and seeded data
+- **Natural language world creation** — describe a scenario and Volnix compiles it into a runnable world with entities, actors, services, policies, and seeded data
 - **10-engine governance architecture** — state, policy, permission, budget, responder, animator, agency, adapter, reporter, and feedback engines working in concert
 - **7-step governance pipeline** — every action flows through permission, policy, budget, capability, responder, validation, and commit checks
 - **Multi-agent simulation** — internal actors collaborate autonomously via LLM; external agents connect via standard protocols
 - **10 verified service packs** — Slack, Gmail, GitHub, Zendesk, Stripe, Google Calendar, Twitter, Reddit, Alpaca, and more — each with deterministic state machines
 - **Reality dimensions** — tune information quality, reliability, social friction, complexity, and boundaries from ideal to hostile
 - **Protocol-native** — MCP server, REST API, OpenAI and Anthropic tool formats, Python SDK
-- **One-click agent integration** — `terrarium attach claude-desktop` patches your agent's config automatically
+- **One-click agent integration** — `volnix attach claude-desktop` patches your agent's config automatically
 - **React dashboard** — observe simulation events, scorecards, deliverables, and causal traces in real time
 - **Reproducible** — seeded worlds produce deterministic state; fork, replay, and diff any run
 
@@ -27,26 +27,26 @@ Describe a world in natural language or YAML. Terrarium compiles it into a deep,
 
 ```bash
 # Install
-pip install terrarium
+pip install volnix
 
 # Verify setup
-terrarium check
+volnix check
 
 # Run a built-in blueprint with internal agents
-terrarium run customer_support --preset brainstorm --actors support-lead,support-agent,supervisor
+volnix run customer_support --preset brainstorm --actors support-lead,support-agent,supervisor
 
 # View the report
-terrarium report last
+volnix report last
 ```
 
 To connect an external AI agent instead:
 
 ```bash
-# Start Terrarium as a server
-terrarium serve customer_support --port 8080
+# Start Volnix as a server
+volnix serve customer_support --port 8080
 
 # In another terminal, connect Claude Desktop
-terrarium attach claude-desktop --port 8080
+volnix attach claude-desktop --port 8080
 ```
 
 ---
@@ -57,20 +57,20 @@ terrarium attach claude-desktop --port 8080
 
 ```bash
 # With pip
-pip install terrarium
+pip install volnix
 
 # With uv (recommended)
-uv pip install terrarium
+uv pip install volnix
 
 # From source
-git clone https://github.com/janaraj/terrarium.git
-cd terrarium
+git clone https://github.com/janaraj/volnix.git
+cd volnix
 uv sync --all-extras
 ```
 
 ### LLM Provider Setup
 
-Terrarium needs an LLM provider for world compilation and internal actor responses. Set at least one:
+Volnix needs an LLM provider for world compilation and internal actor responses. Set at least one:
 
 ```bash
 # Option 1: Anthropic (Claude)
@@ -83,7 +83,7 @@ export OPENAI_API_KEY=sk-proj-...
 export GOOGLE_API_KEY=AIza...
 
 # Option 4: Local via Ollama (no API key needed)
-# Configure in terrarium.toml
+# Configure in volnix.toml
 ```
 
 See `.env.example` for all available environment variables.
@@ -92,7 +92,7 @@ See `.env.example` for all available environment variables.
 
 ## How It Works
 
-Terrarium is built on a **two-half architecture**:
+Volnix is built on a **two-half architecture**:
 
 **World Law (Deterministic Engine)** owns state, events, the causal graph, permissions, policy enforcement, budget accounting, time, visibility, mutation validation, and replay. The engine never guesses and never generates text. It enforces structure.
 
@@ -180,7 +180,7 @@ compiler:
 Or create a world from natural language:
 
 ```bash
-terrarium create "Market analysis team with an economist, data analyst, and strategist \
+volnix create "Market analysis team with an economist, data analyst, and strategist \
   collaborating via Slack to produce a quarterly prediction" \
   --reality messy --output market_world.yaml
 ```
@@ -213,44 +213,44 @@ Three presets bundle these: `ideal` (best case), `messy` (realistic, default), `
 
 | Command | Description |
 |---------|------------|
-| `terrarium create <description>` | Generate a world YAML from natural language |
-| `terrarium run <world>` | Compile and execute a simulation |
-| `terrarium serve <world>` | Start HTTP/MCP servers for agent connections |
-| `terrarium mcp <world>` | Start MCP stdio server (for agent subprocesses) |
-| `terrarium dashboard` | Start the React dashboard (historical run viewer) |
-| `terrarium blueprints` | List available world blueprints |
-| `terrarium report [run_id]` | Generate governance report for a run |
-| `terrarium check` | System health check (Python, packages, LLM providers) |
-| `terrarium config --export <target>` | Export config for agent integration |
-| `terrarium attach <agent>` | Patch agent config to connect to Terrarium |
-| `terrarium detach <agent>` | Restore original agent config |
-| `terrarium inspect <run_id>` | Deep dive into run details |
-| `terrarium diff <run1> <run2>` | Compare two runs |
+| `volnix create <description>` | Generate a world YAML from natural language |
+| `volnix run <world>` | Compile and execute a simulation |
+| `volnix serve <world>` | Start HTTP/MCP servers for agent connections |
+| `volnix mcp <world>` | Start MCP stdio server (for agent subprocesses) |
+| `volnix dashboard` | Start the React dashboard (historical run viewer) |
+| `volnix blueprints` | List available world blueprints |
+| `volnix report [run_id]` | Generate governance report for a run |
+| `volnix check` | System health check (Python, packages, LLM providers) |
+| `volnix config --export <target>` | Export config for agent integration |
+| `volnix attach <agent>` | Patch agent config to connect to Volnix |
+| `volnix detach <agent>` | Restore original agent config |
+| `volnix inspect <run_id>` | Deep dive into run details |
+| `volnix diff <run1> <run2>` | Compare two runs |
 
-Run `terrarium --help` or `terrarium <command> --help` for full option details.
+Run `volnix --help` or `volnix <command> --help` for full option details.
 
 ---
 
 ## Agent Integration
 
-Terrarium speaks multiple protocols. Pick the one your agent uses.
+Volnix speaks multiple protocols. Pick the one your agent uses.
 
 ### MCP (Model Context Protocol)
 
 The recommended path for Claude Desktop, Cursor, and Windsurf:
 
 ```bash
-# Start Terrarium
-terrarium serve customer_support --port 8080
+# Start Volnix
+volnix serve customer_support --port 8080
 
 # Auto-patch your agent's config
-terrarium attach claude-desktop --port 8080   # or: cursor, windsurf
+volnix attach claude-desktop --port 8080   # or: cursor, windsurf
 ```
 
 Or export the config snippet manually:
 
 ```bash
-terrarium config --export claude-desktop --port 8080
+volnix config --export claude-desktop --port 8080
 ```
 
 ### REST API
@@ -270,9 +270,9 @@ curl -X POST http://localhost:8080/api/v1/actions/email_send \
 ### Python SDK
 
 ```python
-from terrarium.sdk import TerrariumClient
+from volnix.sdk import VolnixClient
 
-async with TerrariumClient(url="http://localhost:8080", actor_id="my-agent") as terra:
+async with VolnixClient(url="http://localhost:8080", actor_id="my-agent") as terra:
     tools = await terra.tools(fmt="openai")
     result = await terra.call("email_send", to="user@example.com", body="Hello")
     print(result)
@@ -283,25 +283,25 @@ async with TerrariumClient(url="http://localhost:8080", actor_id="my-agent") as 
 Export tool definitions for your framework of choice:
 
 ```bash
-terrarium config --export openai-tools      # OpenAI function calling
-terrarium config --export anthropic-tools   # Anthropic tool use
-terrarium config --export langgraph         # LangGraph adapter
-terrarium config --export crewai            # CrewAI adapter
-terrarium config --export autogen           # AutoGen adapter
+volnix config --export openai-tools      # OpenAI function calling
+volnix config --export anthropic-tools   # Anthropic tool use
+volnix config --export langgraph         # LangGraph adapter
+volnix config --export crewai            # CrewAI adapter
+volnix config --export autogen           # AutoGen adapter
 ```
 
 ---
 
 ## Configuration
 
-Terrarium uses a layered TOML configuration system:
+Volnix uses a layered TOML configuration system:
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| Base | `terrarium.toml` | Shipped defaults (committed to repo) |
-| Environment | `terrarium.{env}.toml` | Environment-specific overrides |
-| Local | `terrarium.local.toml` | Machine-specific, git-ignored |
-| Env vars | `TERRARIUM__section__key` | Runtime overrides |
+| Base | `volnix.toml` | Shipped defaults (committed to repo) |
+| Environment | `volnix.{env}.toml` | Environment-specific overrides |
+| Local | `volnix.local.toml` | Machine-specific, git-ignored |
+| Env vars | `VOLNIX__section__key` | Runtime overrides |
 
 Key configuration sections:
 
@@ -326,7 +326,7 @@ host = "0.0.0.0"
 port = 8100
 ```
 
-See `terrarium.toml` for the complete configuration reference.
+See `volnix.toml` for the complete configuration reference.
 
 ---
 
@@ -352,10 +352,10 @@ See `terrarium.toml` for the complete configuration reference.
 
 ```bash
 # List all blueprints (including user-created)
-terrarium blueprints
+volnix blueprints
 
 # Run any blueprint directly
-terrarium run incident_response --preset brainstorm --actors oncall,sre,incident-lead
+volnix run incident_response --preset brainstorm --actors oncall,sre,incident-lead
 ```
 
 ---
@@ -381,10 +381,10 @@ Each verified pack simulates a real service with deterministic state machines:
 
 ## Dashboard
 
-Terrarium includes a React dashboard for observing simulations:
+Volnix includes a React dashboard for observing simulations:
 
 ```bash
-terrarium dashboard --port 8200
+volnix dashboard --port 8200
 # Open http://localhost:8200
 ```
 
@@ -400,7 +400,7 @@ The dashboard provides:
 ## Project Structure
 
 ```
-terrarium/
+volnix/
   core/           # Types, protocols, event bus, envelope, context
   engines/        # The 10 engines (state, policy, permission, budget, ...)
   pipeline/       # 7-step governance pipeline (DAG executor)
@@ -434,13 +434,13 @@ uv run pytest
 uv run pytest tests/simulation/test_runner.py -v
 
 # Lint
-uv run ruff check terrarium/ tests/
+uv run ruff check volnix/ tests/
 
 # Format check
-uv run ruff format --check terrarium/ tests/
+uv run ruff format --check volnix/ tests/
 
 # Type check
-uv run mypy terrarium/
+uv run mypy volnix/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for architectural rules.

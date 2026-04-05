@@ -1,4 +1,4 @@
-"""Tests for terrarium.validation.pipeline -- composite validation pipeline."""
+"""Tests for volnix.validation.pipeline -- composite validation pipeline."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.errors import EntityNotFoundError
-from terrarium.core.types import EntityId, StateDelta
-from terrarium.validation.config import ValidationConfig
-from terrarium.validation.pipeline import ValidationPipeline
-from terrarium.validation.schema import ValidationResult
+from volnix.core.context import ResponseProposal
+from volnix.core.errors import EntityNotFoundError
+from volnix.core.types import EntityId, StateDelta
+from volnix.validation.config import ValidationConfig
+from volnix.validation.pipeline import ValidationPipeline
+from volnix.validation.schema import ValidationResult
 
 
 # ---------------------------------------------------------------------------

@@ -1,17 +1,17 @@
-"""Tests for terrarium.ledger.export -- JSON, CSV, and replay export."""
+"""Tests for volnix.ledger.export -- JSON, CSV, and replay export."""
 import json
 import pytest
 
-from terrarium.core.types import ActorId
-from terrarium.ledger.config import LedgerConfig
-from terrarium.ledger.entries import (
+from volnix.core.types import ActorId
+from volnix.ledger.config import LedgerConfig
+from volnix.ledger.entries import (
     LLMCallEntry,
     PipelineStepEntry,
 )
-from terrarium.ledger.export import LedgerExporter
-from terrarium.ledger.ledger import Ledger
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.ledger.export import LedgerExporter
+from volnix.ledger.ledger import Ledger
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

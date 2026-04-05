@@ -1,7 +1,7 @@
 """Shared fixtures for external agent E2E tests.
 
 These tests verify that external agent frameworks can connect to
-Terrarium via HTTP and MCP transports, discover tools, and execute
+Volnix via HTTP and MCP transports, discover tools, and execute
 actions through the full 7-step governance pipeline.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 
 def _make_gateway_with_tools(
@@ -22,8 +22,8 @@ def _make_gateway_with_tools(
     handle_result: dict[str, Any] | None = None,
 ):
     """Create a mock Gateway with realistic ticket/email tools."""
-    from terrarium.core.context import StepResult
-    from terrarium.core.types import StepVerdict
+    from volnix.core.context import StepResult
+    from volnix.core.types import StepVerdict
 
     gateway = MagicMock()
 
@@ -133,7 +133,7 @@ def _make_gateway_with_tools(
 
 
 @pytest.fixture
-async def terrarium_http_adapter():
+async def volnix_http_adapter():
     """HTTPRestAdapter with mock gateway returning realistic ticket data."""
     gateway = _make_gateway_with_tools()
     adapter = HTTPRestAdapter(gateway)
@@ -143,7 +143,7 @@ async def terrarium_http_adapter():
 
 
 @pytest.fixture
-def http_transport(terrarium_http_adapter):
+def http_transport(volnix_http_adapter):
     """httpx ASGITransport for direct ASGI testing (no real server)."""
-    adapter, _gw = terrarium_http_adapter
+    adapter, _gw = volnix_http_adapter
     return httpx.ASGITransport(app=adapter.fastapi_app)

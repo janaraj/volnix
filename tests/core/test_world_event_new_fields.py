@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import ActorId, EntityId, EventId, ServiceId, Timestamp
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, EventId, ServiceId, Timestamp
 
 def _make_timestamp():
     from datetime import datetime, timezone

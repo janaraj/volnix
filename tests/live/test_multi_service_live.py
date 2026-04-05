@@ -4,7 +4,7 @@ Creates an Acme Support world using email + chat + tickets packs,
 compiles with dynamic mode + messy reality, generates entities,
 runs agent actions, ticks the animator, and produces a report.
 
-Requires: codex-acp binary available (uses terrarium.toml routing)
+Requires: codex-acp binary available (uses volnix.toml routing)
 """
 
 from __future__ import annotations
@@ -14,21 +14,21 @@ import os
 
 import pytest
 
-from terrarium.core.types import RunId
+from volnix.core.types import RunId
 
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM — uses terrarium.toml config."""
+    """VolnixApp with REAL codex-acp LLM — uses volnix.toml config."""
     # Check codex-acp is available
     import shutil
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found — skipping live test")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -40,7 +40,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -70,15 +70,15 @@ class TestMultiServiceLiveWorld:
         print("=" * 70)
 
         # Use a focused world def that only uses our verified packs
-        from terrarium.engines.world_compiler.plan import (
+        from volnix.engines.world_compiler.plan import (
             ServiceResolution,
             WorldPlan,
         )
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.gmail.pack import EmailPack
-        from terrarium.packs.verified.slack.pack import ChatPack
-        from terrarium.packs.verified.zendesk.pack import TicketsPack
-        from terrarium.reality.presets import load_preset
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.gmail.pack import EmailPack
+        from volnix.packs.verified.slack.pack import ChatPack
+        from volnix.packs.verified.zendesk.pack import TicketsPack
+        from volnix.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
         chat_surface = ServiceSurface.from_pack(ChatPack())

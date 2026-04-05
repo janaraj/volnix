@@ -1,7 +1,7 @@
-"""Tests for terrarium.persistence.migrations — schema migration system."""
+"""Tests for volnix.persistence.migrations — schema migration system."""
 import pytest
-from terrarium.persistence.sqlite import SQLiteDatabase
-from terrarium.persistence.migrations import Migration, MigrationRunner
+from volnix.persistence.sqlite import SQLiteDatabase
+from volnix.persistence.migrations import Migration, MigrationRunner
 
 
 @pytest.fixture

@@ -1,12 +1,12 @@
-"""Tests for terrarium.config.loader — config loading, merging, and env overrides."""
+"""Tests for volnix.config.loader — config loading, merging, and env overrides."""
 import pytest
 from pathlib import Path
-from terrarium.config.loader import ConfigLoader
+from volnix.config.loader import ConfigLoader
 
 
 def test_load_base_config(tmp_path: Path):
-    """Loading a base terrarium.toml produces a valid config."""
-    toml_file = tmp_path / "terrarium.toml"
+    """Loading a base volnix.toml produces a valid config."""
+    toml_file = tmp_path / "volnix.toml"
     toml_file.write_text(
         '[simulation]\nseed = 100\nmode = "governed"\n'
     )
@@ -18,9 +18,9 @@ def test_load_base_config(tmp_path: Path):
 
 def test_load_with_env_override(tmp_path: Path):
     """Environment-specific TOML overrides base values."""
-    base = tmp_path / "terrarium.toml"
+    base = tmp_path / "volnix.toml"
     base.write_text('[simulation]\nseed = 42\nmode = "governed"\n')
-    env_file = tmp_path / "terrarium.development.toml"
+    env_file = tmp_path / "volnix.development.toml"
     env_file.write_text("[simulation]\nseed = 99\n")
     loader = ConfigLoader(base_dir=tmp_path, env="development")
     config = loader.load()
@@ -31,11 +31,11 @@ def test_load_with_env_override(tmp_path: Path):
 
 def test_load_with_local_override(tmp_path: Path):
     """Local TOML overrides both base and env values."""
-    base = tmp_path / "terrarium.toml"
+    base = tmp_path / "volnix.toml"
     base.write_text('[simulation]\nseed = 42\nmode = "governed"\n')
-    env_file = tmp_path / "terrarium.development.toml"
+    env_file = tmp_path / "volnix.development.toml"
     env_file.write_text("[simulation]\nseed = 99\n")
-    local_file = tmp_path / "terrarium.local.toml"
+    local_file = tmp_path / "volnix.local.toml"
     local_file.write_text("[simulation]\nseed = 7\n")
     loader = ConfigLoader(base_dir=tmp_path, env="development")
     config = loader.load()
@@ -43,10 +43,10 @@ def test_load_with_local_override(tmp_path: Path):
 
 
 def test_env_var_override(monkeypatch, tmp_path: Path):
-    """TERRARIUM__SIMULATION__SEED env var overrides TOML value."""
-    base = tmp_path / "terrarium.toml"
+    """VOLNIX__SIMULATION__SEED env var overrides TOML value."""
+    base = tmp_path / "volnix.toml"
     base.write_text("[simulation]\nseed = 42\n")
-    monkeypatch.setenv("TERRARIUM__SIMULATION__SEED", "99")
+    monkeypatch.setenv("VOLNIX__SIMULATION__SEED", "99")
     loader = ConfigLoader(base_dir=tmp_path)
     config = loader.load()
     assert config.simulation.seed == 99
@@ -54,7 +54,7 @@ def test_env_var_override(monkeypatch, tmp_path: Path):
 
 def test_resolve_secure_refs(monkeypatch, tmp_path: Path):
     """Secure *_ref fields are resolved from environment variables."""
-    base = tmp_path / "terrarium.toml"
+    base = tmp_path / "volnix.toml"
     base.write_text(
         '[llm.providers.anthropic]\n'
         'type = "anthropic"\n'
@@ -87,7 +87,7 @@ def test_deep_merge_override():
 
 
 def test_missing_toml_returns_defaults(tmp_path: Path):
-    """An empty directory with no TOML files produces default TerrariumConfig."""
+    """An empty directory with no TOML files produces default VolnixConfig."""
     loader = ConfigLoader(base_dir=tmp_path)
     config = loader.load()
     assert config.simulation.mode == "governed"
@@ -109,7 +109,7 @@ def test_coerce_types():
 
 def test_malformed_toml(tmp_path: Path):
     """Invalid TOML raises an error during loading."""
-    bad_file = tmp_path / "terrarium.toml"
+    bad_file = tmp_path / "volnix.toml"
     bad_file.write_text("this is not valid [[ toml")
     loader = ConfigLoader(base_dir=tmp_path)
     with pytest.raises(Exception):
@@ -117,7 +117,7 @@ def test_malformed_toml(tmp_path: Path):
 
 
 def test_nonexistent_base_dir(tmp_path: Path):
-    """A missing base directory produces default TerrariumConfig."""
+    """A missing base directory produces default VolnixConfig."""
     missing_dir = tmp_path / "does_not_exist"
     loader = ConfigLoader(base_dir=missing_dir)
     config = loader.load()
@@ -126,9 +126,9 @@ def test_nonexistent_base_dir(tmp_path: Path):
 
 def test_env_var_nested_override(monkeypatch, tmp_path: Path):
     """Deeply nested env var override works."""
-    base = tmp_path / "terrarium.toml"
+    base = tmp_path / "volnix.toml"
     base.write_text("")
-    monkeypatch.setenv("TERRARIUM__BUDGET__WARNING_THRESHOLD_PCT", "90")
+    monkeypatch.setenv("VOLNIX__BUDGET__WARNING_THRESHOLD_PCT", "90")
     loader = ConfigLoader(base_dir=tmp_path)
     config = loader.load()
     assert config.budget.warning_threshold_pct == 90.0
@@ -136,7 +136,7 @@ def test_env_var_nested_override(monkeypatch, tmp_path: Path):
 
 def test_secure_ref_missing_env_var(tmp_path: Path):
     """Missing env var for a *_ref leaves the ref string as-is."""
-    base = tmp_path / "terrarium.toml"
+    base = tmp_path / "volnix.toml"
     base.write_text(
         '[llm.providers.anthropic]\n'
         'type = "anthropic"\n'
@@ -148,8 +148,8 @@ def test_secure_ref_missing_env_var(tmp_path: Path):
     assert provider.api_key_ref == "NONEXISTENT_SECRET_KEY"
 
 
-def test_load_real_terrarium_toml():
-    """Loading the actual terrarium.toml from the repo root succeeds."""
+def test_load_real_volnix_toml():
+    """Loading the actual volnix.toml from the repo root succeeds."""
     repo_root = Path(__file__).resolve().parents[2]
     loader = ConfigLoader(base_dir=repo_root, env="__nonexistent__")
     config = loader.load()

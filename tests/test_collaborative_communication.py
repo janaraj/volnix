@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.actors.state import (
+from volnix.actors.state import (
     ActorBehaviorTraits,
     ActorState,
     InteractionRecord,
@@ -22,9 +22,9 @@ from terrarium.actors.state import (
     Subscription,
     WaitingFor,
 )
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import (
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.events import WorldEvent
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EntityId,
@@ -33,14 +33,14 @@ from terrarium.core.types import (
     ServiceId,
     Timestamp,
 )
-from terrarium.deliverable_presets import AVAILABLE_PRESETS, load_preset
-from terrarium.engines.agency.config import AgencyConfig
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.engines.agency.prompt_builder import ActorPromptBuilder
-from terrarium.simulation.config import SimulationRunnerConfig
-from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import SimulationRunner, SimulationType, StopReason
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.deliverable_presets import AVAILABLE_PRESETS, load_preset
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.simulation.config import SimulationRunnerConfig
+from volnix.simulation.event_queue import EventQueue
+from volnix.simulation.runner import SimulationRunner, SimulationType, StopReason
+from volnix.simulation.world_context import WorldContextBundle
 
 
 # ---------------------------------------------------------------------------
@@ -886,7 +886,7 @@ class TestSimulationRunnerExtensions:
 
     # test_kickstart_envelope_created and test_kickstart_not_created_for_external
     # removed: create_kickstart_envelope was moved from SimulationRunner to
-    # TerrariumApp.build_kickstart_envelope() which resolves channels from
+    # VolnixApp.build_kickstart_envelope() which resolves channels from
     # the actual world state, not hardcoded values.
 
     def test_idle_stop_works(self):
@@ -1008,7 +1008,7 @@ class TestLedgerRecording:
         await engine.notify(event)
         await asyncio.sleep(0.1)  # yield for non-blocking ledger writes
 
-        from terrarium.ledger.entries import (
+        from volnix.ledger.entries import (
             CollaborationNotificationEntry,
             SubscriptionMatchEntry,
         )

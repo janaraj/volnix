@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from terrarium.kernel.surface import APIOperation, ServiceSurface
-from terrarium.packs.profile_loader import ProfileLoader
-from terrarium.packs.profile_registry import ProfileRegistry
-from terrarium.packs.profile_schema import (
+from volnix.kernel.surface import APIOperation, ServiceSurface
+from volnix.packs.profile_loader import ProfileLoader
+from volnix.packs.profile_registry import ProfileRegistry
+from volnix.packs.profile_schema import (
     ProfileEntity,
     ProfileErrorMode,
     ProfileExample,
@@ -26,13 +26,13 @@ from terrarium.packs.profile_schema import (
     ProfileStateMachine,
     ServiceProfileData,
 )
-from terrarium.packs.profile_surface import profile_to_surface
+from volnix.packs.profile_surface import profile_to_surface
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-PROFILES_DIR = Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "profiles"
+PROFILES_DIR = Path(__file__).resolve().parents[2] / "volnix" / "packs" / "profiles"
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +378,7 @@ def test_profile_to_surface_conversion():
     assert "widget" in surface.entity_schemas
     widget_schema = surface.entity_schemas["widget"]
     assert widget_schema["type"] == "object"
-    assert widget_schema["x-terrarium-identity"] == "id"
+    assert widget_schema["x-volnix-identity"] == "id"
     assert widget_schema["required"] == ["id", "name"]
     assert "id" in widget_schema["properties"]
 
@@ -530,7 +530,7 @@ def test_profile_loader_list_profiles():
 
 
 def test_profile_loader_no_dir():
-    loader = ProfileLoader(Path("/tmp/nonexistent_terrarium_profiles_xyz"))
+    loader = ProfileLoader(Path("/tmp/nonexistent_volnix_profiles_xyz"))
     assert loader.discover() == []
     assert loader.load("anything") is None
     assert loader.list_profiles() == []

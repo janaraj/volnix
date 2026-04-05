@@ -1,20 +1,20 @@
-# Terrarium Launch Demos
+# Volnix Launch Demos
 
-Two demos showcasing Terrarium from different angles.
+Two demos showcasing Volnix from different angles.
 
 ## Demo 1: Internal — Customer Support Escalation
 
-**What it shows:** Terrarium as a world engine. 3 internal agents collaborate to handle a support queue with dynamic world events, tiered permissions, policy enforcement, budget tracking, and a team deliverable.
+**What it shows:** Volnix as a world engine. 3 internal agents collaborate to handle a support queue with dynamic world events, tiered permissions, policy enforcement, budget tracking, and a team deliverable.
 
 **Engines highlighted:** World Compiler, State, Policy, Permission, Budget, Responder (Tier 1 packs), Animator (dynamic), Agent Adapter, Report Generator.
 
 ```bash
-# Terminal 1: Start Terrarium with internal agents
-cd /path/to/terrarium
+# Terminal 1: Start Volnix with internal agents
+cd /path/to/volnix
 bash examples/launch-demo/internal/run.sh
 
 # Terminal 2: Start dashboard
-cd terrarium-dashboard && npm run dev
+cd volnix-dashboard && npm run dev
 # Open http://localhost:3000
 ```
 
@@ -30,11 +30,11 @@ See [internal/README.md](internal/README.md) for details.
 
 ```bash
 # Option A: All-in-one (compiles + serves + runs agents)
-cd /path/to/terrarium
+cd /path/to/volnix
 bash examples/launch-demo/external/run.sh
 
 # Option B: Step by step
-uv run terrarium serve demo_ecommerce \
+uv run volnix serve demo_ecommerce \
   --agents examples/launch-demo/external/agents.yaml --port 8080
 # In another terminal:
 uv run python examples/launch-demo/external/run.py

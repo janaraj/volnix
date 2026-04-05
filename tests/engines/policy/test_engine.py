@@ -1,17 +1,17 @@
 """Tests for the PolicyEngine — real policy evaluation."""
 import pytest
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from terrarium.core.events import (
+from volnix.core.context import ActionContext
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.core.events import (
     PolicyBlockEvent,
     PolicyFlagEvent,
     PolicyHoldEvent,
     PolicyEscalateEvent,
 )
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.engines.policy.engine import PolicyEngine
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.engines.policy.engine import PolicyEngine
 
 
 def _make_ctx(

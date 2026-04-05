@@ -1,4 +1,4 @@
-"""Phase C3 WIRE — End-to-End tests for the full Terrarium pipeline.
+"""Phase C3 WIRE — End-to-End tests for the full Volnix pipeline.
 
 Proves the entire architecture works: config -> registry -> wiring ->
 pipeline -> pack dispatch -> state commit -> event publish -> ledger audit.
@@ -19,9 +19,9 @@ import asyncio
 
 import pytest
 
-from terrarium.core.types import ActorId, ActorType, FidelityTier, StepVerdict
-from terrarium.actors.definition import ActorDefinition
-from terrarium.ledger.query import LedgerQuery
+from volnix.core.types import ActorId, ActorType, FidelityTier, StepVerdict
+from volnix.actors.definition import ActorDefinition
+from volnix.ledger.query import LedgerQuery
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -455,7 +455,7 @@ class TestDriftPrevention:
         # commit should NOT be present (pipeline stopped)
         assert "commit" not in step_names
 
-    async def test_terrarium_app_lifecycle(self, app):
+    async def test_volnix_app_lifecycle(self, app):
         """D4: start() -> handle_action() -> stop() without resource leaks.
 
         The app fixture already calls start() and stop(). We verify the

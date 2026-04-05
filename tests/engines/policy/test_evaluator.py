@@ -1,7 +1,7 @@
 """Tests for the ConditionEvaluator — safe expression evaluation."""
 import pytest
 
-from terrarium.engines.policy.evaluator import ConditionEvaluator
+from volnix.engines.policy.evaluator import ConditionEvaluator
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.runtime — PackRuntime with generic MockPack (never EmailPack).
+"""Tests for volnix.packs.runtime — PackRuntime with generic MockPack (never EmailPack).
 
 Key framework enforcement tests prove that bypassing the runtime loses
 validation and fidelity tagging.
@@ -6,9 +6,9 @@ validation and fidelity tagging.
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.errors import PackNotFoundError, ValidationError
-from terrarium.core.types import (
+from volnix.core.context import ResponseProposal
+from volnix.core.errors import PackNotFoundError, ValidationError
+from volnix.core.types import (
     EntityId,
     FidelityMetadata,
     FidelitySource,
@@ -16,10 +16,10 @@ from terrarium.core.types import (
     StateDelta,
     ToolName,
 )
-from terrarium.packs.base import ServicePack
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.runtime import PackRuntime
-from terrarium.validation.schema import SchemaValidator
+from volnix.packs.base import ServicePack
+from volnix.packs.registry import PackRegistry
+from volnix.packs.runtime import PackRuntime
+from volnix.validation.schema import SchemaValidator
 
 
 # ---------------------------------------------------------------------------

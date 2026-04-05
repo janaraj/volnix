@@ -2,14 +2,14 @@
 
 import pytest
 
-from terrarium.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
-from terrarium.llm.providers.mock import MockLLMProvider
-from terrarium.llm.registry import ProviderRegistry
-from terrarium.llm.router import LLMRouter
-from terrarium.llm.secrets import ChainResolver, EnvVarResolver, FileResolver
-from terrarium.llm.tracker import UsageTracker
-from terrarium.llm.types import LLMRequest, LLMUsage, ProviderType
-from terrarium.core.types import ActorId
+from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
+from volnix.llm.providers.mock import MockLLMProvider
+from volnix.llm.registry import ProviderRegistry
+from volnix.llm.router import LLMRouter
+from volnix.llm.secrets import ChainResolver, EnvVarResolver, FileResolver
+from volnix.llm.tracker import UsageTracker
+from volnix.llm.types import LLMRequest, LLMUsage, ProviderType
+from volnix.core.types import ActorId
 
 
 @pytest.mark.asyncio

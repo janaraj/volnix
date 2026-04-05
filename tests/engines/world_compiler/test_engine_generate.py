@@ -9,16 +9,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.actors.registry import ActorRegistry
-from terrarium.core.errors import CompilerError, WorldGenerationValidationError
-from terrarium.engines.world_compiler.engine import WorldCompilerEngine
-from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-from terrarium.kernel.registry import SemanticRegistry
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.llm.types import LLMResponse
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.gmail.pack import EmailPack
-from terrarium.reality.presets import load_preset
+from volnix.actors.registry import ActorRegistry
+from volnix.core.errors import CompilerError, WorldGenerationValidationError
+from volnix.engines.world_compiler.engine import WorldCompilerEngine
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+from volnix.kernel.registry import SemanticRegistry
+from volnix.kernel.surface import ServiceSurface
+from volnix.llm.types import LLMResponse
+from volnix.packs.registry import PackRegistry
+from volnix.packs.verified.gmail.pack import EmailPack
+from volnix.reality.presets import load_preset
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -264,7 +264,7 @@ class TestGenerateWorldWithMockLLM:
         plan = _make_plan_with_email()
         result = await engine.generate_world(plan)
         assert "report" in result
-        assert "TERRARIUM WORLD GENERATION REPORT" in result["report"]
+        assert "VOLNIX WORLD GENERATION REPORT" in result["report"]
 
     @pytest.mark.asyncio
     async def test_returns_warnings(self) -> None:
@@ -409,7 +409,7 @@ class TestGenerateWorldEntityContent:
         result = await engine.generate_world(plan)
         surface = ServiceSurface.from_pack(EmailPack())
         identity_fields = {
-            entity_type: schema.get("x-terrarium-identity", "id")
+            entity_type: schema.get("x-volnix-identity", "id")
             for entity_type, schema in surface.entity_schemas.items()
         }
         for entity_type, entities in result["entities"].items():

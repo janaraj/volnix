@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "terrarium": {
+    "volnix": {
       "url": "http://localhost:8080/mcp",
       "transport": "streamable-http"
     }

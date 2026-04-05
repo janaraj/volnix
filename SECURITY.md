@@ -2,11 +2,11 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Terrarium, please report it responsibly.
+If you discover a security vulnerability in Volnix, please report it responsibly.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, use [GitHub's private vulnerability reporting](https://github.com/janaraj/terrarium/security/advisories/new) to submit your report. This ensures the issue is handled confidentially.
+Instead, use [GitHub's private vulnerability reporting](https://github.com/janaraj/volnix/security/advisories/new) to submit your report. This ensures the issue is handled confidentially.
 
 ### What to include
 

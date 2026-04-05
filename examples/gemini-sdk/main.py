@@ -1,11 +1,11 @@
-"""Google Gemini SDK + Terrarium integration example.
+"""Google Gemini SDK + Volnix integration example.
 
-Zero Terrarium imports. Uses the Gemini compat endpoint to discover
-and execute tools against a running Terrarium world.
+Zero Volnix imports. Uses the Gemini compat endpoint to discover
+and execute tools against a running Volnix world.
 
 Prerequisites:
     pip install google-genai httpx
-    terrarium serve --world <world_id> --port 8080
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -20,14 +20,14 @@ from google.genai import types
 
 load_dotenv()  # loads .env from current directory or parent
 
-TERRARIUM_URL = "http://localhost:8080"
+VOLNIX_URL = "http://localhost:8080"
 ACTOR_ID = "gemini-analyst"
 
 
 def main():
-    # 1. Discover tools from Terrarium (Gemini function declaration format)
-    tool_defs = httpx.get(f"{TERRARIUM_URL}/gemini/v1/tools").json()
-    print(f"Discovered {len(tool_defs)} tools from Terrarium")
+    # 1. Discover tools from Volnix (Gemini function declaration format)
+    tool_defs = httpx.get(f"{VOLNIX_URL}/gemini/v1/tools").json()
+    print(f"Discovered {len(tool_defs)} tools from Volnix")
 
     # 2. Convert to Gemini FunctionDeclarations
     declarations = []
@@ -88,14 +88,14 @@ def main():
         # Add model response to conversation
         contents.append(response.candidates[0].content)
 
-        # 5. Execute each function call against Terrarium world
+        # 5. Execute each function call against Volnix world
         function_responses = []
         for fc in function_calls:
             args = dict(fc.args) if fc.args else {}
             print(f"  Tool call: {fc.name}({json.dumps(args)[:80]}...)")
 
             result = httpx.post(
-                f"{TERRARIUM_URL}/gemini/v1/tools/call",
+                f"{VOLNIX_URL}/gemini/v1/tools/call",
                 json={
                     "name": fc.name,
                     "args": args,

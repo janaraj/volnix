@@ -1,11 +1,11 @@
-"""Tests for terrarium.packs.verified.slack -- backward-compatible smoke tests.
+"""Tests for volnix.packs.verified.slack -- backward-compatible smoke tests.
 
 Full test suite lives in tests/packs/verified/test_chat.py.
 """
 
 import pytest
 
-from terrarium.packs.verified.slack.pack import ChatPack
+from volnix.packs.verified.slack.pack import ChatPack
 
 
 def test_chat_pack_tools():
@@ -23,7 +23,7 @@ def test_chat_pack_name():
 @pytest.mark.asyncio
 async def test_chat_post_message():
     """Smoke test: posting a message returns a valid proposal."""
-    from terrarium.core.types import ToolName
+    from volnix.core.types import ToolName
 
     pack = ChatPack()
     proposal = await pack.handle_action(

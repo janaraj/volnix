@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.core.types import EventId
-from terrarium.engines.reporter.engine import ReportGeneratorEngine
+from volnix.core.types import EventId
+from volnix.engines.reporter.engine import ReportGeneratorEngine
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_permission_denied,

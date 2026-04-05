@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.engines.reporter.scorecard import SCORE_REGISTRY, ScorecardComputer
+from volnix.engines.reporter.scorecard import SCORE_REGISTRY, ScorecardComputer
 
 
 @pytest.fixture

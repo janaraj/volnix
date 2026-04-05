@@ -1,7 +1,7 @@
-"""Tests for terrarium.kernel.surface -- APIOperation + ServiceSurface models."""
+"""Tests for volnix.kernel.surface -- APIOperation + ServiceSurface models."""
 
 import pytest
-from terrarium.kernel.surface import APIOperation, ServiceSurface
+from volnix.kernel.surface import APIOperation, ServiceSurface
 
 
 # ---------------------------------------------------------------------------

@@ -18,8 +18,8 @@ import os
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.core.types import ActorId, ActorType
+from volnix.actors.definition import ActorDefinition
+from volnix.core.types import ActorId, ActorType
 
 # Bypass GOOGLE_API_KEY skip check — we use codex-acp, not Google
 os.environ.setdefault("GOOGLE_API_KEY", "")

@@ -1,4 +1,4 @@
-"""Tests for terrarium.llm.providers.acp_client -- ACP stdio JSON-RPC provider."""
+"""Tests for volnix.llm.providers.acp_client -- ACP stdio JSON-RPC provider."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from terrarium.llm.providers.acp_client import (
+from volnix.llm.providers.acp_client import (
     ACPClientProvider,
     _extract_token_usage_from_map,
     _is_notification,
     _is_request,
     _is_response,
 )
-from terrarium.llm.types import LLMRequest, LLMUsage
+from volnix.llm.types import LLMRequest, LLMUsage
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +430,7 @@ async def test_close_no_process():
 def test_no_httpx_import():
     """ACP provider does not import httpx directly."""
     import inspect
-    import terrarium.llm.providers.acp_client as mod
+    import volnix.llm.providers.acp_client as mod
 
     source = inspect.getsource(mod)
     assert "import httpx" not in source
@@ -439,7 +439,7 @@ def test_no_httpx_import():
 def test_no_acp_sdk_import():
     """ACP provider does not import acp_sdk (uses raw stdio JSON-RPC)."""
     import inspect
-    import terrarium.llm.providers.acp_client as mod
+    import volnix.llm.providers.acp_client as mod
 
     source = inspect.getsource(mod)
     assert "acp_sdk" not in source
@@ -454,7 +454,7 @@ def _has_command(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
-RUN_REAL = os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in (
+RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in (
     "1", "true", "yes",
 )
 
@@ -463,12 +463,12 @@ HAS_GEMINI = _has_command("gemini")
 
 skipif_no_codex_acp = pytest.mark.skipif(
     not (HAS_CODEX_ACP and RUN_REAL),
-    reason="codex-acp not installed or TERRARIUM_RUN_REAL_API_TESTS not set",
+    reason="codex-acp not installed or VOLNIX_RUN_REAL_API_TESTS not set",
 )
 
 skipif_no_gemini_acp = pytest.mark.skipif(
     not (HAS_GEMINI and RUN_REAL),
-    reason="gemini not installed or TERRARIUM_RUN_REAL_API_TESTS not set",
+    reason="gemini not installed or VOLNIX_RUN_REAL_API_TESTS not set",
 )
 
 
@@ -489,10 +489,10 @@ async def test_real_codex_acp_single_turn():
     )
     try:
         resp = await provider.generate(
-            LLMRequest(user_content="respond with only the word: terrarium")
+            LLMRequest(user_content="respond with only the word: volnix")
         )
         assert resp.error is None, f"codex-acp error: {resp.error}"
-        assert "terrarium" in resp.content.lower()
+        assert "volnix" in resp.content.lower()
         assert resp.latency_ms > 0
     finally:
         await provider.close()
@@ -543,10 +543,10 @@ async def test_real_gemini_acp_single_turn():
     )
     try:
         resp = await provider.generate(
-            LLMRequest(user_content="respond with only the word: terrarium")
+            LLMRequest(user_content="respond with only the word: volnix")
         )
         assert resp.error is None, f"gemini ACP error: {resp.error}"
-        assert "terrarium" in resp.content.lower()
+        assert "volnix" in resp.content.lower()
         assert resp.latency_ms > 0
     finally:
         await provider.close()

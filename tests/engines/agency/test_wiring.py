@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from terrarium.config.schema import TerrariumConfig
-from terrarium.core.protocols import AgencyEngineProtocol
-from terrarium.engines.agency.config import AgencyConfig
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.registry.composition import create_default_registry
-from terrarium.simulation.config import SimulationRunnerConfig
+from volnix.config.schema import VolnixConfig
+from volnix.core.protocols import AgencyEngineProtocol
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.registry.composition import create_default_registry
+from volnix.simulation.config import SimulationRunnerConfig
 
 
 def test_agency_engine_in_default_registry():
@@ -25,18 +25,18 @@ def test_agency_engine_in_engine_list():
     assert "agency" in names
 
 
-def test_agency_config_in_terrarium_config():
-    """TerrariumConfig should include an AgencyConfig field with defaults."""
-    config = TerrariumConfig()
+def test_agency_config_in_volnix_config():
+    """VolnixConfig should include an AgencyConfig field with defaults."""
+    config = VolnixConfig()
     assert hasattr(config, "agency")
     assert isinstance(config.agency, AgencyConfig)
     assert config.agency.frustration_threshold_tier3 == 0.7
     assert config.agency.batch_size == 5
 
 
-def test_simulation_runner_config_in_terrarium_config():
-    """TerrariumConfig should include a SimulationRunnerConfig field with defaults."""
-    config = TerrariumConfig()
+def test_simulation_runner_config_in_volnix_config():
+    """VolnixConfig should include a SimulationRunnerConfig field with defaults."""
+    config = VolnixConfig()
     assert hasattr(config, "simulation_runner")
     assert isinstance(config.simulation_runner, SimulationRunnerConfig)
     assert config.simulation_runner.max_logical_time == 86400.0

@@ -16,14 +16,14 @@ import pytest
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM + temp dirs."""
+    """VolnixApp with REAL codex-acp LLM + temp dirs."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -36,7 +36,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app, tmp_path
     await app.stop()
@@ -71,8 +71,8 @@ class TestFeedbackPipelineE2E:
         # ── Step 1: Infer Twilio profile ──────────────────────────
         print("\n  Step 1: Infer Twilio profile...")
 
-        from terrarium.kernel.context_hub import ContextHubProvider
-        from terrarium.packs.profile_infer import ProfileInferrer
+        from volnix.kernel.context_hub import ContextHubProvider
+        from volnix.packs.profile_infer import ProfileInferrer
 
         hub = ContextHubProvider()
         context_hub = hub if await hub.is_available() else None
@@ -101,7 +101,7 @@ class TestFeedbackPipelineE2E:
             adapter._profile_registry = responder._profile_registry
 
         # Save to the app's profile loader so capture can find it
-        from terrarium.packs.profile_loader import ProfileLoader
+        from volnix.packs.profile_loader import ProfileLoader
         profiles_dir = tmp_path / "profiles"
         loader = ProfileLoader(profiles_dir)
         loader.save(profile)
@@ -110,14 +110,14 @@ class TestFeedbackPipelineE2E:
         # ── Step 3: Build world + compile ─────────────────────────
         print("\n  Step 3: Compile world with email + twilio...")
 
-        from terrarium.engines.world_compiler.plan import (
+        from volnix.engines.world_compiler.plan import (
             ServiceResolution,
             WorldPlan,
         )
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.profile_surface import profile_to_surface
-        from terrarium.packs.verified.gmail.pack import EmailPack
-        from terrarium.reality.presets import load_preset
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.profile_surface import profile_to_surface
+        from volnix.packs.verified.gmail.pack import EmailPack
+        from volnix.reality.presets import load_preset
 
         twilio_surface = profile_to_surface(profile)
         email_surface = ServiceSurface.from_pack(EmailPack())
@@ -158,7 +158,7 @@ class TestFeedbackPipelineE2E:
         # ── Step 4: Create run + execute agent action ─────────────
         print("\n  Step 4: Create run + agent action...")
 
-        from terrarium.core.types import RunId
+        from volnix.core.types import RunId
 
         run_id = await app.run_manager.create_run(
             world_def={"name": plan.name, "services": ["email", "twilio"]},
@@ -285,7 +285,7 @@ class TestFeedbackPipelineE2E:
         # ── Step 11: Compile Tier 1 pack scaffold ─────────────────
         print("\n  Step 11: Compile Tier 1 pack scaffold...")
 
-        from terrarium.engines.feedback.pack_compiler import PackCompiler
+        from volnix.engines.feedback.pack_compiler import PackCompiler
 
         pack_compiler = PackCompiler()
         pack_result = await pack_compiler.compile(
@@ -300,7 +300,7 @@ class TestFeedbackPipelineE2E:
         # ── Step 12: Verify pack scaffold ─────────────────────────
         print("\n  Step 12: Verify pack scaffold...")
 
-        from terrarium.engines.feedback.pack_verifier import PackVerifier
+        from volnix.engines.feedback.pack_verifier import PackVerifier
 
         verifier = PackVerifier()
         verification = await verifier.verify(pack_result.output_dir)

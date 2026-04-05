@@ -1,14 +1,14 @@
-"""Tests for terrarium.engines.animator — world tick, scheduled/organic events.
+"""Tests for volnix.engines.animator — world tick, scheduled/organic events.
 
 Full test suites are in tests/engines/animator/ — this file contains
 basic smoke tests for backwards compatibility.
 """
 import pytest
-from terrarium.engines.animator.engine import WorldAnimatorEngine
-from terrarium.engines.animator.config import AnimatorConfig
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.engines.animator.generator import OrganicGenerator
-from terrarium.scheduling.scheduler import WorldScheduler
+from volnix.engines.animator.engine import WorldAnimatorEngine
+from volnix.engines.animator.config import AnimatorConfig
+from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.animator.generator import OrganicGenerator
+from volnix.scheduling.scheduler import WorldScheduler
 
 
 def test_animator_imports():

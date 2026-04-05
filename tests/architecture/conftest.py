@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.app import TerrariumApp
-from terrarium.config.schema import TerrariumConfig
-from terrarium.engines.state.config import StateConfig
-from terrarium.persistence.config import PersistenceConfig
+from volnix.app import VolnixApp
+from volnix.config.schema import VolnixConfig
+from volnix.engines.state.config import StateConfig
+from volnix.persistence.config import PersistenceConfig
 
 
 @pytest.fixture
 async def app(tmp_path):
-    """Minimal TerrariumApp for architecture contract tests."""
-    config = TerrariumConfig()
+    """Minimal VolnixApp for architecture contract tests."""
+    config = VolnixConfig()
     config = config.model_copy(update={
         "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
         "state": StateConfig(
@@ -20,7 +20,7 @@ async def app(tmp_path):
             snapshot_dir=str(tmp_path / "snapshots"),
         ),
     })
-    terrarium_app = TerrariumApp(config)
-    await terrarium_app.start()
-    yield terrarium_app
-    await terrarium_app.stop()
+    volnix_app = VolnixApp(config)
+    await volnix_app.start()
+    yield volnix_app
+    await volnix_app.stop()

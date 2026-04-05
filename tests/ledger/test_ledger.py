@@ -1,10 +1,10 @@
-"""Tests for terrarium.ledger.ledger -- append-only audit ledger."""
+"""Tests for volnix.ledger.ledger -- append-only audit ledger."""
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from terrarium.core.types import ActorId, EntityId, SnapshotId, RunId
-from terrarium.ledger.config import LedgerConfig
-from terrarium.ledger.entries import (
+from volnix.core.types import ActorId, EntityId, SnapshotId, RunId
+from volnix.ledger.config import LedgerConfig
+from volnix.ledger.entries import (
     EngineLifecycleEntry,
     GatewayRequestEntry,
     LLMCallEntry,
@@ -13,9 +13,9 @@ from terrarium.ledger.entries import (
     StateMutationEntry,
     ValidationEntry,
 )
-from terrarium.ledger.ledger import Ledger
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.ledger.ledger import Ledger
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

@@ -1,9 +1,9 @@
-"""Tests for terrarium.ledger.query -- fluent query builder for ledger entries."""
+"""Tests for volnix.ledger.query -- fluent query builder for ledger entries."""
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.core.types import ActorId
-from terrarium.ledger.query import LedgerAggregation, LedgerQuery, LedgerQueryBuilder
+from volnix.core.types import ActorId
+from volnix.ledger.query import LedgerAggregation, LedgerQuery, LedgerQueryBuilder
 
 
 def test_ledger_query_defaults():

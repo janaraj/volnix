@@ -1,7 +1,7 @@
-"""Tests for terrarium.core.context — ActionContext, StepResult, ResponseProposal."""
+"""Tests for volnix.core.context — ActionContext, StepResult, ResponseProposal."""
 import pytest
-from terrarium.core.context import ActionContext, StepResult, ResponseProposal
-from terrarium.core.types import StepVerdict, ActorId, ServiceId
+from volnix.core.context import ActionContext, StepResult, ResponseProposal
+from volnix.core.types import StepVerdict, ActorId, ServiceId
 
 
 def test_action_context_mutable():

@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.dimensions -- dimension models and WorldConditions.
+"""Tests for volnix.reality.dimensions -- dimension models and WorldConditions.
 
 Tests the 5 dimension models (InformationQualityDimension, ReliabilityDimension,
 SocialFrictionDimension, ComplexityDimension, BoundaryDimension) and the
@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from terrarium.reality.dimensions import (
+from volnix.reality.dimensions import (
     BoundaryDimension,
     ComplexityDimension,
     InformationQualityDimension,

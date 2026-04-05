@@ -1,9 +1,9 @@
-"""Tests for terrarium.runs.artifacts — run artifact persistence."""
+"""Tests for volnix.runs.artifacts — run artifact persistence."""
 import pytest
 
-from terrarium.core.types import RunId
-from terrarium.runs.artifacts import ArtifactStore
-from terrarium.runs.config import RunConfig
+from volnix.core.types import RunId
+from volnix.runs.artifacts import ArtifactStore
+from volnix.runs.config import RunConfig
 
 
 def _make_store(tmp_path) -> ArtifactStore:

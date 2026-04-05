@@ -8,18 +8,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.actors.state import (
+from volnix.actors.state import (
     ActorBehaviorTraits,
     ActorState,
     InteractionRecord,
     ScheduledAction,
     WaitingFor,
 )
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import ActorId, EntityId, ServiceId, Timestamp
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.llm.types import LLMResponse
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, ServiceId, Timestamp
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.llm.types import LLMResponse
+from volnix.simulation.world_context import WorldContextBundle
 
 
 def _make_timestamp(tick: int = 1) -> Timestamp:
@@ -539,7 +539,7 @@ async def test_notify_end_to_end_with_mock_llm():
     engine = await _create_engine([actor])
 
     # Mock the LLM router — returns native tool_calls then text
-    from terrarium.llm.types import ToolCall
+    from volnix.llm.types import ToolCall
     mock_router = AsyncMock()
     mock_router.route = AsyncMock(
         return_value=LLMResponse(
@@ -814,7 +814,7 @@ class TestEdgeCases:
     # GAP 2.2: All actors classify as Tier 3
     async def test_notify_all_actors_tier3(self):
         """All actors with high frustration -> all classify as Tier 3 (individual LLM calls)."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -852,7 +852,7 @@ class TestEdgeCases:
     # GAP 2.3: All actors classify as Tier 2
     async def test_notify_all_actors_tier2(self):
         """Low frustration actors -> all use multi-turn loop (same as Tier 3)."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -1321,7 +1321,7 @@ class TestParseToolCall:
 
     async def test_do_nothing_returns_none(self):
         """do_nothing tool call returns None."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
 
         actor = _make_actor()
         engine = await _create_engine([actor])
@@ -1331,7 +1331,7 @@ class TestParseToolCall:
 
     async def test_namespaced_tool_call(self):
         """Namespaced tool call splits into service + action_type."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
 
         actor = _make_actor()
         engine = await _create_engine([actor])
@@ -1349,7 +1349,7 @@ class TestParseToolCall:
 
     async def test_metadata_extracted_from_arguments(self):
         """reasoning, intended_for, state_updates are extracted and not in payload."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
 
         actor = _make_actor()
         engine = await _create_engine([actor])
@@ -1378,7 +1378,7 @@ class TestParseToolCall:
 
     async def test_tool_without_namespace(self):
         """Tool names without __ separator still work."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
 
         actor = _make_actor()
         engine = await _create_engine([actor])
@@ -1394,7 +1394,7 @@ class TestParseToolCall:
 
     async def test_empty_arguments(self):
         """Tool call with empty arguments doesn't crash."""
-        from terrarium.llm.types import ToolCall
+        from volnix.llm.types import ToolCall
 
         actor = _make_actor()
         engine = await _create_engine([actor])

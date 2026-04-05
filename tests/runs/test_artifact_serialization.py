@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import ActorId, EventId, RunId, ServiceId, Timestamp
-from terrarium.runs.artifacts import ArtifactStore
-from terrarium.runs.config import RunConfig
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EventId, RunId, ServiceId, Timestamp
+from volnix.runs.artifacts import ArtifactStore
+from volnix.runs.config import RunConfig
 
 
 def _ts(tick: int = 5) -> Timestamp:

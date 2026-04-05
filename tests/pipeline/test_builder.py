@@ -1,12 +1,12 @@
-"""Tests for terrarium.pipeline.builder -- pipeline construction from config."""
+"""Tests for volnix.pipeline.builder -- pipeline construction from config."""
 
 import pytest
 
-from terrarium.core.context import ActionContext, StepResult
-from terrarium.core.types import StepVerdict
-from terrarium.pipeline.builder import build_pipeline_from_config
-from terrarium.pipeline.config import PipelineConfig
-from terrarium.pipeline.dag import PipelineDAG
+from volnix.core.context import ActionContext, StepResult
+from volnix.core.types import StepVerdict
+from volnix.pipeline.builder import build_pipeline_from_config
+from volnix.pipeline.config import PipelineConfig
+from volnix.pipeline.dag import PipelineDAG
 
 
 # ---------------------------------------------------------------------------

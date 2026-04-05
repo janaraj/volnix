@@ -2,10 +2,10 @@
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.engines.world_compiler.service_resolution import CompilerServiceResolver
-from terrarium.kernel.surface import ServiceSurface, APIOperation
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.gmail.pack import EmailPack
+from volnix.engines.world_compiler.service_resolution import CompilerServiceResolver
+from volnix.kernel.surface import ServiceSurface, APIOperation
+from volnix.packs.registry import PackRegistry
+from volnix.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class TestCompilerServiceResolver:
     @pytest.mark.asyncio
     async def test_resolve_bare_name_with_kernel_resolver(self, pack_registry, kernel):
         """Bare name falls through to kernel ServiceResolver."""
-        from terrarium.kernel.resolver import ServiceResolver
+        from volnix.kernel.resolver import ServiceResolver
 
         kernel_resolver = ServiceResolver(kernel=kernel)
         resolver = CompilerServiceResolver(

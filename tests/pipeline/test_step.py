@@ -1,10 +1,10 @@
-"""Tests for terrarium.pipeline.step -- base step, result creation, and timing."""
+"""Tests for volnix.pipeline.step -- base step, result creation, and timing."""
 
 import pytest
 
-from terrarium.core.context import ActionContext, StepResult
-from terrarium.core.types import ActorId, EventId, ServiceId, StepVerdict
-from terrarium.pipeline.step import BasePipelineStep
+from volnix.core.context import ActionContext, StepResult
+from volnix.core.types import ActorId, EventId, ServiceId, StepVerdict
+from volnix.pipeline.step import BasePipelineStep
 
 
 class ConcreteStep(BasePipelineStep):

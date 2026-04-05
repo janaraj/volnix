@@ -1,15 +1,15 @@
-"""Tests for terrarium.bus.replay — event replay by range, time, and type."""
+"""Tests for volnix.bus.replay — event replay by range, time, and type."""
 import asyncio
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.fanout import TopicFanout
-from terrarium.bus.persistence import BusPersistence
-from terrarium.bus.replay import ReplayEngine
-from terrarium.bus.types import Subscription
-from terrarium.core.events import Event
-from terrarium.core.types import Timestamp
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.bus.fanout import TopicFanout
+from volnix.bus.persistence import BusPersistence
+from volnix.bus.replay import ReplayEngine
+from volnix.bus.types import Subscription
+from volnix.core.events import Event
+from volnix.core.types import Timestamp
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 def _make_event(event_type: str = "test.event") -> Event:

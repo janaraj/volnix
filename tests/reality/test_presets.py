@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.presets -- preset loading and enum values.
+"""Tests for volnix.reality.presets -- preset loading and enum values.
 
 Tests loading the 3 built-in presets (ideal, messy, hostile) from YAML,
 custom YAML file loading, invalid preset handling, and frozen results.
@@ -9,10 +9,10 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from terrarium.core.errors import InvalidPresetError
-from terrarium.core.types import RealityPreset
-from terrarium.reality.dimensions import WorldConditions
-from terrarium.reality.presets import load_from_yaml, load_preset
+from volnix.core.errors import InvalidPresetError
+from volnix.core.types import RealityPreset
+from volnix.reality.dimensions import WorldConditions
+from volnix.reality.presets import load_from_yaml, load_preset
 
 
 class TestLoadIdeal:

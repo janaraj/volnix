@@ -1,9 +1,9 @@
-"""Tests for terrarium.engines.state.event_log -- EventLog append/query."""
+"""Tests for volnix.engines.state.event_log -- EventLog append/query."""
 import pytest
 from datetime import datetime, timezone, timedelta
-from terrarium.core.types import ActorId, ServiceId, EntityId, EventId, Timestamp
-from terrarium.core.events import WorldEvent, Event
-from terrarium.engines.state.event_log import EventLog
+from volnix.core.types import ActorId, ServiceId, EntityId, EventId, Timestamp
+from volnix.core.events import WorldEvent, Event
+from volnix.engines.state.event_log import EventLog
 
 
 def _make_event(action="test_action", actor="agent-1", service="svc-1",

@@ -1,7 +1,7 @@
 """Tests for AgentBoundaryAnalyzer -- agent-to-world observation."""
 import pytest
 
-from terrarium.engines.reporter.agent_boundaries import (
+from volnix.engines.reporter.agent_boundaries import (
     AgentBoundaryAnalyzer,
     BoundaryCategory,
     BoundaryFinding,

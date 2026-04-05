@@ -1,10 +1,10 @@
-"""Tests for terrarium.runs.manager — run lifecycle management."""
+"""Tests for volnix.runs.manager — run lifecycle management."""
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.core.types import RunId
-from terrarium.runs.config import RunConfig
-from terrarium.runs.manager import RunManager
+from volnix.core.types import RunId
+from volnix.runs.config import RunConfig
+from volnix.runs.manager import RunManager
 
 
 def _make_manager(tmp_path) -> RunManager:

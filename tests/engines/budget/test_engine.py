@@ -1,16 +1,16 @@
 """Tests for the BudgetEngine — real budget tracking and enforcement."""
 import pytest
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from terrarium.core.events import (
+from volnix.core.context import ActionContext
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.core.events import (
     BudgetDeductionEvent,
     BudgetExhaustedEvent,
     BudgetWarningEvent,
 )
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.engines.budget.engine import BudgetEngine
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.engines.budget.engine import BudgetEngine
 
 
 def _make_ctx(

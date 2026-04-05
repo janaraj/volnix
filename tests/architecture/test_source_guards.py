@@ -1,4 +1,4 @@
-"""Static architecture guardrails for the Terrarium backend."""
+"""Static architecture guardrails for the Volnix backend."""
 
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ from tests.helpers.guardrails import staged_guardrail
 pytestmark = pytest.mark.architecture
 
 _ALLOWED_SQLITE_CONSTRUCTORS = {
-    "terrarium/persistence/manager.py",
-    "terrarium/persistence/snapshot.py",
+    "volnix/persistence/manager.py",
+    "volnix/persistence/snapshot.py",
 }
 _ALLOWED_CONCRETE_ENGINE_IMPORTERS = {
-    "terrarium/registry/composition.py",
+    "volnix/registry/composition.py",
 }
 
 
@@ -43,13 +43,13 @@ def test_low_level_sql_connectors_are_confined_to_sqlite_backend():
     """Direct sqlite connection APIs should only appear inside the sqlite backend."""
     for target in ("aiosqlite.connect", "sqlite3.connect"):
         offenders = set(find_call_offenders(PRODUCT_ROOT, {target}))
-        assert offenders == {"terrarium/persistence/sqlite.py"}
+        assert offenders == {"volnix/persistence/sqlite.py"}
 
 
 def test_dynamic_imports_are_confined_to_pack_loader():
     """Pack discovery is the only sanctioned dynamic-import surface."""
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"importlib.import_module"}))
-    assert offenders == {"terrarium/packs/loader.py"}
+    assert offenders == {"volnix/packs/loader.py"}
 
 
 def test_external_entrypoints_do_not_call_state_read_apis():
@@ -73,7 +73,7 @@ def test_external_entrypoints_do_not_import_pack_modules():
         matches = sorted(
             module
             for module in imported_modules(path)
-            if module.startswith("terrarium.packs")
+            if module.startswith("volnix.packs")
         )
         if matches:
             offenders[rel_repo_path(path)] = matches
@@ -84,7 +84,7 @@ def test_concrete_engine_imports_stay_in_composition_boundaries():
     """Concrete engine-class imports should stay in the composition root or package exports."""
     offenders = find_import_offenders(
         PRODUCT_ROOT,
-        lambda module: module.startswith("terrarium.engines.") and module.endswith(".engine"),
+        lambda module: module.startswith("volnix.engines.") and module.endswith(".engine"),
     )
     filtered = {
         path: modules
@@ -99,7 +99,7 @@ def test_verified_packs_do_not_import_runtime_layers():
     offenders = find_import_offenders(
         PRODUCT_ROOT / "packs" / "verified",
         lambda module: module.startswith(
-            ("terrarium.persistence", "terrarium.engines", "terrarium.bus")
+            ("volnix.persistence", "volnix.engines", "volnix.bus")
         ),
     )
     assert offenders == {}

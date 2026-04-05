@@ -1,12 +1,12 @@
-"""Tests for terrarium.kernel.primitives -- per-category primitive definitions."""
+"""Tests for volnix.kernel.primitives -- per-category primitive definitions."""
 
 import pytest
-from terrarium.kernel.primitives import SemanticPrimitive, get_primitives_for_category
+from volnix.kernel.primitives import SemanticPrimitive, get_primitives_for_category
 
 
 def test_total_count():
     """Total primitives across all categories (11 categories)."""
-    from terrarium.kernel.categories import CATEGORIES
+    from volnix.kernel.categories import CATEGORIES
 
     total = 0
     for cat_name in CATEGORIES:

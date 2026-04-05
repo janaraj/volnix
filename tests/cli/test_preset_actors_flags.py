@@ -20,7 +20,7 @@ class TestPresetLoading:
 
     def test_all_presets_loadable(self):
         """Every shipped preset must load without error."""
-        from terrarium.deliverable_presets import AVAILABLE_PRESETS, load_preset
+        from volnix.deliverable_presets import AVAILABLE_PRESETS, load_preset
 
         assert len(AVAILABLE_PRESETS) >= 6, (
             f"Expected at least 6 presets, got {len(AVAILABLE_PRESETS)}"
@@ -32,7 +32,7 @@ class TestPresetLoading:
 
     def test_preset_has_required_keys(self):
         """Every preset must have: name, description, schema, prompt_instructions."""
-        from terrarium.deliverable_presets import AVAILABLE_PRESETS, load_preset
+        from volnix.deliverable_presets import AVAILABLE_PRESETS, load_preset
 
         required_keys = {"name", "description", "schema", "prompt_instructions"}
         for name in AVAILABLE_PRESETS:
@@ -42,7 +42,7 @@ class TestPresetLoading:
 
     def test_preset_schema_is_valid_json_schema(self):
         """Every preset schema must have 'type' and 'properties'."""
-        from terrarium.deliverable_presets import AVAILABLE_PRESETS, load_preset
+        from volnix.deliverable_presets import AVAILABLE_PRESETS, load_preset
 
         for name in AVAILABLE_PRESETS:
             data = load_preset(name)
@@ -52,14 +52,14 @@ class TestPresetLoading:
 
     def test_invalid_preset_raises(self):
         """Unknown preset name must raise."""
-        from terrarium.deliverable_presets import load_preset
+        from volnix.deliverable_presets import load_preset
 
         with pytest.raises((FileNotFoundError, ValueError)):
             load_preset("nonexistent_preset_xyz")
 
     def test_known_presets_exist(self):
         """The 6 documented presets must all exist."""
-        from terrarium.deliverable_presets import AVAILABLE_PRESETS
+        from volnix.deliverable_presets import AVAILABLE_PRESETS
 
         expected = {"synthesis", "decision", "prediction", "brainstorm", "recommendation", "assessment"}
         actual = set(AVAILABLE_PRESETS)
@@ -142,7 +142,7 @@ class TestCLIFlagsHarness:
 
     def test_run_command_has_deliverable_option(self):
         """The run command must accept --deliverable."""
-        from terrarium.cli import app
+        from volnix.cli import app
         from typer.testing import CliRunner
 
         runner = CliRunner()
@@ -151,7 +151,7 @@ class TestCLIFlagsHarness:
 
     def test_run_command_has_actors_option(self):
         """The run command must accept --actors."""
-        from terrarium.cli import app
+        from volnix.cli import app
         from typer.testing import CliRunner
 
         runner = CliRunner()
@@ -160,7 +160,7 @@ class TestCLIFlagsHarness:
 
     def test_deliverable_help_lists_all_types(self):
         """--deliverable help text must mention all 6 types."""
-        from terrarium.cli import app
+        from volnix.cli import app
         from typer.testing import CliRunner
 
         runner = CliRunner()

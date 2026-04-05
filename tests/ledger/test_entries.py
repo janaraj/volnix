@@ -1,10 +1,10 @@
-"""Tests for terrarium.ledger.entries -- typed ledger entry dataclasses."""
+"""Tests for volnix.ledger.entries -- typed ledger entry dataclasses."""
 from datetime import datetime
 
 import pytest
 
-from terrarium.core.types import ActorId, EntityId, EnvelopeId, EventId, RunId, SnapshotId
-from terrarium.ledger.entries import (
+from volnix.core.types import ActorId, EntityId, EnvelopeId, EventId, RunId, SnapshotId
+from volnix.ledger.entries import (
     ENTRY_REGISTRY,
     ActionGenerationEntry,
     ActorActivationEntry,
@@ -164,7 +164,7 @@ def test_entry_serialization_roundtrip():
 
 def test_entry_registry_all_types():
     """ENTRY_REGISTRY should contain all concrete entry types."""
-    from terrarium.ledger.entries import (
+    from volnix.ledger.entries import (
         ActivationCompleteEntry,
         FeedbackAnnotationEntry,
         FeedbackCaptureEntry,

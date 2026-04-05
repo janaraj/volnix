@@ -1,4 +1,4 @@
-"""Runtime-backed HTTP adapter tests using a real TerrariumApp."""
+"""Runtime-backed HTTP adapter tests using a real VolnixApp."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from terrarium.app import TerrariumApp
-from terrarium.config.schema import TerrariumConfig
-from terrarium.engines.state.config import StateConfig
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.config import PersistenceConfig
+from volnix.app import VolnixApp
+from volnix.config.schema import VolnixConfig
+from volnix.engines.state.config import StateConfig
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.config import PersistenceConfig
 from tests.helpers.guardrails import staged_guardrail
 from tests.helpers.runtime import spawn_websocket_receiver, start_http_adapter
 
@@ -30,8 +30,8 @@ def _email_send_payload() -> dict[str, str]:
 
 @pytest.fixture
 async def app(tmp_path):
-    """Boot a real TerrariumApp with isolated temporary storage."""
-    config = TerrariumConfig().model_copy(
+    """Boot a real VolnixApp with isolated temporary storage."""
+    config = VolnixConfig().model_copy(
         update={
             "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
             "state": StateConfig(
@@ -40,10 +40,10 @@ async def app(tmp_path):
             ),
         }
     )
-    terrarium_app = TerrariumApp(config)
-    await terrarium_app.start()
-    yield terrarium_app
-    await terrarium_app.stop()
+    volnix_app = VolnixApp(config)
+    await volnix_app.start()
+    yield volnix_app
+    await volnix_app.stop()
 
 
 @pytest.mark.asyncio

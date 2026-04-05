@@ -13,7 +13,7 @@ Level 2 per-attribute numbers affect event generation.
 Run with:
     source .env && pytest tests/live/test_animator_modes.py -v -s
 
-Uses Codex ACP as the LLM provider (configured in terrarium.toml).
+Uses Codex ACP as the LLM provider (configured in volnix.toml).
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.packs.verified.gmail.pack import EmailPack
-from terrarium.reality.presets import load_preset
-from terrarium.scheduling.scheduler import WorldScheduler
+from volnix.engines.world_compiler.plan import WorldPlan, ServiceResolution
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.engines.animator.context import AnimatorContext
+from volnix.kernel.surface import ServiceSurface
+from volnix.packs.verified.gmail.pack import EmailPack
+from volnix.reality.presets import load_preset
+from volnix.scheduling.scheduler import WorldScheduler
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ def _make_plan(preset: str = "messy", behavior: str = "dynamic") -> WorldPlan:
     """Create a WorldPlan with email pack and the given preset/behavior."""
     surface = ServiceSurface.from_pack(EmailPack())
     conditions = load_preset(preset)
-    from terrarium.reality.expander import ConditionExpander
+    from volnix.reality.expander import ConditionExpander
     prompt_ctx = ConditionExpander().build_prompt_context(conditions)
 
     return WorldPlan(
@@ -173,8 +173,8 @@ class TestReactiveMode:
         await animator.configure(plan, scheduler)
 
         # Simulate agent action
-        from terrarium.core.events import WorldEvent
-        from terrarium.core.types import ActorId, ServiceId, Timestamp
+        from volnix.core.events import WorldEvent
+        from volnix.core.types import ActorId, ServiceId, Timestamp
         agent_event = WorldEvent(
             event_type="world.email_send",
             timestamp=Timestamp(
@@ -283,7 +283,7 @@ class TestFullE2EPipeline:
         print(f"  Events from animator: {len(tick_results)}")
 
         # 5. Verify ledger has entries from both generation AND animator
-        from terrarium.ledger.query import LedgerQuery
+        from volnix.ledger.query import LedgerQuery
         entries = await app.ledger.query(LedgerQuery(limit=500))
         print(f"  Ledger entries: {len(entries)}")
 

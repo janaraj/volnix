@@ -6,7 +6,7 @@ Creates a social media monitoring world where:
 - A support agent monitors, responds, and engages
 - Animator generates organic social activity (new posts, replies, votes)
 
-Requires: codex-acp binary available (uses terrarium.toml routing)
+Requires: codex-acp binary available (uses volnix.toml routing)
 
 Run with:
     uv run pytest tests/live/test_social_simulation.py -v -s
@@ -20,19 +20,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from terrarium.core.types import RunId
+from volnix.core.types import RunId
 
 
 @pytest.fixture
 async def social_app(tmp_path):
-    """TerrariumApp with codex-acp for social media simulation."""
+    """VolnixApp with codex-acp for social media simulation."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found — skipping live test")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -44,7 +44,7 @@ async def social_app(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -66,14 +66,14 @@ class TestSocialMediaSimulation:
         print("STEP 1: BUILD SOCIAL MEDIA WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import (
+        from volnix.engines.world_compiler.plan import (
             ServiceResolution,
             WorldPlan,
         )
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.reddit.pack import RedditPack
-        from terrarium.packs.verified.twitter.pack import TwitterPack
-        from terrarium.reality.presets import load_preset
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.reddit.pack import RedditPack
+        from volnix.packs.verified.twitter.pack import TwitterPack
+        from volnix.reality.presets import load_preset
 
         reddit_surface = ServiceSurface.from_pack(RedditPack())
         twitter_surface = ServiceSurface.from_pack(TwitterPack())

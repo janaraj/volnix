@@ -1,11 +1,11 @@
-"""Anthropic SDK + Terrarium integration example.
+"""Anthropic SDK + Volnix integration example.
 
-Zero Terrarium imports. Uses the Anthropic compat endpoint to discover
-and execute tools against a running Terrarium world.
+Zero Volnix imports. Uses the Anthropic compat endpoint to discover
+and execute tools against a running Volnix world.
 
 Prerequisites:
     pip install anthropic httpx
-    terrarium serve --world <world_id> --port 8080
+    volnix serve --world <world_id> --port 8080
 
 Usage:
     python main.py
@@ -19,14 +19,14 @@ from dotenv import load_dotenv
 
 load_dotenv()  # loads .env from current directory or parent
 
-TERRARIUM_URL = "http://localhost:8080"
+VOLNIX_URL = "http://localhost:8080"
 ACTOR_ID = "anthropic-analyst"
 
 
 def main():
-    # 1. Discover tools from Terrarium (Anthropic tool use format)
-    tools = httpx.get(f"{TERRARIUM_URL}/anthropic/v1/tools").json()
-    print(f"Discovered {len(tools)} tools from Terrarium")
+    # 1. Discover tools from Volnix (Anthropic tool use format)
+    tools = httpx.get(f"{VOLNIX_URL}/anthropic/v1/tools").json()
+    print(f"Discovered {len(tools)} tools from Volnix")
 
     # 2. Create Anthropic client (uses ANTHROPIC_API_KEY from env)
     client = Anthropic()
@@ -74,13 +74,13 @@ def main():
         # Add assistant message
         messages.append({"role": "assistant", "content": response.content})
 
-        # 4. Execute each tool call against Terrarium world
+        # 4. Execute each tool call against Volnix world
         tool_results = []
         for tu in tool_uses:
             print(f"  Tool call: {tu.name}({json.dumps(tu.input)[:80]}...)")
 
             result = httpx.post(
-                f"{TERRARIUM_URL}/anthropic/v1/tools/call",
+                f"{VOLNIX_URL}/anthropic/v1/tools/call",
                 json={
                     "name": tu.name,
                     "input": tu.input,

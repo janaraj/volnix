@@ -1,8 +1,8 @@
 """Tests for GapAnalyzer -- capability gap classification."""
 import pytest
 
-from terrarium.core import GapResponse
-from terrarium.engines.reporter.capability_gaps import GapAnalyzer
+from volnix.core import GapResponse
+from volnix.engines.reporter.capability_gaps import GapAnalyzer
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_world_event,

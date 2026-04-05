@@ -1,6 +1,6 @@
-"""Tests for terrarium.config.tunable — runtime-tunable parameters."""
+"""Tests for volnix.config.tunable — runtime-tunable parameters."""
 import pytest
-from terrarium.config.tunable import TunableField, TunableRegistry
+from volnix.config.tunable import TunableField, TunableRegistry
 
 
 def test_register_and_get():

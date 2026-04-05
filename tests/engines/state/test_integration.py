@@ -2,19 +2,19 @@
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime, timezone
-from terrarium.engines.state.engine import StateEngine
-from terrarium.pipeline.dag import PipelineDAG
-from terrarium.pipeline.config import PipelineConfig
-from terrarium.pipeline.builder import build_pipeline_from_config
-from terrarium.registry.composition import create_default_registry
-from terrarium.registry.wiring import wire_engines
-from terrarium.config.schema import TerrariumConfig
-from terrarium.core.types import (
+from volnix.engines.state.engine import StateEngine
+from volnix.pipeline.dag import PipelineDAG
+from volnix.pipeline.config import PipelineConfig
+from volnix.pipeline.builder import build_pipeline_from_config
+from volnix.registry.composition import create_default_registry
+from volnix.registry.wiring import wire_engines
+from volnix.config.schema import VolnixConfig
+from volnix.core.types import (
     ActorId, EntityId, EventId, ServiceId, SnapshotId,
     StepVerdict, StateDelta, Timestamp,
 )
-from terrarium.core.context import ActionContext, ResponseProposal
-from terrarium.core.events import WorldEvent
+from volnix.core.context import ActionContext, ResponseProposal
+from volnix.core.events import WorldEvent
 
 
 def _make_ctx(action="create_user", deltas=None, **overrides):

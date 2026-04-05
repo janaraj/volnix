@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.world_compiler — YAML/NL compilation, schema resolution, data gen."""
+"""Tests for volnix.engines.world_compiler — YAML/NL compilation, schema resolution, data gen."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.world_compiler.engine import WorldCompilerEngine
+from volnix.engines.world_compiler.engine import WorldCompilerEngine
 
 
 @pytest.mark.asyncio

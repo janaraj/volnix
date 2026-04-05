@@ -1,12 +1,12 @@
-"""Tests for terrarium.engines.state.engine -- StateEngine orchestrator."""
+"""Tests for volnix.engines.state.engine -- StateEngine orchestrator."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
-from terrarium.engines.state.engine import StateEngine
-from terrarium.core.types import EntityId, ActorId, ServiceId, StepVerdict, StateDelta, Timestamp
-from terrarium.core.context import ActionContext, StepResult, ResponseProposal
-from terrarium.core.events import WorldEvent
-from terrarium.core.errors import EntityNotFoundError
+from volnix.engines.state.engine import StateEngine
+from volnix.core.types import EntityId, ActorId, ServiceId, StepVerdict, StateDelta, Timestamp
+from volnix.core.context import ActionContext, StepResult, ResponseProposal
+from volnix.core.events import WorldEvent
+from volnix.core.errors import EntityNotFoundError
 
 
 @pytest.fixture
@@ -350,7 +350,7 @@ async def test_execute_transaction_rollback(tmp_path):
             await engine.execute(ctx2)
 
         # The order entity should NOT exist (transaction rolled back)
-        from terrarium.core.errors import EntityNotFoundError
+        from volnix.core.errors import EntityNotFoundError
         with pytest.raises(EntityNotFoundError):
             await engine.get_entity("order", EntityId("o1"))
 
@@ -364,7 +364,7 @@ async def test_execute_transaction_rollback(tmp_path):
 @pytest.mark.asyncio
 async def test_fork_raises_not_implemented(engine):
     """fork() raises NotImplementedError (deferred to Phase F5)."""
-    from terrarium.core.types import SnapshotId
+    from volnix.core.types import SnapshotId
     with pytest.raises(NotImplementedError):
         await engine.fork(SnapshotId("snap_1"))
 
@@ -372,6 +372,6 @@ async def test_fork_raises_not_implemented(engine):
 @pytest.mark.asyncio
 async def test_diff_raises_not_implemented(engine):
     """diff() raises NotImplementedError (deferred to Phase F5)."""
-    from terrarium.core.types import SnapshotId
+    from volnix.core.types import SnapshotId
     with pytest.raises(NotImplementedError):
         await engine.diff(SnapshotId("snap_a"), SnapshotId("snap_b"))

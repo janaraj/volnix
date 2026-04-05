@@ -1,15 +1,15 @@
-"""Tests for terrarium.bus.middleware — before/after hooks, logging, metrics."""
+"""Tests for volnix.bus.middleware — before/after hooks, logging, metrics."""
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.middleware import (
+from volnix.bus.middleware import (
     BusMiddleware,
     LoggingMiddleware,
     MetricsMiddleware,
     MiddlewareChain,
 )
-from terrarium.core.events import Event
-from terrarium.core.types import Timestamp
+from volnix.core.events import Event
+from volnix.core.types import Timestamp
 
 
 def _make_event(event_type: str = "test.event") -> Event:

@@ -1,7 +1,7 @@
-"""Tests for terrarium.engines.adapter.protocols.acp_server — ACP message routing."""
+"""Tests for volnix.engines.adapter.protocols.acp_server — ACP message routing."""
 import pytest
 import pytest_asyncio
-from terrarium.engines.adapter.protocols.acp_server import ACPServerAdapter
+from volnix.engines.adapter.protocols.acp_server import ACPServerAdapter
 
 
 def test_acp_server_init():

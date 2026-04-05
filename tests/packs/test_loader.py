@@ -1,12 +1,12 @@
-"""Tests for terrarium.packs.loader — dynamic pack/profile discovery."""
+"""Tests for volnix.packs.loader — dynamic pack/profile discovery."""
 
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from terrarium.packs.base import ServicePack
-from terrarium.packs.loader import (
+from volnix.packs.base import ServicePack
+from volnix.packs.loader import (
     _module_path_from_filepath,
     discover_packs,
     discover_profiles,
@@ -16,7 +16,7 @@ from terrarium.packs.loader import (
 class TestDiscoverPacks:
     def test_discover_from_verified_dir(self):
         """discover_packs finds the EmailPack from the real filesystem."""
-        verified_dir = Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "verified"
+        verified_dir = Path(__file__).resolve().parents[2] / "volnix" / "packs" / "verified"
         packs = discover_packs(verified_dir)
         assert len(packs) >= 1
         pack_names = [p.pack_name for p in packs]
@@ -49,7 +49,7 @@ class TestDiscoverPacks:
 
     def test_discover_profiles_empty(self):
         """discover_profiles returns [] when no profile.py files exist."""
-        verified_dir = Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "verified"
+        verified_dir = Path(__file__).resolve().parents[2] / "volnix" / "packs" / "verified"
         profiles = discover_profiles(verified_dir)
         # Email pack has no profile.py, so profiles should be empty
         assert profiles == []
@@ -58,12 +58,12 @@ class TestDiscoverPacks:
 class TestModulePathComputation:
     def test_module_path_from_filepath(self):
         """Converts filesystem path to correct dotted module path."""
-        p = Path("/Users/someone/workspace/terrarium/packs/verified/gmail/pack.py")
+        p = Path("/Users/someone/workspace/volnix/packs/verified/gmail/pack.py")
         result = _module_path_from_filepath(p)
-        assert result == "terrarium.packs.verified.gmail.pack"
+        assert result == "volnix.packs.verified.gmail.pack"
 
-    def test_module_path_no_terrarium_root(self):
-        """Returns None if 'terrarium' is not in the path parts."""
+    def test_module_path_no_volnix_root(self):
+        """Returns None if 'volnix' is not in the path parts."""
         p = Path("/tmp/some/other/project/pack.py")
         result = _module_path_from_filepath(p)
         assert result is None
