@@ -436,3 +436,66 @@ async def test_no_team_channel_skips_post():
     # No channel post, but goal_context still updated
     assert len(envelopes) == 0
     assert "findings" in actor.goal_context.lower()
+
+
+# ---------------------------------------------------------------------------
+# Message persistence + re-activation tests
+# ---------------------------------------------------------------------------
+
+
+async def test_messages_persisted_on_actor():
+    """After activation, actor.activation_messages contains the conversation."""
+    router = _make_sequential_router(
+        _make_tool_response("tickets_search", {"query": "q", "reasoning": "r"}),
+        _make_text_response("Done investigating"),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    assert actor.activation_messages == []
+
+    await engine._activate_with_tool_loop(actor, "continue_work", None)
+
+    # Messages persisted: system + user + assistant+tool_call + tool_result + ...
+    assert len(actor.activation_messages) >= 4
+    assert actor.activation_messages[0]["role"] == "system"
+    assert actor.activation_messages[1]["role"] == "user"
+
+
+async def test_reactivation_continues_conversation():
+    """Re-activation appends to persisted messages, not fresh start."""
+    # First activation
+    router1 = _make_sequential_router(
+        _make_tool_response("tickets_search", {"query": "q", "reasoning": "r"}),
+        _make_text_response("Initial findings"),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router1
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    await engine._activate_with_tool_loop(actor, "continue_work", None)
+    msg_count_after_first = len(actor.activation_messages)
+    assert msg_count_after_first >= 4
+
+    # Re-activation
+    router2 = _make_sequential_router(_make_text_response("Updated synthesis"))
+    engine._llm_router = router2
+
+    await engine._activate_with_tool_loop(actor, "subscription_match", None)
+
+    # Messages grew (reactivation context appended + new LLM exchange)
+    assert len(actor.activation_messages) > msg_count_after_first
+    # Second LLM call should have received the full prior conversation + reactivation context
+    second_request = router2.route.call_args_list[0][0][0]
+    assert len(second_request.messages) > msg_count_after_first
+    # Should contain a re-activation context message
+    reactivation_msgs = [
+        m for m in second_request.messages
+        if "Re-activation" in (m.get("content") or "")
+    ]
+    assert len(reactivation_msgs) >= 1

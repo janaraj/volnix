@@ -144,7 +144,9 @@ class ActorPromptBuilder:
                 "create, update, or delete anything. Only use read actions."
             )
         elif actor.autonomous:
-            sections.append(self._build_autonomous_instructions(actor, team_roster))
+            sections.append(self._build_autonomous_instructions(
+                actor, team_roster, activation_reason,
+            ))
         else:
             sections.append(
                 "## Instructions\n"
@@ -219,8 +221,10 @@ class ActorPromptBuilder:
     def _build_autonomous_instructions(
         actor: ActorState,
         team_roster: list[dict[str, str]] | None,
+        activation_reason: str = "",
     ) -> str:
         """Build instructions for autonomous agents."""
+        is_reactivation = bool(actor.activation_messages)
         team_size = len(team_roster) if team_roster else 1
         team_note = ""
         if team_size > 1:
@@ -228,16 +232,23 @@ class ActorPromptBuilder:
                 f"You are part of a team of {team_size} working together.\n"
                 "- Leverage teammates' expertise — ask questions, request analysis\n"
                 "- Read what teammates shared in Recent Activity and build on it\n"
-                "- Use `intended_for` to address teammates by role or 'all'\n\n"
+                "- Use `intended_for` to address specific teammates by role\n\n"
             )
 
         lead_note = ""
         if actor.is_lead and team_size > 1:
-            lead_note = (
-                "**As the lead, your FIRST action must be to post a delegation message "
-                "in the team channel — assign specific tasks to each team member by name "
-                "based on their role. Then coordinate their work.**\n\n"
-            )
+            if not is_reactivation:
+                lead_note = (
+                    "**As the lead, your FIRST action must be to post a delegation message "
+                    "in the team channel — assign specific tasks to each team member by name "
+                    "based on their role. Then coordinate their work.**\n\n"
+                )
+            else:
+                lead_note = (
+                    "**You have already delegated. Review team updates above, "
+                    "synthesize new findings, and coordinate next steps. "
+                    "Do NOT re-delegate.**\n\n"
+                )
 
         steps = [
             "INVESTIGATE. Read relevant data to understand the situation.",
