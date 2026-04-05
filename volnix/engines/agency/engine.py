@@ -53,6 +53,11 @@ class AgencyEngine(BaseEngine):
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
         self._pipeline_lock = asyncio.Lock()  # Serializes pipeline execution across parallel agents
         self._tool_executor: Any = None
+        self._simulation_progress: tuple[int, int] | None = None  # (current_events, max_events)
+
+    def set_simulation_progress(self, current: int, total: int) -> None:
+        """Update simulation progress for lead agent prompt awareness."""
+        self._simulation_progress = (current, total)
 
     def set_tool_executor(self, executor: Any) -> None:
         """Set the pipeline executor for inline tool execution in multi-turn loops.
@@ -460,10 +465,12 @@ class AgencyEngine(BaseEngine):
                     envs = await self._activate_with_tool_loop(actor, "continue_work", None)
                     envelopes.extend(envs)
                 elif sa.action_type == "request_findings":
-                    # Lead asks team to share findings (buffer period reached)
+                    # Phase 3: Buffer period — lead gathers final findings
                     actor.goal_context = (
-                        "WRAP-UP: Ask each team member to share their findings and "
-                        "conclusions in the team channel NOW. Address each by role."
+                        "BUFFER PERIOD: The simulation is nearing its end. "
+                        "Instruct ALL team members to stop new investigations, "
+                        "finalize current work, and share their final findings "
+                        "immediately. Address each member by role."
                     )
                     envs = await self._activate_with_tool_loop(actor, "request_findings", None)
                     envelopes.extend(envs)
@@ -531,13 +538,17 @@ class AgencyEngine(BaseEngine):
         ) if actor.recent_interactions else "(no conversation history)"
 
         system_prompt = self._prompt_builder.build_system_prompt()
+        preset_name = payload.get("preset", "deliverable")
         user_prompt = (
-            f"## DELIVERABLE REQUEST\n\n"
+            f"## FINAL DELIVERABLE — GENERATE NOW\n\n"
+            f"The simulation has concluded. Your ONLY job is to generate "
+            f"the final {preset_name} deliverable.\n\n"
             f"{goal_context}\n\n"
             f"## TEAM CONVERSATION\n\n{conversation}\n\n"
-            f"Synthesize the team's discussion into a comprehensive deliverable. "
+            f"Review ALL validated findings from your team. "
+            f"Do NOT ask any more questions. Use only the data already collected. "
             f"Be thorough — include all key findings, methodology, "
-            f"and any dissenting views from the conversation."
+            f"and any dissenting views. Format according to the schema provided."
         )
 
         try:
@@ -812,6 +823,7 @@ class AgencyEngine(BaseEngine):
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
+                simulation_progress=self._simulation_progress,
             )
 
             # Build messages: continue from persisted conversation or start fresh
@@ -821,14 +833,15 @@ class AgencyEngine(BaseEngine):
                 reactivation_ctx = self._build_reactivation_context(
                     actor, trigger_event, reason,
                 )
-                # Include updated instructions on re-activation.
-                # The prompt builder returns lead-specific "do NOT re-delegate"
-                # because is_reactivation=True when activation_messages exist.
+                # Include updated phase-aware instructions on re-activation.
+                # Lead agents get phase-specific prompts (monitor/buffer)
+                # based on activation_reason + is_reactivation.
                 if actor.autonomous:
                     reactivation_instructions = ActorPromptBuilder.build_autonomous_instructions(
                         actor=actor,
                         team_roster=team_roster,
                         activation_reason=reason,
+                        simulation_progress=self._simulation_progress,
                     )
                     combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
                 else:

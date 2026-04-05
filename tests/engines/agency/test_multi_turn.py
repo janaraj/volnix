@@ -549,6 +549,9 @@ async def test_reactivation_includes_lead_instructions() -> None:
         "Re-activation context should be present in messages"
     )
     content = reactivation_msg["content"]
-    assert "Do NOT re-delegate" in content, (
-        f"Re-activation message should include 'Do NOT re-delegate' for lead. Got: {content[:300]}"
+    assert "Active Monitoring" in content, (
+        f"Re-activation message should include Phase 2 'Active Monitoring' for lead. Got: {content[:300]}"
+    )
+    assert "Do NOT investigate on your own" in content, (
+        "Lead should be told not to investigate on their own"
     )

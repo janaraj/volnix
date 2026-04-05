@@ -99,6 +99,7 @@ class ActorPromptBuilder:
         available_actions: list[dict[str, Any]],
         team_roster: list[dict[str, str]] | None = None,
         allowed_services: set[str] | None = None,
+        simulation_progress: tuple[int, int] | None = None,
     ) -> str:
         """Build per-actor user prompt.
 
@@ -145,7 +146,7 @@ class ActorPromptBuilder:
             )
         elif actor.autonomous:
             sections.append(self.build_autonomous_instructions(
-                actor, team_roster, activation_reason,
+                actor, team_roster, activation_reason, simulation_progress,
             ))
         else:
             sections.append(
@@ -222,8 +223,16 @@ class ActorPromptBuilder:
         actor: ActorState,
         team_roster: list[dict[str, str]] | None,
         activation_reason: str = "",
+        simulation_progress: tuple[int, int] | None = None,
     ) -> str:
-        """Build instructions for autonomous agents."""
+        """Build instructions for autonomous agents.
+
+        For lead agents, instructions are phase-aware:
+        - Phase 1 (Kickoff): first activation → delegate tasks
+        - Phase 2 (Monitor): re-activation → validate, direct, assist
+        - Phase 3 (Buffer): request_findings → wrap up, gather final findings
+        Non-lead agents get standard INVESTIGATE/SHARE/ACT instructions.
+        """
         is_reactivation = bool(actor.activation_messages)
         team_size = len(team_roster) if team_roster else 1
         team_note = ""
@@ -237,34 +246,66 @@ class ActorPromptBuilder:
 
         lead_note = ""
         if actor.is_lead and team_size > 1:
-            if not is_reactivation:
+            if activation_reason == "request_findings":
+                # Phase 3: Buffer & Wrap-up
                 lead_note = (
-                    "**As the lead, start by posting a delegation message in the "
-                    "team channel — assign specific tasks to each team member by "
-                    "role. After delegating, you may do your own investigation "
-                    "to get an overview of the situation.**\n\n"
+                    "**CRITICAL: BUFFER PERIOD — The simulation is nearing its end.**\n"
+                    "- Instruct ALL sub-agents to STOP starting new investigations.\n"
+                    "- Command them to finalize current tasks and share final findings NOW.\n"
+                    "- Begin synthesizing the overall situation from what has been shared.\n"
+                    "- Address each team member by role with specific wrap-up instructions.\n\n"
+                )
+            elif not is_reactivation:
+                # Phase 1: Kickoff & Delegation
+                lead_note = (
+                    "**You are the team lead. Your role is orchestration, "
+                    "validation, and synthesis — NOT deep investigation.**\n\n"
+                    "Start by posting a delegation message in the team channel:\n"
+                    "- Assign specific tasks to each team member by role.\n"
+                    "- Set expectations: what to investigate, what to report back.\n"
+                    "- You may do a brief overview (1-2 reads) but do NOT investigate deeply.\n"
+                    "- After delegating, call `do_nothing` to wait for your team's findings.\n\n"
                 )
             else:
+                # Phase 2: Active Monitoring & Coordination
                 lead_note = (
-                    "**You have already delegated. Do NOT re-delegate. "
-                    "Your job now is to actively coordinate:\n"
-                    "- Review what your team has shared\n"
-                    "- Ask follow-up questions if findings are incomplete\n"
-                    "- Investigate areas the team hasn't covered yet\n"
-                    "- Synthesize findings into an updated analysis\n"
-                    "- If the team has covered everything, share your synthesis**\n\n"
+                    "**You have already delegated. Your job is Active Monitoring:**\n"
+                    "- Review the new findings shared by your team below.\n"
+                    "- VALIDATE: Are their findings complete and accurate?\n"
+                    "- DIRECT: If a finding is incomplete, ask that agent to dig deeper.\n"
+                    "- ASSIGN: If new events or tickets arrived, delegate them immediately.\n"
+                    "- Do NOT investigate on your own — rely on your team to gather data.\n"
+                    "- Share a brief status synthesis if you have enough information.\n\n"
                 )
 
-        steps = [
-            "INVESTIGATE. Read relevant data to understand the situation.",
-            "SHARE your findings. Post a summary in the team channel so the lead and teammates can see what you learned.",
-            "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
-        ]
-        if team_size > 1:
-            steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")
-        steps.append("NO REPETITION. Check Your Action History — don't re-query or re-do completed work.")
-        steps.append("Track progress via state_updates.pending_tasks and goal_context.")
-        steps.append("If nothing new to add: call the `do_nothing` tool.")
+        # Simulation state (lead only — provides budget awareness)
+        sim_state = ""
+        if actor.is_lead and simulation_progress:
+            current, total = simulation_progress
+            pct = int(current / total * 100) if total > 0 else 0
+            sim_state = f"## Simulation State\n{current}/{total} events processed ({pct}%)\n\n"
+
+        # Steps: lead gets DELEGATE/MONITOR/VALIDATE, non-lead gets INVESTIGATE/SHARE/ACT
+        if actor.is_lead and team_size > 1:
+            steps = [
+                "DELEGATE: Assign tasks and set reporting expectations.",
+                "MONITOR: Read team updates in the channel.",
+                "VALIDATE: Check findings for accuracy and completeness.",
+                "ASSIST: Provide guidance if sub-agents are stuck or blocked.",
+                "SYNTHESIZE: When findings are sufficient, share your synthesis.",
+                "If nothing new to act on: call the `do_nothing` tool.",
+            ]
+        else:
+            steps = [
+                "INVESTIGATE. Read relevant data to understand the situation.",
+                "SHARE your findings. Post a summary in the team channel so the lead and teammates can see what you learned.",
+                "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
+            ]
+            if team_size > 1:
+                steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")
+            steps.append("NO REPETITION. Check Your Action History — don't re-query or re-do completed work.")
+            steps.append("Track progress via state_updates.pending_tasks and goal_context.")
+            steps.append("If nothing new to add: call the `do_nothing` tool.")
 
         numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(steps))
 
@@ -272,6 +313,7 @@ class ActorPromptBuilder:
             "## Instructions\n"
             f"{team_note}"
             f"{lead_note}"
+            f"{sim_state}"
             "The world's services contain real data. Use the available tools to carry out your mission.\n\n"
             f"{numbered}\n\n"
             "For messages: only provide `text` in payload — the system auto-fills `channel_id`."

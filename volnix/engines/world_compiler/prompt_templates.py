@@ -534,6 +534,9 @@ Generate organic world events that happen between agent turns.
 ## Recent Agent Actions
 {recent_actions}
 
+## Previous Organic Events (from earlier ticks)
+{recent_organic}
+
 ## Animator Settings
 Creativity: {creativity}, Frequency: {event_frequency}
 Escalation on inaction: {escalation_on_inaction}
@@ -547,6 +550,7 @@ Escalation on inaction: {escalation_on_inaction}
   {{"actor_id": "<role from actors list>", "service_id": "service_name",
     "action": "tool_name_from_list_above", "input_data": {{}}, "sub_type": "organic"}}
 - Use actor roles from the Actors list — events come FROM characters in the world
+- VARY the actor across ticks — rotate through different roles, don't always pick the same one
 - If no actors are defined, use "system" as actor_id
 - You MUST use action names from the Available Tools list — do NOT invent actions
 - Use the service name from the tool's "service" field as service_id
