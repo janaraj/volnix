@@ -240,11 +240,11 @@ class ActorPromptBuilder:
             )
 
         steps = [
-            "INVESTIGATE first. Read relevant data before taking action.",
+            "INVESTIGATE. Read relevant data to understand the situation.",
+            "SHARE your findings. Post a summary in the team channel so the lead and teammates can see what you learned.",
             "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
         ]
         if team_size > 1:
-            steps.append("COORDINATE with your team. Share findings and status in the team channel.")
             steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")
         steps.append("NO REPETITION. Check Your Action History — don't re-query or re-do completed work.")
         steps.append("Track progress via state_updates.pending_tasks and goal_context.")

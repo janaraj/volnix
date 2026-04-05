@@ -470,6 +470,15 @@ class AgencyEngine(BaseEngine):
                     env = await self._activate_autonomous_agent(actor)
                     if env is not None:
                         envelopes.append(env)
+                elif sa.action_type == "request_findings":
+                    # Lead asks team to share findings (buffer period reached)
+                    actor.goal_context = (
+                        "WRAP-UP: Ask each team member to share their findings and "
+                        "conclusions in the team channel NOW. Address each by role."
+                    )
+                    env = await self._activate_autonomous_agent(actor)
+                    if env is not None:
+                        envelopes.append(env)
                 else:
                     # Standard scheduled action (produce_deliverable, etc.)
                     env = ActionEnvelope(
