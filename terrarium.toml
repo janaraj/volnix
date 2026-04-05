@@ -348,12 +348,12 @@ temperature = 0
 
 [llm.routing.agency_individual]
 provider = "openai"                     # "gemini"
-model = "gpt-5.4-nano"                 # "gpt-4.1-mini" | "gemini-3.1-flash-lite-preview"
+model = "gpt-5.4-mini"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
 max_tokens = 4096
 temperature = 0
 
 [llm.routing.agency_batch]
 provider = "openai"                     # "gemini"
-model = "gpt-5.4-nano"                 # "gpt-4.1-mini" | "gemini-3.1-flash-lite-preview"
+model = "gpt-5.4-mini"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
 max_tokens = 8192
 temperature = 0

@@ -232,8 +232,8 @@ def test_autonomous_prompt_has_team_and_instructions():
     )
 
     assert "#research" in prompt
-    assert "INVESTIGATE first" in prompt
-    assert "ACT on what you find" in prompt
+    assert "INVESTIGATE" in prompt
+    assert "SHARE your findings" in prompt
     assert "Action History" in prompt
 
 

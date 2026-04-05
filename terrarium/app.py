@@ -979,29 +979,41 @@ class TerrariumApp:
                 if lead_state is None:
                     lead_state = actor_states[0]
 
-                # Calculate synthesis deadline
+                # Calculate deadlines — buffer scales with team size
                 max_ticks = self._config.simulation_runner.max_ticks
-                buffer_pct = self._config.agency.synthesis_buffer_pct
-                deadline_tick = int(max_ticks * (1 - buffer_pct))
                 tick_interval = self._config.simulation_runner.tick_interval_seconds
+                num_agents = len(actor_states)
+                ticks_per_agent = 3
+                findings_tick = max(2, max_ticks - (num_agents * ticks_per_agent))
+                deadline_tick = max_ticks - 1
 
                 if len(actor_states) > 1:
                     lead_state.goal_context = (
-                        f"You are the designated lead for this collaboration. "
-                        f"Start by assigning specific tasks to each team member based on their role — "
-                        f"use their names and be explicit about who handles what. "
-                        f"Then coordinate progress. "
-                        f"After the team has worked sufficiently (around tick {deadline_tick}), "
-                        f"you must produce a '{preset_name}' deliverable.\n\n"
+                        f"You are the designated lead. "
+                        f"Start by delegating specific tasks to each team member by role. "
+                        f"Then wait for their findings. When you receive findings, "
+                        f"synthesize them into the '{preset_name}' deliverable.\n\n"
                         f"{preset.get('prompt_instructions', '')}"
                     )
                 else:
                     lead_state.goal_context = (
-                        f"After you have investigated and acted on the mission "
-                        f"(around tick {deadline_tick}), "
+                        f"Investigate and act on the mission, then "
                         f"produce a '{preset_name}' deliverable.\n\n"
                         f"{preset.get('prompt_instructions', '')}"
                     )
+
+                # Schedule findings request — lead asks team for updates
+                lead_state.scheduled_actions.append(
+                    ScheduledAction(
+                        logical_time=float(findings_tick * tick_interval),
+                        action_type="request_findings",
+                        description="Ask team to share findings",
+                        target_service=None,
+                        payload={},
+                    )
+                )
+
+                # Schedule deliverable at deadline (hard fallback)
                 lead_state.scheduled_actions.append(
                     ScheduledAction(
                         logical_time=float(deadline_tick * tick_interval),
@@ -1015,8 +1027,8 @@ class TerrariumApp:
                     )
                 )
                 logger.info(
-                    "Scheduled %s deliverable for %s at tick %d",
-                    preset_name, lead_state.actor_id, deadline_tick,
+                    "Scheduled request_findings at tick %d, %s deliverable at tick %d for %s",
+                    findings_tick, preset_name, deadline_tick, lead_state.actor_id,
                 )
 
         # Only the lead starts autonomously. Non-lead agents are activated
