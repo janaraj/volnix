@@ -1363,26 +1363,6 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             return {"messages": messages, "count": total}
 
-        @app.get("/api/v1/runs/{run_id}/deliverable")
-        async def get_run_deliverable(run_id: str):
-            """Get the deliverable artifact for a run, if one was produced."""
-            from starlette.responses import JSONResponse
-
-            from volnix.core.types import RunId as _RId
-
-            result = await gateway._app.artifact_store.load_artifact(
-                _RId(run_id),
-                "deliverable",
-            )
-            if result is None:
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "error": "No deliverable produced for this run",
-                    },
-                )
-            return result
-
         @app.get("/api/v1/compare")
         async def compare_runs_endpoint(
             runs: str = fastapi.Query(
@@ -1650,8 +1630,6 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             # C4+C5 fix: mount as raw ASGI app (no double response,
             # no request._send)
-            from starlette.routing import Mount
-
             app.mount("/mcp", app=session_manager.handle_request)
 
             logger.info("MCP SSE endpoint mounted at /mcp")
