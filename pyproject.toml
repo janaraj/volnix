@@ -75,6 +75,14 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = [
+    "E501",   # Line too long — LLM prompt templates and log messages
+    "E402",   # Import not at top — deliberate deferred imports for circular dep avoidance
+    "N806",   # Variable name not lowercase — external API naming (APIOperation, etc.)
+    "N802",   # Function name not lowercase — external API naming
+    "N814",   # Camelcase imported as constant
+    "N818",   # Exception name not ending in Error
+]
 
 [tool.mypy]
 python_version = "3.12"

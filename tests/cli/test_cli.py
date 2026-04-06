@@ -176,7 +176,7 @@ class TestCheckCommand:
 
     def test_check_help_shows_test_flag(self):
         """check --help mentions the --test flag."""
-        result = runner.invoke(app, ["check", "--help"])
+        result = runner.invoke(app, ["check", "--help"], color=False)
         assert result.exit_code == 0
         assert "--test" in result.output
 
