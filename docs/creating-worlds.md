@@ -32,25 +32,24 @@ volnix run my_world.yaml
 
 ## YAML Schema
 
-A world definition has two top-level sections: `world` and `compiler`.
+A world definition has one top-level section: `world`.
 
 ```yaml
 world:
   name: "World Name"
   description: "What this world is about."
+  behavior: "reactive"          # static | reactive | dynamic
+  mode: "governed"              # governed | ungoverned
+  reality:
+    preset: "messy"             # ideal | messy | hostile
 
   services: { ... }
   actors: [ ... ]
   policies: [ ... ]
   seeds: [ ... ]
   mission: "Optional success criteria."
-
-compiler:
-  seed: 42
-  behavior: "reactive"
-  mode: "governed"
-  reality:
-    preset: "messy"
+  deliverable: { ... }         # Optional deliverable schema
+  animator: { ... }            # Optional animator settings (for dynamic mode)
 ```
 
 ---
@@ -398,6 +397,11 @@ It will appear in `volnix blueprints` as a `USER` blueprint.
 ```yaml
 world:
   name: "Incident Response"
+  behavior: dynamic
+  mode: governed
+  reality:
+    preset: messy
+    reliability: frequently_broken
   description: >
     An engineering team handling a production incident.
     The on-call engineer triages alerts, communicates status
@@ -445,12 +449,4 @@ world:
     - "The team standup is in 45 minutes"
 
   mission: "Identify root cause, mitigate impact, and communicate status to stakeholders."
-
-compiler:
-  seed: 42
-  behavior: dynamic
-  mode: governed
-  reality:
-    preset: messy
-    reliability: frequently_broken
 ```

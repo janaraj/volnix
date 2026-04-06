@@ -54,46 +54,51 @@ You'll see blueprints like `customer_support`, `incident_response`, `open_sandbo
 
 ## 4. Run Your First Simulation
 
-### Option A: Internal Agents (autonomous simulation)
+### Option A: Internal Agents (autonomous multi-agent simulation)
 
 Internal agents are LLM-powered actors that collaborate within the world without external input. This is the fastest way to see Volnix in action:
 
 ```bash
-volnix run customer_support \
-  --preset brainstorm \
-  --actors support-lead,support-agent,supervisor
+uv run volnix serve demo_support_escalation \
+  --internal volnix/blueprints/official/agents_support_team.yaml \
+  --port 8080
 ```
 
-This compiles the `customer_support` blueprint, creates internal actors for each role, and runs a simulation where they collaborate via Slack and process tickets. The entire run takes about 30-60 seconds depending on your LLM provider.
+This compiles the `demo_support_escalation` blueprint and runs a 3-agent team (supervisor, senior-agent, triage-agent). They collaborate via Slack, investigate tickets, process refunds, and produce a deliverable. The run takes about 60-120 seconds depending on your LLM provider.
 
-### Option B: External Agent (you connect an AI agent)
+You can also run with a dynamic world where NPC customers generate new events:
 
-Start Volnix as a server and connect your own agent:
+```bash
+uv run volnix serve dynamic_support_center \
+  --internal volnix/blueprints/official/agents_dynamic_support.yaml \
+  --port 8080
+```
+
+See [internal-agents.md](internal-agents.md) for the full guide on agent teams, lead coordination, and deliverables.
+
+### Option B: External Agent (connect your own AI agent)
+
+Start Volnix as a server and connect your own agent via any supported protocol:
 
 ```bash
 # Terminal 1: Start the server
-volnix serve customer_support --port 8080
+uv run volnix serve customer_support --port 8080
 ```
 
 ```bash
-# Terminal 2: Connect Claude Desktop (or Cursor, Windsurf)
-volnix attach claude-desktop --port 8080
+# Terminal 2: Connect using the OpenAI SDK (or Anthropic, Gemini, MCP, etc.)
+cd examples/openai-sdk
+uv run python main.py
 ```
 
-Now open Claude Desktop and ask it to check emails, read tickets, or process a refund. Claude sees Volnix's tools as MCP tools and interacts with the simulated world.
-
-When you're done, detach:
-
-```bash
-volnix detach claude-desktop
-```
+The agent fetches tools from Volnix in its native format and interacts with the simulated world. See [agent-integration.md](agent-integration.md) for all supported protocols and [examples/](../examples/) for working code.
 
 ## 5. View Results
 
 ### Terminal report
 
 ```bash
-volnix report last
+uv run volnix report last
 ```
 
 This prints a governance scorecard showing actions taken, policies triggered, budget usage, and capability gaps.
@@ -103,10 +108,10 @@ This prints a governance scorecard showing actions taken, policies triggered, bu
 For a richer view with event timelines, scorecards, and deliverable inspection:
 
 ```bash
-volnix dashboard --port 8200
+cd volnix-dashboard && npm run dev
 ```
 
-Open `http://localhost:8200` in your browser. The dashboard shows all historical runs with filtering, search, and side-by-side comparison.
+Open `http://localhost:3000` in your browser. The dashboard shows all historical runs with filtering, search, and side-by-side comparison.
 
 ## 6. Create Your Own World
 
@@ -134,6 +139,10 @@ Create a file `my_world.yaml`:
 world:
   name: "My First World"
   description: "A simple world for testing."
+  behavior: reactive            # static | reactive | dynamic
+  mode: governed                # governed | ungoverned
+  reality:
+    preset: messy               # ideal | messy | hostile
 
   services:
     slack: verified/slack
@@ -151,13 +160,6 @@ world:
 
   seeds:
     - "Three unread emails from different customers"
-
-compiler:
-  seed: 42
-  behavior: reactive
-  mode: governed
-  reality:
-    preset: messy
 ```
 
 ```bash
@@ -166,8 +168,10 @@ volnix serve my_world.yaml --port 8080
 
 ## 7. Next Steps
 
+- [Internal Agents](internal-agents.md) — agent teams, lead coordination, deliverables
 - [Creating Worlds](creating-worlds.md) — full YAML schema, reality dimensions, behavior modes
+- [Behavior Modes](behavior-modes.md) — static vs reactive vs dynamic, Animator engine
 - [Agent Integration](agent-integration.md) — MCP, REST API, Python SDK, framework adapters
+- [Blueprints Reference](blueprints-reference.md) — complete catalog of blueprints and pairings
 - [Configuration](configuration.md) — TOML config layers, LLM provider setup, server settings
 - [Architecture](architecture.md) — the 10 engines, 7-step pipeline, event bus, and design principles
-- [Internal Simulation](internal-simulation.md) — how internal agents collaborate, activate, and produce deliverables

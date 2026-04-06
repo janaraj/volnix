@@ -8,85 +8,56 @@ Describe a world in natural language or YAML. Volnix compiles it into a deep, re
 
 ---
 
-## Key Features
-
-- **Natural language world creation** — describe a scenario and Volnix compiles it into a runnable world with entities, actors, services, policies, and seeded data
-- **10-engine governance architecture** — state, policy, permission, budget, responder, animator, agency, adapter, reporter, and feedback engines working in concert
-- **7-step governance pipeline** — every action flows through permission, policy, budget, capability, responder, validation, and commit checks
-- **Multi-agent simulation** — internal actors collaborate autonomously via LLM; external agents connect via standard protocols
-- **10 verified service packs** — Slack, Gmail, GitHub, Zendesk, Stripe, Google Calendar, Twitter, Reddit, Alpaca, and more — each with deterministic state machines
-- **Reality dimensions** — tune information quality, reliability, social friction, complexity, and boundaries from ideal to hostile
-- **Protocol-native** — MCP server, REST API, OpenAI and Anthropic tool formats, Python SDK
-- **One-click agent integration** — `volnix attach claude-desktop` patches your agent's config automatically
-- **React dashboard** — observe simulation events, scorecards, deliverables, and causal traces in real time
-- **Reproducible** — seeded worlds produce deterministic state; fork, replay, and diff any run
-
----
-
 ## Quick Start
 
-```bash
-# Install
-pip install volnix
-
-# Verify setup
-volnix check
-
-# Run a built-in blueprint with internal agents
-volnix run customer_support --preset brainstorm --actors support-lead,support-agent,supervisor
-
-# View the report
-volnix report last
-```
-
-To connect an external AI agent instead:
+**Requirements:** Python 3.12+, at least one LLM provider API key.
 
 ```bash
-# Start Volnix as a server
-volnix serve customer_support --port 8080
-
-# In another terminal, connect Claude Desktop
-volnix attach claude-desktop --port 8080
-```
-
----
-
-## Installation
-
-**Requirements:** Python 3.12+
-
-```bash
-# With pip
-pip install volnix
-
-# With uv (recommended)
-uv pip install volnix
-
-# From source
+# Install from source
 git clone https://github.com/janaraj/volnix.git
 cd volnix
 uv sync --all-extras
+
+# Set an LLM provider
+export GOOGLE_API_KEY=AIza...      # or ANTHROPIC_API_KEY or OPENAI_API_KEY
+
+# Verify setup
+uv run volnix check
 ```
 
-### LLM Provider Setup
+### Run with Internal Agents (autonomous multi-agent simulation)
 
-Volnix needs an LLM provider for world compilation and internal actor responses. Set at least one:
+Internal agents are LLM-powered actors that collaborate within the world without external input:
 
 ```bash
-# Option 1: Anthropic (Claude)
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Option 2: OpenAI
-export OPENAI_API_KEY=sk-proj-...
-
-# Option 3: Google Gemini
-export GOOGLE_API_KEY=AIza...
-
-# Option 4: Local via Ollama (no API key needed)
-# Configure in volnix.toml
+# Compile a world + run a 3-agent support team
+uv run volnix serve demo_support_escalation \
+  --internal volnix/blueprints/official/agents_support_team.yaml \
+  --port 8080
 ```
 
-See `.env.example` for all available environment variables.
+The team (supervisor, senior-agent, triage-agent) autonomously delegates tasks, investigates tickets, and produces a deliverable. Open the dashboard at `http://localhost:3000` to watch live.
+
+### Run with External Agents (connect your own AI agent)
+
+```bash
+# Start Volnix as a server
+uv run volnix serve customer_support --port 8080
+```
+
+Then connect any agent using its native SDK. Zero Volnix imports required:
+
+```python
+# OpenAI SDK example
+import httpx, openai
+
+tools = httpx.get("http://localhost:8080/openai/v1/tools").json()
+client = openai.OpenAI()
+# Use tools in client.chat.completions.create(tools=tools)
+# Execute via POST http://localhost:8080/openai/v1/tools/call
+```
+
+See [examples/](examples/) for OpenAI, Anthropic, Gemini, CrewAI, LangGraph, AutoGen, PydanticAI, and MCP integrations.
 
 ---
 
@@ -127,12 +98,16 @@ Each step can halt the action. A refund that exceeds the agent's authority is he
 
 ## Defining Worlds
 
-Worlds are defined in YAML with two sections: `world` (what exists) and `compiler` (how it behaves).
+Worlds are defined in YAML under a single `world:` section:
 
 ```yaml
 world:
   name: "Customer Support"
   description: "A mid-size SaaS company support team handling tickets and refunds."
+  behavior: reactive          # static | reactive | dynamic
+  mode: governed              # governed | ungoverned
+  reality:
+    preset: messy             # ideal | messy | hostile
 
   services:
     gmail: verified/gmail
@@ -168,19 +143,12 @@ world:
   seeds:
     - "VIP customer has been waiting 7 days for a $249 refund"
     - "Three tickets are past SLA deadline"
-
-compiler:
-  seed: 42
-  behavior: reactive
-  mode: governed
-  reality:
-    preset: messy
 ```
 
 Or create a world from natural language:
 
 ```bash
-volnix create "Market analysis team with an economist, data analyst, and strategist \
+uv run volnix create "Market analysis team with an economist, data analyst, and strategist \
   collaborating via Slack to produce a quarterly prediction" \
   --reality messy --output market_world.yaml
 ```
@@ -201,11 +169,69 @@ Three presets bundle these: `ideal` (best case), `messy` (realistic, default), `
 
 ### Behavior Modes
 
-| Mode | Description |
-|------|------------|
-| `static` | World frozen after compilation. Fully deterministic. |
-| `reactive` | World responds to agent actions. Same actions produce same reactions. |
-| `dynamic` | World generates its own events. Fully alive. |
+| Mode | Animator | Description |
+|------|----------|-------------|
+| `static` | OFF | World frozen after compilation. No NPC events. Fully deterministic. |
+| `reactive` | Cause-effect only | World responds to agent actions. Same actions produce same reactions. |
+| `dynamic` | Fully active | World generates organic events (NPCs create tickets, follow up, escalate). |
+
+Override at runtime: `--behavior static` on any `serve` or `run` command.
+
+See [docs/behavior-modes.md](docs/behavior-modes.md) for details on how the Animator engine works.
+
+---
+
+## Internal Agent Teams
+
+Internal agents are LLM-powered actors that collaborate autonomously within the world. Define a team in a separate YAML file:
+
+```yaml
+mission: "Handle the support queue as a team. Investigate tickets, resolve issues, process refunds."
+deliverable: synthesis
+
+agents:
+  - role: supervisor
+    lead: true                    # Coordinator — delegates, monitors, synthesizes
+    personality: "Experienced support manager who delegates effectively."
+    permissions:
+      read: [zendesk, stripe, slack]
+      write: [zendesk, stripe, slack]
+
+  - role: senior-agent
+    personality: "Thorough investigator with deep product knowledge."
+    permissions:
+      read: [zendesk, stripe, slack]
+      write: [zendesk, stripe, slack]
+
+  - role: triage-agent
+    personality: "Fast categorizer who prioritizes by urgency."
+    permissions:
+      read: [zendesk, slack]
+      write: [zendesk, slack]
+```
+
+Run it against any compiled world:
+
+```bash
+uv run volnix serve customer_support \
+  --internal volnix/blueprints/official/agents_support_team.yaml \
+  --port 8080
+```
+
+### Lead Agent Lifecycle
+
+The agent marked `lead: true` follows 4 phases:
+
+| Phase | Trigger | Lead's Job |
+|-------|---------|-----------|
+| **1. Delegate** | First activation | Assign tasks to each team member, set expectations |
+| **2. Monitor** | Team messages arrive | Validate findings, direct next steps, assign new work |
+| **3. Buffer** | Approaching event limit | Request all agents to share final findings |
+| **4. Synthesize** | Scheduled deadline | Generate the final deliverable from team conversation |
+
+Sub-agents investigate, share findings in the team channel, and respond to lead direction. The lead never investigates deeply — it orchestrates.
+
+See [docs/internal-agents.md](docs/internal-agents.md) for the complete guide.
 
 ---
 
@@ -216,16 +242,27 @@ Three presets bundle these: `ideal` (best case), `messy` (realistic, default), `
 | `volnix create <description>` | Generate a world YAML from natural language |
 | `volnix run <world>` | Compile and execute a simulation |
 | `volnix serve <world>` | Start HTTP/MCP servers for agent connections |
-| `volnix mcp <world>` | Start MCP stdio server (for agent subprocesses) |
-| `volnix dashboard` | Start the React dashboard (historical run viewer) |
-| `volnix blueprints` | List available world blueprints |
-| `volnix report [run_id]` | Generate governance report for a run |
+| `volnix mcp` | Start MCP stdio server (for agent subprocesses) |
+| `volnix blueprints` | List available world blueprints and presets |
 | `volnix check` | System health check (Python, packages, LLM providers) |
-| `volnix config --export <target>` | Export config for agent integration |
-| `volnix attach <agent>` | Patch agent config to connect to Volnix |
-| `volnix detach <agent>` | Restore original agent config |
+| `volnix report [run_id]` | Generate governance report for a run |
 | `volnix inspect <run_id>` | Deep dive into run details |
 | `volnix diff <run1> <run2>` | Compare two runs |
+| `volnix list` | List runs, tools, services, engines |
+| `volnix show <id>` | Show details of a run, tool, or service |
+| `volnix ledger` | Query and display audit ledger entries |
+| `volnix config` | Export configuration for agent integration |
+
+Key flags for `serve` and `run`:
+
+| Flag | Purpose | Example |
+|------|---------|---------|
+| `--internal <yaml>` | Run with an internal agent team | `--internal agents_support_team.yaml` |
+| `--agents <yaml>` | External agent permissions/budgets | `--agents external_agents.yaml` |
+| `--behavior <mode>` | Override behavior: static, reactive, dynamic | `--behavior static` |
+| `--deliverable <type>` | Deliverable type: synthesis, decision, prediction | `--deliverable synthesis` |
+| `--world <id>` | Use existing compiled world (skip compilation) | `--world world_83a6d1e3` |
+| `--port <n>` | HTTP server port | `--port 8080` |
 
 Run `volnix --help` or `volnix <command> --help` for full option details.
 
@@ -233,136 +270,69 @@ Run `volnix --help` or `volnix <command> --help` for full option details.
 
 ## Agent Integration
 
-Volnix speaks multiple protocols. Pick the one your agent uses.
+Volnix speaks multiple protocols. Pick the one your agent uses:
 
-### MCP (Model Context Protocol)
+| Protocol | Endpoint | Best For |
+|----------|----------|----------|
+| **MCP** | `http://localhost:8080/mcp` | Claude Desktop, Cursor, Windsurf, PydanticAI |
+| **OpenAI compat** | `http://localhost:8080/openai/v1/` | OpenAI SDK, LangGraph, AutoGen |
+| **Anthropic compat** | `http://localhost:8080/anthropic/v1/` | Anthropic SDK |
+| **Gemini compat** | `http://localhost:8080/gemini/v1/` | Google Gemini SDK |
+| **REST API** | `http://localhost:8080/api/v1/` | Custom agents, scripts, any HTTP client |
 
-The recommended path for Claude Desktop, Cursor, and Windsurf:
-
-```bash
-# Start Volnix
-volnix serve customer_support --port 8080
-
-# Auto-patch your agent's config
-volnix attach claude-desktop --port 8080   # or: cursor, windsurf
-```
-
-Or export the config snippet manually:
-
-```bash
-volnix config --export claude-desktop --port 8080
-```
-
-### REST API
-
-For custom agents, scripts, or any HTTP client:
-
-```bash
-# List available tools
-curl http://localhost:8080/api/v1/tools?format=openai
-
-# Execute a tool
-curl -X POST http://localhost:8080/api/v1/actions/email_send \
-  -H "Content-Type: application/json" \
-  -d '{"actor_id": "my-agent", "arguments": {"to": "user@example.com", "body": "Hello"}}'
-```
-
-### Python SDK
-
-```python
-from volnix.sdk import VolnixClient
-
-async with VolnixClient(url="http://localhost:8080", actor_id="my-agent") as terra:
-    tools = await terra.tools(fmt="openai")
-    result = await terra.call("email_send", to="user@example.com", body="Hello")
-    print(result)
-```
-
-### Framework Integration
-
-Export tool definitions for your framework of choice:
-
-```bash
-volnix config --export openai-tools      # OpenAI function calling
-volnix config --export anthropic-tools   # Anthropic tool use
-volnix config --export langgraph         # LangGraph adapter
-volnix config --export crewai            # CrewAI adapter
-volnix config --export autogen           # AutoGen adapter
-```
-
----
-
-## Configuration
-
-Volnix uses a layered TOML configuration system:
-
-| Layer | File | Purpose |
-|-------|------|---------|
-| Base | `volnix.toml` | Shipped defaults (committed to repo) |
-| Environment | `volnix.{env}.toml` | Environment-specific overrides |
-| Local | `volnix.local.toml` | Machine-specific, git-ignored |
-| Env vars | `VOLNIX__section__key` | Runtime overrides |
-
-Key configuration sections:
-
-```toml
-# LLM providers
-[llm.providers.anthropic]
-type = "anthropic"
-api_key_ref = "ANTHROPIC_API_KEY"
-
-[llm.providers.openai]
-type = "openai_compatible"
-api_key_ref = "OPENAI_API_KEY"
-
-# Simulation defaults
-[simulation]
-seed = 42
-behavior = "dynamic"
-
-# Server settings
-[adapter]
-host = "0.0.0.0"
-port = 8100
-```
-
-See `volnix.toml` for the complete configuration reference.
+All protocols expose the same world tools and go through the same governance pipeline. See [docs/agent-integration.md](docs/agent-integration.md) for setup guides and [examples/](examples/) for working code.
 
 ---
 
 ## Built-in Blueprints
 
-| Blueprint | Description |
-|-----------|------------|
-| `customer_support` | Support team with email, chat, tickets, and payments |
-| `incident_response` | Incident triage with Slack, GitHub, and calendar |
-| `open_sandbox` | Minimal world for freeform testing |
-| `market_prediction_analysis` | Multi-agent market analysis with predictions |
-| `campaign_brainstorm` | Campaign planning with creative collaboration |
-| `climate_research_station` | Research data generation and analysis |
-| `feature_prioritization` | Feature ranking with structured debate |
-| `security_posture_assessment` | Security audit simulation |
-| `support_ticket_triage` | Ticket routing and resolution |
-| `governance_test` | Policy enforcement testing |
-| `agents_market_analysts` | Internal agent team: market analysis |
-| `agents_climate_researchers` | Internal agent team: climate research |
-| `agents_campaign_creatives` | Internal agent team: campaign ideation |
-| `agents_feature_team` | Internal agent team: feature prioritization |
-| `agents_security_team` | Internal agent team: security assessment |
+### World Definitions
+
+| Blueprint | Domain | Behavior | Services |
+|-----------|--------|----------|----------|
+| `customer_support` | Support | Reactive | Gmail, Slack, Zendesk, Stripe |
+| `demo_support_escalation` | Support | Dynamic | Stripe, Zendesk, Slack |
+| `dynamic_support_center` | Support | Dynamic | Stripe, Zendesk, Slack |
+| `incident_response` | DevOps | Dynamic | Slack, GitHub, Calendar |
+| `market_prediction_analysis` | Finance | Dynamic | Slack, Twitter, Reddit |
+| `campaign_brainstorm` | Marketing | Dynamic | Slack |
+| `climate_research_station` | Research | Dynamic | Slack, Gmail |
+| `feature_prioritization` | Product | Dynamic | Slack |
+| `security_posture_assessment` | Security | Dynamic | Slack, Zendesk |
+| `open_sandbox` | Testing | Static | All services (ungoverned) |
+| `governance_test` | Testing | Reactive | Stripe, Zendesk, Slack |
+
+### Internal Agent Team Profiles
+
+Pair these with a world definition using `--internal`:
+
+| Profile | Team Size | Roles | Deliverable |
+|---------|-----------|-------|-------------|
+| `agents_support_team` | 3 | Supervisor, Senior-agent, Triage-agent | Synthesis |
+| `agents_dynamic_support` | 3 | Supervisor, Senior-agent, Triage-agent | Synthesis |
+| `agents_market_analysts` | 3 | Macro-economist, Technical-analyst, Risk-analyst | Prediction |
+| `agents_climate_researchers` | 4 | Lead-researcher, Physicist, Oceanographer, Statistician | Synthesis |
+| `agents_campaign_creatives` | 3 | Creative-director, Copywriter, Social-media-specialist | Brainstorm |
+| `agents_feature_team` | 3 | Product-lead, Engineer, Designer | Decision |
+| `agents_security_team` | 3 | Security-lead, Network-engineer, Compliance-officer | Assessment |
 
 ```bash
-# List all blueprints (including user-created)
-volnix blueprints
+# List all blueprints
+uv run volnix blueprints
 
-# Run any blueprint directly
-volnix run incident_response --preset brainstorm --actors oncall,sre,incident-lead
+# Example: market analysis with internal team
+uv run volnix serve market_prediction_analysis \
+  --internal volnix/blueprints/official/agents_market_analysts.yaml \
+  --port 8080
 ```
+
+See [docs/blueprints-reference.md](docs/blueprints-reference.md) for the full catalog.
 
 ---
 
 ## Verified Service Packs
 
-Each verified pack simulates a real service with deterministic state machines:
+Each verified pack simulates a real service with deterministic state machines. Volnix also supports YAML-defined profiles for services without a verified pack. See [docs/service-packs.md](docs/service-packs.md) for the full guide on fidelity tiers, profiles, bootstrapping, and creating custom services.
 
 | Pack | Category | Simulates |
 |------|----------|-----------|
@@ -379,13 +349,28 @@ Each verified pack simulates a real service with deterministic state machines:
 
 ---
 
+## Configuration
+
+Volnix uses a layered TOML configuration system:
+
+| Layer | File | Purpose |
+|-------|------|---------|
+| Base | `volnix.toml` | Shipped defaults (committed to repo) |
+| Environment | `volnix.{env}.toml` | Environment-specific overrides |
+| Local | `volnix.local.toml` | Machine-specific, git-ignored |
+| Env vars | `VOLNIX__section__key` | Runtime overrides |
+
+See [docs/configuration.md](docs/configuration.md) and `volnix.toml` for the complete reference.
+
+---
+
 ## Dashboard
 
 Volnix includes a React dashboard for observing simulations:
 
 ```bash
-volnix dashboard --port 8200
-# Open http://localhost:8200
+cd volnix-dashboard && npm run dev
+# Open http://localhost:3000
 ```
 
 The dashboard provides:
@@ -393,7 +378,7 @@ The dashboard provides:
 - Live event streaming via WebSocket
 - Governance scorecards and metrics
 - Deliverable inspection
-- Run comparison (side-by-side diff)
+- Agent activity timeline
 
 ---
 
@@ -404,20 +389,40 @@ volnix/
   core/           # Types, protocols, event bus, envelope, context
   engines/        # The 10 engines (state, policy, permission, budget, ...)
   pipeline/       # 7-step governance pipeline (DAG executor)
-  bus/             # Event bus (inter-engine communication)
-  ledger/          # Audit log (observability)
-  packs/           # Service packs (verified + profiled)
-  kernel/          # Semantic kernel (service classification)
-  llm/             # LLM router (multi-provider routing)
-  persistence/     # SQLite async persistence layer
-  scheduling/      # Time-based event scheduling
-  simulation/      # SimulationRunner, EventQueue, config
-  actors/          # Actor state, subscriptions, replay
-  gateway/         # External request gateway
-  sdk.py           # Python SDK client
-  cli.py           # CLI entry point (typer)
-  app.py           # Application bootstrap
+  bus/            # Event bus (inter-engine communication)
+  ledger/         # Audit log (observability)
+  packs/          # Service packs (verified + profiled)
+  kernel/         # Semantic kernel (service classification)
+  llm/            # LLM router (multi-provider routing)
+  persistence/    # SQLite async persistence layer
+  simulation/     # SimulationRunner, EventQueue, config
+  actors/         # Actor state, subscriptions, replay
+  gateway/        # External request gateway
+  blueprints/     # Official world blueprints and agent profiles
+  cli.py          # CLI entry point (typer)
+  app.py          # Application bootstrap
+docs/             # User-facing guides
+examples/         # Integration examples (OpenAI, Anthropic, Gemini, etc.)
+internal_docs/    # Specifications and architecture documents
 ```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|------------|
+| [Getting Started](docs/getting-started.md) | Installation, first run, connecting agents |
+| [Creating Worlds](docs/creating-worlds.md) | World YAML schema, reality dimensions, seeds |
+| [Internal Agents](docs/internal-agents.md) | Agent teams, lead coordination, deliverables |
+| [Agent Integration](docs/agent-integration.md) | MCP, REST, SDK, framework adapters |
+| [Behavior Modes](docs/behavior-modes.md) | Static vs reactive vs dynamic, Animator engine |
+| [Blueprints Reference](docs/blueprints-reference.md) | Complete catalog of blueprints and pairings |
+| [Service Packs & Profiles](docs/service-packs.md) | Verified packs, YAML profiles, fidelity tiers, custom services |
+| [Configuration](docs/configuration.md) | TOML config system, LLM providers, tuning |
+| [Architecture](docs/architecture.md) | Two-half model, 10 engines, governance pipeline |
+| [Design Principles](DESIGN_PRINCIPLES.md) | Architectural rules and patterns |
+| [Contributing](CONTRIBUTING.md) | Development setup, code standards, PR process |
 
 ---
 
@@ -442,14 +447,6 @@ uv run ruff format --check volnix/ tests/
 # Type check
 uv run mypy volnix/
 ```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for architectural rules.
-
----
-
-## Contributing
-
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and the pull request process.
 
 ---
 

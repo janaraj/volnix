@@ -1,14 +1,29 @@
 # Volnix Integration Examples
 
-Each folder contains a working example of connecting an AI agent framework to a Volnix world. All examples have been tested E2E against the Stock Analysis world (Alpaca service).
+Each folder contains a working example of connecting an AI agent framework to a Volnix world.
+
+## Which Example Should I Start With?
+
+| I want to... | Example | Protocol |
+|--------------|---------|----------|
+| Use OpenAI SDK | `openai-sdk/` | HTTP compat (zero Volnix imports) |
+| Use Anthropic SDK | `anthropic-sdk/` | HTTP compat (zero Volnix imports) |
+| Use Gemini SDK | `gemini-sdk/` | HTTP compat (zero Volnix imports) |
+| Use Claude Desktop / Cursor | `mcp/` | MCP (config only, no code) |
+| Use PydanticAI | `pydanticai/` | MCP native |
+| Use CrewAI | `crewai/` | Adapter (1 import) |
+| Use LangGraph | `langgraph/` | Adapter (1 import) |
+| Use AutoGen | `autogen/` | Adapter (1 import) |
+| Run autonomous internal agents | `launch-demo/` | Internal (no external agent) |
+| Test governance policies | `governance-test/` | HTTP REST |
 
 ## Prerequisites
 
-1. **Volnix installed and a world compiled:**
+1. **Volnix installed and a world running:**
    ```bash
    cd /path/to/volnix
    uv sync --all-extras
-   volnix serve customer_support --port 8080
+   uv run volnix serve customer_support --port 8080
    ```
 
 2. **API keys** in a `.env` file (needed by the agent's LLM, not by Volnix):
@@ -328,3 +343,65 @@ advisor_tools = await crewai_tools(url, actor_id="investment-advisor")
 ```
 
 Volnix enforces permissions and budgets per agent through the governance pipeline.
+
+---
+
+## Internal Agent Examples
+
+Internal agents run autonomously inside the world — no external agent needed.
+
+### Launch Demo
+
+The `launch-demo/` folder contains ready-to-run examples:
+
+**Internal team (3 autonomous agents):**
+```bash
+cd examples/launch-demo/internal
+./run.sh
+```
+
+This starts a support team with a supervisor (lead), senior-agent, and triage-agent. They delegate, investigate, and produce a deliverable. See [docs/internal-agents.md](../docs/internal-agents.md) for the full guide.
+
+**External agent:**
+```bash
+cd examples/launch-demo/external
+./run.sh
+```
+
+This starts a server and runs a single external agent against the world.
+
+### Running Any Blueprint with Internal Agents
+
+```bash
+# Support team
+uv run volnix serve customer_support \
+  --internal volnix/blueprints/official/agents_support_team.yaml \
+  --port 8080
+
+# Market analysis team
+uv run volnix serve market_prediction_analysis \
+  --internal volnix/blueprints/official/agents_market_analysts.yaml \
+  --port 8080
+
+# Dynamic world with NPC customers
+uv run volnix serve dynamic_support_center \
+  --internal volnix/blueprints/official/agents_dynamic_support.yaml \
+  --port 8080
+
+# Static mode (no NPC events, faster)
+uv run volnix serve customer_support \
+  --internal volnix/blueprints/official/agents_support_team.yaml \
+  --behavior static \
+  --port 8080
+```
+
+See [docs/blueprints-reference.md](../docs/blueprints-reference.md) for the full catalog of world + agent pairings.
+
+---
+
+## Further Reading
+
+- [Internal Agents](../docs/internal-agents.md) — Agent teams, lead lifecycle, deliverables
+- [Agent Integration](../docs/agent-integration.md) — Protocol details, MCP, REST, SDK
+- [Behavior Modes](../docs/behavior-modes.md) — Static vs reactive vs dynamic
+- [Blueprints Reference](../docs/blueprints-reference.md) — All blueprints and recommended pairings
