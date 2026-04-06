@@ -38,10 +38,16 @@ class ConfigLoader:
         """
         config: dict[str, Any] = {}
 
-        # Layer 1: base config
+        # Layer 0: bundled defaults (inside the installed package)
+        # Provides sensible provider/routing config for pip install users.
+        bundled_path = Path(__file__).parent.parent / "bundled_config.toml"
+        if bundled_path.is_file():
+            config = self._load_toml(bundled_path)
+
+        # Layer 1: project-level config (overrides bundled defaults)
         base_path = self._base_dir / "volnix.toml"
         if base_path.is_file():
-            config = self._load_toml(base_path)
+            config = self._deep_merge(config, self._load_toml(base_path))
 
         # Layer 2: environment-specific overrides
         env_path = self._base_dir / f"volnix.{self._env}.toml"
