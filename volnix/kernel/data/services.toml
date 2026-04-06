@@ -1,0 +1,78 @@
+# Volnix Semantic Kernel -- Service-to-Category Mappings
+#
+# Maps well-known service names to their semantic category.
+# The kernel loads this at initialization for service classification
+# during world compilation.
+#
+# When adding a new service, use an existing category from categories.py.
+
+[services]
+# Communication
+slack = "communication"
+gmail = "communication"
+email = "communication"
+outlook = "communication"
+teams = "communication"
+sendgrid = "communication"
+twilio = "communication"
+
+# Work management
+jira = "work_management"
+zendesk = "work_management"
+linear = "work_management"
+asana = "work_management"
+trello = "work_management"
+hubspot = "work_management"
+salesforce = "work_management"
+
+# Money / transactions
+stripe = "money_transactions"
+paypal = "money_transactions"
+square = "money_transactions"
+braintree = "money_transactions"
+shopify = "money_transactions"
+
+# Authority / approvals
+servicenow = "authority_approvals"
+docusign = "authority_approvals"
+
+# Identity / auth
+okta = "identity_auth"
+auth0 = "identity_auth"
+azure_ad = "identity_auth"
+
+# Storage / documents
+google_drive = "storage_documents"
+dropbox = "storage_documents"
+sharepoint = "storage_documents"
+box = "storage_documents"
+notion = "storage_documents"
+
+# Code / DevOps
+github = "code_devops"
+gitlab = "code_devops"
+bitbucket = "code_devops"
+
+# Scheduling
+google_calendar = "scheduling"
+outlook_calendar = "scheduling"
+calendly = "scheduling"
+
+# Monitoring / observability
+datadog = "monitoring_observability"
+pagerduty = "monitoring_observability"
+grafana = "monitoring_observability"
+newrelic = "monitoring_observability"
+
+# Social media
+reddit = "social_media"
+twitter = "social_media"
+linkedin = "social_media"
+facebook = "social_media"
+instagram = "social_media"
+
+# Trading
+alpaca = "trading"
+interactive_brokers = "trading"
+td_ameritrade = "trading"
+robinhood = "trading"

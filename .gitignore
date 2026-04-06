@@ -7,6 +7,8 @@ volnix.local.toml
 volnix.development.toml.bak
 terrarium.development.toml.bak
 data/
+!volnix/kernel/data/
+!volnix/kernel/data/
 dev_data/
 volnix_data/
 terrarium_data/

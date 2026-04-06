@@ -1,0 +1,51 @@
+# Reference only -- canonical source is categories.py. This file is not loaded at runtime.
+#
+# Volnix Semantic Kernel -- Category Definitions
+#
+# Each section defines a semantic service category.  The kernel uses these
+# definitions to classify services and resolve primitives.
+
+[communication]
+description = "Services for sending, receiving, and organising messages across channels."
+primitives = ["channel", "thread", "message", "delivery", "visibility_rule"]
+example_services = ["slack", "gmail", "outlook", "teams"]
+
+[work_management]
+description = "Services for tracking, assigning, and managing units of work."
+primitives = ["work_item", "lifecycle", "assignment", "sla", "escalation"]
+example_services = ["jira", "zendesk", "linear", "asana"]
+
+[money_transactions]
+description = "Services for processing, authorising, and recording financial transactions."
+primitives = ["transaction", "authorization", "settlement", "reversal", "balance"]
+example_services = ["stripe", "paypal", "square"]
+
+[authority_approvals]
+description = "Services for requesting, granting, and auditing approvals."
+primitives = ["request", "approval", "rejection", "delegation", "audit_trail"]
+example_services = ["servicenow", "docusign"]
+
+[identity_auth]
+description = "Services for authentication, identity verification, and access control."
+primitives = ["user", "credential", "session", "role", "permission"]
+example_services = ["okta", "auth0", "azure_ad"]
+
+[storage_documents]
+description = "Services for storing, retrieving, and organising files and documents."
+primitives = ["document", "folder", "version", "share", "metadata"]
+example_services = ["google_drive", "dropbox", "sharepoint"]
+
+[code_devops]
+description = "Services for source control, CI/CD, and developer operations."
+primitives = ["repository", "branch", "pull_request", "pipeline", "deployment"]
+example_services = ["github", "gitlab", "bitbucket"]
+
+[scheduling]
+description = "Services for managing calendars, events, and availability."
+primitives = ["event", "availability", "recurrence", "attendee", "reminder"]
+example_services = ["google_calendar", "outlook_calendar", "calendly"]
+
+[monitoring_observability]
+description = "Services for monitoring, alerting, and observability of systems."
+primitives = ["metric", "alert", "incident", "dashboard", "log_stream"]
+example_services = ["datadog", "pagerduty", "grafana"]
