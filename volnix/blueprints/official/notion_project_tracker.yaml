@@ -1,0 +1,29 @@
+world:
+  name: "Notion Project Tracker"
+  description: >
+    A product team using Notion for project documentation and task tracking,
+    and Slack for team communication. The team manages a backlog of feature
+    requests, bug reports, and technical debt items across multiple databases.
+  behavior: static
+  mode: governed
+  reality:
+    preset: messy
+
+  services:
+    notion: verified/notion
+    slack: verified/slack
+
+  policies:
+    - name: "Archive approval"
+      trigger:
+        action: "pages.update"
+        condition: "input.archived == true"
+      enforcement: hold
+
+  seeds:
+    - "Product roadmap database with 8 feature requests in various stages"
+    - "Bug tracker database with 5 open bugs, 2 marked critical"
+    - "Team wiki page with onboarding docs and architecture decisions"
+    - "Sprint planning page with current sprint goals and assignments"
+
+  mission: "Review the product backlog, prioritize items, resolve critical bugs, and produce a sprint planning summary."

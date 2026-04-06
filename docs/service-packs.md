@@ -256,29 +256,36 @@ examples:
 
 ## Service Resolution
 
-When the compiler encounters a service name in the world YAML, it resolves through a multi-step priority chain. **Most steps produce a usable service surface directly — no LLM required.** The LLM is only the last fallback.
+When the compiler encounters a service name in the world YAML, it resolves through a multi-step priority chain. The first two steps are fully deterministic. After that, the quality depends on what external sources are available.
 
 ```
 1. Verified Pack?          → Tier 1, direct (deterministic Python, confidence=1.0)
-   |
+   |                         No LLM. Hand-built handlers.
    v not found
 2. Curated Profile?        → Tier 2, direct (hand-written YAML, confidence=0.8-0.9)
-   |
+   |                         No LLM at resolution time. Profile already exists.
    v not found
-3. Context Hub?            → Tier 2, direct (curated docs → surface, confidence=0.7)
-   |                         NO LLM — operations extracted from real documentation
+3. OpenAPI spec on disk?   → Tier 2, direct (spec parsed → surface, confidence=0.5-0.6)
+   |                         No LLM. Operations extracted programmatically from spec.
    v not found
-4. OpenAPI spec?           → Tier 2, direct (spec parsed → surface, confidence=0.5-0.6)
-   |                         NO LLM — operations extracted from real API spec
-   v not found
-5. Semantic Kernel?        → Category primitives (confidence=0.1-0.4)
-   |                         NO LLM — static registry lookup
-   v none of the above resolved
-6. Profile Inference       → Tier 2 bootstrapped (LLM, but uses ALL sources above as context)
-                             confidence=0.3-0.7 depending on what sources were available
+4. Context Hub + LLM       → Tier 2, inferred (real docs → LLM → profile, confidence=0.7)
+   |                         LLM generates profile, but from curated real documentation.
+   v Context Hub has no docs
+5. Kernel + LLM            → Tier 2, inferred (category primitives → LLM, confidence=0.4)
+   |                         LLM generates profile from category knowledge only.
+   v unknown category
+6. LLM only                → Tier 2, inferred (general knowledge, confidence=0.3)
+                             LLM generates profile with no external context.
 ```
 
-**Key point:** Steps 3-5 are NOT "inputs to LLM generation." They are **direct resolution paths** that produce a working service surface without any LLM call. The LLM inference at Step 6 is only reached when all direct paths fail. And even then, it gathers whatever partial information the earlier steps found (Context Hub docs, OpenAPI operations, Kernel primitives) to give the LLM maximum context.
+**Key distinction:**
+- Steps 1-3 are **fully deterministic** — no LLM involved at all
+- Steps 4-6 all use the **LLM ProfileInferrer**, but with different quality of input:
+  - Step 4: LLM reads **real curated API documentation** from Context Hub → highest quality inference
+  - Step 5: LLM uses **category primitives** from the Semantic Kernel (e.g., "work_management" → work_item, lifecycle, assignment)
+  - Step 6: LLM uses only its **general knowledge** → lowest quality, most likely to hallucinate
+
+The confidence scores reflect this: real docs (0.7) > category knowledge (0.4) > nothing (0.3).
 
 In world YAML, you can hint which tier to use:
 
@@ -315,34 +322,36 @@ When the compiler encounters `jira`, the Kernel classifies it as `work_managemen
 
 Service mappings are in `volnix/kernel/data/services.toml` (33+ pre-mapped services).
 
-### Context Hub (Direct Resolution — No LLM)
+### Context Hub + LLM Inference (Step 4)
 
-The **Context Hub** ([`@aisuite/chub`](https://github.com/andrewyng/context-hub)) is a curated API documentation provider. It fetches real, maintained documentation for popular services.
+The **Context Hub** ([`@aisuite/chub`](https://github.com/andrewyng/context-hub)) is a curated API documentation provider. It fetches real, maintained documentation for services.
 
 ```
-Context Hub resolution (NO LLM involved):
-  1. chub search "stripe" → finds content IDs: stripe/api, stripe/webhooks
-  2. chub get stripe/api --lang py → returns curated Python-focused markdown
-  3. Volnix parses the docs → extracts operations, entities, patterns
-  4. Converts directly to ServiceSurface (confidence=0.7)
+Context Hub-backed inference:
+  1. chub search "hubspot" → finds content IDs: hubspot/api
+  2. chub get hubspot/api --lang py → returns curated Python-focused markdown
+  3. ProfileInferrer feeds the markdown into an LLM prompt
+  4. LLM reads real docs → generates structured profile YAML
+  5. Profile validated, saved to disk, registered for runtime use
 ```
 
-This is a **direct resolution** — the Context Hub docs produce a working service surface without any LLM call. The operations, parameters, and response schemas come from real curated documentation.
+**This is NOT blind LLM hallucination.** The LLM works from real, curated API documentation — it reads actual endpoint descriptions, parameter schemas, and response examples from the Context Hub markdown. The result is a bootstrapped profile with:
+- `fidelity_source: "bootstrapped"`
+- `confidence: 0.7`
+- `source_chain: ["context_hub", "llm_inference"]`
 
-Context Hub is an open-source library with curated docs for hundreds of services (Stripe, Twilio, Jira, Shopify, etc.). Volnix uses it as a primary source before falling back to LLM inference.
+Context Hub is optional — if `npx` is not available or the service isn't in the hub, the resolver falls back to Kernel + LLM (Step 5) or LLM-only (Step 6) with lower confidence.
 
-Context Hub is optional — if `npx` is not available or the service isn't in the hub, the resolver continues to the next source. If Context Hub partially resolves a service (docs found but incomplete), those docs are still used as context if LLM inference is needed later.
+### OpenAPI Specs (Step 3 — Direct Resolution, No LLM)
 
-### OpenAPI Specs (Direct Resolution — No LLM)
-
-Volnix can parse **local OpenAPI 3.x specs** (YAML or JSON) placed in the spec directory. Like Context Hub, this is a direct resolution with no LLM involved:
+Volnix can parse **local OpenAPI 3.x specs** (YAML or JSON) placed in the spec directory. This is a **truly direct resolution** — operations are extracted programmatically, no LLM involved:
 
 1. Loads `{service_name}.yaml` or `{service_name}.json` from the configured spec directory
-2. Extracts all operations (paths + methods → tool definitions)
+2. Parses all paths + methods → tool definitions with parameter schemas
 3. Resolves `$ref` references in parameters and response schemas
-4. Converts directly to `ServiceSurface` with confidence 0.5-0.6
+4. Produces a working `ServiceSurface` with real operations (confidence 0.5-0.6)
 
-This is useful when you have the actual API spec for a service. Drop the spec file in the spec directory and Volnix picks it up automatically:
+This is the only Tier 2 resolution path (besides curated profiles) that produces a **complete, working surface without any LLM call**. Drop the spec file in the spec directory and Volnix picks it up automatically:
 
 ```bash
 # Place your spec in the configured spec directory
@@ -351,9 +360,9 @@ cp my_service_openapi.yaml volnix/specs/my_service.yaml
 # Now reference it in your world YAML — Volnix auto-discovers the spec
 ```
 
-### Profile Inference (Last Resort — LLM with Context)
+### Profile Inference (Steps 4-6 — LLM with Available Context)
 
-Profile inference is the **last fallback** — it only runs when Steps 1-5 all fail to produce a complete service surface. Even then, it's not blind LLM generation — it gathers whatever partial information the earlier steps found:
+Profile inference runs when no verified pack, curated profile, or OpenAPI spec exists (Steps 1-3 fail). It gathers whatever external context is available before calling the LLM:
 
 **Step 1: Gather sources**
 ```
@@ -414,203 +423,444 @@ The `DriftReport` shows:
 
 ---
 
-## Creating a New Verified Pack (Tier 1)
+## BYOP — Bring Your Own Pack
 
-Follow this structure to add a deterministic service pack.
+Volnix simulates any API. You can add your own service at three levels:
 
-### Step 1: Create the Directory
+| Level | Effort | How | Fidelity |
+|-------|--------|-----|----------|
+| **Automatic** | Zero | Just put the service name in your YAML — the compiler fetches Context Hub docs and generates a profile via LLM | Tier 2 (bootstrapped, confidence 0.3-0.7) |
+| **YAML Profile** | Minutes | Write a `.profile.yaml` with operations, entities, and behavioral rules | Tier 2 (curated, confidence 0.9) |
+| **Verified Pack** | Hours | Write Python handlers with deterministic logic, entity schemas, and state machines | Tier 1 (deterministic, confidence 1.0) |
+
+---
+
+## How the Registry Works
+
+Volnix maintains two registries that together provide the complete tool surface:
+
+**PackRegistry** — Discovers verified packs from `volnix/packs/verified/*/pack.py` at startup. Indexes by pack name and tool name. Provides deterministic handlers.
+
+**ProfileRegistry** — Loads YAML profiles from `volnix/packs/profiles/*.profile.yaml` at startup. Also registers profiles bootstrapped during compilation. Provides LLM-constrained tool definitions.
+
+**Gateway** — Merges both registries into a single tool map. Pack tools are registered first; profile tools fill gaps for services without a verified pack. The `not in tool_map` guard ensures pack tools always take precedence.
 
 ```
-volnix/packs/verified/my_service/
-├── __init__.py
-├── pack.py              # ServicePack subclass
-├── handlers.py          # Action handler functions
-├── schemas.py           # Tool definitions + entity schemas
-└── state_machines.py    # Entity lifecycle transitions
+Startup:
+  PackRegistry: 154 tools from 11 packs (gmail, slack, zendesk, stripe, notion, ...)
+  ProfileRegistry: 55 tools from 6 profiles (jira, shopify, twilio, ...)
+  Gateway: 209 tools total (packs take precedence)
+
+At runtime:
+  Agent calls "pages.create" → Gateway → PackRegistry → NotionPack.handle_action()  [Tier 1]
+  Agent calls "jira_create_issue" → Gateway → ProfileRegistry → Tier2Generator.generate()  [Tier 2]
 ```
 
-### Step 2: Define Schemas (`schemas.py`)
+---
 
-```python
-"""Entity schemas and tool definitions for my_service pack."""
+## Tier 2 Runtime — How Each Method Type Works
 
-# Entity schemas — JSON-Schema style
-ITEM_ENTITY_SCHEMA = {
-    "type": "object",
-    "x-volnix-identity": "id",
-    "required": ["id", "name", "status", "created_at"],
-    "properties": {
-        "id": {"type": "string"},
-        "name": {"type": "string"},
-        "status": {"type": "string", "enum": ["draft", "active", "archived"]},
-        "description": {"type": "string"},
-        "created_at": {"type": "string"},
-        "updated_at": {"type": "string"},
-    },
-}
+When an agent calls a Tier 2 profiled tool, the Responder's `Tier2Generator` makes an LLM call constrained by the profile. The LLM receives the current world state so it can generate realistic responses.
 
-# Tool definitions — what the agent sees
-TOOL_DEFINITIONS = [
-    {
-        "name": "items.create",
-        "description": "Create a new item",
-        "pack_name": "my_service",
-        "http_method": "POST",
-        "parameters": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-                "name": {"type": "string", "description": "Item name"},
-                "description": {"type": "string", "description": "Item description"},
-            },
-        },
-    },
-    {
-        "name": "items.read",
-        "description": "Get an item by ID",
-        "pack_name": "my_service",
-        "http_method": "GET",
-        "parameters": {
-            "type": "object",
-            "required": ["item_id"],
-            "properties": {
-                "item_id": {"type": "string", "description": "Item ID"},
-            },
-        },
-    },
-    # ... more tools
-]
+**GET / Retrieve**: LLM receives the full entity list from world state. It finds the requested entity by ID and returns it. If not found, it generates a 404 error matching the profile's error_modes.
+
+**POST / Create**: LLM generates a realistic new entity with proper ID format, timestamps, and field values. The response is validated against the operation's `response_schema`. A `StateDelta(operation="create")` commits the new entity to world state.
+
+**PATCH / Update**: LLM sees the current entity state plus the requested changes. Returns the updated entity. A `StateDelta(operation="update")` commits the changes with `previous_fields` for audit.
+
+**POST / Search / Query**: LLM receives ALL existing entities of the relevant type from world state (up to 20). It reads the search criteria and returns matching entities. The LLM understands "search contacts where email contains 'acme'" and filters accordingly.
+
+**DELETE**: LLM generates the appropriate response (often setting `archived: true`). A StateDelta commits the change.
+
+**Validation**: Every response is checked against the operation's `response_schema`. If validation fails for create/mutate operations, the LLM is retried once with the validation errors as context. Read-only operations log warnings but don't block.
+
+---
+
+## Creating a Verified Pack (Tier 1) — Notion Walkthrough
+
+This walkthrough uses the real Notion pack (`volnix/packs/verified/notion/`) as a reference. It has 15 tools matching the official Notion SDK, 5 entity types, and 67 tests.
+
+### Step 1: Get the Real API Documentation
+
+Before writing any code, get the actual API docs for your service:
+
+```bash
+# Context Hub has docs for many services
+npx @aisuite/chub search notion
+npx @aisuite/chub get notion/workspace-api --lang py > /tmp/notion-docs.md
+
+# Check what SDK methods exist
+grep -E "notion\.\w+\.\w+" /tmp/notion-docs.md | sort -u
+```
+
+This gives you the real method names, endpoints, parameters, and response formats. **Never invent API methods — use the real ones.**
+
+### Step 2: Create the Directory
+
+```
+volnix/packs/verified/notion/
+├── __init__.py          # Re-export NotionPack
+├── schemas.py           # Entity schemas + tool definitions (pure data)
+├── state_machines.py    # Entity lifecycle transitions (pure data)
+├── handlers.py          # 15 async handler functions (logic)
+└── pack.py              # ServicePack subclass (wiring)
 ```
 
 ### Step 3: Define State Machines (`state_machines.py`)
 
-```python
-"""State machine definitions for my_service entities."""
+Identify which entity fields have lifecycle states. For Notion, pages/databases/blocks have an `archived` field — one-way transition from active to archived:
 
-ITEM_TRANSITIONS = {
-    "draft":    ["active", "archived"],
-    "active":   ["archived"],
-    "archived": [],  # Terminal state
+```python
+"""State machine definitions for Notion entities.
+
+Notion's archived field is one-way: once archived, objects cannot be unarchived.
+Applied to pages, databases, and blocks.
+"""
+from __future__ import annotations
+
+ARCHIVED_STATES: list[str] = ["active", "archived"]
+
+ARCHIVED_TRANSITIONS: dict[str, list[str]] = {
+    "active": ["archived"],
+    "archived": [],  # One-way — Notion does not allow unarchive
 }
 ```
 
-### Step 4: Write Handlers (`handlers.py`)
+### Step 4: Define Entity Schemas (`schemas.py`)
 
-Each handler is an async function that takes `(input_data, state)` and returns a `ResponseProposal`:
+Each entity type needs a JSON-Schema-style dict. Key requirements:
+- `"x-volnix-identity"` marks the primary key field
+- `"required"` lists fields that must exist on every entity
+- `"enum"` on state fields — must match state machine transitions
+- Match the real API response structure
 
 ```python
-"""Action handlers for my_service pack."""
-import uuid
-from datetime import UTC, datetime
-from volnix.core.context import ResponseProposal
-from volnix.core.types import EntityId, StateDelta
+"""Entity schemas and tool definitions for the Notion service pack.
 
+All schemas match the official Notion API v2022-06-28+ response format.
+Tool names match the official notion-client Python SDK methods.
+"""
+from __future__ import annotations
 
-async def handle_items_create(input_data: dict, state: dict) -> ResponseProposal:
-    """Create a new item."""
-    item_id = f"item-{uuid.uuid4().hex[:8]}"
-    now = datetime.now(UTC).isoformat()
+# -- Entity Schemas --
 
-    fields = {
-        "id": item_id,
-        "name": input_data["name"],
-        "description": input_data.get("description", ""),
-        "status": "draft",
-        "created_at": now,
-        "updated_at": now,
+PAGE_ENTITY_SCHEMA: dict = {
+    "type": "object",
+    "x-volnix-identity": "id",
+    "required": ["id", "object", "parent", "properties", "archived",
+                 "created_time", "last_edited_time"],
+    "properties": {
+        "id": {"type": "string"},
+        "object": {"type": "string", "enum": ["page"]},
+        "parent": {"type": "object"},
+        "properties": {"type": "object"},
+        "url": {"type": "string"},
+        "archived": {"type": "boolean"},
+        "created_time": {"type": "string"},
+        "last_edited_time": {"type": "string"},
+        "created_by": {"type": "object"},
+        "last_edited_by": {"type": "object"},
+        "cover": {},
+        "icon": {},
+    },
+}
+
+# DATABASE_ENTITY_SCHEMA, BLOCK_ENTITY_SCHEMA, USER_ENTITY_SCHEMA,
+# COMMENT_ENTITY_SCHEMA follow the same pattern...
+```
+
+Then define tool definitions — one per SDK method:
+
+```python
+NOTION_TOOL_DEFINITIONS: list[dict] = [
+    {
+        "name": "pages.create",
+        "description": "Create a new page in a database or as a child of another page",
+        "pack_name": "notion",
+        "http_method": "POST",
+        "http_path": "/v1/pages",
+        "parameters": {
+            "type": "object",
+            "required": ["parent", "properties"],
+            "properties": {
+                "parent": {
+                    "type": "object",
+                    "description": "Parent page or database: {database_id: '...'} or {page_id: '...'}",
+                    "properties": {
+                        "database_id": {"type": "string"},
+                        "page_id": {"type": "string"},
+                    },
+                },
+                "properties": {
+                    "type": "object",
+                    "description": "Page properties (title, etc.)",
+                    "properties": {},
+                },
+                "children": {
+                    "type": "array",
+                    "description": "Child block objects to add to the page",
+                    "items": {"type": "object"},
+                },
+            },
+        },
+    },
+    # ... 14 more tools matching the Notion SDK
+]
+```
+
+**Important**: Parameter schemas must be OpenAI-compatible — `type: "object"` must have a `properties` field (even if empty). `type: "array"` must have `items`.
+
+### Step 5: Write Handlers (`handlers.py`)
+
+Each handler is an async function: `(input_data: dict, state: dict) -> ResponseProposal`
+
+The `state` dict contains entity lists keyed by type: `state["pages"]`, `state["blocks"]`, etc.
+
+**Shared helpers** (every pack needs these):
+
+```python
+def _notion_error(status: int, code: str, message: str) -> dict:
+    """Notion API error format."""
+    return {"object": "error", "status": status, "code": code, "message": message}
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+```
+
+**Create handler** — generates entity, returns StateDelta:
+
+```python
+async def handle_pages_create(input_data: dict, state: dict) -> ResponseProposal:
+    page_id = _new_id("page")
+    now = _now_iso()
+
+    page_fields = {
+        "id": page_id,
+        "object": "page",
+        "parent": input_data["parent"],
+        "properties": input_data.get("properties", {}),
+        "url": f"https://www.notion.so/{page_id.replace('-', '')}",
+        "archived": False,
+        "created_time": now,
+        "last_edited_time": now,
+        "created_by": {"object": "user", "id": "bot-user-001"},
+        "last_edited_by": {"object": "user", "id": "bot-user-001"},
     }
 
     delta = StateDelta(
-        entity_type="item",
-        entity_id=EntityId(item_id),
+        entity_type="page",
+        entity_id=EntityId(page_id),
         operation="create",
-        fields=fields,
+        fields=page_fields,
     )
+    return ResponseProposal(response_body=page_fields, proposed_state_deltas=[delta])
+```
 
+**Retrieve handler** — lookup from state, 404 if missing:
+
+```python
+async def handle_pages_retrieve(input_data: dict, state: dict) -> ResponseProposal:
+    page_id = input_data["page_id"]
+    for page in state.get("pages", []):
+        if page.get("id") == page_id:
+            return ResponseProposal(response_body=page)
     return ResponseProposal(
-        response_body={"item": fields},
-        state_deltas=[delta],
-    )
-
-
-async def handle_items_read(input_data: dict, state: dict) -> ResponseProposal:
-    """Read an item by ID."""
-    item_id = input_data["item_id"]
-    items = state.get("item", {})
-    item = items.get(item_id)
-
-    if item is None:
-        return ResponseProposal(
-            response_body={"error": "not_found", "description": f"Item {item_id} not found"},
-            state_deltas=[],
-            status_code=404,
-        )
-
-    return ResponseProposal(
-        response_body={"item": item},
-        state_deltas=[],
+        response_body=_notion_error(404, "object_not_found",
+                                     f"Could not find page with ID: {page_id}.")
     )
 ```
 
-### Step 5: Wire the Pack (`pack.py`)
+**Search handler** — fuzzy text match + filtering + cursor pagination:
 
 ```python
-"""My Service pack (Tier 1 — verified)."""
-from typing import ClassVar
-from volnix.core.context import ResponseProposal
-from volnix.core.types import ToolName
-from volnix.packs.base import ActionHandler, ServicePack
-from volnix.packs.verified.my_service.handlers import (
-    handle_items_create,
-    handle_items_read,
-)
-from volnix.packs.verified.my_service.schemas import (
-    ITEM_ENTITY_SCHEMA,
-    TOOL_DEFINITIONS,
-)
-from volnix.packs.verified.my_service.state_machines import ITEM_TRANSITIONS
+async def handle_search(input_data: dict, state: dict) -> ResponseProposal:
+    query = input_data.get("query", "").lower()
+    filter_obj = input_data.get("filter")
 
+    # Collect searchable items
+    items = list(state.get("pages", [])) + list(state.get("databases", []))
 
-class MyServicePack(ServicePack):
-    pack_name: ClassVar[str] = "my_service"
-    category: ClassVar[str] = "work_management"
+    # Filter by object type
+    if filter_obj and filter_obj.get("value"):
+        items = [i for i in items if i.get("object") == filter_obj["value"]]
+
+    # Text search — case-insensitive match on titles and properties
+    if query:
+        results = []
+        for item in items:
+            searchable = _extract_searchable_text(item).lower()
+            if query in searchable:
+                results.append(item)
+        items = results
+
+    # Cursor pagination
+    paginated, has_more, next_cursor = _paginate_cursor(items, input_data)
+    return ResponseProposal(response_body={
+        "object": "list",
+        "results": paginated,
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+    })
+```
+
+**Database query** — filter by property conditions:
+
+```python
+async def handle_databases_query(input_data: dict, state: dict) -> ResponseProposal:
+    database_id = input_data["database_id"]
+
+    # Verify database exists
+    db = None
+    for d in state.get("databases", []):
+        if d.get("id") == database_id:
+            db = d
+            break
+    if db is None:
+        return ResponseProposal(
+            response_body=_notion_error(404, "object_not_found",
+                                         f"Could not find database: {database_id}")
+        )
+
+    # Get pages in this database
+    pages = [p for p in state.get("pages", [])
+             if p.get("parent", {}).get("database_id") == database_id]
+
+    # Apply filter
+    filter_obj = input_data.get("filter")
+    if filter_obj:
+        pages = [p for p in pages if _match_filter(p, filter_obj)]
+
+    # Cursor pagination
+    paginated, has_more, next_cursor = _paginate_cursor(pages, input_data)
+    return ResponseProposal(response_body={
+        "object": "list",
+        "results": paginated,
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+        "type": "page_with_id",
+    })
+```
+
+See `volnix/packs/verified/notion/handlers.py` for the complete implementation of all 15 handlers including the filter evaluation logic.
+
+### Step 6: Wire the Pack (`pack.py`)
+
+```python
+class NotionPack(ServicePack):
+    pack_name: ClassVar[str] = "notion"
+    category: ClassVar[str] = "storage_documents"
     fidelity_tier: ClassVar[int] = 1
 
     _handlers: ClassVar[dict[str, ActionHandler]] = {
-        "items.create": handle_items_create,
-        "items.read": handle_items_read,
+        "pages.create": handle_pages_create,
+        "pages.retrieve": handle_pages_retrieve,
+        "pages.update": handle_pages_update,
+        "databases.create": handle_databases_create,
+        "databases.retrieve": handle_databases_retrieve,
+        "databases.query": handle_databases_query,
+        "blocks.children.list": handle_blocks_children_list,
+        "blocks.children.append": handle_blocks_children_append,
+        "blocks.retrieve": handle_blocks_retrieve,
+        "blocks.delete": handle_blocks_delete,
+        "users.list": handle_users_list,
+        "users.me": handle_users_me,
+        "search": handle_search,
+        "comments.create": handle_comments_create,
+        "comments.list": handle_comments_list,
     }
 
     def get_tools(self) -> list[dict]:
-        return list(TOOL_DEFINITIONS)
+        return list(NOTION_TOOL_DEFINITIONS)
 
     def get_entity_schemas(self) -> dict:
-        return {"item": ITEM_ENTITY_SCHEMA}
+        return {
+            "page": PAGE_ENTITY_SCHEMA,
+            "database": DATABASE_ENTITY_SCHEMA,
+            "block": BLOCK_ENTITY_SCHEMA,
+            "user": USER_ENTITY_SCHEMA,
+            "comment": COMMENT_ENTITY_SCHEMA,
+        }
 
     def get_state_machines(self) -> dict:
-        return {"item": {"transitions": ITEM_TRANSITIONS}}
+        return {
+            "page": {"field": "archived", "transitions": ARCHIVED_TRANSITIONS},
+            "database": {"field": "archived", "transitions": ARCHIVED_TRANSITIONS},
+            "block": {"field": "archived", "transitions": ARCHIVED_TRANSITIONS},
+        }
 
-    async def handle_action(self, action: ToolName, input_data: dict, state: dict) -> ResponseProposal:
+    async def handle_action(self, action, input_data, state) -> ResponseProposal:
         return await self.dispatch_action(action, input_data, state)
 ```
 
-### Step 6: Auto-Discovery
+### Step 7: Write Tests
+
+Create `tests/packs/verified/test_notion.py` following the pattern in `test_tickets.py`:
+
+```python
+@pytest.fixture
+def notion_pack():
+    return NotionPack()
+
+@pytest.fixture
+def sample_state():
+    """State with pre-existing pages, databases, blocks, users, comments."""
+    return {
+        "pages": [...],      # 3 pages (2 in db-001, 1 standalone)
+        "databases": [...],  # 2 databases with property schemas
+        "blocks": [...],     # 5 blocks (paragraph, heading, to_do)
+        "users": [...],      # 1 person + 1 bot
+        "comments": [...],   # 2 comments on page-001
+    }
+
+async def test_pages_create(notion_pack, sample_state):
+    result = await notion_pack.handle_action(
+        ToolName("pages.create"),
+        {"parent": {"database_id": "db-001"}, "properties": {"Name": {...}}},
+        sample_state,
+    )
+    assert result.response_body["object"] == "page"
+    assert len(result.proposed_state_deltas) == 1
+    assert result.proposed_state_deltas[0].operation == "create"
+```
+
+See `tests/packs/verified/test_notion.py` for the full 67-test suite.
+
+### Step 8: Auto-Discovery
 
 No registration code needed. Volnix auto-discovers packs at startup by scanning `volnix/packs/verified/*/pack.py` for `ServicePack` subclasses. Just create the directory and it works.
 
-### Step 7: Use in a World
+```bash
+# Verify your pack is discovered
+uv run volnix list services
+# Should show: notion (storage_documents, 15 tools, tier 1)
+```
+
+### Step 9: Use in a World
 
 ```yaml
 world:
   services:
-    my_service: verified/my_service
+    notion: verified/notion
+    slack: verified/slack
 ```
 
 ---
 
 ## Creating a Service Profile (Tier 2)
 
-If you don't need deterministic behavior, a YAML profile is simpler:
+If you don't need deterministic behavior, a YAML profile is simpler. The LLM generates responses at runtime constrained by the profile's schemas and rules.
+
+### When to Use a Profile vs a Pack
+
+| Use a Profile when... | Use a Pack when... |
+|----------------------|-------------------|
+| Prototyping quickly | You need reproducible results |
+| The service isn't performance-critical | The service is on a benchmark-grade path |
+| You want to test agent behavior, not service accuracy | You need exact API response formats |
+| The service has simple CRUD operations | The service has complex query/filter logic |
 
 ### Step 1: Create the YAML File
 
@@ -675,6 +925,18 @@ examples:
 
 Like packs, profiles are auto-discovered at startup. Just save the file and it works.
 
+### Or: Let the Compiler Bootstrap It
+
+If the service is in Context Hub, you don't even need to write the profile. Just reference it in your world YAML:
+
+```yaml
+world:
+  services:
+    hubspot: hubspot    # No pack, no profile — compiler bootstraps from Context Hub
+```
+
+The compiler will fetch docs, generate a profile via LLM, save it to disk, and register it. Next time, the cached profile is reused.
+
 ---
 
 ## Promoting Services
@@ -712,6 +974,10 @@ uv run volnix sync --service jira
 ```
 
 ---
+
+## Acknowledgments
+
+Service profile resolution uses [Context Hub](https://github.com/andrewyng/context-hub) by Andrew Ng — curated, versioned documentation for coding agents. Volnix uses Context Hub for dynamic API schema extraction, resolving service profiles directly from real documentation without LLM inference.
 
 ## Next Steps
 

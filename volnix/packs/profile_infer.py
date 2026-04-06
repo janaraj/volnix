@@ -213,9 +213,10 @@ class ProfileInferrer:
 
         if "context_hub" in sources:
             content = sources["context_hub"]
-            # Truncate to avoid token overflow — keep generous for rich docs
-            if len(content) > 8000:
-                content = content[:8000] + "\n... (truncated)"
+            # Send full documentation to the LLM — no truncation.
+            # The LLM extracts operations, entities, and field schemas
+            # from the real documentation. Token limits are handled by
+            # the LLM router's provider configuration.
             parts.append(f"## Context Hub API Documentation\n{content}")
 
         if "openapi" in sources:
@@ -498,5 +499,6 @@ Category: {category}
 
 {available_docs}
 
-Include realistic operations, entities, state machines, error modes, and a responder prompt.
-Base the operations on the real API if you know it."""
+Create a complete profile covering ALL operations documented above.
+For each operation include realistic parameters, response schemas, and entity references.
+If no documentation is provided, infer from the service category and general API knowledge."""

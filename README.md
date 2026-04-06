@@ -450,6 +450,10 @@ uv run mypy volnix/
 
 ---
 
+## Acknowledgments
+
+- [Context Hub](https://github.com/andrewyng/context-hub) by Andrew Ng — curated, versioned documentation for coding agents. Volnix uses Context Hub for dynamic API schema extraction during service profile resolution, fetching real documentation to build accurate service surfaces directly without LLM inference.
+
 ## License
 
 [MIT](LICENSE)

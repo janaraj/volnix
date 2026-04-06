@@ -1,0 +1,41 @@
+mission: >
+  Review the product backlog in Notion, prioritize feature requests,
+  triage bugs by severity, and produce a sprint planning summary
+  with recommended priorities and assignments.
+
+deliverable: synthesis
+
+agents:
+  - role: product-lead
+    lead: true
+    personality: >
+      Strategic product manager who delegates backlog review tasks,
+      validates prioritization decisions, and synthesizes sprint plans.
+    permissions:
+      read: [notion, slack]
+      write: [notion, slack]
+    budget:
+      api_calls: 50
+      spend_usd: 500
+
+  - role: engineer
+    personality: >
+      Senior engineer who assesses technical complexity, identifies
+      dependencies, and estimates effort for features and bug fixes.
+    permissions:
+      read: [notion, slack]
+      write: [notion, slack]
+    budget:
+      api_calls: 80
+      spend_usd: 500
+
+  - role: designer
+    personality: >
+      UX designer who evaluates feature requests from a user experience
+      perspective and flags usability issues in bug reports.
+    permissions:
+      read: [notion, slack]
+      write: [notion, slack]
+    budget:
+      api_calls: 60
+      spend_usd: 300

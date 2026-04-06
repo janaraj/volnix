@@ -60,6 +60,7 @@ class PackRuntime:
         action: str,
         input_data: dict[str, Any],
         state: dict[str, Any] | None = None,
+        service_id: str | None = None,
     ) -> ResponseProposal:
         """Execute an action through its pack with full validation.
 
@@ -77,8 +78,12 @@ class PackRuntime:
         """
         state = state or {}
 
-        # 1. Resolve pack (generic lookup -- no pack-specific logic)
-        pack = self._registry.get_pack_for_tool(action)
+        # 1. Resolve pack — prefer service_id (handles tool name collisions
+        # like "search" in both notion and reddit), fall back to tool name.
+        if service_id and self._registry.has_pack(service_id):
+            pack = self._registry.get_pack(service_id)
+        else:
+            pack = self._registry.get_pack_for_tool(action)
         entity_schemas = pack.get_entity_schemas()
         state_machines = pack.get_state_machines()
 

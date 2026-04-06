@@ -141,8 +141,22 @@ class AgencyEngine(BaseEngine):
             name = action.get("name", "")
             service = action.get("service", "")
             params = action.get("parameters", {})
-            properties = {**params.get("properties", {}), **meta_params}
+            raw_properties = {**params.get("properties", {}), **meta_params}
             required = list(params.get("required", [])) + ["reasoning"]
+
+            # Sanitize parameter schemas for provider compatibility.
+            # OpenAI requires "object" types to have "properties" and
+            # "array" types to have "items". Bootstrapped profiles may
+            # generate bare types without these.
+            properties: dict[str, Any] = {}
+            for pname, pdef in raw_properties.items():
+                if isinstance(pdef, dict):
+                    pdef = dict(pdef)
+                    if pdef.get("type") == "object" and "properties" not in pdef:
+                        pdef["properties"] = {}
+                    if pdef.get("type") == "array" and "items" not in pdef:
+                        pdef["items"] = {"type": "string"}
+                properties[pname] = pdef
 
             # Sanitize: OpenAI requires ^[a-zA-Z0-9_-]+$ — no dots allowed
             sanitized = name.replace(".", "_")

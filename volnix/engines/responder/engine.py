@@ -129,8 +129,15 @@ class WorldResponderEngine(BaseEngine):
         2. Tier 2 profile (LLM-constrained by profile)
         3. Error: no handler
         """
-        # Tier 1: check pack
-        if self._tier1.has_pack_for_tool(ctx.action):
+        # Tier 1: check pack — resolve by service_id first (handles tool name
+        # collisions like "search" in both notion and reddit), then by tool name.
+        has_pack = False
+        if ctx.service_id and self._pack_registry.has_pack(str(ctx.service_id)):
+            has_pack = True
+        elif self._tier1.has_pack_for_tool(ctx.action):
+            has_pack = True
+
+        if has_pack:
             state = await self._build_state_for_pack(ctx)
             proposal = await self._tier1.dispatch(ctx, state=state)
             ctx.response_proposal = proposal
@@ -233,7 +240,12 @@ class WorldResponderEngine(BaseEngine):
             return {}
 
         permission_engine = self._dependencies.get("permission")
-        pack = self._pack_registry.get_pack_for_tool(ctx.action)
+        # Resolve pack by service_id first (handles tool name collisions),
+        # then fall back to tool name lookup.
+        if ctx.service_id and self._pack_registry.has_pack(str(ctx.service_id)):
+            pack = self._pack_registry.get_pack(str(ctx.service_id))
+        else:
+            pack = self._pack_registry.get_pack_for_tool(ctx.action)
         entity_types = list(pack.get_entity_schemas().keys())
 
         result = {}

@@ -140,6 +140,12 @@ class LLMRouter:
             elif not response.content and not response.tool_calls:
                 is_retryable = True  # Empty response with no error = transient
 
+            if response.error and not is_retryable:
+                logger.warning(
+                    "LLM call failed (non-retryable): %s/%s — %s",
+                    engine_name, use_case, response.error,
+                )
+
             if not is_retryable or attempt >= max_retries:
                 break
 
