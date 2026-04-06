@@ -36,7 +36,45 @@ Internal agent teams go further. A 3-agent market analysis crew — economist, t
 | **Static** | Frozen after compilation. Only agents move. | Deterministic, reproducible benchmarks |
 | **Dynamic** | Lives on its own. NPCs create events, follow up, escalate, change their minds. | Testing how agents handle a world that doesn't wait |
 
-Everything the agent does flows through a **7-step governance pipeline** that enforces permissions, policies, and budgets. Everything is recorded in a causal graph. Everything is reproducible, diffable, and scorable.
+### The 7-Step Governance Pipeline
+
+Every action — from any agent, through any protocol — flows through this pipeline before it touches the world:
+
+```
+  ┌──────────┐   ┌────────┐   ┌────────┐   ┌────────────┐   ┌───────────┐   ┌────────────┐   ┌────────┐
+  │Permission│──▶│ Policy │──▶│ Budget │──▶│ Capability │──▶│ Responder │──▶│ Validation │──▶│ Commit │
+  └──────────┘   └────────┘   └────────┘   └────────────┘   └───────────┘   └────────────┘   └────────┘
+   Can this       Does a       Is there     Does this       Generate the    Is the result    Apply state
+   actor do       policy       budget       tool exist?     service         consistent?      changes and
+   this?          block it?    remaining?                   response                         record event
+```
+
+Each step can halt the action. A refund that exceeds the agent's authority is held for supervisor approval. An API call that exceeds the budget is denied. A response that violates state consistency is rejected. Every decision is recorded in the causal graph and visible in the dashboard.
+
+### How It Works
+
+```
+┌─────────────────────────────────┐      ┌──────────────────────────────────┐
+│        YOUR AGENTS              │      │           VOLNIX                 │
+│                                 │      │                                  │
+│  CrewAI / LangGraph / PydanticAI│─MCP─▶│  Gateway                        │
+│  OpenAI SDK / Anthropic SDK     │─REST─▶│    │                            │
+│  Claude Desktop / Cursor        │─MCP─▶│    ▼                            │
+│  Custom HTTP client             │─HTTP─▶│  7-Step Pipeline                │
+│                                 │      │    │                            │
+│  Internal Agent Teams           │      │    ▼                            │
+│  (autonomous, LLM-powered)      │◀────▶│  Simulated Services             │
+│                                 │      │  (Stripe, Zendesk, Slack, ...)  │
+└─────────────────────────────────┘      │    │                            │
+                                         │    ▼                            │
+                                         │  World State + Causal Graph     │
+                                         │  Scorecards + Event Log         │
+                                         └──────────────────────────────────┘
+```
+
+**External agents** connect via any protocol and interact with the world as if it were real services. They don't know they're in a simulation. The pipeline enforces governance on every action.
+
+**Internal agent teams** are LLM-powered actors that live inside the world. They collaborate through world channels (Slack, email), follow a lead-delegate workflow, and produce deliverables (predictions, decisions, syntheses). The world is their workspace — compiled from YAML, populated with realistic data, and optionally alive with NPCs in dynamic mode.
 
 ### What Volnix is not
 
@@ -88,12 +126,15 @@ export ANTHROPIC_API_KEY=sk-ant-...  # optional
 volnix check
 ```
 
-### Dashboard (optional)
+### Dashboard (optional — requires source install)
+
+The React dashboard is not included in the pip package. Clone the repo to use it:
 
 ```bash
-cd volnix-dashboard
+git clone https://github.com/janaraj/volnix.git
+cd volnix/volnix-dashboard
 npm install && npm run dev
-# Open http://localhost:3000
+# Open http://localhost:3000 — connects to any running Volnix server
 ```
 
 ### Run with Internal Agents (autonomous multi-agent simulation)
@@ -536,6 +577,7 @@ internal_docs/    # Specifications and architecture documents
 | [Service Packs & Profiles](docs/service-packs.md) | Verified packs, YAML profiles, fidelity tiers, custom services |
 | [Configuration](docs/configuration.md) | TOML config system, LLM providers, tuning |
 | [Architecture](docs/architecture.md) | Two-half model, 10 engines, governance pipeline |
+| [Vision](docs/volnix-vision.md) | Where Volnix is heading — world memory, generative worlds, visual reality |
 | [Design Principles](DESIGN_PRINCIPLES.md) | Architectural rules and patterns |
 | [Contributing](CONTRIBUTING.md) | Development setup, code standards, PR process |
 
@@ -562,6 +604,25 @@ uv run ruff format --check volnix/ tests/
 # Type check
 uv run mypy volnix/
 ```
+
+---
+
+## Vision
+
+Volnix today creates worlds that are believable at the API level — realistic data, consistent state, cascading consequences, actors with personalities. This is Stage 1.
+
+Where it's heading:
+
+| Stage | What changes |
+|-------|-------------|
+| **World Memory** | Actors remember past interactions across runs. The customer who was angry last simulation remembers being angry. Persistent worlds that evolve. |
+| **Deep Cross-Service Consistency** | A company announces layoffs → employee morale drops → Slack messages become cautious → some employees start job searching → spending patterns change. One event creates coherent ripples across every service. |
+| **Generative Worlds** | You don't define what happens — you define initial conditions and the world writes its own story. "50-person startup, Series A, one toxic executive." Press play. Six months unfold. |
+| **Visual Reality** | The world isn't just APIs and reports. A 3D trading floor with characters at desks. A startup office where you watch the designer working late. Opinion clusters forming in a town square as misinformation spreads. |
+
+The primitive isn't "agent." The primitive is **world** — a reality with services, actors, events, policies, and information physics. What you do with that world is up to you: agent testing, behavioral research, outcome prediction, collaborative intelligence, synthetic data generation, or automated agent evolution.
+
+Read the full vision: [docs/volnix-vision.md](docs/volnix-vision.md)
 
 ---
 
