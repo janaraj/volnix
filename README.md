@@ -535,8 +535,8 @@ Volnix supports any OpenAI SDK-compatible provider, plus native Gemini, Anthropi
 | `google` | Gemini (native) | `GOOGLE_API_KEY` |
 | `anthropic` | Claude (native) | `ANTHROPIC_API_KEY` |
 | `openai_compatible` | OpenAI, Gemini-via-OpenAI, Ollama, vLLM, Together, Groq | `*_API_KEY` or none |
-| `cli` | `claude`, `codex`, `gemini` CLI tools | Local auth |
-| `acp` | `codex-acp`, `claude-agent-acp` | Local auth |
+| `cli` | `claude`, `codex`, `gemini` CLI tools | Provider-managed |
+| `acp` | `codex-acp`, `claude-agent-acp` | Provider-managed |
 
 See [docs/llm-providers.md](docs/llm-providers.md) for the full provider guide, tested models, and how to add custom providers.
 

@@ -39,7 +39,7 @@ timeout_seconds = 300
 
 ### CLI Providers
 
-Use locally installed CLI tools that handle their own authentication. No API key needed.
+Use locally installed CLI tools. Authentication is managed by each tool.
 
 ```toml
 [llm.providers.claude_cli]
@@ -61,7 +61,7 @@ args = []
 
 ### ACP Providers (Agent Communication Protocol)
 
-Bidirectional JSON-RPC over stdio. These providers support multi-turn tool calling natively and are the default for agent reasoning.
+Bidirectional JSON-RPC over stdio. These providers support multi-turn tool calling natively. Authentication is managed by each provider.
 
 ```toml
 [llm.providers.codex_acp]
