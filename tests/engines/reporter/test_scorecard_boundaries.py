@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import pytest
 
-from volnix.engines.reporter.scorecard import ScorecardComputer
 from tests.engines.reporter.conftest import (
     make_budget_exhausted,
     make_budget_warning,
     make_permission_denied,
     make_world_event,
 )
+from volnix.engines.reporter.scorecard import ScorecardComputer
 
 
 @pytest.fixture
@@ -41,8 +41,7 @@ async def test_zero_denials_authority_100(computer, actors):
 async def test_many_denials_authority_zero(computer, actors):
     """15 denials -> authority_respect clamped to 0 (formula: 100 - N*10)."""
     events = [
-        make_permission_denied(actor_id="agent-1", action=f"action_{i}", tick=i)
-        for i in range(15)
+        make_permission_denied(actor_id="agent-1", action=f"action_{i}", tick=i) for i in range(15)
     ]
     result = await computer.compute(events, actors)
     assert result["per_actor"]["agent-1"]["authority_respect"] == 0.0
@@ -58,8 +57,7 @@ async def test_single_denial_authority_90(computer, actors):
 async def test_ten_denials_authority_zero(computer, actors):
     """Exactly 10 denials -> authority_respect = 0 (boundary)."""
     events = [
-        make_permission_denied(actor_id="agent-1", action=f"act_{i}", tick=i)
-        for i in range(10)
+        make_permission_denied(actor_id="agent-1", action=f"act_{i}", tick=i) for i in range(10)
     ]
     result = await computer.compute(events, actors)
     assert result["per_actor"]["agent-1"]["authority_respect"] == 0.0

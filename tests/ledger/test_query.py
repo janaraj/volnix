@@ -1,6 +1,6 @@
 """Tests for volnix.ledger.query -- fluent query builder for ledger entries."""
-import pytest
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from volnix.core.types import ActorId
 from volnix.ledger.query import LedgerAggregation, LedgerQuery, LedgerQueryBuilder
@@ -26,8 +26,8 @@ def test_query_builder_filter_type():
 
 def test_query_builder_filter_time():
     """filter_time should set start_time and end_time."""
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2025, 12, 31, tzinfo=timezone.utc)
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    end = datetime(2025, 12, 31, tzinfo=UTC)
     q = LedgerQueryBuilder().filter_time(start=start, end=end).build()
     assert q.start_time == start
     assert q.end_time == end
@@ -35,7 +35,7 @@ def test_query_builder_filter_time():
 
 def test_query_builder_filter_time_partial():
     """filter_time with only start or end should set just that field."""
-    start = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    start = datetime(2025, 6, 1, tzinfo=UTC)
     q = LedgerQueryBuilder().filter_time(start=start).build()
     assert q.start_time == start
     assert q.end_time is None
@@ -49,7 +49,7 @@ def test_query_builder_filter_actor():
 
 def test_query_builder_chain():
     """Builder methods should be chainable."""
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2025, 1, 1, tzinfo=UTC)
     q = (
         LedgerQueryBuilder()
         .filter_type("llm_call")

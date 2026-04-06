@@ -5,6 +5,7 @@ Any source of API specifications implements this protocol:
 - OpenAPIProvider (parse spec files/URLs)
 - Future: MCP manifest provider, etc.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
@@ -13,6 +14,7 @@ from typing import Any, Protocol, runtime_checkable
 @runtime_checkable
 class ExternalSpecProvider(Protocol):
     """Protocol for external API spec sources."""
+
     provider_name: str
 
     async def is_available(self) -> bool:

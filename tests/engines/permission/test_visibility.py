@@ -13,7 +13,6 @@ import pytest
 
 from volnix.core.types import ActorId, EntityId
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -52,10 +51,7 @@ def _make_permission_engine(
     async def mock_query(entity_type: str, filters: dict | None = None):
         data = all_data.get(entity_type, [])
         if filters:
-            return [
-                e for e in data
-                if all(e.get(k) == v for k, v in filters.items())
-            ]
+            return [e for e in data if all(e.get(k) == v for k, v in filters.items())]
         return data
 
     state_engine.query_entities = mock_query
@@ -123,8 +119,8 @@ class TestGetVisibleEntities:
             {"id": "t1", "assignee_id": "agent-1"},
             {"id": "t2", "assignee_id": "agent-2"},
             {"id": "t3", "assignee_id": "agent-1"},
-            {"id": "t4", "assignee_id": None},       # unassigned
-            {"id": "t5", "assignee_id": ""},          # unassigned
+            {"id": "t4", "assignee_id": None},  # unassigned
+            {"id": "t5", "assignee_id": ""},  # unassigned
         ]
         engine = _make_permission_engine(
             actor_role="agent",
@@ -148,7 +144,11 @@ class TestGetVisibleEntities:
             },
         ]
         tickets = [
-            {"id": "t1"}, {"id": "t2"}, {"id": "t3"}, {"id": "t4"}, {"id": "t5"},
+            {"id": "t1"},
+            {"id": "t2"},
+            {"id": "t3"},
+            {"id": "t4"},
+            {"id": "t5"},
         ]
         engine = _make_permission_engine(
             actor_role="supervisor",
@@ -233,7 +233,6 @@ class TestGetVisibleEntities:
 
 
 class TestHasVisibilityRules:
-
     @pytest.mark.asyncio
     async def test_no_rules_returns_false(self):
         engine = _make_permission_engine(visibility_rules=[])
@@ -249,7 +248,8 @@ class TestHasVisibilityRules:
             },
         ]
         engine = _make_permission_engine(
-            actor_role="customer", visibility_rules=rules,
+            actor_role="customer",
+            visibility_rules=rules,
         )
         assert await engine.has_visibility_rules(ActorId("c1"), "ticket") is True
 
@@ -263,7 +263,8 @@ class TestHasVisibilityRules:
             },
         ]
         engine = _make_permission_engine(
-            actor_role="customer", visibility_rules=rules,
+            actor_role="customer",
+            visibility_rules=rules,
         )
         assert await engine.has_visibility_rules(ActorId("c1"), "ticket") is False
 
@@ -278,19 +279,24 @@ class TestVisibilityHarness:
 
     def test_protocol_defines_both_methods(self):
         from volnix.core.protocols import PermissionEngineProtocol
+
         assert hasattr(PermissionEngineProtocol, "get_visible_entities")
         assert hasattr(PermissionEngineProtocol, "has_visibility_rules")
 
     def test_permission_engine_implements_both(self):
         from volnix.engines.permission.engine import PermissionEngine
+
         assert hasattr(PermissionEngine, "get_visible_entities")
         assert hasattr(PermissionEngine, "has_visibility_rules")
         assert hasattr(PermissionEngine, "_resolve_self_ref")
 
     def test_visibility_rule_type_exists(self):
         from volnix.core.types import VisibilityRule
+
         rule = VisibilityRule(
-            id="test", actor_role="test", target_entity_type="test",
+            id="test",
+            actor_role="test",
+            target_entity_type="test",
         )
         assert rule.id == "test"
         assert rule.filter_field is None
@@ -298,13 +304,17 @@ class TestVisibilityHarness:
 
     def test_config_has_visibility_rule_entity_type(self):
         from volnix.engines.permission.config import PermissionConfig
+
         config = PermissionConfig()
         assert config.visibility_rule_entity_type == "visibility_rule"
 
     def test_visibility_rule_is_frozen(self):
         from volnix.core.types import VisibilityRule
+
         rule = VisibilityRule(
-            id="test", actor_role="test", target_entity_type="test",
+            id="test",
+            actor_role="test",
+            target_entity_type="test",
         )
         with pytest.raises(Exception):
             rule.id = "changed"

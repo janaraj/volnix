@@ -1,5 +1,7 @@
 """Tests for volnix.config.validation — cross-section config validation."""
+
 import pytest
+
 from volnix.config.schema import VolnixConfig
 from volnix.config.validation import ConfigValidator
 
@@ -23,9 +25,9 @@ def test_validate_pipeline_steps_valid(validator, default_config):
 
 def test_validate_pipeline_steps_invalid(validator):
     """Pipeline steps referencing missing engines produce errors."""
-    config = VolnixConfig.model_validate({
-        "pipeline": {"steps": ["permission", "nonexistent_step"]}
-    })
+    config = VolnixConfig.model_validate(
+        {"pipeline": {"steps": ["permission", "nonexistent_step"]}}
+    )
     engines = ["permission", "policy", "budget"]
     errors = validator.validate_pipeline_steps(config, engines)
     assert len(errors) == 1
@@ -34,24 +36,28 @@ def test_validate_pipeline_steps_invalid(validator):
 
 def test_validate_llm_routing_valid(validator):
     """Valid LLM routing with matching providers produces no errors."""
-    config = VolnixConfig.model_validate({
-        "llm": {
-            "providers": {"anthropic": {"type": "anthropic"}},
-            "routing": {"world_compiler": {"provider": "anthropic", "model": "claude"}},
+    config = VolnixConfig.model_validate(
+        {
+            "llm": {
+                "providers": {"anthropic": {"type": "anthropic"}},
+                "routing": {"world_compiler": {"provider": "anthropic", "model": "claude"}},
+            }
         }
-    })
+    )
     errors = validator.validate_llm_routing(config)
     assert errors == []
 
 
 def test_validate_llm_routing_invalid(validator):
     """LLM routing referencing unknown provider produces errors."""
-    config = VolnixConfig.model_validate({
-        "llm": {
-            "providers": {"anthropic": {"type": "anthropic"}},
-            "routing": {"world_compiler": {"provider": "nonexistent", "model": "m"}},
+    config = VolnixConfig.model_validate(
+        {
+            "llm": {
+                "providers": {"anthropic": {"type": "anthropic"}},
+                "routing": {"world_compiler": {"provider": "nonexistent", "model": "m"}},
+            }
         }
-    })
+    )
     errors = validator.validate_llm_routing(config)
     assert len(errors) == 1
     assert "nonexistent" in errors[0]
@@ -71,18 +77,14 @@ def test_validate_all(validator, default_config):
 
 def test_validate_reality_preset_invalid(validator):
     """Invalid reality preset produces an error."""
-    config = VolnixConfig.model_validate({
-        "simulation": {"reality": {"preset": "fantasy"}}
-    })
+    config = VolnixConfig.model_validate({"simulation": {"reality": {"preset": "fantasy"}}})
     errors = validator.validate_cross_references(config)
     assert any("fantasy" in e for e in errors)
 
 
 def test_validate_simulation_mode_invalid(validator):
     """Invalid simulation mode produces an error."""
-    config = VolnixConfig.model_validate({
-        "simulation": {"mode": "chaos"}
-    })
+    config = VolnixConfig.model_validate({"simulation": {"mode": "chaos"}})
     errors = validator.validate_cross_references(config)
     assert any("chaos" in e for e in errors)
 

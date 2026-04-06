@@ -15,9 +15,7 @@ world:
 
   policies:
     - name: "Archive approval"
-      trigger:
-        action: "pages.update"
-        condition: "input.archived == true"
+      trigger: "archiving a database or more than 5 pages at once"
       enforcement: hold
 
   seeds:

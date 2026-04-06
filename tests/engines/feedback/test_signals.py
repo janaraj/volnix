@@ -1,4 +1,5 @@
 """Tests for Signal Framework -- local signal aggregation."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -17,7 +18,8 @@ def _make_context(
 ) -> SignalContext:
     """Create a SignalContext with test data."""
     return SignalContext(
-        runs=runs or [
+        runs=runs
+        or [
             {
                 "run_id": "run-001",
                 "world_def": {
@@ -40,7 +42,8 @@ def _make_context(
                 },
             },
         ],
-        event_logs=event_logs or {
+        event_logs=event_logs
+        or {
             "run-001": [
                 {"event_type": "world.twilio_send", "service_id": "twilio"},
                 {"event_type": "world.email_send", "service_id": "gmail"},
@@ -117,9 +120,11 @@ async def test_template_insight_signal():
 async def test_aggregator_runs_all_collectors():
     """SignalAggregator runs all registered collectors."""
     run_manager = AsyncMock()
-    run_manager.list_runs = AsyncMock(return_value=[
-        {"run_id": "r1", "world_def": {"name": "Test", "services": {"email": "x"}}},
-    ])
+    run_manager.list_runs = AsyncMock(
+        return_value=[
+            {"run_id": "r1", "world_def": {"name": "Test", "services": {"email": "x"}}},
+        ]
+    )
 
     artifact_store = AsyncMock()
     artifact_store.load_artifact = AsyncMock(return_value=[])
@@ -152,9 +157,7 @@ async def test_aggregator_filters_by_enabled_signals():
         profile_registry=None,
     )
 
-    signals = await aggregator.compute(
-        enabled_signals=["service_usage"]
-    )
+    signals = await aggregator.compute(enabled_signals=["service_usage"])
 
     assert "service_usage" in signals.signals
     assert "capability_gaps" not in signals.signals

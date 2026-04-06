@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import shutil
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,8 +16,7 @@ from volnix.llm.providers.acp_client import (
     _is_request,
     _is_response,
 )
-from volnix.llm.types import LLMRequest, LLMUsage
-
+from volnix.llm.types import LLMRequest
 
 # ---------------------------------------------------------------------------
 # Unit tests: construction and metadata
@@ -211,39 +209,43 @@ async def test_generate_in_session_unknown():
 def test_handle_session_update_direct_text():
     provider = ACPClientProvider(command="test")
     provider._collected_text = []
-    provider._handle_notification({
-        "jsonrpc": "2.0",
-        "method": "session/update",
-        "params": {
-            "sessionId": "sess_1",
-            "update": {
-                "sessionUpdate": "text",
-                "text": "Hello world",
+    provider._handle_notification(
+        {
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "sess_1",
+                "update": {
+                    "sessionUpdate": "text",
+                    "text": "Hello world",
+                },
             },
-        },
-    })
+        }
+    )
     assert "Hello world" in provider._collected_text
 
 
 def test_handle_session_update_message_parts():
     provider = ACPClientProvider(command="test")
     provider._collected_text = []
-    provider._handle_notification({
-        "jsonrpc": "2.0",
-        "method": "session/update",
-        "params": {
-            "sessionId": "sess_1",
-            "update": {"sessionUpdate": "message"},
-            "messages": [
-                {
-                    "parts": [
-                        {"text": "Part 1"},
-                        {"text": "Part 2"},
-                    ]
-                }
-            ],
-        },
-    })
+    provider._handle_notification(
+        {
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "sess_1",
+                "update": {"sessionUpdate": "message"},
+                "messages": [
+                    {
+                        "parts": [
+                            {"text": "Part 1"},
+                            {"text": "Part 2"},
+                        ]
+                    }
+                ],
+            },
+        }
+    )
     assert "Part 1" in provider._collected_text
     assert "Part 2" in provider._collected_text
 
@@ -251,17 +253,19 @@ def test_handle_session_update_message_parts():
 def test_handle_session_update_content_list():
     provider = ACPClientProvider(command="test")
     provider._collected_text = []
-    provider._handle_notification({
-        "jsonrpc": "2.0",
-        "method": "session/update",
-        "params": {
-            "sessionId": "sess_1",
-            "update": {
-                "sessionUpdate": "content",
-                "content": [{"text": "Inside content"}],
+    provider._handle_notification(
+        {
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "sess_1",
+                "update": {
+                    "sessionUpdate": "content",
+                    "content": [{"text": "Inside content"}],
+                },
             },
-        },
-    })
+        }
+    )
     assert "Inside content" in provider._collected_text
 
 
@@ -279,15 +283,18 @@ async def test_handle_permission_request():
     provider._stdin.write = MagicMock()
     provider._stdin.drain = AsyncMock()
 
-    await provider._handle_permission_request(99, {
-        "sessionId": "sess_1",
-        "toolCall": {"toolCallId": "tc_1"},
-        "options": [
-            {"optionId": "deny_all", "name": "Deny", "kind": "deny"},
-            {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
-            {"optionId": "allow_all", "name": "Allow all", "kind": "allow_always"},
-        ],
-    })
+    await provider._handle_permission_request(
+        99,
+        {
+            "sessionId": "sess_1",
+            "toolCall": {"toolCallId": "tc_1"},
+            "options": [
+                {"optionId": "deny_all", "name": "Deny", "kind": "deny"},
+                {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+                {"optionId": "allow_all", "name": "Allow all", "kind": "allow_always"},
+            ],
+        },
+    )
 
     # Verify a response was written to stdin
     assert provider._stdin.write.called
@@ -306,13 +313,16 @@ async def test_handle_permission_fallback_to_first():
     provider._stdin.write = MagicMock()
     provider._stdin.drain = AsyncMock()
 
-    await provider._handle_permission_request(50, {
-        "sessionId": "sess_1",
-        "toolCall": {"toolCallId": "tc_2"},
-        "options": [
-            {"optionId": "first_opt", "name": "First", "kind": "other"},
-        ],
-    })
+    await provider._handle_permission_request(
+        50,
+        {
+            "sessionId": "sess_1",
+            "toolCall": {"toolCallId": "tc_2"},
+            "options": [
+                {"optionId": "first_opt", "name": "First", "kind": "other"},
+            ],
+        },
+    )
 
     written = provider._stdin.write.call_args[0][0].decode()
     msg = json.loads(written)
@@ -372,11 +382,14 @@ async def test_handle_fs_read_partial(tmp_path):
     provider._stdin.drain = AsyncMock()
 
     # Read lines 2-3 (line=2, limit=2)
-    await provider._handle_fs_read(44, {
-        "path": str(test_file),
-        "line": 2,
-        "limit": 2,
-    })
+    await provider._handle_fs_read(
+        44,
+        {
+            "path": str(test_file),
+            "line": 2,
+            "limit": 2,
+        },
+    )
 
     written = provider._stdin.write.call_args[0][0].decode()
     msg = json.loads(written)
@@ -398,10 +411,13 @@ async def test_handle_fs_write(tmp_path):
     provider._stdin.write = MagicMock()
     provider._stdin.drain = AsyncMock()
 
-    await provider._handle_fs_write(45, {
-        "path": str(target),
-        "content": "Written by ACP",
-    })
+    await provider._handle_fs_write(
+        45,
+        {
+            "path": str(target),
+            "content": "Written by ACP",
+        },
+    )
 
     assert target.read_text() == "Written by ACP"
     written = provider._stdin.write.call_args[0][0].decode()
@@ -430,6 +446,7 @@ async def test_close_no_process():
 def test_no_httpx_import():
     """ACP provider does not import httpx directly."""
     import inspect
+
     import volnix.llm.providers.acp_client as mod
 
     source = inspect.getsource(mod)
@@ -439,6 +456,7 @@ def test_no_httpx_import():
 def test_no_acp_sdk_import():
     """ACP provider does not import acp_sdk (uses raw stdio JSON-RPC)."""
     import inspect
+
     import volnix.llm.providers.acp_client as mod
 
     source = inspect.getsource(mod)
@@ -455,7 +473,9 @@ def _has_command(cmd: str) -> bool:
 
 
 RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in (
-    "1", "true", "yes",
+    "1",
+    "true",
+    "yes",
 )
 
 HAS_CODEX_ACP = _has_command("codex-acp")
@@ -520,7 +540,9 @@ async def test_real_codex_acp_multi_turn():
 
         resp2 = await provider.generate_in_session(
             session_id,
-            LLMRequest(user_content="What number did I ask you to remember? Reply with just the number."),
+            LLMRequest(
+                user_content="What number did I ask you to remember? Reply with just the number."
+            ),
         )
         assert resp2.error is None, f"Turn 2 error: {resp2.error}"
 

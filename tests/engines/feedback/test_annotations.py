@@ -1,4 +1,5 @@
 """Tests for AnnotationStore -- per-service behavioral annotations."""
+
 from __future__ import annotations
 
 
@@ -48,9 +49,7 @@ async def test_count_by_service(annotation_store):
 
 async def test_add_with_tag(annotation_store):
     """Annotations can have optional tags."""
-    await annotation_store.add(
-        "stripe", "Webhook issue", "system", tag="capability_gap"
-    )
+    await annotation_store.add("stripe", "Webhook issue", "system", tag="capability_gap")
 
     results = await annotation_store.get_by_service("stripe")
     assert len(results) == 1

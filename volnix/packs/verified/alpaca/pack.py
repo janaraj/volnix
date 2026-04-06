@@ -40,11 +40,11 @@ from volnix.packs.verified.alpaca.handlers import (
     handle_list_assets,
     handle_list_orders,
     handle_list_positions,
-    handle_update_quote,
     handle_social_get_feed,
     handle_social_get_sentiment,
     handle_social_get_trending,
     handle_social_update_sentiment,
+    handle_update_quote,
 )
 from volnix.packs.verified.alpaca.schemas import (
     ACCOUNT_ENTITY_SCHEMA,

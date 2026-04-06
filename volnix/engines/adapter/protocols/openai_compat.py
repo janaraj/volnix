@@ -57,13 +57,17 @@ class OpenAICompatAdapter(ProtocolAdapter):
         """No-op — routes live on the shared FastAPI app."""
 
     async def translate_inbound(
-        self, tool_name: ToolName, raw_input: dict[str, Any],
+        self,
+        tool_name: ToolName,
+        raw_input: dict[str, Any],
     ) -> dict[str, Any]:
         """OpenAI sends function arguments directly — pass through."""
         return raw_input
 
     async def translate_outbound(
-        self, tool_name: ToolName, internal_response: dict[str, Any],
+        self,
+        tool_name: ToolName,
+        internal_response: dict[str, Any],
     ) -> dict[str, Any]:
         """Wrap response in OpenAI tool result format."""
         is_error = isinstance(internal_response, dict) and "error" in internal_response
@@ -91,7 +95,8 @@ class OpenAICompatAdapter(ProtocolAdapter):
         ):
             """List tools in OpenAI function calling format."""
             tools = await gateway.get_tool_manifest(
-                actor_id=actor_id, protocol="openai",
+                actor_id=actor_id,
+                protocol="openai",
             )
             # Sanitize tool names: OpenAI requires ^[a-zA-Z0-9_-]+$
             # Build reverse map so /tools/call can restore original names
@@ -144,7 +149,10 @@ class OpenAICompatAdapter(ProtocolAdapter):
 
             # Resolve actor identity (same pattern as HTTP REST)
             actor_id = resolve_actor_id(
-                request, body, default="openai-agent", gateway=gateway,
+                request,
+                body,
+                default="openai-agent",
+                gateway=gateway,
             )
             if actor_id is None:
                 return JSONResponse(

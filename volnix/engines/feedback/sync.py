@@ -3,6 +3,7 @@
 Ties together :class:`DriftDetector` and :class:`ProfileUpdateProposer`
 to provide a single interface for checking and updating profiles.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,16 +32,14 @@ class ExternalSyncChecker:
         drift_detector: DriftDetector,
         proposer: ProfileUpdateProposer,
         profile_registry: Any,  # ProfileRegistry
-        profile_loader: Any,    # ProfileLoader
+        profile_loader: Any,  # ProfileLoader
     ) -> None:
         self._detector = drift_detector
         self._proposer = proposer
         self._registry = profile_registry
         self._loader = profile_loader
 
-    async def check_drift(
-        self, service_name: str
-    ) -> list[DriftReport]:
+    async def check_drift(self, service_name: str) -> list[DriftReport]:
         """Check a single service for drift against all sources.
 
         Returns list of DriftReports (empty if no drift).
@@ -55,9 +54,7 @@ class ExternalSyncChecker:
 
         return await self._detector.check(profile)
 
-    async def check_all(
-        self, max_concurrent: int = 5
-    ) -> list[DriftReport]:
+    async def check_all(self, max_concurrent: int = 5) -> list[DriftReport]:
         """Check ALL profiled services for drift.
 
         Returns combined list of all drift reports found.
@@ -86,9 +83,7 @@ class ExternalSyncChecker:
 
         return all_reports
 
-    async def propose_update(
-        self, service_name: str
-    ) -> ProfileUpdateProposal | None:
+    async def propose_update(self, service_name: str) -> ProfileUpdateProposal | None:
         """Check drift + propose update for a service.
 
         Returns None if no drift detected.
@@ -105,9 +100,7 @@ class ExternalSyncChecker:
         # Use the report with the most changes as primary
         primary = max(
             reports,
-            key=lambda r: (
-                len(r.operations_added) + len(r.operations_removed)
-            ),
+            key=lambda r: len(r.operations_added) + len(r.operations_removed),
         )
         return await self._proposer.propose(profile, primary)
 

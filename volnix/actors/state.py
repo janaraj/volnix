@@ -112,7 +112,9 @@ class ActorState(BaseModel):
     actor_id: ActorId
     role: str
     actor_type: str = "internal"  # "external" | "internal" | "observer"
-    autonomous: bool = False  # Autonomous agents work in a loop; reactive actors respond when triggered
+    autonomous: bool = (
+        False  # Autonomous agents work in a loop; reactive actors respond when triggered
+    )
 
     # Identity (generated at compile time, immutable during run)
     persona: dict[str, Any] = Field(default_factory=dict)
@@ -147,7 +149,9 @@ class ActorState(BaseModel):
     is_lead: bool = False
     batch_notification_count: int = 0
     batch_threshold: int = 3
-    activation_messages: list[dict[str, Any]] = Field(default_factory=list)  # Persisted multi-turn conversation
+    activation_messages: list[dict[str, Any]] = Field(
+        default_factory=list
+    )  # Persisted multi-turn conversation
 
     # Configuration
     max_recent_interactions: int = 20

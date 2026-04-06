@@ -1,4 +1,5 @@
 """Tests for ServiceCapture -- extract behavioral fingerprint from runs."""
+
 from __future__ import annotations
 
 from volnix.engines.feedback.capture import ServiceCapture

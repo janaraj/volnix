@@ -1,5 +1,7 @@
 """Tests for volnix.persistence.database — abstract database interface."""
+
 import pytest
+
 from volnix.persistence.database import Database
 
 

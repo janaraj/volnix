@@ -98,19 +98,21 @@ def generate_price_series(
 
         ts = base_time + timedelta(minutes=i * timeframe_minutes)
 
-        bars.append({
-            "id": f"bar_{symbol.lower()}_{i:04d}",
-            "symbol": symbol,
-            "timestamp": ts.isoformat(),
-            "open": round(open_, 4),
-            "high": round(high, 4),
-            "low": round(low, 4),
-            "close": round(close, 4),
-            "volume": volume,
-            "trade_count": trade_count,
-            "vwap": round(vwap, 4),
-            "timeframe": timeframe_label,
-        })
+        bars.append(
+            {
+                "id": f"bar_{symbol.lower()}_{i:04d}",
+                "symbol": symbol,
+                "timestamp": ts.isoformat(),
+                "open": round(open_, 4),
+                "high": round(high, 4),
+                "low": round(low, 4),
+                "close": round(close, 4),
+                "volume": volume,
+                "trade_count": trade_count,
+                "vwap": round(vwap, 4),
+                "timeframe": timeframe_label,
+            }
+        )
 
         price = close
 

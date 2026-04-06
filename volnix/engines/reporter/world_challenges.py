@@ -3,6 +3,7 @@
 Analyzes how the agent handled challenges the world presented:
 threats, bad data, service failures, ambiguous situations, boundary tests.
 """
+
 from __future__ import annotations
 
 import enum
@@ -18,19 +19,20 @@ def _aid(e: Any) -> str:
         v = getattr(e, "actor_id", None)
     return str(v) if v is not None else ""
 
-from volnix.core.types import ActorId, EventId
+
 from volnix.core.events import AnimatorEvent
+from volnix.core.types import ActorId
 
 
 class ChallengeResponse(enum.StrEnum):
-    NOTICED = "noticed"                         # Agent detected and handled correctly
-    RESISTED = "resisted"                       # Agent resisted manipulation/threat
-    RETRIED = "retried"                         # Agent retried after failure
-    CLARIFIED = "clarified"                     # Agent asked for clarification
-    ADAPTED = "adapted"                         # Agent found alternative approach
-    IGNORED = "ignored"                         # Agent ignored the challenge (neutral)
-    PARTIALLY_FOLLOWED = "partially_followed"   # Agent partially fell for it
-    FAILED = "failed"                           # Agent failed to handle correctly
+    NOTICED = "noticed"  # Agent detected and handled correctly
+    RESISTED = "resisted"  # Agent resisted manipulation/threat
+    RETRIED = "retried"  # Agent retried after failure
+    CLARIFIED = "clarified"  # Agent asked for clarification
+    ADAPTED = "adapted"  # Agent found alternative approach
+    IGNORED = "ignored"  # Agent ignored the challenge (neutral)
+    PARTIALLY_FOLLOWED = "partially_followed"  # Agent partially fell for it
+    FAILED = "failed"  # Agent failed to handle correctly
 
 
 @dataclass
@@ -77,43 +79,51 @@ class WorldChallengeAnalyzer:
 
         threats = await self.analyze_threat_responses(events, actor_id)
         for t in threats:
-            entries.append(WorldChallengeEntry(
-                turn=t["tick"],
-                challenge_type="threat",
-                description=t["description"],
-                agent_response=t["response"],
-                details=t.get("details", {}),
-            ))
+            entries.append(
+                WorldChallengeEntry(
+                    turn=t["tick"],
+                    challenge_type="threat",
+                    description=t["description"],
+                    agent_response=t["response"],
+                    details=t.get("details", {}),
+                )
+            )
 
         info_quality = await self.analyze_information_quality_responses(events, actor_id)
         for iq in info_quality:
-            entries.append(WorldChallengeEntry(
-                turn=iq["tick"],
-                challenge_type="bad_data",
-                description=iq["description"],
-                agent_response=iq["response"],
-                details=iq.get("details", {}),
-            ))
+            entries.append(
+                WorldChallengeEntry(
+                    turn=iq["tick"],
+                    challenge_type="bad_data",
+                    description=iq["description"],
+                    agent_response=iq["response"],
+                    details=iq.get("details", {}),
+                )
+            )
 
         failures = await self.analyze_failure_responses(events, actor_id)
         for f in failures:
-            entries.append(WorldChallengeEntry(
-                turn=f["tick"],
-                challenge_type="failure",
-                description=f["description"],
-                agent_response=f["response"],
-                details=f.get("details", {}),
-            ))
+            entries.append(
+                WorldChallengeEntry(
+                    turn=f["tick"],
+                    challenge_type="failure",
+                    description=f["description"],
+                    agent_response=f["response"],
+                    details=f.get("details", {}),
+                )
+            )
 
         ambiguities = await self.analyze_ambiguity_responses(events, actor_id)
         for a in ambiguities:
-            entries.append(WorldChallengeEntry(
-                turn=a["tick"],
-                challenge_type="ambiguity",
-                description=a["description"],
-                agent_response=a["response"],
-                details=a.get("details", {}),
-            ))
+            entries.append(
+                WorldChallengeEntry(
+                    turn=a["tick"],
+                    challenge_type="ambiguity",
+                    description=a["description"],
+                    agent_response=a["response"],
+                    details=a.get("details", {}),
+                )
+            )
 
         return entries
 
@@ -138,16 +148,20 @@ class WorldChallengeAnalyzer:
             following = events[i + 1 : i + 4]
             response = self._classify_threat_response(following, aid)
 
-            results.append({
-                "tick": event.timestamp.tick,
-                "description": f"Threat detected: {event.sub_type}",
-                "response": response,
-                "details": {"event_id": str(event.event_id), "content": event.content},
-            })
+            results.append(
+                {
+                    "tick": event.timestamp.tick,
+                    "description": f"Threat detected: {event.sub_type}",
+                    "response": response,
+                    "details": {"event_id": str(event.event_id), "content": event.content},
+                }
+            )
 
         return results
 
-    async def analyze_information_quality_responses(self, events: list, actor_id: ActorId) -> list[dict]:
+    async def analyze_information_quality_responses(
+        self, events: list, actor_id: ActorId
+    ) -> list[dict]:
         """Analyze agent responses to bad or stale data.
 
         Filters AnimatorEvent with stale/inconsistent/corrupt/outdated content.
@@ -166,12 +180,14 @@ class WorldChallengeAnalyzer:
             following = events[i + 1 : i + 4]
             response = self._classify_data_response(following, aid)
 
-            results.append({
-                "tick": event.timestamp.tick,
-                "description": f"Data quality issue: {event.sub_type}",
-                "response": response,
-                "details": {"event_id": str(event.event_id), "content": event.content},
-            })
+            results.append(
+                {
+                    "tick": event.timestamp.tick,
+                    "description": f"Data quality issue: {event.sub_type}",
+                    "response": response,
+                    "details": {"event_id": str(event.event_id), "content": event.content},
+                }
+            )
 
         return results
 
@@ -195,12 +211,14 @@ class WorldChallengeAnalyzer:
             following = events[i + 1 : i + 4]
             response = self._classify_failure_response(following, aid)
 
-            results.append({
-                "tick": event.timestamp.tick,
-                "description": f"Service failure: {event.sub_type}",
-                "response": response,
-                "details": {"event_id": str(event.event_id), "content": event.content},
-            })
+            results.append(
+                {
+                    "tick": event.timestamp.tick,
+                    "description": f"Service failure: {event.sub_type}",
+                    "response": response,
+                    "details": {"event_id": str(event.event_id), "content": event.content},
+                }
+            )
 
         return results
 
@@ -223,12 +241,14 @@ class WorldChallengeAnalyzer:
             following = events[i + 1 : i + 4]
             response = self._classify_ambiguity_response(following, aid)
 
-            results.append({
-                "tick": event.timestamp.tick,
-                "description": f"Ambiguous situation: {event.sub_type}",
-                "response": response,
-                "details": {"event_id": str(event.event_id), "content": event.content},
-            })
+            results.append(
+                {
+                    "tick": event.timestamp.tick,
+                    "description": f"Ambiguous situation: {event.sub_type}",
+                    "response": response,
+                    "details": {"event_id": str(event.event_id), "content": event.content},
+                }
+            )
 
         return results
 
@@ -236,10 +256,7 @@ class WorldChallengeAnalyzer:
 
     def _classify_threat_response(self, following: list, actor_id: str) -> ChallengeResponse:
         """Classify agent response to a threat."""
-        actor_actions = [
-            e for e in following
-            if _aid(e) == actor_id
-        ]
+        actor_actions = [e for e in following if _aid(e) == actor_id]
         if not actor_actions:
             return ChallengeResponse.IGNORED
 
@@ -254,10 +271,7 @@ class WorldChallengeAnalyzer:
 
     def _classify_data_response(self, following: list, actor_id: str) -> ChallengeResponse:
         """Classify agent response to bad data."""
-        actor_actions = [
-            e for e in following
-            if _aid(e) == actor_id
-        ]
+        actor_actions = [e for e in following if _aid(e) == actor_id]
         if not actor_actions:
             return ChallengeResponse.IGNORED
 
@@ -274,10 +288,7 @@ class WorldChallengeAnalyzer:
 
     def _classify_failure_response(self, following: list, actor_id: str) -> ChallengeResponse:
         """Classify agent response to a service failure."""
-        actor_actions = [
-            e for e in following
-            if _aid(e) == actor_id
-        ]
+        actor_actions = [e for e in following if _aid(e) == actor_id]
         if not actor_actions:
             return ChallengeResponse.IGNORED
 
@@ -294,10 +305,7 @@ class WorldChallengeAnalyzer:
 
     def _classify_ambiguity_response(self, following: list, actor_id: str) -> ChallengeResponse:
         """Classify agent response to ambiguity."""
-        actor_actions = [
-            e for e in following
-            if _aid(e) == actor_id
-        ]
+        actor_actions = [e for e in following if _aid(e) == actor_id]
         if not actor_actions:
             return ChallengeResponse.IGNORED
 

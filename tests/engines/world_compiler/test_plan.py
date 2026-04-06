@@ -1,14 +1,15 @@
 """Tests for WorldPlan and ServiceResolution models (D4a)."""
+
 import pytest
 
-from volnix.engines.world_compiler.plan import WorldPlan, ServiceResolution
-from volnix.kernel.surface import ServiceSurface, APIOperation
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+from volnix.kernel.surface import APIOperation, ServiceSurface
 from volnix.reality.dimensions import WorldConditions
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_surface(
     service_name: str = "email",

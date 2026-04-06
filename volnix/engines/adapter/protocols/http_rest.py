@@ -48,19 +48,21 @@ logger = logging.getLogger(__name__)
 
 # Communication actions across all packs — used by the messages
 # endpoint and WebSocket chat_message enrichment.
-COMMUNICATION_ACTIONS: frozenset[str] = frozenset({
-    # Slack / chat pack (Slack MCP naming convention)
-    "chat.postMessage",
-    "chat.replyToThread",
-    # Email pack (gmail)
-    "email_send",
-    # Reddit pack
-    "submit",
-    "comment",
-    # Twitter pack
-    "create_tweet",
-    "reply",
-})
+COMMUNICATION_ACTIONS: frozenset[str] = frozenset(
+    {
+        # Slack / chat pack (Slack MCP naming convention)
+        "chat.postMessage",
+        "chat.replyToThread",
+        # Email pack (gmail)
+        "email_send",
+        # Reddit pack
+        "submit",
+        "comment",
+        # Twitter pack
+        "create_tweet",
+        "reply",
+    }
+)
 
 
 class HTTPRestAdapter(ProtocolAdapter):
@@ -136,7 +138,8 @@ class HTTPRestAdapter(ProtocolAdapter):
         ):
             """List all tools available in this world."""
             return await gateway.get_tool_manifest(
-                actor_id=actor_id, protocol=format,
+                actor_id=actor_id,
+                protocol=format,
             )
 
         @app.post("/api/v1/actions/{tool_name}")
@@ -172,6 +175,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                         token_actor_id = str(resolved)
                     else:
                         from starlette.responses import JSONResponse as _JR401
+
                         return _JR401(
                             status_code=401,
                             content={"error": "Invalid or expired agent token"},
@@ -192,9 +196,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     )
             else:
                 actor_id = (
-                    token_actor_id
-                    or request.headers.get("x-actor-id", "").strip()
-                    or "http-agent"
+                    token_actor_id or request.headers.get("x-actor-id", "").strip() or "http-agent"
                 )
                 arguments = body
                 raw_mode = True
@@ -248,7 +250,10 @@ class HTTPRestAdapter(ProtocolAdapter):
             slot_mgr = getattr(gateway, "_slot_manager", None)
             if not slot_mgr:
                 from starlette.responses import JSONResponse
-                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+
+                return JSONResponse(
+                    status_code=503, content={"error": "Slot manager not initialized"}
+                )
 
             body = await request.json()
             agent_name = body.get("agent_name", "unnamed-agent")
@@ -256,6 +261,7 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             if actor_id:
                 from volnix.core.types import ActorId as _AId
+
                 reg = slot_mgr.register(_AId(actor_id), agent_name)
             else:
                 role_hint = body.get("role_hint")
@@ -263,6 +269,7 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             if reg is None:
                 from starlette.responses import JSONResponse
+
                 return JSONResponse(
                     status_code=409,
                     content={"error": "No available slot or slot already claimed"},
@@ -275,10 +282,14 @@ class HTTPRestAdapter(ProtocolAdapter):
             slot_mgr = getattr(gateway, "_slot_manager", None)
             if not slot_mgr:
                 from starlette.responses import JSONResponse
-                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+
+                return JSONResponse(
+                    status_code=503, content={"error": "Slot manager not initialized"}
+                )
             actor_id = slot_mgr.release(token)
             if actor_id is None:
                 from starlette.responses import JSONResponse
+
                 return JSONResponse(status_code=404, content={"error": "Token not found"})
             return {"status": "released", "actor_id": str(actor_id)}
 
@@ -288,15 +299,22 @@ class HTTPRestAdapter(ProtocolAdapter):
             slot_mgr = getattr(gateway, "_slot_manager", None)
             if not slot_mgr:
                 from starlette.responses import JSONResponse
-                return JSONResponse(status_code=503, content={"error": "Slot manager not initialized"})
+
+                return JSONResponse(
+                    status_code=503, content={"error": "Slot manager not initialized"}
+                )
             auth = request.headers.get("authorization", "")
             if not auth.startswith("Bearer volnix_"):
                 from starlette.responses import JSONResponse
-                return JSONResponse(status_code=401, content={"error": "Missing or invalid Authorization header"})
+
+                return JSONResponse(
+                    status_code=401, content={"error": "Missing or invalid Authorization header"}
+                )
             token = auth.removeprefix("Bearer ").strip()
             actor_id = slot_mgr.resolve_token(token)
             if actor_id is None:
                 from starlette.responses import JSONResponse
+
                 return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
             return {
                 "actor_id": str(actor_id),
@@ -339,9 +357,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             State reads go through app.query_entities() — not
             directly to the state engine or through the tool pipeline.
             """
-            return await gateway._app.read_entities(
-                actor_id, entity_type
-            )
+            return await gateway._app.read_entities(actor_id, entity_type)
 
         @app.websocket("/api/v1/events/stream")
         async def event_stream(websocket: WebSocket):
@@ -384,9 +400,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             """C3: Check admin token if configured."""
             if webhook_mgr and webhook_mgr._config.admin_token:
                 auth = request.headers.get("authorization", "")
-                expected = (
-                    f"Bearer {webhook_mgr._config.admin_token}"
-                )
+                expected = f"Bearer {webhook_mgr._config.admin_token}"
                 return auth == expected
             return True  # No token = open access
 
@@ -430,9 +444,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 )
 
         @app.delete("/api/v1/webhooks/{webhook_id}")
-        async def unregister_webhook(
-            webhook_id: str, request: StarletteRequest
-        ):
+        async def unregister_webhook(webhook_id: str, request: StarletteRequest):
             """Remove a webhook subscription."""
             from starlette.responses import JSONResponse
 
@@ -576,7 +588,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                     run_events = []
                     if persistence:
                         rows = await persistence._log.query(
-                            from_sequence=0, filters={"run_id": rid},
+                            from_sequence=0,
+                            filters={"run_id": rid},
                         )
                         for row in rows:
                             try:
@@ -584,18 +597,19 @@ class HTTPRestAdapter(ProtocolAdapter):
                             except Exception:
                                 pass
                     r["event_count"] = len(run_events)
-                    r["actor_count"] = len({
-                        e.get("actor_id", "")
-                        for e in run_events
-                        if e.get("actor_id", "")
-                        and e.get("actor_id", "") not in _INTERNAL_ACTORS
-                    })
+                    r["actor_count"] = len(
+                        {
+                            e.get("actor_id", "")
+                            for e in run_events
+                            if e.get("actor_id", "")
+                            and e.get("actor_id", "") not in _INTERNAL_ACTORS
+                        }
+                    )
                     world_def = r.get("world_def", {})
                     services_raw = world_def.get("services", {})
                     if isinstance(services_raw, dict) and "services" not in r:
                         r["services"] = [
-                            {"service_id": k, "service_name": k}
-                            for k in services_raw.keys()
+                            {"service_id": k, "service_name": k} for k in services_raw.keys()
                         ]
             except Exception:
                 pass
@@ -618,6 +632,7 @@ class HTTPRestAdapter(ProtocolAdapter):
         async def get_world_endpoint(world_id: str):
             """Get metadata for a specific world."""
             from volnix.core.types import WorldId as _WId
+
             world = await gateway._app.world_manager.get_world(_WId(world_id))
             if not world:
                 return fastapi.responses.JSONResponse(
@@ -634,10 +649,18 @@ class HTTPRestAdapter(ProtocolAdapter):
 
         # ── Run endpoints ──────────────────────────────────────
 
-        _INTERNAL_ACTORS = frozenset({
-            "world_compiler", "animator", "system", "policy",
-            "budget", "state", "permission", "responder",
-        })
+        _INTERNAL_ACTORS = frozenset(
+            {
+                "world_compiler",
+                "animator",
+                "system",
+                "policy",
+                "budget",
+                "state",
+                "permission",
+                "responder",
+            }
+        )
 
         @app.get("/api/v1/runs/{run_id}")
         async def get_run_endpoint(run_id: str):
@@ -660,7 +683,8 @@ class HTTPRestAdapter(ProtocolAdapter):
                 run_events = []
                 if persistence:
                     rows = await persistence._log.query(
-                        from_sequence=0, filters={"run_id": run_id},
+                        from_sequence=0,
+                        filters={"run_id": run_id},
                     )
                     for row in rows:
                         try:
@@ -672,8 +696,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 external_actors = {
                     e.get("actor_id", "")
                     for e in run_events
-                    if e.get("actor_id", "")
-                    and e.get("actor_id", "") not in _INTERNAL_ACTORS
+                    if e.get("actor_id", "") and e.get("actor_id", "") not in _INTERNAL_ACTORS
                 }
                 result["actor_count"] = len(external_actors)
                 result["event_count"] = len(run_events)
@@ -690,8 +713,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 services_raw = world_def.get("services", {})
                 if isinstance(services_raw, dict):
                     result["services"] = [
-                        {"service_id": k, "service_name": k}
-                        for k in services_raw.keys()
+                        {"service_id": k, "service_name": k} for k in services_raw.keys()
                     ]
                 # Promote summary fields to top level for frontend
                 summary = result.get("summary", {})
@@ -735,7 +757,8 @@ class HTTPRestAdapter(ProtocolAdapter):
             """
             from starlette.responses import JSONResponse
 
-            from volnix.core.types import RunId as _NRId, WorldId as _NWId
+            from volnix.core.types import RunId as _NRId
+            from volnix.core.types import WorldId as _NWId
 
             # Parse optional body
             try:
@@ -761,18 +784,14 @@ class HTTPRestAdapter(ProtocolAdapter):
                     },
                 )
 
-            plan = await gateway._app._world_manager.load_plan(
-                _NWId(world_id)
-            )
+            plan = await gateway._app._world_manager.load_plan(_NWId(world_id))
             if plan is None:
                 return JSONResponse(
                     status_code=400,
                     content={"error": f"World {world_id} not found"},
                 )
 
-            run_id = await gateway._app.create_run(
-                plan, world_id=_NWId(world_id)
-            )
+            run_id = await gateway._app.create_run(plan, world_id=_NWId(world_id))
             result: dict[str, Any] = {
                 "run_id": str(run_id),
                 "world_id": world_id,
@@ -854,10 +873,11 @@ class HTTPRestAdapter(ProtocolAdapter):
                 "event_log",
             )
             if saved is not None:
+                events = list(saved)  # Copy — never mutate the artifact
                 if order == "desc":
-                    saved.reverse()
-                total = len(saved)
-                page = saved[offset : offset + limit] if limit else saved[offset:]
+                    events.reverse()
+                total = len(events)
+                page = events[offset : offset + limit] if limit else events[offset:]
                 return page, total
 
             # Active run — read raw JSON payloads from bus persistence.
@@ -884,9 +904,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                 except Exception:
                     pass
             # Total count for this run
-            total_count = await persistence._log.count(
-                filters={"run_id": run_id}
-            )
+            total_count = await persistence._log.count(filters={"run_id": run_id})
             return events, total_count
 
         @app.get("/api/v1/runs/{run_id}/events")
@@ -908,7 +926,10 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             # DB-level sort + pagination
             events, total = await _load_run_events(
-                run_id, order=sort, limit=limit, offset=offset,
+                run_id,
+                order=sort,
+                limit=limit,
+                offset=offset,
             )
 
             # Enrich: causal_child_ids
@@ -949,7 +970,12 @@ class HTTPRestAdapter(ProtocolAdapter):
                     if e.get("service_id") == service_id or e.get("target_service") == service_id
                 ]
             if event_type:
-                events = [e for e in events if e.get("event_type") == event_type]
+                events = [
+                    e
+                    for e in events
+                    if e.get("event_type") == event_type
+                    or e.get("event_type", "").startswith(event_type + ".")
+                ]
             if outcome:
                 events = [e for e in events if e.get("outcome") == outcome]
             # If filters were applied, total reflects filtered count
@@ -1141,10 +1167,12 @@ class HTTPRestAdapter(ProtocolAdapter):
         async def get_run_deliverable(run_id: str):
             """Get the deliverable artifact from a completed run."""
             from starlette.responses import JSONResponse
+
             from volnix.core.types import RunId as _RId
 
             deliverable = await gateway._app.artifact_store.load_artifact(
-                _RId(run_id), "deliverable",
+                _RId(run_id),
+                "deliverable",
             )
             if deliverable is None:
                 return JSONResponse(
@@ -1157,10 +1185,12 @@ class HTTPRestAdapter(ProtocolAdapter):
         async def get_governance_report(run_id: str):
             """Get the governance report for a Mode 1 agent testing run."""
             from starlette.responses import JSONResponse
+
             from volnix.core.types import RunId as _RId
 
             artifact = await gateway._app.artifact_store.load_artifact(
-                _RId(run_id), "governance_report",
+                _RId(run_id),
+                "governance_report",
             )
             if artifact is None:
                 return JSONResponse(
@@ -1287,24 +1317,21 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             # Load all events for the run (ascending order for chat timeline)
             events, total_all = await _load_run_events(
-                run_id, order="asc",
+                run_id,
+                order="asc",
             )
 
             # Filter to communication actions only
-            comm_events = [
-                e for e in events
-                if e.get("action") in COMMUNICATION_ACTIONS
-            ]
+            comm_events = [e for e in events if e.get("action") in COMMUNICATION_ACTIONS]
 
             # Apply channel filter if provided
             if channel:
                 comm_events = [
-                    e for e in comm_events
-                    if (e.get("input_data") or {}).get("channel") == channel
+                    e for e in comm_events if (e.get("input_data") or {}).get("channel") == channel
                 ]
 
             total = len(comm_events)
-            page = comm_events[offset: offset + limit]
+            page = comm_events[offset : offset + limit]
 
             # Build actor role lookup from world_def
             run_data = await gateway._app.run_manager.get_run(_RId(run_id))
@@ -1319,45 +1346,22 @@ class HTTPRestAdapter(ProtocolAdapter):
             for evt in page:
                 inp = evt.get("input_data") or {}
                 ts = evt.get("timestamp") or {}
-                content = (
-                    inp.get("content")
-                    or inp.get("text")
-                    or inp.get("body")
-                    or ""
+                content = inp.get("content") or inp.get("text") or inp.get("body") or ""
+                messages.append(
+                    {
+                        "id": evt.get("event_id", ""),
+                        "tick": ts.get("tick", 0),
+                        "actor_id": evt.get("actor_id", ""),
+                        "actor_role": actor_roles.get(evt.get("actor_id", ""), ""),
+                        "channel": inp.get("channel", ""),
+                        "content": content,
+                        "reply_to": inp.get("reply_to_event_id"),
+                        "intended_for": inp.get("intended_for", []),
+                        "timestamp": ts.get("wall_time", ""),
+                    }
                 )
-                messages.append({
-                    "id": evt.get("event_id", ""),
-                    "tick": ts.get("tick", 0),
-                    "actor_id": evt.get("actor_id", ""),
-                    "actor_role": actor_roles.get(evt.get("actor_id", ""), ""),
-                    "channel": inp.get("channel", ""),
-                    "content": content,
-                    "reply_to": inp.get("reply_to_event_id"),
-                    "intended_for": inp.get("intended_for", []),
-                    "timestamp": ts.get("wall_time", ""),
-                })
 
             return {"messages": messages, "count": total}
-
-        @app.get("/api/v1/runs/{run_id}/deliverable")
-        async def get_run_deliverable(run_id: str):
-            """Get the deliverable artifact for a run, if one was produced."""
-            from starlette.responses import JSONResponse
-
-            from volnix.core.types import RunId as _RId
-
-            result = await gateway._app.artifact_store.load_artifact(
-                _RId(run_id),
-                "deliverable",
-            )
-            if result is None:
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "error": "No deliverable produced for this run",
-                    },
-                )
-            return result
 
         @app.get("/api/v1/compare")
         async def compare_runs_endpoint(
@@ -1419,11 +1423,27 @@ class HTTPRestAdapter(ProtocolAdapter):
                         return {"type": "run_complete", "data": data}
                     return {"type": "status", "data": data}
 
+                # Policy governance events
+                if event_type.startswith("policy."):
+                    return {"type": "policy", "data": data}
+
+                # Permission events
+                if event_type.startswith("permission."):
+                    return {"type": "permission", "data": data}
+
+                # Capability gap events
+                if event_type.startswith("capability."):
+                    return {"type": "capability", "data": data}
+
                 # World action events (tool calls from agents)
                 if event_type.startswith("world."):
                     return {"type": "event", "data": data}
 
-                # Skip everything else (engine lifecycle, pipeline steps, permissions, etc.)
+                # Animator events
+                if event_type.startswith("animator."):
+                    return {"type": "event", "data": data}
+
+                # Skip engine lifecycle, pipeline steps, etc.
                 return None
 
             def _make_chat_message(event: Any) -> dict | None:
@@ -1433,12 +1453,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     return None
                 inp = getattr(event, "input_data", {}) or {}
                 ts = getattr(event, "timestamp", None)
-                content = (
-                    inp.get("content")
-                    or inp.get("text")
-                    or inp.get("body")
-                    or ""
-                )
+                content = inp.get("content") or inp.get("text") or inp.get("body") or ""
                 return {
                     "type": "chat_message",
                     "data": {
@@ -1492,9 +1507,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             )
 
             routes = await gateway.get_tool_manifest(protocol="http")
-            mount_service_prefixes(
-                app, routes, mw_cfg.service_prefixes, gateway
-            )
+            mount_service_prefixes(app, routes, mw_cfg.service_prefixes, gateway)
 
         # G6: Mount MCP SSE/HTTP endpoint for remote MCP clients
         # (Claude Desktop, Cursor, Windsurf, LangGraph MCP adapters)
@@ -1511,9 +1524,7 @@ class HTTPRestAdapter(ProtocolAdapter):
         from pathlib import Path
 
         app_config = getattr(self._gateway, "_app", None)
-        dashboard_cfg = getattr(
-            getattr(app_config, "_config", None), "dashboard", None
-        )
+        dashboard_cfg = getattr(getattr(app_config, "_config", None), "dashboard", None)
         static_dir = getattr(dashboard_cfg, "static_dir", "") if dashboard_cfg else ""
         if not static_dir:
             return
@@ -1525,9 +1536,7 @@ class HTTPRestAdapter(ProtocolAdapter):
 
         from starlette.staticfiles import StaticFiles
 
-        app.mount(
-            "/", StaticFiles(directory=str(dist), html=True), name="frontend"
-        )
+        app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
         logger.info("Dashboard frontend mounted from %s", dist)
 
     async def _mount_pack_routes(self, app: Any, gateway: Any) -> None:
@@ -1564,10 +1573,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                         # Path params override body values
                         arguments.update(path_params)
                     # Actor ID from header only (never from body — prevents impersonation)
-                    actor_id = (
-                        request.headers.get("x-actor-id", "").strip()
-                        or "http-agent"
-                    )
+                    actor_id = request.headers.get("x-actor-id", "").strip() or "http-agent"
                     return await gateway.handle_request(
                         actor_id=actor_id,
                         tool_name=tn,
@@ -1581,9 +1587,7 @@ class HTTPRestAdapter(ProtocolAdapter):
             elif method == "GET":
                 app.get(path)(make_handler(tool_name, "GET"))
 
-    async def _mount_mcp_endpoint(
-        self, app: Any, gateway: Any
-    ) -> None:
+    async def _mount_mcp_endpoint(self, app: Any, gateway: Any) -> None:
         """Mount MCP SSE/HTTP endpoint for remote MCP clients.
 
         Uses the MCP SDK's StreamableHTTPSessionManager as a raw ASGI
@@ -1594,9 +1598,7 @@ class HTTPRestAdapter(ProtocolAdapter):
         """
         mcp_adapter = gateway._adapters.get("mcp")
         if mcp_adapter is None or mcp_adapter._server is None:
-            logger.debug(
-                "No MCP adapter available — skipping /mcp endpoint"
-            )
+            logger.debug("No MCP adapter available — skipping /mcp endpoint")
             return
 
         try:
@@ -1628,20 +1630,13 @@ class HTTPRestAdapter(ProtocolAdapter):
 
             # C4+C5 fix: mount as raw ASGI app (no double response,
             # no request._send)
-            from starlette.routing import Mount
-
             app.mount("/mcp", app=session_manager.handle_request)
 
             logger.info("MCP SSE endpoint mounted at /mcp")
         except ImportError:
-            logger.debug(
-                "MCP StreamableHTTP not available — "
-                "skipping /mcp endpoint"
-            )
+            logger.debug("MCP StreamableHTTP not available — skipping /mcp endpoint")
         except Exception as exc:
-            logger.warning(
-                "Failed to mount MCP SSE endpoint: %s", exc
-            )
+            logger.warning("Failed to mount MCP SSE endpoint: %s", exc)
 
     async def run_server(self, host: str = "0.0.0.0", port: int = 8080) -> None:
         """Run the FastAPI server (blocking)."""

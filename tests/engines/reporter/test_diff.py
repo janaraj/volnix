@@ -1,10 +1,12 @@
 """Tests for CounterfactualDiffer -- run comparison."""
-import pytest
+
 from unittest.mock import AsyncMock
 
+import pytest
+
+from tests.engines.reporter.conftest import make_world_event
 from volnix.engines.reporter.diff import CounterfactualDiffer
 from volnix.engines.reporter.scorecard import ScorecardComputer
-from tests.engines.reporter.conftest import make_world_event
 
 
 def _mock_state(events=None):

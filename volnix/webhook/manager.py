@@ -8,6 +8,7 @@ C2 fix: deliveries are fire-and-forget async tasks (non-blocking).
 H3 fix: exception handling in delivery — one failure doesn't affect others.
 H4 fix: only world.* events forwarded to webhooks (internal events filtered).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,9 +28,7 @@ class WebhookManager:
 
     def __init__(self, config: WebhookConfig) -> None:
         self._config = config
-        self._registry = WebhookRegistry(
-            max_registrations=config.max_registrations
-        )
+        self._registry = WebhookRegistry(max_registrations=config.max_registrations)
         self._delivery = WebhookDelivery(
             max_retries=config.max_retries,
             backoff_base=config.retry_backoff_base,
@@ -80,13 +79,9 @@ class WebhookManager:
 
         # C2 fix: fire-and-forget — don't block the bus consumer
         for sub in matches:
-            asyncio.create_task(
-                self._deliver_one(sub, event, service_id)
-            )
+            asyncio.create_task(self._deliver_one(sub, event, service_id))
 
-    async def _deliver_one(
-        self, sub: Any, event: Any, service_id: str
-    ) -> None:
+    async def _deliver_one(self, sub: Any, event: Any, service_id: str) -> None:
         """Deliver one event to one webhook (async task).
 
         H3 fix: exception handling — one bad delivery doesn't
@@ -96,9 +91,7 @@ class WebhookManager:
             try:
                 service = sub.service or service_id
                 payload = format_payload(event, service=service)
-                result = await self._delivery.send(
-                    sub.url, payload, secret=sub.secret
-                )
+                result = await self._delivery.send(sub.url, payload, secret=sub.secret)
                 if result.success:
                     self._stats["delivered"] += 1
                     logger.debug(
@@ -117,7 +110,8 @@ class WebhookManager:
                 self._stats["errors"] += 1
                 logger.warning(
                     "Webhook delivery error for %s: %s",
-                    sub.url, exc,
+                    sub.url,
+                    exc,
                 )
 
     # -- Public API (called by HTTP endpoints) ---------------------------------
@@ -130,9 +124,7 @@ class WebhookManager:
         secret: str = "",
     ) -> str:
         """Register a webhook subscription. Returns ID."""
-        return self._registry.register(
-            url=url, events=events, service=service, secret=secret
-        )
+        return self._registry.register(url=url, events=events, service=service, secret=secret)
 
     def unregister(self, sub_id: str) -> bool:
         """Remove a webhook by ID."""

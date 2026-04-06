@@ -1,7 +1,9 @@
 """Tests for volnix.persistence.migrations — schema migration system."""
+
 import pytest
-from volnix.persistence.sqlite import SQLiteDatabase
+
 from volnix.persistence.migrations import Migration, MigrationRunner
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture
@@ -110,9 +112,21 @@ async def test_migration_idempotent(db):
 async def test_migration_out_of_order_registration(db):
     """Migrations registered out of order are sorted correctly."""
     runner = MigrationRunner(db)
-    runner.register(Migration(version=3, name="v3", sql_up="CREATE TABLE t3 (id INTEGER)", sql_down="DROP TABLE t3"))
-    runner.register(Migration(version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"))
-    runner.register(Migration(version=2, name="v2", sql_up="CREATE TABLE t2 (id INTEGER)", sql_down="DROP TABLE t2"))
+    runner.register(
+        Migration(
+            version=3, name="v3", sql_up="CREATE TABLE t3 (id INTEGER)", sql_down="DROP TABLE t3"
+        )
+    )
+    runner.register(
+        Migration(
+            version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"
+        )
+    )
+    runner.register(
+        Migration(
+            version=2, name="v2", sql_up="CREATE TABLE t2 (id INTEGER)", sql_down="DROP TABLE t2"
+        )
+    )
     applied = await runner.migrate_up()
     assert applied == 3
     assert await runner.get_current_version() == 3
@@ -121,8 +135,16 @@ async def test_migration_out_of_order_registration(db):
 async def test_migration_down_to_zero(db):
     """migrate_down(0) reverts all migrations."""
     runner = MigrationRunner(db)
-    runner.register(Migration(version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"))
-    runner.register(Migration(version=2, name="v2", sql_up="CREATE TABLE t2 (id INTEGER)", sql_down="DROP TABLE t2"))
+    runner.register(
+        Migration(
+            version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"
+        )
+    )
+    runner.register(
+        Migration(
+            version=2, name="v2", sql_up="CREATE TABLE t2 (id INTEGER)", sql_down="DROP TABLE t2"
+        )
+    )
     await runner.migrate_up()
     reverted = await runner.migrate_down(target_version=0)
     assert reverted == 2
@@ -134,8 +156,16 @@ async def test_migration_down_to_zero(db):
 async def test_migration_sql_failure_is_atomic(db):
     """If a migration fails, no partial state remains."""
     runner = MigrationRunner(db)
-    runner.register(Migration(version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"))
-    runner.register(Migration(version=2, name="v2_bad", sql_up="INVALID SQL THAT WILL FAIL", sql_down="SELECT 1"))
+    runner.register(
+        Migration(
+            version=1, name="v1", sql_up="CREATE TABLE t1 (id INTEGER)", sql_down="DROP TABLE t1"
+        )
+    )
+    runner.register(
+        Migration(
+            version=2, name="v2_bad", sql_up="INVALID SQL THAT WILL FAIL", sql_down="SELECT 1"
+        )
+    )
     with pytest.raises(Exception):
         await runner.migrate_up()
     # Since migrations are wrapped in a transaction, v1 should also be rolled back

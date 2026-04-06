@@ -18,9 +18,7 @@ from volnix.actors.state import (
     ActorBehaviorTraits,
     ActorState,
     InteractionRecord,
-    ScheduledAction,
     Subscription,
-    WaitingFor,
 )
 from volnix.core.envelope import ActionEnvelope
 from volnix.core.events import WorldEvent
@@ -29,19 +27,16 @@ from volnix.core.types import (
     ActorId,
     EntityId,
     EnvelopePriority,
-    EventId,
     ServiceId,
     Timestamp,
 )
 from volnix.deliverable_presets import AVAILABLE_PRESETS, load_preset
-from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.engine import AgencyEngine
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
 from volnix.simulation.runner import SimulationRunner, SimulationType, StopReason
 from volnix.simulation.world_context import WorldContextBundle
-
 
 # ---------------------------------------------------------------------------
 # Helpers (reuse the same patterns as tests/engines/agency/test_engine.py)
@@ -317,9 +312,11 @@ class TestIntendedForTagged:
             },
         )
 
-        envelopes = await engine.notify(event)
+        await engine.notify(event)
         # Alice (researcher) should be activated, Bob (oceanographer) should not
-        activated_ids = {str(a.actor_id) for a in engine.get_all_states() if a.pending_notifications}
+        activated_ids = {
+            str(a.actor_id) for a in engine.get_all_states() if a.pending_notifications
+        }
         assert "actor-alice" in activated_ids
 
     async def test_all_tag_activates_everyone(self):
@@ -501,7 +498,11 @@ class TestSensitivityLevels:
             actor_id="agent-external",
             service_id="chat",
             action="chat.postMessage",
-            input_data={"channel": "#research", "text": "Urgent data", "intended_for": ["researcher"]},
+            input_data={
+                "channel": "#research",
+                "text": "Urgent data",
+                "intended_for": ["researcher"],
+            },
         )
 
         await engine.notify(event)
@@ -721,19 +722,23 @@ class TestReplyToConvention:
         engine = await _create_engine([actor])
 
         # Simulate LLM response with a reply_to in the action
-        raw_output = json.dumps({
-            "action_type": "chat.postMessage",
-            "target_service": "chat",
-            "payload": {
-                "channel": "#research",
-                "text": "I agree with the analysis.",
-                "reply_to_event_id": "evt-original-999",
-            },
-            "reasoning": "Responding to oceanographer's finding",
-        })
+        raw_output = json.dumps(
+            {
+                "action_type": "chat.postMessage",
+                "target_service": "chat",
+                "payload": {
+                    "channel": "#research",
+                    "text": "I agree with the analysis.",
+                    "reply_to_event_id": "evt-original-999",
+                },
+                "reasoning": "Responding to oceanographer's finding",
+            }
+        )
 
         trigger_event = _make_world_event()
-        envelope = engine._parse_llm_action(actor, raw_output, "subscription_immediate", trigger_event)
+        envelope = engine._parse_llm_action(
+            actor, raw_output, "subscription_immediate", trigger_event
+        )
 
         assert envelope is not None
         assert envelope.action_type == "chat.postMessage"
@@ -745,15 +750,19 @@ class TestReplyToConvention:
         actor = _make_actor(actor_id="actor-alice", role="researcher")
         engine = await _create_engine([actor])
 
-        raw_output = json.dumps({
-            "action_type": "chat.postMessage",
-            "target_service": "chat",
-            "payload": {"channel": "#research", "text": "New thread topic"},
-            "reasoning": "Starting a new discussion",
-        })
+        raw_output = json.dumps(
+            {
+                "action_type": "chat.postMessage",
+                "target_service": "chat",
+                "payload": {"channel": "#research", "text": "New thread topic"},
+                "reasoning": "Starting a new discussion",
+            }
+        )
 
         trigger_event = _make_world_event()
-        envelope = engine._parse_llm_action(actor, raw_output, "subscription_immediate", trigger_event)
+        envelope = engine._parse_llm_action(
+            actor, raw_output, "subscription_immediate", trigger_event
+        )
 
         assert envelope is not None
         assert trigger_event.event_id in envelope.parent_event_ids
@@ -893,13 +902,15 @@ class TestSimulationRunnerExtensions:
         """SimulationRunner detects idle_stop condition."""
         queue = EventQueue()
         # Add a dummy pending item so QUEUE_EMPTY does not trigger first
-        queue.submit(ActionEnvelope(
-            actor_id=ActorId("dummy"),
-            source=ActionSource.INTERNAL,
-            action_type="noop",
-            logical_time=0.0,
-            priority=EnvelopePriority.INTERNAL,
-        ))
+        queue.submit(
+            ActionEnvelope(
+                actor_id=ActorId("dummy"),
+                source=ActionSource.INTERNAL,
+                action_type="noop",
+                logical_time=0.0,
+                priority=EnvelopePriority.INTERNAL,
+            )
+        )
         runner = SimulationRunner(
             event_queue=queue,
             pipeline_executor=AsyncMock(),

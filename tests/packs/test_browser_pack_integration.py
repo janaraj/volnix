@@ -12,11 +12,9 @@ import pytest
 from volnix.core.context import ResponseProposal
 from volnix.core.types import (
     FidelityTier,
-    ToolName,
 )
 from volnix.packs.registry import PackRegistry
 from volnix.packs.runtime import PackRuntime
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

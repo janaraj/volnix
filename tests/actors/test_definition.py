@@ -1,11 +1,10 @@
 """Tests for volnix.actors.definition -- ActorDefinition model."""
 
 import pytest
-from pydantic import ValidationError
 
-from volnix.core.types import ActorId, ActorType
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.personality import FrictionProfile, Personality
+from volnix.core.types import ActorId, ActorType
 
 
 class TestActorDefinition:

@@ -3,11 +3,12 @@
 Tests use REAL httpx.AsyncClient with ASGITransport against the FastAPI app.
 No server is started -- httpx connects directly to the ASGI app.
 """
+
 import asyncio
-import pytest
-import httpx
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
+import pytest
 from starlette.testclient import TestClient
 
 from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
@@ -21,8 +22,12 @@ def _make_mock_gateway(tools=None, handle_result=None, entity_result=None):
     gateway = MagicMock()
 
     http_tools = tools or [
-        {"method": "POST", "path": "/email/v1/messages/send",
-         "content_type": "application/json", "tool_name": "email_send"},
+        {
+            "method": "POST",
+            "path": "/email/v1/messages/send",
+            "content_type": "application/json",
+            "tool_name": "email_send",
+        },
     ]
     gateway.get_tool_manifest = AsyncMock(return_value=http_tools)
 
@@ -35,15 +40,20 @@ def _make_mock_gateway(tools=None, handle_result=None, entity_result=None):
 
     # Mock permission engine that always allows
     permission_engine = AsyncMock()
-    permission_engine.execute = AsyncMock(return_value=StepResult(
-        step_name="permission", verdict=StepVerdict.ALLOW,
-    ))
+    permission_engine.execute = AsyncMock(
+        return_value=StepResult(
+            step_name="permission",
+            verdict=StepVerdict.ALLOW,
+        )
+    )
 
     registry = MagicMock()
+
     def _registry_get(name):
         if name == "permission":
             return permission_engine
         return state
+
     registry.get = MagicMock(side_effect=_registry_get)
 
     bus = MagicMock()
@@ -159,11 +169,13 @@ async def test_http_query_entities():
     """GET /api/v1/entities/{type} queries through app.read_entities."""
     entities = [{"email_id": "e1", "status": "sent"}]
     gateway = _make_mock_gateway()
-    gateway._app.read_entities = AsyncMock(return_value={
-        "entity_type": "email",
-        "count": 1,
-        "entities": entities,
-    })
+    gateway._app.read_entities = AsyncMock(
+        return_value={
+            "entity_type": "email",
+            "count": 1,
+            "entities": entities,
+        }
+    )
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
 
@@ -245,7 +257,8 @@ async def test_websocket_event_stream_endpoint_exists():
 
     app = adapter.fastapi_app
     ws_routes = [
-        r.path for r in app.routes
+        r.path
+        for r in app.routes
         if hasattr(r, "path") and "events/stream" in getattr(r, "path", "")
     ]
     assert "/api/v1/events/stream" in ws_routes
@@ -740,12 +753,14 @@ async def test_http_wrapped_arguments_not_dict_returns_422():
 async def test_http_pack_route_malformed_json_returns_422():
     """Pack route with non-JSON POST body → 422 (not silently swallowed)."""
     gateway = _make_mock_gateway(
-        tools=[{
-            "method": "POST",
-            "path": "/email/v1/messages/send",
-            "content_type": "application/json",
-            "tool_name": "email_send",
-        }],
+        tools=[
+            {
+                "method": "POST",
+                "path": "/email/v1/messages/send",
+                "content_type": "application/json",
+                "tool_name": "email_send",
+            }
+        ],
     )
     adapter = HTTPRestAdapter(gateway)
     await adapter.start_server()
@@ -768,12 +783,14 @@ async def test_http_pack_route_actor_id_from_header_not_body():
     """Pack route uses X-Actor-Id header, NOT actor_id from body (security)."""
     expected = {"email_id": "e1"}
     gateway = _make_mock_gateway(
-        tools=[{
-            "method": "POST",
-            "path": "/email/v1/messages/send",
-            "content_type": "application/json",
-            "tool_name": "email_send",
-        }],
+        tools=[
+            {
+                "method": "POST",
+                "path": "/email/v1/messages/send",
+                "content_type": "application/json",
+                "tool_name": "email_send",
+            }
+        ],
         handle_result=expected,
     )
     adapter = HTTPRestAdapter(gateway)

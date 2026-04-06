@@ -3,7 +3,9 @@
 Handles both YAML file paths and pre-loaded dicts (from NL parser).
 Integrates with D1 ConditionExpander for reality section processing.
 """
+
 from __future__ import annotations
+
 import copy
 import logging
 from pathlib import Path
@@ -36,7 +38,9 @@ class YAMLParser:
             + dict mapping service_name → spec_reference string
         """
         world_def = self._load_yaml(world_def_path)
-        compiler_settings = self._load_yaml(compiler_settings_path) if compiler_settings_path else {}
+        compiler_settings = (
+            self._load_yaml(compiler_settings_path) if compiler_settings_path else {}
+        )
         return await self.parse_from_dicts(world_def, compiler_settings)
 
     async def parse_from_dicts(
@@ -121,7 +125,14 @@ class YAMLParser:
         preset = reality.get("preset", "messy")
 
         # Warn about unknown reality keys
-        known_dims = {"preset", "information", "reliability", "friction", "complexity", "boundaries"}
+        known_dims = {
+            "preset",
+            "information",
+            "reliability",
+            "friction",
+            "complexity",
+            "boundaries",
+        }
         unknown = set(reality.keys()) - known_dims
         if unknown:
             logger.warning("Unknown reality keys (ignored): %s", unknown)

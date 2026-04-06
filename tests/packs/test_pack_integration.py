@@ -9,20 +9,14 @@ from pathlib import Path
 import pytest
 
 from volnix.core.context import ResponseProposal
-from volnix.core.errors import ValidationError
 from volnix.core.types import (
     EntityId,
-    FidelityMetadata,
-    FidelitySource,
     FidelityTier,
     StateDelta,
-    ToolName,
 )
 from volnix.packs.base import ServicePack
 from volnix.packs.registry import PackRegistry
 from volnix.packs.runtime import PackRuntime
-from volnix.packs.verified.gmail.pack import EmailPack
-
 
 # ---------------------------------------------------------------------------
 # Second mock pack — proves extensibility (no email-specific code in framework)
@@ -278,8 +272,8 @@ class TestImportBoundaries:
 
         Packs must NEVER import from persistence/, engines/, or bus/.
         """
-        from volnix.packs.verified.gmail import pack as pack_mod
         from volnix.packs.verified.gmail import handlers as handlers_mod
+        from volnix.packs.verified.gmail import pack as pack_mod
         from volnix.packs.verified.gmail import schemas as schemas_mod
         from volnix.packs.verified.gmail import state_machines as sm_mod
 

@@ -63,9 +63,7 @@ class ReplayLog:
         self._replay_mode = True
         self._entries = list(entries)
         self._replay_index = {
-            (e.logical_time, e.actor_id): e.llm_output
-            for e in entries
-            if e.llm_output is not None
+            (e.logical_time, e.actor_id): e.llm_output for e in entries if e.llm_output is not None
         }
 
     async def get_recorded_output(self, logical_time: float, actor_id: str) -> str | None:

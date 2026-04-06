@@ -101,10 +101,7 @@ class CLISubprocessProvider(LLMProvider):
             latency = (time.monotonic() - start) * 1000
 
             if proc.returncode != 0:
-                error_msg = (
-                    stderr.decode().strip()
-                    or f"Command exited with code {proc.returncode}"
-                )
+                error_msg = stderr.decode().strip() or f"Command exited with code {proc.returncode}"
                 return LLMResponse(
                     content="",
                     usage=LLMUsage(),
@@ -128,7 +125,7 @@ class CLISubprocessProvider(LLMProvider):
                 provider="cli",
                 latency_ms=latency,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             try:
                 proc.kill()
                 await proc.wait()

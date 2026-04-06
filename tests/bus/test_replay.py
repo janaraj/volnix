@@ -1,7 +1,9 @@
 """Tests for volnix.bus.replay — event replay by range, time, and type."""
+
 import asyncio
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from volnix.bus.fanout import TopicFanout
 from volnix.bus.persistence import BusPersistence
@@ -17,8 +19,8 @@ def _make_event(event_type: str = "test.event") -> Event:
     return Event(
         event_type=event_type,
         timestamp=Timestamp(
-            world_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2025, 1, 1, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
     )

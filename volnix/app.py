@@ -1,4 +1,5 @@
 """VolnixApp -- bootstrap and orchestration for the full system."""
+
 from __future__ import annotations
 
 import asyncio
@@ -85,11 +86,13 @@ class VolnixApp:
             from volnix.runs.manager import RunManager
 
             self._run_manager = RunManager(
-                config=self._config.runs, persistence=self._conn_mgr,
+                config=self._config.runs,
+                persistence=self._conn_mgr,
             )
             self._artifact_store = RunArtifactStore(config=self._config.runs)
 
             from volnix.worlds.manager import WorldManager
+
             self._world_manager = WorldManager(
                 data_dir=self._config.worlds.data_dir,
             )
@@ -100,7 +103,9 @@ class VolnixApp:
             state_db = await self._conn_mgr.get_connection("state")
             self._registry = create_default_registry()
             await wire_engines(
-                self._registry, self._bus, self._config,
+                self._registry,
+                self._bus,
+                self._config,
                 engine_overrides={"state": {"_db": state_db}},
             )
 
@@ -111,7 +116,10 @@ class VolnixApp:
             steps = self._registry.get_pipeline_steps()
             steps["validation"] = ValidationStep(ledger=self._ledger)
             self._pipeline = build_pipeline_from_config(
-                self._config.pipeline, steps, bus=self._bus, ledger=self._ledger,
+                self._config.pipeline,
+                steps,
+                bus=self._bus,
+                ledger=self._ledger,
             )
 
             # 8. Side-effect processor
@@ -122,6 +130,7 @@ class VolnixApp:
 
             # 10. Gateway
             from volnix.gateway.gateway import Gateway
+
             self._gateway = Gateway(app=self, config=self._config.gateway)
             await self._gateway.initialize()
 
@@ -130,9 +139,7 @@ class VolnixApp:
             if self._config.webhook.enabled:
                 from volnix.webhook.manager import WebhookManager
 
-                self._webhook_manager = WebhookManager(
-                    self._config.webhook
-                )
+                self._webhook_manager = WebhookManager(self._config.webhook)
                 await self._webhook_manager.start(self._bus)
 
             self._started = True
@@ -262,9 +269,7 @@ class VolnixApp:
             compiler._compiler_resolver = CompilerServiceResolver(
                 pack_registry=pack_reg,
                 kernel=existing_kernel,
-                resolver=(
-                    getattr(existing, "_resolver", None) if existing else None
-                ),
+                resolver=(getattr(existing, "_resolver", None) if existing else None),
                 profile_loader=profile_loader,
                 profile_inferrer=profile_inferrer,
                 profile_registry=profile_registry,
@@ -279,6 +284,7 @@ class VolnixApp:
 
         # Slot manager for external agent identity
         from volnix.actors.slot_manager import SlotManager
+
         self._slot_manager = SlotManager(
             actor_registry=actor_registry,
             config=self._config.agents,
@@ -353,12 +359,8 @@ class VolnixApp:
         feedback._config["_conn_mgr"] = self._conn_mgr
         feedback._ledger = self._ledger
         feedback._config["_artifact_store"] = self._artifact_store
-        feedback._config["_profile_registry"] = getattr(
-            responder, "_profile_registry", None
-        )
-        feedback._config["_profile_loader"] = getattr(
-            responder, "_profile_loader", None
-        )
+        feedback._config["_profile_registry"] = getattr(responder, "_profile_registry", None)
+        feedback._config["_profile_loader"] = getattr(responder, "_profile_loader", None)
         feedback._config["_run_manager"] = self._run_manager
 
     async def stop(self) -> None:
@@ -402,9 +404,7 @@ class VolnixApp:
         # External-only worlds (no actor_specs, or all type=agent/external)
         # should not start a simulation — external agents drive the world.
         actor_specs = getattr(plan, "actor_specs", [])
-        has_internal_actors = any(
-            a.get("type") not in ("agent", "external") for a in actor_specs
-        )
+        has_internal_actors = any(a.get("type") not in ("agent", "external") for a in actor_specs)
         if not has_internal_actors:
             return None
 
@@ -435,12 +435,19 @@ class VolnixApp:
         # Find the best channel for kickstart — prefer channels actors
         # are subscribed to (so the message triggers activations)
         from collections import Counter
+
         channel_counts: Counter = Counter()
         agency = self._registry.get("agency")
         if agency:
             for actor_state in getattr(agency, "_actor_states", {}).values():
                 for sub in actor_state.subscriptions:
-                    ch = sub.filter.get("channel") if hasattr(sub, "filter") else (sub.get("filter", {}).get("channel") if isinstance(sub, dict) else None)
+                    ch = (
+                        sub.filter.get("channel")
+                        if hasattr(sub, "filter")
+                        else (
+                            sub.get("filter", {}).get("channel") if isinstance(sub, dict) else None
+                        )
+                    )
                     if ch:
                         channel_counts[ch] += 1
 
@@ -464,7 +471,10 @@ class VolnixApp:
 
         logger.info(
             "Kickstart: actor=%s, action=%s, service=%s, channel=%s",
-            lead_id, action, service_id, channel_id,
+            lead_id,
+            action,
+            service_id,
+            channel_id,
         )
 
         return ActionEnvelope(
@@ -485,9 +495,7 @@ class VolnixApp:
             metadata={"activation_reason": "kickstart"},
         )
 
-    async def read_entities(
-        self, actor_id: str, entity_type: str
-    ) -> dict[str, Any]:
+    async def read_entities(self, actor_id: str, entity_type: str) -> dict[str, Any]:
         """Read entities with visibility scoping.
 
         If visibility rules exist for this actor + entity type, returns only
@@ -501,14 +509,13 @@ class VolnixApp:
 
         if has_rules:
             visible_ids = await permission.get_visible_entities(
-                typed_actor, entity_type,
+                typed_actor,
+                entity_type,
             )
             if visible_ids:
                 all_ents = await state.query_entities(entity_type)
                 visible_set = {str(eid) for eid in visible_ids}
-                entities = [
-                    e for e in all_ents if e.get("id", "") in visible_set
-                ]
+                entities = [e for e in all_ents if e.get("id", "") in visible_set]
             else:
                 entities = await state.query_entities(entity_type)
         else:
@@ -519,6 +526,31 @@ class VolnixApp:
             "count": len(entities),
             "entities": entities,
         }
+
+    async def _ensure_active_run(self) -> None:
+        """Auto-create a run if there's a world but no active run.
+
+        Reuses the same pattern as the CLI serve path (cli.py:765-776):
+        load plan from world → create_run(). Ensures external agents
+        connecting via MCP/HTTP always have a run for event tracking.
+        """
+        if self._current_run_id or not self._current_world_id:
+            return
+        if not self._world_manager:
+            return
+        plan = await self._world_manager.load_plan(WorldId(self._current_world_id))
+        if plan is None:
+            return
+        run_id = await self.create_run(
+            plan,
+            mode=plan.mode,
+            world_id=WorldId(self._current_world_id),
+        )
+        logger.info(
+            "Auto-created run %s for world %s",
+            run_id,
+            self._current_world_id,
+        )
 
     async def handle_action(
         self,
@@ -531,6 +563,9 @@ class VolnixApp:
         """Execute a single action through the full 7-step pipeline."""
         if not self._started:
             raise RuntimeError("VolnixApp is not started. Call start() first.")
+
+        # Auto-create run if needed (external agent connected after previous run completed)
+        await self._ensure_active_run()
 
         # Track last action time for idle auto-complete
         self._last_action_time = datetime.now(UTC)
@@ -630,7 +665,8 @@ class VolnixApp:
             committed_event = ctx.commit_result.events[0]  # from StateEngine commit
         logger.debug(
             "[handle_action] _event attached: type=%s, short_circuited=%s",
-            type(committed_event).__name__, ctx.short_circuited,
+            type(committed_event).__name__,
+            ctx.short_circuited,
         )
 
         if ctx.short_circuited:
@@ -648,7 +684,11 @@ class VolnixApp:
             return result
         return {"error": "No response produced", "_event": committed_event}
 
-    def configure_governance(self, plan: Any) -> None:
+    def configure_governance(
+        self,
+        plan: Any,
+        compiled_policies: list[dict] | None = None,
+    ) -> None:
         """Inject governance state from a WorldPlan after world compilation.
 
         Sets policies, world_mode, and actor_registry on governance engines.
@@ -656,6 +696,9 @@ class VolnixApp:
 
         Args:
             plan: A WorldPlan object with policies, mode, and actor_specs.
+            compiled_policies: If provided, use these instead of plan.policies.
+                Generated by _compile_policy_triggers() during world compilation,
+                where NL string triggers are compiled to dict triggers via LLM.
         """
         policy_engine = self._registry.get("policy")
         permission_engine = self._registry.get("permission")
@@ -664,7 +707,13 @@ class VolnixApp:
         mode = getattr(plan, "mode", "governed")
 
         if hasattr(policy_engine, "_policies"):
-            policy_engine._policies = getattr(plan, "policies", [])
+            policies = compiled_policies or getattr(plan, "policies", [])
+            policy_engine._policies = policies
+            logger.info(
+                "Governance: loaded %d policies (%d compiled)",
+                len(policies),
+                sum(1 for p in policies if isinstance(p.get("trigger"), dict)),
+            )
         if hasattr(policy_engine, "_world_mode"):
             policy_engine._world_mode = mode
         if hasattr(permission_engine, "_world_mode"):
@@ -719,7 +768,9 @@ class VolnixApp:
         await animator.configure(plan, self._scheduler)
 
     async def configure_agency(
-        self, plan: Any, result: dict,
+        self,
+        plan: Any,
+        result: dict,
         internal_profile: Any | None = None,
     ) -> None:
         """Configure the AgencyEngine from compilation results.
@@ -814,11 +865,7 @@ class VolnixApp:
         all_entity_ids: list[str] = []
         for entity_type, entities in result.get("entities", {}).items():
             for entity in entities:
-                eid = (
-                    entity.get("id")
-                    or entity.get(f"{entity_type}_id")
-                    or entity.get("number")
-                )
+                eid = entity.get("id") or entity.get(f"{entity_type}_id") or entity.get("number")
                 if eid:
                     all_entity_ids.append(str(eid))
 
@@ -835,9 +882,7 @@ class VolnixApp:
                         role=actor_def.role,
                         actor_type="observer" if str(actor_def.type) == "observer" else "internal",
                         persona=(
-                            actor_def.personality.model_dump()
-                            if actor_def.personality
-                            else {}
+                            actor_def.personality.model_dump() if actor_def.personality else {}
                         ),
                         behavior_traits=traits,
                         current_goal=actor_def.metadata.get("goal"),
@@ -855,9 +900,7 @@ class VolnixApp:
                             16,
                         )
                         state.watched_entities = [
-                            e
-                            for i, e in enumerate(all_entity_ids)
-                            if (actor_hash + i) % 3 == 0
+                            e for i, e in enumerate(all_entity_ids) if (actor_hash + i) % 3 == 0
                         ][:15]
 
                     actor_states.append(state)
@@ -878,8 +921,7 @@ class VolnixApp:
                 # starts with role-specific focus, not just the shared mission.
                 personality_text = agent_def.metadata.get("personality", "")
                 initial_goal = (
-                    f"Your role focus: {personality_text.strip()}"
-                    if personality_text else ""
+                    f"Your role focus: {personality_text.strip()}" if personality_text else ""
                 )
                 state = ActorState(
                     actor_id=agent_def.id,
@@ -897,6 +939,7 @@ class VolnixApp:
             # Give all autonomous agents a Slack subscription for team communication.
             # Query state for the primary channel (same logic as build_kickstart_envelope).
             from volnix.actors.state import Subscription as _AgentSub
+
             state_engine = self._registry.get("state")
             team_channel = None
             if state_engine:
@@ -912,11 +955,13 @@ class VolnixApp:
                 for state in actor_states:
                     if state.autonomous:
                         state.team_channel = team_channel
-                        state.subscriptions.append(_AgentSub(
-                            service_id="slack",
-                            filter={"channel": team_channel},
-                            sensitivity="immediate",
-                        ))
+                        state.subscriptions.append(
+                            _AgentSub(
+                                service_id="slack",
+                                filter={"channel": team_channel},
+                                sensitivity="immediate",
+                            )
+                        )
                 logger.info("Internal agents subscribed to team channel: %s", team_channel)
 
         # Set batch_threshold from config for each actor
@@ -933,6 +978,7 @@ class VolnixApp:
                 # Apply pre-generated subscriptions (no LLM needed).
                 # Deserialize dicts to Subscription objects (JSON loses types).
                 from volnix.actors.state import Subscription as _Sub
+
                 for state in actor_states:
                     actor_key = str(state.actor_id)
                     if actor_key in pre_generated:
@@ -963,7 +1009,8 @@ class VolnixApp:
                         }
                         try:
                             subs = await sub_gen.generate_subscriptions(
-                                actor_spec, plan,
+                                actor_spec,
+                                plan,
                             )
                             state.subscriptions = subs
                         except Exception as exc:
@@ -974,7 +1021,8 @@ class VolnixApp:
                             )
                 except Exception as exc:
                     logger.warning(
-                        "Subscription generation unavailable: %s", exc,
+                        "Subscription generation unavailable: %s",
+                        exc,
                     )
             else:
                 logger.info(
@@ -985,8 +1033,8 @@ class VolnixApp:
         # Schedule deliverable production for lead actor
         deliverable_cfg = getattr(plan, "deliverable_config", {})
         if deliverable_cfg and actor_states:
-            from volnix.deliverable_presets.loader import load_preset
             from volnix.actors.state import ScheduledAction
+            from volnix.deliverable_presets.loader import load_preset
 
             preset_name = deliverable_cfg.get("preset", "")
             preset = load_preset(preset_name) if preset_name else None
@@ -1054,7 +1102,10 @@ class VolnixApp:
                 )
                 logger.info(
                     "Scheduled request_findings at tick %d, %s deliverable at tick %d for %s",
-                    findings_tick, preset_name, deadline_tick, lead_state.actor_id,
+                    findings_tick,
+                    preset_name,
+                    deadline_tick,
+                    lead_state.actor_id,
                 )
 
         # Only the lead starts autonomously. Non-lead agents are activated
@@ -1064,6 +1115,7 @@ class VolnixApp:
         for state in actor_states:
             if state.autonomous and state.is_lead:
                 from volnix.actors.state import ScheduledAction
+
                 state.scheduled_actions.append(
                     ScheduledAction(
                         logical_time=tick_interval,
@@ -1086,9 +1138,10 @@ class VolnixApp:
         Returns the generation result dict for backward compatibility.
         """
         world_id = await self.create_world(plan)
-        run_id = await self.create_run(plan, world_id=world_id)
+        await self.create_run(plan, world_id=world_id)
         # Load from disk (not instance state)
         import json as _json
+
         gen_path = self._world_manager.get_world_dir(world_id) / "generation.json"
         return _json.loads(gen_path.read_text()) if gen_path.exists() else {}
 
@@ -1149,7 +1202,10 @@ class VolnixApp:
         return world_id
 
     async def create_run(
-        self, plan: Any, mode: str = "governed", tag: str | None = None,
+        self,
+        plan: Any,
+        mode: str = "governed",
+        tag: str | None = None,
         world_id: WorldId | None = None,
         agents_yaml: str | None = None,
         internal_profile: Any | None = None,
@@ -1199,9 +1255,7 @@ class VolnixApp:
         # Copy world's pristine state.db → run's own state.db
         world_db = self._world_manager.get_state_db_path(world_id)
         if not Path(world_db).exists():
-            raise VolnixError(
-                f"World '{world_id}' has no state.db — generation may have failed"
-            )
+            raise VolnixError(f"World '{world_id}' has no state.db — generation may have failed")
         run_dir = Path(self._run_manager._data_dir) / str(run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
         run_db = str(run_dir / "state.db")
@@ -1219,6 +1273,7 @@ class VolnixApp:
 
         # Load generation result from the world's saved data (not instance state)
         import json as _json
+
         gen_path = self._world_manager.get_world_dir(world_id) / "generation.json"
         result = _json.loads(gen_path.read_text()) if gen_path.exists() else {}
 
@@ -1226,6 +1281,7 @@ class VolnixApp:
         # and register them in the actor registry (same as compiler does at
         # engine.py:374 during fresh generation — needed for permission checks)
         from volnix.actors.definition import ActorDefinition
+
         if "actors" in result:
             result["actors"] = [
                 ActorDefinition.model_validate(a) if isinstance(a, dict) else a
@@ -1241,21 +1297,25 @@ class VolnixApp:
         # When no profile, register http-agent/mcp-agent as fallback identities.
         if agents_yaml and self._slot_manager:
             from volnix.actors.profile import load_agent_profile
+
             agent_defs = load_agent_profile(agents_yaml)
             self._slot_manager.register_from_profile(agent_defs)
         else:
             # No profile — register default gateway actors for backward compat
             from volnix.actors.definition import ActorDefinition
             from volnix.core.types import ActorType
+
             for default_id in ("http-agent", "mcp-agent"):
                 aid = ActorId(default_id)
                 if self._actor_registry and not self._actor_registry.has_actor(aid):
-                    self._actor_registry.register(ActorDefinition(
-                        id=aid,
-                        type=ActorType.AGENT,
-                        role="gateway-default",
-                        permissions={"read": "all", "write": "all"},
-                    ))
+                    self._actor_registry.register(
+                        ActorDefinition(
+                            id=aid,
+                            type=ActorType.AGENT,
+                            role="gateway-default",
+                            permissions={"read": "all", "write": "all"},
+                        )
+                    )
 
         # Register internal agents in actor registry (profile loaded by CLI layer)
         if internal_profile:
@@ -1263,10 +1323,14 @@ class VolnixApp:
                 if not self._actor_registry.has_actor(agent_def.id):
                     self._actor_registry.register(agent_def)
             logger.info(
-                "Registered %d internal agents", len(internal_profile.agents),
+                "Registered %d internal agents",
+                len(internal_profile.agents),
             )
 
-        self.configure_governance(plan)
+        self.configure_governance(
+            plan,
+            compiled_policies=result.get("compiled_policies"),
+        )
         await self.configure_animator(plan)
         await self.configure_agency(plan, result, internal_profile=internal_profile)
 
@@ -1283,9 +1347,7 @@ class VolnixApp:
         # Runs with a SimulationRunner handle completion via end conditions.
         world_def = plan.model_dump() if hasattr(plan, "model_dump") else {}
         actors = world_def.get("actor_specs", world_def.get("actors", []))
-        has_internal = any(
-            a.get("type") not in ("agent", "external") for a in actors
-        )
+        has_internal = any(a.get("type") not in ("agent", "external") for a in actors)
         if not has_internal:
             self._idle_watcher_task = asyncio.create_task(
                 self._idle_watcher(run_id, timeout_seconds=300)
@@ -1301,9 +1363,7 @@ class VolnixApp:
         """Complete a run: generate report, save artifacts, optional snapshot."""
         run = await self._run_manager.get_run(run_id)
         if run is None or run.get("status") != "running":
-            raise ValueError(
-                f"Cannot end run {run_id}: run is not in 'running' state"
-            )
+            raise ValueError(f"Cannot end run {run_id}: run is not in 'running' state")
 
         world_def = run.get("world_def", {}) if run else {}
         actors_raw = world_def.get("actor_specs", world_def.get("actors", []))
@@ -1311,7 +1371,8 @@ class VolnixApp:
         # Build actors list for reporter (explicit — not from global registry)
         actors_for_report = [
             {"id": a.get("id", ""), "type": a.get("type", ""), "role": a.get("role", "")}
-            for a in actors_raw if isinstance(a, dict) and a.get("id")
+            for a in actors_raw
+            if isinstance(a, dict) and a.get("id")
         ]
 
         # Get run-scoped events FIRST (filtered by run_id).
@@ -1341,10 +1402,13 @@ class VolnixApp:
         if has_external:
             try:
                 gov_report = await reporter.generate_governance_report(
-                    actors=actors_for_report, events=raw_events,
+                    actors=actors_for_report,
+                    events=raw_events,
                 )
                 await self._artifact_store.save(
-                    run_id, "governance_report", gov_report,
+                    run_id,
+                    "governance_report",
+                    gov_report,
                 )
             except Exception as exc:
                 logger.warning("Governance report generation failed: %s", exc)
@@ -1378,7 +1442,11 @@ class VolnixApp:
         def _actor_to_dict(a: Any) -> dict:
             if isinstance(a, dict):
                 return {"id": a.get("id", ""), "role": a.get("role", ""), "type": a.get("type", "")}
-            return {"id": getattr(a, "id", ""), "role": getattr(a, "role", ""), "type": getattr(a, "type", "")}
+            return {
+                "id": getattr(a, "id", ""),
+                "role": getattr(a, "role", ""),
+                "type": getattr(a, "type", ""),
+            }
 
         actors_summary = [_actor_to_dict(a) for a in actors_raw]
 
@@ -1436,7 +1504,9 @@ class VolnixApp:
                 if results:
                     logger.info(
                         "Animator bridge: generated %d events after %s by %s",
-                        len(results), event_type, actor,
+                        len(results),
+                        event_type,
+                        actor,
                     )
             except Exception as exc:
                 logger.warning("Animator bridge tick failed: %s", exc)
@@ -1458,7 +1528,8 @@ class VolnixApp:
             if elapsed >= timeout_seconds:
                 logger.info(
                     "Run %s idle for %ds, auto-completing",
-                    run_id, int(elapsed),
+                    run_id,
+                    int(elapsed),
                 )
                 try:
                     await self.end_run(run_id)
@@ -1474,7 +1545,9 @@ class VolnixApp:
         return await comparator.compare([RunId(rid) for rid in run_ids])
 
     async def diff_governed_ungoverned(
-        self, gov_tag: str, ungov_tag: str,
+        self,
+        gov_tag: str,
+        ungov_tag: str,
     ) -> dict:
         """Specialized governed vs ungoverned comparison."""
         from volnix.runs.comparison import RunComparator
@@ -1483,11 +1556,10 @@ class VolnixApp:
         gov_run = await self._run_manager.get_run(RunId(gov_tag))
         ungov_run = await self._run_manager.get_run(RunId(ungov_tag))
         if not gov_run or not ungov_run:
-            raise ValueError(
-                f"Could not resolve run tags: {gov_tag}, {ungov_tag}"
-            )
+            raise ValueError(f"Could not resolve run tags: {gov_tag}, {ungov_tag}")
         return await comparator.compare_governed_ungoverned(
-            RunId(gov_run["run_id"]), RunId(ungov_run["run_id"]),
+            RunId(gov_run["run_id"]),
+            RunId(ungov_run["run_id"]),
         )
 
     # ── Properties ──────────────────────────────────────────────

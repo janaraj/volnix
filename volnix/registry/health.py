@@ -32,7 +32,12 @@ class HealthAggregator:
             try:
                 results[name] = await engine.health_check()
             except Exception as exc:
-                results[name] = {"engine": name, "started": False, "healthy": False, "error": str(exc)}
+                results[name] = {
+                    "engine": name,
+                    "started": False,
+                    "healthy": False,
+                    "error": str(exc),
+                }
         self._last_results = results
         return results
 

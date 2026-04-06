@@ -163,7 +163,9 @@ def _make_mock_llm_router(*, invalid_sections: set[str] | None = None):
 
         return LLMResponse(
             content=json.dumps(payload),
-            provider="mock", model="gemini-3-flash-preview", latency_ms=0,
+            provider="mock",
+            model="gemini-3-flash-preview",
+            latency_ms=0,
         )
 
     router = AsyncMock()
@@ -171,9 +173,7 @@ def _make_mock_llm_router(*, invalid_sections: set[str] | None = None):
     return router
 
 
-async def _make_engine(
-    llm_router=None, state_engine=None, actor_registry=None
-):
+async def _make_engine(llm_router=None, state_engine=None, actor_registry=None):
     """Build a WorldCompilerEngine with injected dependencies."""
     if llm_router is None:
         llm_router = _make_mock_llm_router()
@@ -212,9 +212,7 @@ def _make_plan_with_email() -> WorldPlan:
                 resolution_source="tier1_pack",
             )
         },
-        actor_specs=[
-            {"role": "support-agent", "type": "external", "count": 2}
-        ],
+        actor_specs=[{"role": "support-agent", "type": "external", "count": 2}],
         conditions=load_preset("messy"),
         reality_prompt_context={},
     )
@@ -427,7 +425,11 @@ class TestGenerateWorldEntityContent:
             assert actor.role, "Actor missing role"
             assert actor.personality is not None, "Actor missing personality"
             assert actor.personality.style in (
-                "methodical", "creative", "aggressive", "cautious", "balanced"
+                "methodical",
+                "creative",
+                "aggressive",
+                "cautious",
+                "balanced",
             )
 
     @pytest.mark.asyncio

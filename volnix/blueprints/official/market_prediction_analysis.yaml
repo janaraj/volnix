@@ -20,6 +20,22 @@ world:
     - "#SPX500 trending on Twitter with mixed sentiment"
     - "Reddit r/wallstreetbets debate on whether market is overbought"
 
+  policies:
+    - name: "Bulk post moderation"
+      trigger: "posting more than 3 messages in rapid succession"
+      enforcement: hold
+      hold_config:
+        approver_role: "macro-economist"
+        timeout: "15m"
+
+    - name: "Sentiment manipulation alert"
+      trigger: "retweeting or amplifying unverified financial claims"
+      enforcement: block
+
+    - name: "Audit social reads"
+      trigger: "reading trending topics or searching social feeds"
+      enforcement: log
+
   behavior: dynamic
   fidelity: auto
   mode: governed

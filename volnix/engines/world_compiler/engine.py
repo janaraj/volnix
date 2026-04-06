@@ -105,8 +105,13 @@ class WorldCompilerEngine(BaseEngine):
             verified_packs = self._compiler_resolver.get_available_packs()
 
         world_def, settings = await self._nl_parser.parse(
-            description, reality, behavior, fidelity, seed,
-            categories=categories, verified_packs=verified_packs,
+            description,
+            reality,
+            behavior,
+            fidelity,
+            seed,
+            categories=categories,
+            verified_packs=verified_packs,
         )
         partial, specs = await self._yaml_parser.parse_from_dicts(world_def, settings)
         # Override source
@@ -120,21 +125,25 @@ class WorldCompilerEngine(BaseEngine):
     ) -> WorldPlan:
         """Resolve services and assemble final WorldPlan."""
         if not self._compiler_resolver:
-            return partial.model_copy(update={
-                "warnings": list(partial.warnings) + ["No service resolver available"],
-            })
+            return partial.model_copy(
+                update={
+                    "warnings": list(partial.warnings) + ["No service resolver available"],
+                }
+            )
 
         # Auto-include chat service when internal actors exist
         chat_auto_included = False
         if self._typed_config.auto_include_chat:
             original_specs = service_specs
             service_specs = self._maybe_auto_include_chat(
-                partial, service_specs,
+                partial,
+                service_specs,
             )
             chat_auto_included = service_specs is not original_specs
 
         resolutions, warnings = await self._compiler_resolver.resolve_all(
-            service_specs, partial.fidelity,
+            service_specs,
+            partial.fidelity,
         )
 
         updates: dict[str, Any] = {
@@ -160,8 +169,7 @@ class WorldCompilerEngine(BaseEngine):
         """
         # Check if world has internal actors
         has_internal = any(
-            spec.get("type", "external") == "internal"
-            for spec in partial.actor_specs
+            spec.get("type", "external") == "internal" for spec in partial.actor_specs
         )
         if not has_internal:
             return service_specs
@@ -173,9 +181,7 @@ class WorldCompilerEngine(BaseEngine):
             return service_specs
 
         # Add chat service via verified/slack pack
-        logger.info(
-            "Auto-including chat service for world with internal actors"
-        )
+        logger.info("Auto-including chat service for world with internal actors")
         updated_specs = dict(service_specs)
         updated_specs["chat"] = "verified/slack"
         return updated_specs
@@ -198,7 +204,8 @@ class WorldCompilerEngine(BaseEngine):
     ) -> WorldPlan:
         """Compile a WorldPlan from in-memory dicts (public API for replay)."""
         partial, specs = await self._yaml_parser.parse_from_dicts(
-            world_def, settings or {},
+            world_def,
+            settings or {},
         )
         return await self._resolve_and_assemble(partial, specs)
 
@@ -226,6 +233,9 @@ class WorldCompilerEngine(BaseEngine):
         from volnix.engines.world_compiler.seed_processor import CompilerSeedProcessor
         from volnix.engines.world_compiler.validator import CompilerWorldValidator
 
+        # Step 3.5: COMPILE NL policy triggers → dict triggers
+        plan = await self._compile_policy_triggers(plan)
+
         # Assemble generation context ONCE — shared by all generators
         ctx = WorldGenerationContext(plan)
         validator = CompilerWorldValidator(
@@ -242,10 +252,7 @@ class WorldCompilerEngine(BaseEngine):
             seed=plan.seed,
         )
         all_entities: dict[str, list[dict[str, Any]]] = {}
-        section_specs = {
-            spec.entity_type: spec
-            for spec in data_gen.iter_generation_specs(plan)
-        }
+        section_specs = {spec.entity_type: spec for spec in data_gen.iter_generation_specs(plan)}
         # Sort by dependency: generate root entities (no x-volnix-ref)
         # before dependent entities. Ensures valid cross-references.
         ordered_specs = data_gen._sort_by_dependency(list(section_specs.values()))
@@ -346,6 +353,7 @@ class WorldCompilerEngine(BaseEngine):
 
         # Step 6.5: DEDUP entities (seed versions win on conflict)
         from volnix.utils.collections import dedup_entity_collection
+
         all_entities = dedup_entity_collection(all_entities, key="id", strategy="last_wins")
 
         # Step 7: final validation gate before state/actor side effects
@@ -391,18 +399,22 @@ class WorldCompilerEngine(BaseEngine):
                     }
                     try:
                         rules = await vis_gen.generate_for_role(
-                            actor_spec, plan, context_vars,
+                            actor_spec,
+                            plan,
+                            context_vars,
                         )
                         for rule in rules:
                             visibility_rules.append(rule.model_dump())
                     except Exception as exc:
                         logger.warning(
                             "Visibility rules failed for role %s: %s",
-                            actor.role, exc,
+                            actor.role,
+                            exc,
                         )
             except Exception as exc:
                 logger.warning(
-                    "Visibility rule generation unavailable: %s", exc,
+                    "Visibility rule generation unavailable: %s",
+                    exc,
                 )
 
         if visibility_rules:
@@ -423,9 +435,7 @@ class WorldCompilerEngine(BaseEngine):
             logger.info("Populated %d entities into state engine", entity_count)
             snapshot_id = await state_engine.snapshot("initial_world")
         else:
-            logger.warning(
-                "No state engine available — entities not persisted"
-            )
+            logger.warning("No state engine available — entities not persisted")
 
         if actor_registry and actors:
             actor_registry.register_batch(actors)
@@ -436,9 +446,7 @@ class WorldCompilerEngine(BaseEngine):
             for actor in actors:
                 event = WorldEvent(
                     event_type="world.actor_registered",
-                    timestamp=Timestamp(
-                        world_time=now, wall_time=now, tick=0
-                    ),
+                    timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
                     actor_id=ActorId("world_compiler"),
                     service_id=ServiceId("world_compiler"),
                     action="register_actor",
@@ -489,15 +497,14 @@ class WorldCompilerEngine(BaseEngine):
                         actor_spec = {
                             "role": actor.role,
                             "personality": (
-                                actor.personality.model_dump()
-                                if actor.personality
-                                else ""
+                                actor.personality.model_dump() if actor.personality else ""
                             ),
                             "type": str(actor.type),
                         }
                         try:
                             subs = await sub_gen.generate_subscriptions(
-                                actor_spec, plan,
+                                actor_spec,
+                                plan,
                             )
                             actor_subscriptions[str(actor.id)] = subs
                         except Exception as exc:
@@ -526,6 +533,7 @@ class WorldCompilerEngine(BaseEngine):
                 "final_world": final_validation.model_dump(mode="json"),
             },
             "retry_counts": retry_counts,
+            "compiled_policies": plan.policies,
         }
 
         # Generate report
@@ -539,49 +547,138 @@ class WorldCompilerEngine(BaseEngine):
             from volnix.ledger.entries import WorldCompilationEntry
 
             try:
-                await _ledger.append(WorldCompilationEntry(
-                    plan_name=plan.name,
-                    behavior=plan.behavior,
-                    seed=plan.seed,
-                    services=list(plan.services.keys()),
-                    entity_count=sum(
-                        len(v) for v in all_entities.values()
-                    ),
-                    entity_types=list(all_entities.keys()),
-                    actor_count=len(actors),
-                    seeds_processed=len(plan.seeds),
-                    total_retries=sum(retry_counts.values()),
-                    warnings_count=len(warnings),
-                    snapshot_id=str(snapshot_id) if snapshot_id else "",
-                    duration_ms=_compile_ms,
-                ))
-            except Exception as exc:
-                logger.warning(
-                    "Compilation ledger entry failed: %s", exc
+                await _ledger.append(
+                    WorldCompilationEntry(
+                        plan_name=plan.name,
+                        behavior=plan.behavior,
+                        seed=plan.seed,
+                        services=list(plan.services.keys()),
+                        entity_count=sum(len(v) for v in all_entities.values()),
+                        entity_types=list(all_entities.keys()),
+                        actor_count=len(actors),
+                        seeds_processed=len(plan.seeds),
+                        total_retries=sum(retry_counts.values()),
+                        warnings_count=len(warnings),
+                        snapshot_id=str(snapshot_id) if snapshot_id else "",
+                        duration_ms=_compile_ms,
+                    )
                 )
+            except Exception as exc:
+                logger.warning("Compilation ledger entry failed: %s", exc)
 
         # Publish generation complete event
-        await self.publish(WorldEvent(
-            event_type="world.generation_complete",
-            timestamp=Timestamp(
-                world_time=datetime.now(UTC),
-                wall_time=datetime.now(UTC),
-                tick=0,
-            ),
-            actor_id=ActorId("world_compiler"),
-            service_id=ServiceId("world_compiler"),
-            action="generate_world",
-            input_data={
-                "entity_count": sum(
-                    len(v) for v in all_entities.values()
+        await self.publish(
+            WorldEvent(
+                event_type="world.generation_complete",
+                timestamp=Timestamp(
+                    world_time=datetime.now(UTC),
+                    wall_time=datetime.now(UTC),
+                    tick=0,
                 ),
-                "actor_count": len(actors),
-                "seeds_processed": len(plan.seeds),
-                "snapshot_id": str(snapshot_id) if snapshot_id else None,
-            },
-        ))
+                actor_id=ActorId("world_compiler"),
+                service_id=ServiceId("world_compiler"),
+                action="generate_world",
+                input_data={
+                    "entity_count": sum(len(v) for v in all_entities.values()),
+                    "actor_count": len(actors),
+                    "seeds_processed": len(plan.seeds),
+                    "snapshot_id": str(snapshot_id) if snapshot_id else None,
+                },
+            )
+        )
 
         return result
+
+    async def _compile_policy_triggers(self, plan: WorldPlan) -> WorldPlan:
+        """Compile NL string triggers into structured dict triggers via LLM.
+
+        Policies with dict triggers pass through unchanged.
+        Returns a new WorldPlan with all NL triggers compiled to dicts.
+        """
+        from volnix.engines.world_compiler.prompt_templates import (
+            POLICY_TRIGGER_COMPILATION,
+        )
+
+        # Partition: find policies with NL string triggers
+        nl_policies: list[tuple[int, dict[str, Any]]] = []
+        for idx, policy in enumerate(plan.policies):
+            if isinstance(policy.get("trigger"), str):
+                nl_policies.append((idx, policy))
+
+        if not nl_policies:
+            return plan  # All triggers already structured
+
+        # Collect available operations from resolved services
+        available_ops: list[str] = []
+        for svc_name, resolution in plan.services.items():
+            for op in resolution.surface.operations:
+                available_ops.append(
+                    f"- {op.name} (service: {svc_name}, description: {op.description})"
+                )
+
+        if not available_ops:
+            logger.warning("No resolved operations — NL triggers preserved as-is")
+            return plan
+
+        # Build prompt input
+        trigger_lines = [
+            f'- Policy "{p.get("name", "unnamed")}" '
+            f'(enforcement: {p.get("enforcement", "log")}): "{p["trigger"]}"'
+            for _, p in nl_policies
+        ]
+
+        # Single LLM call for all NL triggers
+        response = await POLICY_TRIGGER_COMPILATION.execute(
+            self._llm_router,
+            _seed=plan.seed,
+            available_operations="\n".join(available_ops),
+            policy_triggers="\n".join(trigger_lines),
+        )
+        result = POLICY_TRIGGER_COMPILATION.parse_json_response(response)
+
+        # Build lookup by policy name
+        compiled_lookup: dict[str, dict[str, Any]] = {
+            entry["policy_name"]: entry for entry in result.get("compiled_policies", [])
+        }
+
+        # Rebuild policies list with compiled triggers
+        new_policies: list[dict[str, Any]] = list(plan.policies)
+        warnings: list[str] = list(plan.warnings)
+
+        for idx, policy in nl_policies:
+            name = policy.get("name", "unnamed")
+            entry = compiled_lookup.get(name)
+
+            if not entry or entry.get("unresolvable"):
+                reason = (entry or {}).get("reason", "no matching operations")
+                warnings.append(f"Policy '{name}' NL trigger unresolvable: {reason}")
+                continue
+
+            triggers = entry.get("triggers", [])
+            if not triggers:
+                warnings.append(f"Policy '{name}' compiled to zero triggers")
+                continue
+
+            # Replace string trigger with first compiled dict trigger
+            first = dict(policy)
+            first["trigger"] = triggers[0]
+            first["_compiled_from_nl"] = policy["trigger"]
+            new_policies[idx] = first
+
+            # Additional triggers → cloned policies
+            for extra in triggers[1:]:
+                cloned = dict(policy)
+                cloned["trigger"] = extra
+                cloned["_compiled_from_nl"] = policy["trigger"]
+                cloned["name"] = f"{name} ({extra['action']})"
+                new_policies.append(cloned)
+
+        logger.info(
+            "Compiled %d NL policy triggers (%d total policies)",
+            len(nl_policies),
+            len(new_policies),
+        )
+        return plan.model_copy(update={"policies": new_policies, "warnings": warnings})
 
     async def _generate_validated_entity_section(
         self,
@@ -605,9 +702,7 @@ class WorldCompilerEngine(BaseEngine):
         # Tier 2 profiles often don't — inject them so the LLM and
         # structured output API enforce valid states during generation.
         if state_machine:
-            enriched_schema = self._inject_state_machine_enums(
-                spec.entity_schema, state_machine
-            )
+            enriched_schema = self._inject_state_machine_enums(spec.entity_schema, state_machine)
             spec = spec.model_copy(update={"entity_schema": enriched_schema})
 
         entities = await data_gen.generate_section(spec, ctx, ref_context=ref_context)
@@ -878,7 +973,10 @@ class WorldCompilerEngine(BaseEngine):
         schemas: dict[str, Any] | None = None,
     ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
         expansion = await seed_processor.expand_seed(
-            description, all_entities, base_vars, schemas=schemas,
+            description,
+            all_entities,
+            base_vars,
+            schemas=schemas,
         )
         retries = 0
         result, updated_entities = await self._validate_seed_application(
@@ -895,7 +993,9 @@ class WorldCompilerEngine(BaseEngine):
         if not result.valid:
             logger.warning(
                 "Seed [%s] initial validation failed (%d errors): %s",
-                section, len(result.errors), "; ".join(result.errors[:3]),
+                section,
+                len(result.errors),
+                "; ".join(result.errors[:3]),
             )
 
         while not result.valid and retries < self._typed_config.max_section_retries:
@@ -954,7 +1054,9 @@ class WorldCompilerEngine(BaseEngine):
         schemas: dict[str, Any] | None = None,
     ) -> tuple[Any, dict[str, list[dict[str, Any]]]]:
         updated_entities = seed_processor.apply_modifications(
-            expansion, current_entities, schemas=schemas,
+            expansion,
+            current_entities,
+            schemas=schemas,
         )
 
         if not expansion.invariants:
@@ -1031,21 +1133,15 @@ class WorldCompilerEngine(BaseEngine):
         )
         return repair_template.parse_json_response(response)
 
-    async def resolve_service_schema(
-        self, service_name: str
-    ) -> dict[str, Any]:
+    async def resolve_service_schema(self, service_name: str) -> dict[str, Any]:
         """Resolve and return the schema for a named service."""
         if not self._compiler_resolver:
             raise CompilerError("No service resolver available")
-        resolution = await self._compiler_resolver.resolve_one(
-            service_name, service_name, "auto"
-        )
+        resolution = await self._compiler_resolver.resolve_one(service_name, service_name, "auto")
         if resolution is None:
             raise CompilerError(f"Could not resolve service: {service_name}")
         return resolution.surface.model_dump()
 
-    async def expand_reality(
-        self, preset: str, overrides: dict[str, Any] | None = None
-    ) -> Any:
+    async def expand_reality(self, preset: str, overrides: dict[str, Any] | None = None) -> Any:
         """Expand reality preset + overrides into WorldConditions."""
         return self._condition_expander.expand(preset, overrides)

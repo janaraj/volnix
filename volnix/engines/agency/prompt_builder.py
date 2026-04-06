@@ -132,9 +132,7 @@ class ActorPromptBuilder:
                     team_lines.append(f"- **{member['role']}** (ID: {member['id']})")
             # Show team channel for autonomous agents
             if actor.autonomous and actor.team_channel:
-                team_lines.append(
-                    f"\nTeam channel: `{actor.team_channel}`"
-                )
+                team_lines.append(f"\nTeam channel: `{actor.team_channel}`")
             sections.append("\n".join(team_lines))
 
         # --- 3. Instructions (before tools/state — shapes LLM intent early) ---
@@ -145,9 +143,14 @@ class ActorPromptBuilder:
                 "create, update, or delete anything. Only use read actions."
             )
         elif actor.autonomous:
-            sections.append(self.build_autonomous_instructions(
-                actor, team_roster, activation_reason, simulation_progress,
-            ))
+            sections.append(
+                self.build_autonomous_instructions(
+                    actor,
+                    team_roster,
+                    activation_reason,
+                    simulation_progress,
+                )
+            )
         else:
             sections.append(
                 "## Instructions\n"
@@ -184,15 +187,11 @@ class ActorPromptBuilder:
 
         # Action history (anti-repetition: shows what agent already did)
         if actor.autonomous:
-            context_parts.append(
-                self._build_action_history(actor, available_actions)
-            )
+            context_parts.append(self._build_action_history(actor, available_actions))
 
         # Recent activity (what the team has been doing)
         if actor.recent_interactions:
-            context_parts.append(
-                self._build_recent_activity(actor)
-            )
+            context_parts.append(self._build_recent_activity(actor))
 
         if context_parts:
             sections.append("## What You Know\n\n" + "\n\n".join(context_parts))
@@ -303,7 +302,9 @@ class ActorPromptBuilder:
             ]
             if team_size > 1:
                 steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")
-            steps.append("NO REPETITION. Check Your Action History — don't re-query or re-do completed work.")
+            steps.append(
+                "NO REPETITION. Check Your Action History — don't re-query or re-do completed work."
+            )
             steps.append("Track progress via state_updates.pending_tasks and goal_context.")
             steps.append("If nothing new to add: call the `do_nothing` tool.")
 
@@ -327,8 +328,7 @@ class ActorPromptBuilder:
         """Build summary of agent's own actions (anti-repetition)."""
         # Build lookup: tool name → http_method
         method_lookup = {
-            a.get("name", ""): a.get("http_method", "POST").upper()
-            for a in available_actions
+            a.get("name", ""): a.get("http_method", "POST").upper() for a in available_actions
         }
 
         own = [r for r in actor.recent_interactions if r.source == "self"]
@@ -345,8 +345,12 @@ class ActorPromptBuilder:
                 entry += f" → {r.response_summary[:150]}"
             if method == "GET":
                 queries.append(entry)
-            elif r.action in ("chat.postMessage", "chat.replyToThread",
-                              "chat.update", "email_send"):
+            elif r.action in (
+                "chat.postMessage",
+                "chat.replyToThread",
+                "chat.update",
+                "email_send",
+            ):
                 messages.append(r.summary)
             else:
                 other.append(r.summary)
@@ -422,9 +426,9 @@ class ActorPromptBuilder:
         )
 
         trigger_lines = [
-            f"## Trigger",
+            "## Trigger",
             f"**{trigger_event.actor_id}** performed `{trigger_event.action}`"
-            f" on `{trigger_event.service_id}`"
+            f" on `{trigger_event.service_id}`",
         ]
         if channel:
             trigger_lines[-1] += f" in `{channel}`"
@@ -454,20 +458,14 @@ class ActorPromptBuilder:
                 f"Activation: {reason}",
             ]
             if trigger_event:
-                text = (
-                    trigger_event.input_data.get("text")
-                    or trigger_event.action
-                )
+                text = trigger_event.input_data.get("text") or trigger_event.action
                 preview = (text[:200] + "...") if len(text) > 200 else text
                 actor_section.append(
-                    f"Trigger: {trigger_event.actor_id} → "
-                    f"{trigger_event.action}: {preview}"
+                    f"Trigger: {trigger_event.actor_id} → {trigger_event.action}: {preview}"
                 )
             if actor.current_goal:
                 actor_section.append(f"Goal: {actor.current_goal}")
             sections.append("\n".join(actor_section))
 
-        sections.append(
-            f"Respond with JSON: {json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}"
-        )
+        sections.append(f"Respond with JSON: {json.dumps(BATCH_OUTPUT_SCHEMA, indent=2)}")
         return "\n\n".join(sections)

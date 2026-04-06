@@ -4,17 +4,17 @@ All tests in this directory require a real LLM provider:
   - codex-acp (default, configured in volnix.toml)
   - OR GOOGLE_API_KEY for direct Gemini access
 """
+
 from __future__ import annotations
 
 import os
-import shutil
 
 import pytest
 
 from volnix.app import VolnixApp
 from volnix.config.loader import ConfigLoader
-from volnix.persistence.config import PersistenceConfig
 from volnix.engines.state.config import StateConfig
+from volnix.persistence.config import PersistenceConfig
 from volnix.worlds.config import WorldsConfig
 
 
@@ -45,14 +45,16 @@ async def live_app(tmp_path):
     """
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-        "worlds": WorldsConfig(data_dir=str(tmp_path / "worlds")),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+            "worlds": WorldsConfig(data_dir=str(tmp_path / "worlds")),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()

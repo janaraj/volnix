@@ -1,5 +1,7 @@
 """Tests for volnix.config.registry — live config registry and subscriptions."""
+
 import pytest
+
 from volnix.config.registry import ConfigRegistry
 from volnix.config.schema import VolnixConfig
 
@@ -79,6 +81,7 @@ def test_update_tunable_notifies_multiple():
 def test_get_section_returns_typed():
     """get_section returns the actual typed Pydantic model, not a dict."""
     from volnix.config.schema import SimulationConfig
+
     config = VolnixConfig()
     registry = ConfigRegistry(config)
     section = registry.get_section("simulation")

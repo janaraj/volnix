@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 from pydantic import ValidationError
 
 from volnix.core.events import WorldEvent
-from volnix.core.types import ActorId, EntityId, EventId, ServiceId, Timestamp
+from volnix.core.types import ActorId, EventId, ServiceId, Timestamp
+
 
 def _make_timestamp():
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    from datetime import datetime
+
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=1)
+
 
 def _base_kwargs():
     return {
@@ -36,7 +41,15 @@ def test_default_values():
 
 def test_explicit_values():
     """New fields can be set explicitly."""
-    deltas = [{"entity_type": "ticket", "entity_id": "t-1", "operation": "create", "fields": {"id": "t-1"}, "previous_fields": None}]
+    deltas = [
+        {
+            "entity_type": "ticket",
+            "entity_id": "t-1",
+            "operation": "create",
+            "fields": {"id": "t-1"},
+            "previous_fields": None,
+        }
+    ]
     cost = {"api_calls": 1, "llm_spend_usd": 0.05, "world_actions": 1}
     event = WorldEvent(
         **_base_kwargs(),
@@ -60,7 +73,15 @@ def test_serialization_round_trip():
         **_base_kwargs(),
         response_body={"data": [1, 2, 3]},
         outcome="held",
-        state_deltas=[{"entity_type": "email", "entity_id": "e-1", "operation": "update", "fields": {"status": "read"}, "previous_fields": {"status": "unread"}}],
+        state_deltas=[
+            {
+                "entity_type": "email",
+                "entity_id": "e-1",
+                "operation": "update",
+                "fields": {"status": "read"},
+                "previous_fields": {"status": "unread"},
+            }
+        ],
         cost={"api_calls": 2, "llm_spend_usd": 0.1, "world_actions": 1},
         run_id="run-456",
     )
@@ -77,7 +98,11 @@ def test_backward_compat_deserialization():
     old_dict = {
         "event_id": "evt-old",
         "event_type": "world.old_action",
-        "timestamp": {"world_time": "2026-01-01T00:00:00Z", "wall_time": "2026-01-01T00:00:00Z", "tick": 0},
+        "timestamp": {
+            "world_time": "2026-01-01T00:00:00Z",
+            "wall_time": "2026-01-01T00:00:00Z",
+            "tick": 0,
+        },
         "actor_id": "actor-1",
         "service_id": "svc-1",
         "action": "old_action",

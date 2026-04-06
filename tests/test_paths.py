@@ -3,14 +3,11 @@
 Covers: resolve_blueprint, resolve_preset, sanitize_filename,
 path traversal prevention, precedence chain, listing, error handling.
 """
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # ── sanitize_filename ────────────────────────────────────────────
 

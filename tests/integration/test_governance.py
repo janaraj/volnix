@@ -4,20 +4,12 @@ These tests exercise the real governance engines wired into the full
 VolnixApp pipeline, verifying that governance decisions flow correctly
 from YAML-defined rules through to pipeline verdicts and events.
 """
+
 import pytest
 
-from volnix.core.context import ActionContext
-from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from volnix.core.events import (
-    BudgetDeductionEvent,
-    BudgetExhaustedEvent,
-    PermissionDeniedEvent,
-    PolicyBlockEvent,
-    PolicyFlagEvent,
-    PolicyHoldEvent,
-)
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.registry import ActorRegistry
+from volnix.core.types import ActorId, ActorType
 
 
 def _register_actors(app, *actors):
@@ -334,11 +326,11 @@ async def test_agent_multiple_actions_within_budget(app):
             input_data={
                 "from_addr": "agent@acme.com",
                 "to_addr": f"customer{i}@test.com",
-                "subject": f"Ticket #{i+1} resolved",
+                "subject": f"Ticket #{i + 1} resolved",
                 "body": "Your issue has been addressed.",
             },
         )
-        assert "error" not in result, f"Action {i+1} failed: {result}"
+        assert "error" not in result, f"Action {i + 1} failed: {result}"
         assert "email_id" in result
 
 
@@ -414,7 +406,7 @@ async def test_full_governed_lifecycle_with_ledger_trace(app):
             input_data={
                 "from_addr": "agent@acme.com",
                 "to_addr": f"customer{i}@test.com",
-                "subject": f"Response #{i+1}",
+                "subject": f"Response #{i + 1}",
                 "body": "Thank you for your patience.",
             },
         )
@@ -422,6 +414,7 @@ async def test_full_governed_lifecycle_with_ledger_trace(app):
 
     # Verify ledger: 7 pipeline steps per action × 2 actions = 14 entries
     from volnix.ledger.query import LedgerQuery
+
     entries = await app.ledger.query(LedgerQuery(limit=100))
     pipeline_entries = [e for e in entries if e.entry_type == "pipeline_step"]
     assert len(pipeline_entries) >= 14, (

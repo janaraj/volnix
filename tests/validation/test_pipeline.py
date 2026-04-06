@@ -9,10 +9,7 @@ import pytest
 from volnix.core.context import ResponseProposal
 from volnix.core.errors import EntityNotFoundError
 from volnix.core.types import EntityId, StateDelta
-from volnix.validation.config import ValidationConfig
 from volnix.validation.pipeline import ValidationPipeline
-from volnix.validation.schema import ValidationResult
-
 
 # ---------------------------------------------------------------------------
 # Mock state engine
@@ -123,9 +120,7 @@ async def test_pipeline_all_valid():
     pipe = ValidationPipeline()
     state = MockStateEngine({"ch_1": {"id": "ch_1"}})
     proposal = _valid_proposal()
-    result = await pipe.validate_response_proposal(
-        proposal, state, response_schema=RESPONSE_SCHEMA
-    )
+    result = await pipe.validate_response_proposal(proposal, state, response_schema=RESPONSE_SCHEMA)
     assert result.valid is True
 
 
@@ -134,9 +129,7 @@ async def test_pipeline_schema_failure():
     pipe = ValidationPipeline()
     state = MockStateEngine()
     proposal = ResponseProposal(response_body={"status": "pending"})  # missing id
-    result = await pipe.validate_response_proposal(
-        proposal, state, response_schema=RESPONSE_SCHEMA
-    )
+    result = await pipe.validate_response_proposal(proposal, state, response_schema=RESPONSE_SCHEMA)
     assert result.valid is False
     assert any("id" in e for e in result.errors)
 
@@ -149,9 +142,7 @@ async def test_pipeline_state_machine_failure():
         fields={"status": "pending"},
         previous_fields={"status": "succeeded"},
     )
-    result = await pipe.validate_response_proposal(
-        proposal, state, state_machines=STATE_MACHINES
-    )
+    result = await pipe.validate_response_proposal(proposal, state, state_machines=STATE_MACHINES)
     assert result.valid is False
 
 
@@ -170,9 +161,7 @@ async def test_pipeline_consistency_failure():
             ),
         ],
     )
-    result = await pipe.validate_response_proposal(
-        proposal, state, entity_schemas=ENTITY_SCHEMAS
-    )
+    result = await pipe.validate_response_proposal(proposal, state, entity_schemas=ENTITY_SCHEMAS)
     assert result.valid is False
     assert any("ch_missing" in e for e in result.errors)
 
@@ -220,9 +209,7 @@ async def test_pipeline_retry_success():
     state = MockStateEngine()
 
     bad_proposal = ResponseProposal(response_body={"status": "pending"})  # missing id
-    good_proposal = ResponseProposal(
-        response_body={"id": "ch_1", "status": "pending"}
-    )
+    good_proposal = ResponseProposal(response_body={"id": "ch_1", "status": "pending"})
 
     async def fix_callback(proposal, errors):
         return good_proposal

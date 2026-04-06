@@ -1,4 +1,5 @@
 """Tests for volnix.runs.artifacts — run artifact persistence."""
+
 import pytest
 
 from volnix.core.types import RunId
@@ -70,6 +71,7 @@ async def test_save_returns_file_path(tmp_path):
     path = await store.save_report(run_id, {"test": True})
     assert isinstance(path, str)
     from pathlib import Path
+
     assert Path(path).exists()
     assert path.endswith("report.json")
 

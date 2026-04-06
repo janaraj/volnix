@@ -6,6 +6,7 @@ The capture step is the first stage of the promotion ladder:
 It produces a :class:`CapturedSurface` by analysing the event log
 from a simulation run and grouping observations by service.
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,9 +37,7 @@ class ServiceCapture:
         self._artifacts = artifact_store
         self._annotations = annotation_store
 
-    async def capture(
-        self, run_id: RunId | str, service_name: ServiceId | str
-    ) -> CapturedSurface:
+    async def capture(self, run_id: RunId | str, service_name: ServiceId | str) -> CapturedSurface:
         """Extract observed behavior for *service_name* from *run_id*.
 
         Steps:
@@ -54,10 +53,7 @@ class ServiceCapture:
         events = await self._load_events(run_id)
 
         # 2. Filter for this service
-        service_events = [
-            e for e in events
-            if self._event_matches_service(e, name)
-        ]
+        service_events = [e for e in events if self._event_matches_service(e, name)]
 
         # 3. Build observations
         operations = self._extract_operations(service_events)
@@ -68,15 +64,10 @@ class ServiceCapture:
         annotations: list[dict[str, Any]] = []
         if self._annotations:
             run_annotations = await self._annotations.get_by_run(run_id)
-            annotations = [
-                a for a in run_annotations
-                if a.get("service_id", "").lower() == name
-            ]
+            annotations = [a for a in run_annotations if a.get("service_id", "").lower() == name]
 
         # 5. Extract behavioral rules from annotations
-        behavioral_rules = [
-            a["text"] for a in annotations if a.get("text")
-        ]
+        behavioral_rules = [a["text"] for a in annotations if a.get("text")]
 
         return CapturedSurface(
             service_name=name,
@@ -103,9 +94,7 @@ class ServiceCapture:
                 return data
             return []
         except (KeyError, FileNotFoundError, ValueError, OSError) as exc:
-            logger.warning(
-                "Failed to load event_log for run '%s': %s", run_id, exc
-            )
+            logger.warning("Failed to load event_log for run '%s': %s", run_id, exc)
             return []
 
     @staticmethod
@@ -117,10 +106,7 @@ class ServiceCapture:
         else:
             sid = str(getattr(event, "service_id", ""))
             action = str(getattr(event, "action", ""))
-        return (
-            sid.lower() == service_name
-            or action.lower().startswith(f"{service_name}_")
-        )
+        return sid.lower() == service_name or action.lower().startswith(f"{service_name}_")
 
     @staticmethod
     def _extract_operations(events: list[Any]) -> list[ObservedOperation]:

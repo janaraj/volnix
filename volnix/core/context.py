@@ -19,7 +19,6 @@ from volnix.core.types import (
     ActionSource,
     ActorId,
     EntityId,
-    EventId,
     FidelityMetadata,
     RealityPreset,
     RunId,

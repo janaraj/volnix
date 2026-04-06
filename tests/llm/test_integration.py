@@ -8,8 +8,7 @@ from volnix.llm.registry import ProviderRegistry
 from volnix.llm.router import LLMRouter
 from volnix.llm.secrets import ChainResolver, EnvVarResolver, FileResolver
 from volnix.llm.tracker import UsageTracker
-from volnix.llm.types import LLMRequest, LLMUsage, ProviderType
-from volnix.core.types import ActorId
+from volnix.llm.types import LLMRequest, ProviderType
 
 
 @pytest.mark.asyncio
@@ -95,10 +94,12 @@ async def test_secret_resolution_chain(monkeypatch, tmp_path):
     secret_file = tmp_path / "MY_MOCK_KEY"
     secret_file.write_text("file-key-value")
 
-    resolver = ChainResolver([
-        EnvVarResolver(),
-        FileResolver(secrets_dir=str(tmp_path)),
-    ])
+    resolver = ChainResolver(
+        [
+            EnvVarResolver(),
+            FileResolver(secrets_dir=str(tmp_path)),
+        ]
+    )
     assert resolver.resolve("MY_MOCK_KEY") == "file-key-value"
 
     config = LLMConfig(

@@ -3,8 +3,6 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from volnix.packs.base import ServicePack
 from volnix.packs.loader import (
     _module_path_from_filepath,

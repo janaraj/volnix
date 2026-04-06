@@ -84,6 +84,13 @@ class PolicyEngine(BaseEngine):
                 if self._evaluator.evaluate(condition, eval_context):
                     mode = str(policy.get("enforcement", "log")).lower()
                     triggered.append((policy, mode))
+                    logger.info(
+                        "Policy '%s' triggered: action=%s, enforcement=%s, actor=%s",
+                        policy.get("name", "unknown"),
+                        ctx.action,
+                        mode,
+                        ctx.actor_id,
+                    )
 
         if not triggered:
             return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW)
@@ -92,6 +99,7 @@ class PolicyEngine(BaseEngine):
         if self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned":
             now = datetime.now(UTC)
             ts = Timestamp(world_time=now, wall_time=now, tick=0)
+            run_id = str(ctx.run_id) if ctx.run_id else None
             events = [
                 PolicyFlagEvent(
                     event_type="policy.flag",
@@ -99,6 +107,7 @@ class PolicyEngine(BaseEngine):
                     policy_id=PolicyId(p.get("id", p.get("name", "unknown"))),
                     actor_id=ctx.actor_id,
                     action=ctx.action,
+                    run_id=run_id,
                 )
                 for p, _ in triggered
             ]
@@ -124,9 +133,7 @@ class PolicyEngine(BaseEngine):
         """Alias for execute — evaluate policies against the context."""
         return await self.execute(ctx)
 
-    async def get_active_policies(
-        self, service_id: ServiceId | None = None
-    ) -> list[PolicyId]:
+    async def get_active_policies(self, service_id: ServiceId | None = None) -> list[PolicyId]:
         """Return identifiers of currently active policies.
 
         Args:
@@ -135,14 +142,11 @@ class PolicyEngine(BaseEngine):
         policies = self._policies
         if service_id is not None:
             policies = [
-                p for p in policies
-                if str(service_id) in str(p.get("services", ""))
-                or not p.get("services")
+                p
+                for p in policies
+                if str(service_id) in str(p.get("services", "")) or not p.get("services")
             ]
-        return [
-            PolicyId(p.get("id", p.get("name", f"policy-{i}")))
-            for i, p in enumerate(policies)
-        ]
+        return [PolicyId(p.get("id", p.get("name", f"policy-{i}"))) for i, p in enumerate(policies)]
 
     async def resolve_hold(
         self,
@@ -155,7 +159,10 @@ class PolicyEngine(BaseEngine):
         now = datetime.now(UTC)
         logger.info(
             "Hold %s resolved: approved=%s by %s reason=%s",
-            hold_id, approved, approver, reason,
+            hold_id,
+            approved,
+            approver,
+            reason,
         )
         return PolicyFlagEvent(
             event_type="policy.hold_resolved",
@@ -168,24 +175,23 @@ class PolicyEngine(BaseEngine):
 
     async def add_policy(self, policy_def: dict[str, Any]) -> PolicyId:
         """Add a new policy to the active set."""
-        pid = PolicyId(policy_def.get("id", policy_def.get("name", f"policy-{len(self._policies)}")))
+        pid = PolicyId(
+            policy_def.get("id", policy_def.get("name", f"policy-{len(self._policies)}"))
+        )
         policy_def.setdefault("id", pid)
         self._policies.append(policy_def)
         return pid
 
     async def remove_policy(self, policy_id: PolicyId) -> None:
         """Remove a policy from the active set."""
-        self._policies = [
-            p for p in self._policies
-            if p.get("id", p.get("name")) != policy_id
-        ]
+        self._policies = [p for p in self._policies if p.get("id", p.get("name")) != policy_id]
 
     # -- Internal helpers ------------------------------------------------------
 
     def _matches_action(self, policy: dict[str, Any], ctx: ActionContext) -> bool:
         """Check if a policy's trigger matches the current action.
 
-        String triggers use whole-word matching against action name parts.
+        String triggers are compiled to dict triggers during world compilation.
         Dict triggers use exact/prefix matching against the ``action`` field.
         """
         trigger = policy.get("trigger")
@@ -195,23 +201,17 @@ class PolicyEngine(BaseEngine):
             return False
 
         if isinstance(trigger, str):
-            # String triggers are natural-language descriptions.  Use whole-word
-            # matching to prevent false positives like "ticket" ⊂ "tickets.list".
-            trigger_lower = trigger.lower()
-            action_lower = ctx.action.lower()
-
-            # Check if full action name appears in trigger text
-            if action_lower in trigger_lower:
-                return True
-
-            # Split action into semantic parts (e.g. "tickets.list" → {"tickets","list"})
-            action_parts = set(action_lower.replace(".", " ").replace("_", " ").split())
-            trigger_words = set(trigger_lower.split())
-
-            # Match only if an exact whole-word overlap exists
-            if action_parts & trigger_words:
-                return True
-
+            # String triggers are compiled to dict triggers during world
+            # compilation (_compile_policy_triggers). If a string trigger
+            # reaches runtime, it was either unresolvable or compilation
+            # was skipped. No heuristic matching — return False.
+            logger.warning(
+                "Uncompiled NL trigger at runtime for policy '%s' — "
+                "string triggers must be compiled to dict triggers "
+                "during world compilation (trigger: %.100s)",
+                policy.get("name", "unknown"),
+                trigger,
+            )
             return False
 
         if isinstance(trigger, dict):

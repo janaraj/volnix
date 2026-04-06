@@ -1,16 +1,16 @@
 """Tests for CompilerServiceResolver — service resolution chain."""
-import pytest
+
 from unittest.mock import AsyncMock
 
-from volnix.engines.world_compiler.service_resolution import CompilerServiceResolver
-from volnix.kernel.surface import ServiceSurface, APIOperation
-from volnix.packs.registry import PackRegistry
-from volnix.packs.verified.gmail.pack import EmailPack
+import pytest
 
+from volnix.engines.world_compiler.service_resolution import CompilerServiceResolver
+from volnix.kernel.surface import ServiceSurface
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_kernel_surface(service_name: str, confidence: float = 0.1) -> ServiceSurface:
     """Build a kernel-inferred ServiceSurface (weak signal, no operations)."""
@@ -100,7 +100,9 @@ class TestCompilerServiceResolver:
     async def test_strict_mode_filters_low_confidence(self, pack_registry, kernel):
         """Strict fidelity mode skips services with confidence < 0.5."""
         mock_resolver = AsyncMock()
-        mock_resolver.resolve = AsyncMock(return_value=_make_kernel_surface("slack", confidence=0.1))
+        mock_resolver.resolve = AsyncMock(
+            return_value=_make_kernel_surface("slack", confidence=0.1)
+        )
 
         resolver = CompilerServiceResolver(
             pack_registry=pack_registry,
@@ -115,7 +117,9 @@ class TestCompilerServiceResolver:
     async def test_auto_mode_allows_low_confidence(self, pack_registry, kernel):
         """Auto fidelity mode allows low-confidence services."""
         mock_resolver = AsyncMock()
-        mock_resolver.resolve = AsyncMock(return_value=_make_kernel_surface("slack", confidence=0.1))
+        mock_resolver.resolve = AsyncMock(
+            return_value=_make_kernel_surface("slack", confidence=0.1)
+        )
 
         resolver = CompilerServiceResolver(
             pack_registry=pack_registry,
@@ -145,5 +149,11 @@ class TestCompilerServiceResolver:
         assert resolver._parse_spec_reference("verified/gmail") == ("verified", "gmail")
         assert resolver._parse_spec_reference("profiled/stripe") == ("profiled", "stripe")
         assert resolver._parse_spec_reference("stripe") == ("auto", "stripe")
-        assert resolver._parse_spec_reference({"provider": "verified/browser"}) == ("verified", "browser")
-        assert resolver._parse_spec_reference({"provider": "raw_provider"}) == ("complex", "raw_provider")
+        assert resolver._parse_spec_reference({"provider": "verified/browser"}) == (
+            "verified",
+            "browser",
+        )
+        assert resolver._parse_spec_reference({"provider": "raw_provider"}) == (
+            "complex",
+            "raw_provider",
+        )

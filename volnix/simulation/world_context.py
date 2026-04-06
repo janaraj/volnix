@@ -110,7 +110,7 @@ class WorldContextBundle(BaseModel, frozen=True):
                 desc = t.get("description", "")
                 params = t.get("required_params", [])
                 params_str = f" — params: {', '.join(params)}" if params else ""
-                entry = f"  - action_type: \"{name}\", target_service: \"{service_name}\"{params_str}"
+                entry = f'  - action_type: "{name}", target_service: "{service_name}"{params_str}'
                 if desc:
                     entry += f"  ({desc})"
                 if method == "GET":

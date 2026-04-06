@@ -1,4 +1,5 @@
 """Tests for FeedbackEngine G4b methods -- sync + signals."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -52,12 +53,14 @@ async def test_signals_with_run_manager(mock_event_bus):
     engine = FeedbackEngine()
 
     run_manager = AsyncMock()
-    run_manager.list_runs = AsyncMock(return_value=[
-        {
-            "run_id": "r1",
-            "world_def": {"name": "Test", "services": {"email": "x"}},
-        },
-    ])
+    run_manager.list_runs = AsyncMock(
+        return_value=[
+            {
+                "run_id": "r1",
+                "world_def": {"name": "Test", "services": {"email": "x"}},
+            },
+        ]
+    )
 
     artifact_store = AsyncMock()
     artifact_store.load_artifact = AsyncMock(return_value=[])

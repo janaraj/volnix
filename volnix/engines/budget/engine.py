@@ -8,7 +8,7 @@ the actor's YAML config — no hardcoded limits.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from volnix.core import (
@@ -18,7 +18,6 @@ from volnix.core import (
     BaseEngine,
     BudgetState,
     Event,
-    PipelineStep,
     StepResult,
     StepVerdict,
     WorldMode,
@@ -33,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 def _now_timestamp() -> Timestamp:
     """Create a Timestamp for the current moment."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -190,9 +189,10 @@ class BudgetEngine(BaseEngine):
                 spend_amount = max(0.0, float(raw_amount))
             except (ValueError, TypeError):
                 logger.warning(
-                    "Cannot extract spend_usd from payload amount=%r "
-                    "(actor=%s, action=%s)",
-                    raw_amount, ctx.actor_id, ctx.action,
+                    "Cannot extract spend_usd from payload amount=%r (actor=%s, action=%s)",
+                    raw_amount,
+                    ctx.actor_id,
+                    ctx.action,
                 )
 
         # Deduct 1 api_call, 1 world_action, and any spend amount
@@ -204,23 +204,27 @@ class BudgetEngine(BaseEngine):
         state_after = self._tracker.get_budget(ctx.actor_id)
 
         # Deduction events for each active dimension
-        events.append(BudgetDeductionEvent(
-            event_type="budget.deduction",
-            timestamp=_now_timestamp(),
-            actor_id=ctx.actor_id,
-            budget_type="api_calls",
-            amount=1.0,
-            remaining=float(state_after["api_calls_remaining"]),
-        ))
-        if spend_amount > 0:
-            events.append(BudgetDeductionEvent(
+        events.append(
+            BudgetDeductionEvent(
                 event_type="budget.deduction",
                 timestamp=_now_timestamp(),
                 actor_id=ctx.actor_id,
-                budget_type="spend_usd",
-                amount=spend_amount,
-                remaining=float(state_after["spend_usd_remaining"]),
-            ))
+                budget_type="api_calls",
+                amount=1.0,
+                remaining=float(state_after["api_calls_remaining"]),
+            )
+        )
+        if spend_amount > 0:
+            events.append(
+                BudgetDeductionEvent(
+                    event_type="budget.deduction",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    budget_type="spend_usd",
+                    amount=spend_amount,
+                    remaining=float(state_after["spend_usd_remaining"]),
+                )
+            )
 
         # Check thresholds
         threshold_events = self._tracker.check_thresholds(
@@ -268,10 +272,14 @@ class BudgetEngine(BaseEngine):
         state = self._tracker.get_budget_state(actor_id)
         if state is None:
             return BudgetState(
-                api_calls_remaining=0, api_calls_total=0,
-                llm_spend_remaining_usd=0.0, llm_spend_total_usd=0.0,
-                world_actions_remaining=0, world_actions_total=0,
-                spend_usd_remaining=0.0, spend_usd_total=0.0,
+                api_calls_remaining=0,
+                api_calls_total=0,
+                llm_spend_remaining_usd=0.0,
+                llm_spend_total_usd=0.0,
+                world_actions_remaining=0,
+                world_actions_total=0,
+                spend_usd_remaining=0.0,
+                spend_usd_total=0.0,
             )
         return state
 
@@ -280,10 +288,14 @@ class BudgetEngine(BaseEngine):
         state = self._tracker.get_budget_state(actor_id)
         if state is None:
             return BudgetState(
-                api_calls_remaining=0, api_calls_total=0,
-                llm_spend_remaining_usd=0.0, llm_spend_total_usd=0.0,
-                world_actions_remaining=0, world_actions_total=0,
-                spend_usd_remaining=0.0, spend_usd_total=0.0,
+                api_calls_remaining=0,
+                api_calls_total=0,
+                llm_spend_remaining_usd=0.0,
+                llm_spend_total_usd=0.0,
+                world_actions_remaining=0,
+                world_actions_total=0,
+                spend_usd_remaining=0.0,
+                spend_usd_total=0.0,
             )
         return state
 
@@ -301,7 +313,4 @@ class BudgetEngine(BaseEngine):
 
     def _is_ungoverned(self) -> bool:
         """Check if the world is in ungoverned mode."""
-        return (
-            self._world_mode == WorldMode.UNGOVERNED
-            or self._world_mode == "ungoverned"
-        )
+        return self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned"

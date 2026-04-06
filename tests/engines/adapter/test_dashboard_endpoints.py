@@ -4,14 +4,11 @@ Tests use REAL httpx.AsyncClient with ASGITransport against the FastAPI app.
 No server is started -- httpx connects directly to the ASGI app.
 """
 
-import asyncio
-
-import httpx
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
+import httpx
 
+from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -169,7 +166,10 @@ def _make_dashboard_gateway():
     # Mock run_manager
     run_manager = AsyncMock()
     run_manager.list_runs = AsyncMock(
-        return_value=[SAMPLE_RUN, {**SAMPLE_RUN, "run_id": "run_def456", "status": "running", "tag": None}]
+        return_value=[
+            SAMPLE_RUN,
+            {**SAMPLE_RUN, "run_id": "run_def456", "status": "running", "tag": None},
+        ]
     )
     run_manager.get_run = AsyncMock(return_value=SAMPLE_RUN)
 
@@ -324,9 +324,7 @@ async def test_get_run_events_filter_service():
 async def test_get_run_events_filter_event_type():
     client, gw = await _make_client()
     async with client:
-        resp = await client.get(
-            "/api/v1/runs/run_abc123/events?event_type=world.tickets.create"
-        )
+        resp = await client.get("/api/v1/runs/run_abc123/events?event_type=world.tickets.create")
     body = resp.json()
     assert body["total"] == 1
 

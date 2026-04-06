@@ -24,7 +24,9 @@ class AnthropicProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "anthropic"
 
-    def __init__(self, api_key: str, default_model: str = "claude-sonnet-4-6", timeout: float = 300.0) -> None:
+    def __init__(
+        self, api_key: str, default_model: str = "claude-sonnet-4-6", timeout: float = 300.0
+    ) -> None:
         self._client = AsyncAnthropic(api_key=api_key, timeout=timeout)
         self._default_model = default_model
 
@@ -93,8 +95,14 @@ class AnthropicProvider(LLMProvider):
                     }
                     for t in request.tools
                 ]
-                tc_map = {"auto": {"type": "auto"}, "required": {"type": "any"}, "none": {"type": "none"}}
-                create_kwargs["tool_choice"] = tc_map.get(request.tool_choice or "required", {"type": "any"})
+                tc_map = {
+                    "auto": {"type": "auto"},
+                    "required": {"type": "any"},
+                    "none": {"type": "none"},
+                }
+                create_kwargs["tool_choice"] = tc_map.get(
+                    request.tool_choice or "required", {"type": "any"}
+                )
 
             message = await self._client.messages.create(**create_kwargs)
             latency = (time.monotonic() - start) * 1000
@@ -109,7 +117,9 @@ class AnthropicProvider(LLMProvider):
                     if parsed_tool_calls is None:
                         parsed_tool_calls = []
                     parsed_tool_calls.append(
-                        ToolCall(name=block.name, arguments=block.input, id=getattr(block, "id", ""))
+                        ToolCall(
+                            name=block.name, arguments=block.input, id=getattr(block, "id", "")
+                        )
                     )
             usage = LLMUsage(
                 prompt_tokens=message.usage.input_tokens,
@@ -125,9 +135,15 @@ class AnthropicProvider(LLMProvider):
                 try:
                     parsed_structured = json.loads(content)
                     items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
-                    logger.info("Anthropic structured output parsed: %d items, %d chars", items, len(content))
+                    logger.info(
+                        "Anthropic structured output parsed: %d items, %d chars",
+                        items,
+                        len(content),
+                    )
                 except json.JSONDecodeError:
-                    logger.warning("Anthropic structured output was not valid JSON (%d chars)", len(content))
+                    logger.warning(
+                        "Anthropic structured output was not valid JSON (%d chars)", len(content)
+                    )
 
             return LLMResponse(
                 content=content,

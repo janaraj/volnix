@@ -90,7 +90,8 @@ class AgencyEngine(BaseEngine):
 
         logger.info(
             "AgencyEngine configured: %d internal actors, %d tool definitions",
-            len(self._actor_states), len(self._tool_definitions),
+            len(self._actor_states),
+            len(self._tool_definitions),
         )
 
     def _build_tool_definitions(self) -> list[ToolDefinition]:
@@ -166,7 +167,7 @@ class AgencyEngine(BaseEngine):
             else:
                 api_name = sanitized
 
-            self._tool_name_map[api_name] = name    # "chat_postMessage" → "chat.postMessage"
+            self._tool_name_map[api_name] = name  # "chat_postMessage" → "chat.postMessage"
             self._tool_to_service[api_name] = service  # "chat_postMessage" → "slack"
 
             tools.append(
@@ -232,8 +233,7 @@ class AgencyEngine(BaseEngine):
 
         # Build lookup: original action name → http_method
         method_lookup = {
-            a.get("name", ""): a.get("http_method", "POST").upper()
-            for a in self._available_actions
+            a.get("name", ""): a.get("http_method", "POST").upper() for a in self._available_actions
         }
 
         allowed = []
@@ -261,7 +261,7 @@ class AgencyEngine(BaseEngine):
             return  # SimulationRunner handles notify() directly
 
         if isinstance(event, WorldEvent):
-            envelopes = await self.notify(event)
+            await self.notify(event)
 
     def _record_to_ledger(self, *entries) -> None:
         """Schedule ledger writes without blocking the caller.
@@ -302,7 +302,6 @@ class AgencyEngine(BaseEngine):
         if not self._actor_states:
             return []
 
-
         # Tier 1: deterministic activation check
         activated = self._tier1_activation_check(committed_event)
 
@@ -321,10 +320,7 @@ class AgencyEngine(BaseEngine):
                     continue
 
                 # STEP 1: RECORDING — does this agent subscribe to this service?
-                service_match = any(
-                    event_service == sub.service_id
-                    for sub in actor.subscriptions
-                )
+                service_match = any(event_service == sub.service_id for sub in actor.subscriptions)
                 if service_match:
                     record = self._build_interaction_record(
                         committed_event, actor, source="notified"
@@ -358,6 +354,7 @@ class AgencyEngine(BaseEngine):
                         CollaborationNotificationEntry,
                         SubscriptionMatchEntry,
                     )
+
                     self._record_to_ledger(
                         SubscriptionMatchEntry(
                             actor_id=actor_id,
@@ -399,14 +396,17 @@ class AgencyEngine(BaseEngine):
 
         # Record activations to ledger (non-blocking)
         from volnix.ledger.entries import ActorActivationEntry
+
         for actor_id, reason in activated:
             tier = self._classify_tier(self._actor_states[actor_id], reason)
-            self._record_to_ledger(ActorActivationEntry(
-                actor_id=actor_id,
-                activation_reason=reason,
-                activation_tier=tier,
-                trigger_event_id=committed_event.event_id,
-            ))
+            self._record_to_ledger(
+                ActorActivationEntry(
+                    actor_id=actor_id,
+                    activation_reason=reason,
+                    activation_tier=tier,
+                    trigger_event_id=committed_event.event_id,
+                )
+            )
 
         # Classify into Tier 2 (batch) and Tier 3 (individual)
         tier2_actors: list[tuple[ActorState, str]] = []
@@ -455,13 +455,16 @@ class AgencyEngine(BaseEngine):
 
         # Record action generation to ledger (non-blocking)
         from volnix.ledger.entries import ActionGenerationEntry
+
         for env in envelopes:
-            self._record_to_ledger(ActionGenerationEntry(
-                actor_id=env.actor_id,
-                envelope_id=env.envelope_id,
-                action_type=env.action_type,
-                tier=env.metadata.get("activation_tier", 0),
-            ))
+            self._record_to_ledger(
+                ActionGenerationEntry(
+                    actor_id=env.actor_id,
+                    envelope_id=env.envelope_id,
+                    action_type=env.action_type,
+                    tier=env.metadata.get("activation_tier", 0),
+                )
+            )
 
         return envelopes
 
@@ -494,7 +497,9 @@ class AgencyEngine(BaseEngine):
                         actor_id=actor.actor_id,
                         source=ActionSource.INTERNAL,
                         action_type=sa.action_type,
-                        target_service=(ServiceId(sa.target_service) if sa.target_service else None),
+                        target_service=(
+                            ServiceId(sa.target_service) if sa.target_service else None
+                        ),
                         payload=sa.payload,
                         logical_time=current_time,
                         priority=EnvelopePriority.SYSTEM,
@@ -512,15 +517,13 @@ class AgencyEngine(BaseEngine):
 
     def next_scheduled_time(self) -> float | None:
         """Earliest logical_time of any actor's scheduled action, or None."""
-        times = [
-            sa.logical_time
-            for a in self._actor_states.values()
-            for sa in a.scheduled_actions
-        ]
+        times = [sa.logical_time for a in self._actor_states.values() for sa in a.scheduled_actions]
         return min(times) if times else None
 
     async def generate_deliverable(
-        self, actor_id: ActorId, payload: dict,
+        self,
+        actor_id: ActorId,
+        payload: dict,
     ) -> dict:
         """Activate the lead actor to synthesize collaboration into a deliverable.
 
@@ -546,10 +549,14 @@ class AgencyEngine(BaseEngine):
         goal_context = actor.goal_context or ""
 
         # Build conversation context from actor's recent interactions
-        conversation = "\n".join(
-            f"[{r.actor_role or r.actor_id}] {r.summary}"
-            for r in actor.recent_interactions[-20:]
-        ) if actor.recent_interactions else "(no conversation history)"
+        conversation = (
+            "\n".join(
+                f"[{r.actor_role or r.actor_id}] {r.summary}"
+                for r in actor.recent_interactions[-20:]
+            )
+            if actor.recent_interactions
+            else "(no conversation history)"
+        )
 
         system_prompt = self._prompt_builder.build_system_prompt()
         preset_name = payload.get("preset", "deliverable")
@@ -574,7 +581,8 @@ class AgencyEngine(BaseEngine):
                 cache_system_prompt=True,
             )
             response = await self._llm_router.route(
-                request, "agency",
+                request,
+                "agency",
                 self._typed_config.llm_use_case_individual,
             )
 
@@ -647,8 +655,7 @@ class AgencyEngine(BaseEngine):
                 actor.goal_context
                 and "synthesis_deadline" in (actor.goal_context or "")
                 and any(
-                    sa.action_type == "produce_deliverable"
-                    and sa.logical_time <= event_time
+                    sa.action_type == "produce_deliverable" and sa.logical_time <= event_time
                     for sa in actor.scheduled_actions
                 )
             ):
@@ -673,7 +680,8 @@ class AgencyEngine(BaseEngine):
         """
         logger.info(
             "[AGENCY._matches_sub] service=%s, filter=%s, input_channel=%s",
-            sub.service_id, dict(sub.filter),
+            sub.service_id,
+            dict(sub.filter),
             event.input_data.get("channel", event.input_data.get("channel_id", "?")),
         )
         # Service must match
@@ -827,8 +835,7 @@ class AgencyEngine(BaseEngine):
         async with self._llm_semaphore:
             system_prompt = self._prompt_builder.build_system_prompt()
             team_roster = [
-                {"role": a.role, "id": str(a.actor_id)}
-                for a in self._actor_states.values()
+                {"role": a.role, "id": str(a.actor_id)} for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
             user_prompt = self._prompt_builder.build_individual_prompt(
@@ -845,7 +852,9 @@ class AgencyEngine(BaseEngine):
                 # Re-activation: continue prior conversation with new context
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
                 reactivation_ctx = self._build_reactivation_context(
-                    actor, trigger_event, reason,
+                    actor,
+                    trigger_event,
+                    reason,
                 )
                 # Include updated phase-aware instructions on re-activation.
                 # Lead agents get phase-specific prompts (monitor/buffer)
@@ -882,7 +891,8 @@ class AgencyEngine(BaseEngine):
                     cache_system_prompt=True,
                 )
                 response = await self._llm_router.route(
-                    request, "agency",
+                    request,
+                    "agency",
                     self._typed_config.llm_use_case_individual,
                 )
                 step_latency = (_time.monotonic() - step_start) * 1000
@@ -893,13 +903,15 @@ class AgencyEngine(BaseEngine):
                     # do_nothing terminates the loop
                     if tc.name == "do_nothing":
                         terminated_by = "do_nothing"
-                        self._record_to_ledger(ToolLoopStepEntry(
-                            actor_id=actor.actor_id,
-                            activation_id=activation_id,
-                            step_index=step_idx,
-                            tool_name="do_nothing",
-                            llm_latency_ms=step_latency,
-                        ))
+                        self._record_to_ledger(
+                            ToolLoopStepEntry(
+                                actor_id=actor.actor_id,
+                                activation_id=activation_id,
+                                step_index=step_idx,
+                                tool_name="do_nothing",
+                                llm_latency_ms=step_latency,
+                            )
+                        )
                         break
 
                     # Parse tool call into ActionEnvelope
@@ -915,68 +927,85 @@ class AgencyEngine(BaseEngine):
 
                     if committed_event is None:
                         # Pipeline blocked — tell the agent
-                        messages.append({
-                            "role": "assistant",
-                            "tool_calls": [{
-                                "id": tc.id or f"call_{step_idx}",
-                                "type": "function",
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments),
-                                },
-                            }],
-                        })
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id or f"call_{step_idx}",
-                            "content": "BLOCKED: This action was not permitted by the governance pipeline.",
-                        })
-                        self._record_to_ledger(ToolLoopStepEntry(
-                            actor_id=actor.actor_id,
-                            activation_id=activation_id,
-                            step_index=step_idx,
-                            tool_name=tc.name,
-                            tool_arguments=tc.arguments,
-                            blocked=True,
-                            llm_latency_ms=step_latency,
-                        ))
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "id": tc.id or f"call_{step_idx}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc.name,
+                                            "arguments": json.dumps(tc.arguments),
+                                        },
+                                    }
+                                ],
+                            }
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id or f"call_{step_idx}",
+                                "content": "BLOCKED: This action was not permitted by the governance pipeline.",
+                            }
+                        )
+                        self._record_to_ledger(
+                            ToolLoopStepEntry(
+                                actor_id=actor.actor_id,
+                                activation_id=activation_id,
+                                step_index=step_idx,
+                                tool_name=tc.name,
+                                tool_arguments=tc.arguments,
+                                blocked=True,
+                                llm_latency_ms=step_latency,
+                            )
+                        )
                         continue
 
                     # Success — record envelope and add result to messages
                     envelopes.append(env)
 
                     result_body = json.dumps(
-                        committed_event.response_body or {}, default=str,
+                        committed_event.response_body or {},
+                        default=str,
                     )[:2000]
 
                     tc_id = tc.id or f"call_{step_idx}"
-                    messages.append({
-                        "role": "assistant",
-                        "tool_calls": [{
-                            "id": tc_id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.name,
-                                "arguments": json.dumps(tc.arguments),
-                            },
-                        }],
-                    })
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": result_body,
-                    })
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": tc_id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.name,
+                                        "arguments": json.dumps(tc.arguments),
+                                    },
+                                }
+                            ],
+                        }
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": result_body,
+                        }
+                    )
 
-                    self._record_to_ledger(ToolLoopStepEntry(
-                        actor_id=actor.actor_id,
-                        activation_id=activation_id,
-                        step_index=step_idx,
-                        tool_name=tc.name,
-                        tool_arguments=tc.arguments,
-                        event_id=committed_event.event_id,
-                        llm_latency_ms=step_latency,
-                        response_preview=result_body[:200],
-                    ))
+                    self._record_to_ledger(
+                        ToolLoopStepEntry(
+                            actor_id=actor.actor_id,
+                            activation_id=activation_id,
+                            step_index=step_idx,
+                            tool_name=tc.name,
+                            tool_arguments=tc.arguments,
+                            event_id=committed_event.event_id,
+                            llm_latency_ms=step_latency,
+                            response_preview=result_body[:200],
+                        )
+                    )
 
                 elif response.content:
                     # Text response — agent is sharing findings
@@ -989,7 +1018,10 @@ class AgencyEngine(BaseEngine):
                     # Auto-post findings to team channel
                     if actor.team_channel:
                         post_env = self._create_channel_post(
-                            actor, text, reason, trigger_event,
+                            actor,
+                            text,
+                            reason,
+                            trigger_event,
                         )
                         if post_env:
                             async with self._pipeline_lock:
@@ -1005,7 +1037,8 @@ class AgencyEngine(BaseEngine):
                     logger.info(
                         "[AGENCY.loop] actor=%s step=%d: empty response "
                         "(completion_tokens=%d), treating as do_nothing",
-                        actor.actor_id, step_idx,
+                        actor.actor_id,
+                        step_idx,
                         response.usage.completion_tokens if response.usage else 0,
                     )
                     break
@@ -1032,21 +1065,26 @@ class AgencyEngine(BaseEngine):
             actor.activation_messages = messages
 
             # Record activation completion
-            self._record_to_ledger(ActivationCompleteEntry(
-                actor_id=actor.actor_id,
-                activation_id=activation_id,
-                activation_reason=reason,
-                total_tool_calls=len([
-                    e for e in envelopes if e.action_type != "chat.postMessage"
-                ]),
-                total_envelopes=len(envelopes),
-                terminated_by=terminated_by,
-                final_text=(actor.goal_context or "")[:200],
-            ))
+            self._record_to_ledger(
+                ActivationCompleteEntry(
+                    actor_id=actor.actor_id,
+                    activation_id=activation_id,
+                    activation_reason=reason,
+                    total_tool_calls=len(
+                        [e for e in envelopes if e.action_type != "chat.postMessage"]
+                    ),
+                    total_envelopes=len(envelopes),
+                    terminated_by=terminated_by,
+                    final_text=(actor.goal_context or "")[:200],
+                )
+            )
 
         logger.info(
             "[AGENCY.loop] actor=%s reason=%s envelopes=%d terminated=%s",
-            actor.actor_id, reason, len(envelopes), terminated_by,
+            actor.actor_id,
+            reason,
+            len(envelopes),
+            terminated_by,
         )
         return envelopes
 
@@ -1100,7 +1138,8 @@ class AgencyEngine(BaseEngine):
 
         # New team messages from recent_interactions
         team_msgs = [
-            r for r in actor.recent_interactions
+            r
+            for r in actor.recent_interactions
             if isinstance(r, InteractionRecord) and r.source != "self"
         ]
         if team_msgs:
@@ -1113,9 +1152,7 @@ class AgencyEngine(BaseEngine):
                 parts.append(f'- [{r.actor_role}]{tag}: "{r.summary}"')
 
         if trigger_event:
-            parts.append(
-                f"\nTriggered by: {trigger_event.actor_id} → {trigger_event.action}"
-            )
+            parts.append(f"\nTriggered by: {trigger_event.actor_id} → {trigger_event.action}")
 
         parts.append(
             "\nContinue your work based on the new information above. "
@@ -1274,8 +1311,11 @@ class AgencyEngine(BaseEngine):
         thread_ts, and intended_for from the conversation context.
         """
         comm_actions = {
-            "chat.postMessage", "chat.replyToThread", "chat.update",
-            "users.messages.send", "email_send",
+            "chat.postMessage",
+            "chat.replyToThread",
+            "chat.update",
+            "users.messages.send",
+            "email_send",
         }
         if action_type not in comm_actions:
             return
@@ -1317,8 +1357,11 @@ class AgencyEngine(BaseEngine):
         Uses the agent's first Slack subscription channel as the team channel.
         """
         comm_actions = {
-            "chat.postMessage", "chat.replyToThread", "chat.update",
-            "users.messages.send", "email_send",
+            "chat.postMessage",
+            "chat.replyToThread",
+            "chat.update",
+            "users.messages.send",
+            "email_send",
         }
         if action_type not in comm_actions:
             return
@@ -1400,9 +1443,12 @@ class AgencyEngine(BaseEngine):
                     source=ActionSource.INTERNAL,
                     action_type=action_type,
                     target_service=(
-                        ServiceId(self._resolve_service_name(
-                            action_data.get("target_service", ""), action_type,
-                        ))
+                        ServiceId(
+                            self._resolve_service_name(
+                                action_data.get("target_service", ""),
+                                action_type,
+                            )
+                        )
                         if action_data.get("target_service")
                         else None
                     ),
@@ -1445,9 +1491,7 @@ class AgencyEngine(BaseEngine):
                 # Trigger escalation if defined (dedup: skip if already scheduled)
                 if actor.waiting_for.escalation_action:
                     esc_action = actor.waiting_for.escalation_action
-                    if not any(
-                        sa.action_type == esc_action for sa in actor.scheduled_actions
-                    ):
+                    if not any(sa.action_type == esc_action for sa in actor.scheduled_actions):
                         actor.scheduled_actions.append(
                             ScheduledAction(
                                 logical_time=committed_event.timestamp.tick + 1.0,
@@ -1493,9 +1537,9 @@ class AgencyEngine(BaseEngine):
             else:
                 # Include key params so agents know what they already queried
                 key_params = {
-                    k: v for k, v in committed_event.input_data.items()
-                    if k in ("id", "charge", "query", "customer", "status", "channel_id")
-                    and v
+                    k: v
+                    for k, v in committed_event.input_data.items()
+                    if k in ("id", "charge", "query", "customer", "status", "channel_id") and v
                 }
                 if key_params:
                     param_str = ", ".join(f"{k}={v}" for k, v in key_params.items())
@@ -1507,9 +1551,8 @@ class AgencyEngine(BaseEngine):
             response_summary = ""
             if is_self and committed_event.response_body:
                 import json as _json
-                response_summary = _json.dumps(
-                    committed_event.response_body, default=str
-                )[:500]
+
+                response_summary = _json.dumps(committed_event.response_body, default=str)[:500]
 
             record = InteractionRecord(
                 tick=committed_event.timestamp.tick,
@@ -1561,9 +1604,7 @@ class AgencyEngine(BaseEngine):
                 sa = updates["schedule_action"]
                 actor.scheduled_actions.append(
                     ScheduledAction(
-                        logical_time=float(
-                            sa.get("logical_time", self._get_current_time() + 60)
-                        ),
+                        logical_time=float(sa.get("logical_time", self._get_current_time() + 60)),
                         action_type=str(sa.get("action_type", "check_status")),
                         description=str(sa.get("description", "")),
                         target_service=sa.get("target_service"),

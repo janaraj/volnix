@@ -6,23 +6,50 @@ Volnix creates stateful, causal, observable realities where AI agents exist as p
 
 Describe a world in natural language or YAML. Volnix compiles it into a deep, reproducible simulation. Agents interact through standard protocols (MCP, REST, OpenAI function calling, Anthropic tool use). Everything that happens is recorded, scored, and diffable.
 
+<p align="center">
+  <img src="docs/assets/dashboard-live.png" alt="Volnix Dashboard — Live simulation view" width="800">
+</p>
+
 ---
 
 ## Quick Start
 
-**Requirements:** Python 3.12+, at least one LLM provider API key.
+### System Requirements
+
+| Dependency | Version | Purpose |
+|-----------|---------|---------|
+| **Python** | 3.12+ | Core runtime |
+| **uv** | latest | Package manager ([install](https://docs.astral.sh/uv/getting-started/installation/)) |
+| **SQLite** | 3.35+ | Bundled with Python — no separate install needed |
+| **Node.js** | 18+ | Dashboard only (optional) |
+| **LLM API key** | any one | Google (`GOOGLE_API_KEY`), OpenAI (`OPENAI_API_KEY`), or Anthropic (`ANTHROPIC_API_KEY`) |
+
+### Install
 
 ```bash
-# Install from source
+# From PyPI
+pip install volnix
+
+# Or from source
 git clone https://github.com/janaraj/volnix.git
 cd volnix
 uv sync --all-extras
 
-# Set an LLM provider
-export GOOGLE_API_KEY=AIza...      # or ANTHROPIC_API_KEY or OPENAI_API_KEY
+# Set an LLM provider (at least one required)
+export GOOGLE_API_KEY=AIza...
+export OPENAI_API_KEY=sk-...         # optional, needed for agency engine
+export ANTHROPIC_API_KEY=sk-ant-...  # optional
 
 # Verify setup
-uv run volnix check
+volnix check
+```
+
+### Dashboard (optional)
+
+```bash
+cd volnix-dashboard
+npm install && npm run dev
+# Open http://localhost:3000
 ```
 
 ### Run with Internal Agents (autonomous multi-agent simulation)
@@ -40,24 +67,63 @@ The team (supervisor, senior-agent, triage-agent) autonomously delegates tasks, 
 
 ### Run with External Agents (connect your own AI agent)
 
+External agents connect to a running Volnix server via MCP, REST, or native SDK protocols. Two modes:
+
+**Mode 1: Single agent (no profile)** — agent auto-registers with default permissions:
+
 ```bash
-# Start Volnix as a server
 uv run volnix serve customer_support --port 8080
 ```
 
-Then connect any agent using its native SDK. Zero Volnix imports required:
-
 ```python
-# OpenAI SDK example
-import httpx, openai
+# PydanticAI via MCP — zero Volnix imports
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPServerStreamableHTTP
 
-tools = httpx.get("http://localhost:8080/openai/v1/tools").json()
-client = openai.OpenAI()
-# Use tools in client.chat.completions.create(tools=tools)
-# Execute via POST http://localhost:8080/openai/v1/tools/call
+server = MCPServerStreamableHTTP("http://localhost:8080/mcp/")
+agent = Agent("openai:gpt-4.1-mini", toolsets=[server])
+
+async with agent:
+    result = await agent.run("Check the support queue and handle urgent tickets.")
 ```
 
-See [examples/](examples/) for OpenAI, Anthropic, Gemini, CrewAI, LangGraph, AutoGen, PydanticAI, and MCP integrations.
+**Mode 2: Multi-agent with profile** — define roles, permissions, and budgets per agent:
+
+```yaml
+# agents_stock_analysts.yaml
+agents:
+  - id: financial-analyst        # Must match actor_id in your framework
+    role: financial-analyst
+    permissions:
+      read: [alpaca]
+      write: []
+    budget:
+      api_calls: 200
+
+  - id: research-analyst
+    role: research-analyst
+    permissions:
+      read: [alpaca]
+    budget:
+      api_calls: 200
+```
+
+```bash
+uv run volnix serve stock_analysis --agents agents_stock_analysts.yaml --port 8080
+```
+
+```python
+# CrewAI — each agent gets tools bound to its actor_id
+from volnix.adapters.crewai import crewai_tools
+
+analyst_tools = await crewai_tools("http://localhost:8080", actor_id="financial-analyst")
+research_tools = await crewai_tools("http://localhost:8080", actor_id="research-analyst")
+# Permissions and budgets enforced per-agent by Volnix
+```
+
+The `actor_id` is the contract between your framework and Volnix. Every tool call carries the actor identity through the governance pipeline. This works identically across CrewAI, PydanticAI, LangGraph, AutoGen, OpenAI SDK, or any HTTP client.
+
+See [docs/agent-integration.md](docs/agent-integration.md) for the full guide and [examples/](examples/) for working code.
 
 ---
 
@@ -242,6 +308,7 @@ See [docs/internal-agents.md](docs/internal-agents.md) for the complete guide.
 | `volnix create <description>` | Generate a world YAML from natural language |
 | `volnix run <world>` | Compile and execute a simulation |
 | `volnix serve <world>` | Start HTTP/MCP servers for agent connections |
+| `volnix dashboard` | Start the API server for browsing historical runs (no world needed) |
 | `volnix mcp` | Start MCP stdio server (for agent subprocesses) |
 | `volnix blueprints` | List available world blueprints and presets |
 | `volnix check` | System health check (Python, packages, LLM providers) |
@@ -263,6 +330,11 @@ Key flags for `serve` and `run`:
 | `--deliverable <type>` | Deliverable type: synthesis, decision, prediction | `--deliverable synthesis` |
 | `--world <id>` | Use existing compiled world (skip compilation) | `--world world_83a6d1e3` |
 | `--port <n>` | HTTP server port | `--port 8080` |
+
+```bash
+# Browse past runs without starting a world (API-only mode for the dashboard)
+volnix dashboard --port 8200
+```
 
 Run `volnix --help` or `volnix <command> --help` for full option details.
 
@@ -293,8 +365,12 @@ All protocols expose the same world tools and go through the same governance pip
 | `customer_support` | Support | Reactive | Gmail, Slack, Zendesk, Stripe |
 | `demo_support_escalation` | Support | Dynamic | Stripe, Zendesk, Slack |
 | `dynamic_support_center` | Support | Dynamic | Stripe, Zendesk, Slack |
+| `support_ticket_triage` | Support | Reactive | Zendesk, Gmail, Slack |
 | `incident_response` | DevOps | Dynamic | Slack, GitHub, Calendar |
+| `stock_analysis` | Finance | Static | Alpaca |
 | `market_prediction_analysis` | Finance | Dynamic | Slack, Twitter, Reddit |
+| `notion_project_tracker` | Product | Static | Notion, Slack |
+| `hubspot_sales_pipeline` | Sales | Dynamic | HubSpot (Tier 2), Slack |
 | `campaign_brainstorm` | Marketing | Dynamic | Slack |
 | `climate_research_station` | Research | Dynamic | Slack, Gmail |
 | `feature_prioritization` | Product | Dynamic | Slack |
@@ -344,6 +420,7 @@ Each verified pack simulates a real service with deterministic state machines. V
 | `google_calendar` | Scheduling | Calendar API (events, calendars, attendees) |
 | `twitter` | Social | Twitter API (tweets, replies, followers) |
 | `reddit` | Social | Reddit API (posts, comments, subreddits) |
+| `notion` | Documents | Notion API (pages, databases, blocks, search) |
 | `alpaca` | Trading | Alpaca API (orders, positions, market data) |
 | `browser` | Web | HTTP browsing (GET/POST to custom sites) |
 
@@ -366,19 +443,13 @@ See [docs/configuration.md](docs/configuration.md) and `volnix.toml` for the com
 
 ## Dashboard
 
-Volnix includes a React dashboard for observing simulations:
+Volnix includes a React dashboard for observing simulations in real time. Start it alongside any `serve` command:
 
 ```bash
-cd volnix-dashboard && npm run dev
-# Open http://localhost:3000
+cd volnix-dashboard && npm run dev    # http://localhost:3000
 ```
 
-The dashboard provides:
-- Run history with filtering and search
-- Live event streaming via WebSocket
-- Governance scorecards and metrics
-- Deliverable inspection
-- Agent activity timeline
+Features: run history, live event streaming (WebSocket), governance scorecards, policy trigger logs, deliverable inspection, agent activity timeline, entity browser.
 
 ---
 
@@ -456,4 +527,6 @@ uv run mypy volnix/
 
 ## License
 
-[MIT](LICENSE)
+MIT License. See [LICENSE](LICENSE) for details.
+
+Copyright (c) 2026 Janarthanan Rajendran

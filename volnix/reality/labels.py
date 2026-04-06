@@ -252,6 +252,7 @@ def resolve_dimension(dimension_name: str, value: str | dict[str, Any]) -> BaseD
         return resolve_label(dimension_name, value)
     if dimension_name not in _DIMENSION_CLASSES:
         from volnix.core.errors import DimensionValueError
+
         raise DimensionValueError(
             f"Unknown dimension: {dimension_name!r}",
         )

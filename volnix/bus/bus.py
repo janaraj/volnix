@@ -5,6 +5,7 @@ published events, fans them out to topic subscribers, persists them to
 an append-only SQLite log (when enabled), and supports replay of
 historical events.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,14 +13,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from volnix.core.events import Event
-from volnix.persistence.database import Database
-
 from volnix.bus.config import BusConfig
 from volnix.bus.fanout import TopicFanout
 from volnix.bus.middleware import MiddlewareChain
 from volnix.bus.persistence import BusPersistence
 from volnix.bus.types import BusMetrics, Subscriber, Subscription
+from volnix.core.events import Event
+from volnix.persistence.database import Database
 
 
 class EventBus:
@@ -48,9 +48,7 @@ class EventBus:
         """Set up persistence, middleware chain, and internal state."""
         if self._config.persistence_enabled:
             if self._db is None:
-                raise ValueError(
-                    "persistence_enabled is True but no Database was provided"
-                )
+                raise ValueError("persistence_enabled is True but no Database was provided")
             self._persistence = BusPersistence(self._db)
             await self._persistence.initialize()
         self._initialized = True
@@ -130,7 +128,11 @@ class EventBus:
             try:
                 await self._persistence.persist(processed)
             except Exception:
-                logger.error("Event persistence failed for event %s", event.event_type if hasattr(event, 'event_type') else type(event).__name__, exc_info=True)
+                logger.error(
+                    "Event persistence failed for event %s",
+                    event.event_type if hasattr(event, "event_type") else type(event).__name__,
+                    exc_info=True,
+                )
                 self._persistence_errors += 1
 
         # Fanout
@@ -211,6 +213,9 @@ class EventBus:
                     await sub.callback(event)
                     self._events_delivered += 1
                 except Exception:
-                    logger.exception("Subscriber callback failed for event %s", event.event_type if hasattr(event, 'event_type') else type(event).__name__)
+                    logger.exception(
+                        "Subscriber callback failed for event %s",
+                        event.event_type if hasattr(event, "event_type") else type(event).__name__,
+                    )
             except asyncio.CancelledError:
                 break

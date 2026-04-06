@@ -183,8 +183,6 @@ class TestExpandWithLLM:
         )
         proc = CompilerSeedProcessor(llm_router=router)
         base_vars = _make_ctx().for_seed_expansion()
-        mods = await proc.expand_seed(
-            "Add VIP email", _make_entities(), base_vars
-        )
+        mods = await proc.expand_seed("Add VIP email", _make_entities(), base_vars)
         assert len(mods.entities_to_create) == 1
         assert len(mods.invariants) == 1

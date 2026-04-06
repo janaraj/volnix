@@ -1,11 +1,21 @@
 """Tests for volnix.core.types — NewType aliases, enums, and frozen dataclasses."""
+
 import pytest
+
 from volnix.core.types import (
-    EntityId, ActorId, ServiceId, EventId, ToolName, RunId,
-    FidelityTier, FidelitySource, FidelityMode, RealityPreset,
+    ActionCost,
     BehaviorMode,
-    StepVerdict, EnforcementMode,
-    FidelityMetadata, ActionCost, BudgetState, StateDelta, SideEffect,
+    BudgetState,
+    EnforcementMode,
+    EntityId,
+    FidelityMetadata,
+    FidelityMode,
+    FidelitySource,
+    FidelityTier,
+    RealityPreset,
+    SideEffect,
+    StateDelta,
+    StepVerdict,
 )
 
 

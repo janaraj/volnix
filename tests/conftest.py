@@ -96,14 +96,12 @@ def stub_state_engine():
         key = (entity_type, str(entity_id))
         if key not in engine._entities:
             from volnix.core.errors import EntityNotFoundError
+
             raise EntityNotFoundError(f"{entity_type}/{entity_id}")
         return engine._entities[key]
 
     async def _query(entity_type, filters=None):
-        return [
-            v for k, v in engine._entities.items()
-            if k[0] == entity_type
-        ]
+        return [v for k, v in engine._entities.items() if k[0] == entity_type]
 
     engine.get_entity = AsyncMock(side_effect=_get_entity)
     engine.query_entities = AsyncMock(side_effect=_query)
@@ -118,12 +116,14 @@ def mock_llm_provider():
     from volnix.llm.types import LLMResponse
 
     provider = AsyncMock()
-    provider.complete = AsyncMock(return_value=LLMResponse(
-        content='{"result": "mock"}',
-        provider="mock",
-        model="mock-model",
-        latency_ms=0,
-    ))
+    provider.complete = AsyncMock(
+        return_value=LLMResponse(
+            content='{"result": "mock"}',
+            provider="mock",
+            model="mock-model",
+            latency_ms=0,
+        )
+    )
     return provider
 
 
@@ -131,12 +131,14 @@ def mock_llm_provider():
 def test_config():
     """Minimal valid VolnixConfig for testing."""
     from volnix.config.schema import VolnixConfig
+
     return VolnixConfig()
 
 
 @pytest.fixture
 def make_action_context():
     """Factory fixture for creating ActionContext with sensible defaults."""
+
     def _make(**kwargs):
         now = datetime.now(UTC)
         defaults = {
@@ -144,20 +146,26 @@ def make_action_context():
             "actor_id": ActorId("actor-test"),
             "service_id": ServiceId("email"),
             "action": "email_send",
-            "input_data": {"from_addr": "a@b.com", "to_addr": "c@d.com",
-                           "subject": "test", "body": "hello"},
+            "input_data": {
+                "from_addr": "a@b.com",
+                "to_addr": "c@d.com",
+                "subject": "test",
+                "body": "hello",
+            },
             "world_time": now,
             "wall_time": now,
             "tick": 1,
         }
         defaults.update(kwargs)
         return ActionContext(**defaults)
+
     return _make
 
 
 @pytest.fixture
 def make_world_event():
     """Factory fixture for creating WorldEvent with sensible defaults."""
+
     def _make(**kwargs):
         now = datetime.now(UTC)
         defaults = {
@@ -170,6 +178,7 @@ def make_world_event():
         }
         defaults.update(kwargs)
         return WorldEvent(**defaults)
+
     return _make
 
 

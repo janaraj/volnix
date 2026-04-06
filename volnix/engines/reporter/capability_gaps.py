@@ -35,18 +35,18 @@ class GapAnalyzer:
                 response = self._classify_response(event, following)
                 ts = _get(event, "timestamp", {})
                 tick = ts.get("tick", "") if isinstance(ts, dict) else getattr(ts, "tick", "")
-                gaps.append({
-                    "tick": str(tick),
-                    "agent": str(_get(event, "actor_id", "")),
-                    "tool": str(_get(event, "requested_tool", "")),
-                    "response": response.value,
-                    "response_label": response.name,
-                })
+                gaps.append(
+                    {
+                        "tick": str(tick),
+                        "agent": str(_get(event, "actor_id", "")),
+                        "tool": str(_get(event, "requested_tool", "")),
+                        "response": response.value,
+                        "response_label": response.name,
+                    }
+                )
         return gaps
 
-    def _classify_response(
-        self, gap_event: Any, following_events: list[Any]
-    ) -> GapResponse:
+    def _classify_response(self, gap_event: Any, following_events: list[Any]) -> GapResponse:
         """Classify how the system responded to a capability gap.
 
         Deterministic: check next 3 actions after gap for the same actor.
@@ -60,10 +60,7 @@ class GapAnalyzer:
             return GapResponse.SKIPPED
 
         actor = str(_get(gap_event, "actor_id", ""))
-        actor_actions = [
-            e for e in following_events
-            if str(_get(e, "actor_id", "")) == actor
-        ]
+        actor_actions = [e for e in following_events if str(_get(e, "actor_id", "")) == actor]
 
         if not actor_actions:
             return GapResponse.SKIPPED

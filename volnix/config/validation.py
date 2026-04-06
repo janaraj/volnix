@@ -34,8 +34,7 @@ class ConfigValidator:
         for step in config.pipeline.steps:
             if step not in engine_set:
                 errors.append(
-                    f"Pipeline step '{step}' is not in available engines: "
-                    f"{sorted(engine_set)}"
+                    f"Pipeline step '{step}' is not in available engines: {sorted(engine_set)}"
                 )
         return errors
 

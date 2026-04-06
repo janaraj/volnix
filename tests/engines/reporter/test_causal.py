@@ -1,10 +1,12 @@
 """Tests for CausalTraceRenderer -- causal chain formatting."""
-import pytest
+
 from unittest.mock import AsyncMock
 
+import pytest
+
+from tests.engines.reporter.conftest import make_world_event
 from volnix.core.types import EventId
 from volnix.engines.reporter.causal_trace import CausalTraceRenderer
-from tests.engines.reporter.conftest import make_world_event
 
 
 @pytest.fixture

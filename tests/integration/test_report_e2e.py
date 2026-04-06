@@ -3,22 +3,18 @@
 Tests that the reporter engine works correctly when wired into the
 full VolnixApp system.
 """
-import pytest
+
 from unittest.mock import AsyncMock
 
-from volnix.core.types import ActorId, EventId, WorldId
-from volnix.core.events import (
-    PermissionDeniedEvent,
-    WorldEvent,
-)
-from volnix.engines.reporter.engine import ReportGeneratorEngine
+import pytest
+
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_permission_denied,
     make_policy_block,
-    make_policy_escalate,
     make_world_event,
 )
+from volnix.engines.reporter.engine import ReportGeneratorEngine
 
 
 async def _make_wired_engine(events=None):
@@ -158,8 +154,12 @@ async def test_e2e_permission_denial_drops_authority_respect():
 
     # Verify all 6 per-actor spec metrics are present (plus detailed scores array)
     expected_per_actor = {
-        "policy_compliance", "authority_respect", "escalation_quality",
-        "communication_protocol", "budget_discipline", "sla_adherence",
+        "policy_compliance",
+        "authority_respect",
+        "escalation_quality",
+        "communication_protocol",
+        "budget_discipline",
+        "sla_adherence",
         "scores",  # detailed score objects with name/value/weight/formula
     }
     assert set(actor_scores.keys()) == expected_per_actor

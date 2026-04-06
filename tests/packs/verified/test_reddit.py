@@ -9,7 +9,6 @@ from volnix.core.types import ToolName
 from volnix.packs.verified.reddit.pack import RedditPack
 from volnix.packs.verified.reddit.state_machines import (
     REDDIT_POST_TRANSITIONS,
-    REDDIT_USER_TRANSITIONS,
     SUBREDDIT_TRANSITIONS,
 )
 
@@ -701,20 +700,12 @@ class TestSubscribe:
         assert result.response_body["ok"] is True
 
         # Check user delta: subscribed_subreddit_ids now includes sr-rust
-        user_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "reddit_user"
-        ]
+        user_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "reddit_user"]
         assert len(user_deltas) == 1
         assert "sr-rust" in user_deltas[0].fields["subscribed_subreddit_ids"]
 
         # Check subreddit delta: subscriber_count incremented
-        sub_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "subreddit"
-        ]
+        sub_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "subreddit"]
         assert len(sub_deltas) == 1
         assert sub_deltas[0].fields["subscriber_count"] == 4  # was 3, +1
 
@@ -729,19 +720,11 @@ class TestSubscribe:
         assert result.response_body["ok"] is True
 
         # Check user delta: subscribed_subreddit_ids no longer includes sr-python
-        user_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "reddit_user"
-        ]
+        user_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "reddit_user"]
         assert len(user_deltas) == 1
         assert "sr-python" not in user_deltas[0].fields["subscribed_subreddit_ids"]
 
         # Check subreddit delta: subscriber_count decremented
-        sub_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "subreddit"
-        ]
+        sub_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "subreddit"]
         assert len(sub_deltas) == 1
         assert sub_deltas[0].fields["subscriber_count"] == 4  # was 5, -1

@@ -1,11 +1,14 @@
 """Tests for volnix.registry.health."""
-import pytest
+
 from unittest.mock import AsyncMock
-from volnix.registry.registry import EngineRegistry
-from volnix.registry.health import HealthAggregator
-from volnix.registry.wiring import wire_engines
+
+import pytest
+
+from tests.registry.conftest import make_mock_bus, make_mock_engine
 from volnix.config.schema import VolnixConfig
-from tests.registry.conftest import make_mock_engine, make_mock_bus
+from volnix.registry.health import HealthAggregator
+from volnix.registry.registry import EngineRegistry
+from volnix.registry.wiring import wire_engines
 
 
 @pytest.mark.asyncio

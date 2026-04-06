@@ -1,20 +1,23 @@
 """Integration tests for the state engine within the full pipeline/registry."""
-import pytest
+
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
-from datetime import datetime, timezone
-from volnix.engines.state.engine import StateEngine
-from volnix.pipeline.dag import PipelineDAG
-from volnix.pipeline.config import PipelineConfig
-from volnix.pipeline.builder import build_pipeline_from_config
-from volnix.registry.composition import create_default_registry
-from volnix.registry.wiring import wire_engines
-from volnix.config.schema import VolnixConfig
-from volnix.core.types import (
-    ActorId, EntityId, EventId, ServiceId, SnapshotId,
-    StepVerdict, StateDelta, Timestamp,
-)
+
+import pytest
+
 from volnix.core.context import ActionContext, ResponseProposal
 from volnix.core.events import WorldEvent
+from volnix.core.types import (
+    ActorId,
+    EntityId,
+    ServiceId,
+    StateDelta,
+    StepVerdict,
+    Timestamp,
+)
+from volnix.engines.state.engine import StateEngine
+from volnix.pipeline.dag import PipelineDAG
+from volnix.registry.composition import create_default_registry
 
 
 def _make_ctx(action="create_user", deltas=None, **overrides):
@@ -25,8 +28,8 @@ def _make_ctx(action="create_user", deltas=None, **overrides):
         service_id=ServiceId("user-svc"),
         action=action,
         input_data={"name": "Alice"},
-        world_time=datetime(2026, 1, 15, tzinfo=timezone.utc),
-        wall_time=datetime.now(timezone.utc),
+        world_time=datetime(2026, 1, 15, tzinfo=UTC),
+        wall_time=datetime.now(UTC),
         tick=1,
     )
     for k, v in overrides.items():
@@ -120,8 +123,8 @@ async def test_causal_chain_linked(state_engine):
     event1 = WorldEvent(
         event_type="world.create",
         timestamp=Timestamp(
-            world_time=datetime(2026, 1, 15, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2026, 1, 15, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
         actor_id=ActorId("agent-1"),
@@ -133,8 +136,8 @@ async def test_causal_chain_linked(state_engine):
     event2 = WorldEvent(
         event_type="world.update",
         timestamp=Timestamp(
-            world_time=datetime(2026, 1, 16, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2026, 1, 16, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=2,
         ),
         actor_id=ActorId("agent-1"),

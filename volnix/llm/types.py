@@ -7,7 +7,6 @@ all LLM providers and the routing layer.
 from __future__ import annotations
 
 import enum
-
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -35,9 +34,9 @@ class ToolDefinition(BaseModel, frozen=True):
     action name (collision avoidance).
     """
 
-    name: str                                   # "search_recent"
-    service: str = ""                           # "twitter"
-    description: str = ""                       # "Search recent tweets"
+    name: str  # "search_recent"
+    service: str = ""  # "twitter"
+    description: str = ""  # "Search recent tweets"
     parameters: dict[str, Any] = Field(default_factory=dict)  # JSON Schema
 
 
@@ -48,9 +47,9 @@ class ToolCall(BaseModel, frozen=True):
     so callers don't need to know which provider was used.
     """
 
-    name: str                                   # "search_recent"
+    name: str  # "search_recent"
     arguments: dict[str, Any] = Field(default_factory=dict)  # {"query": "..."}
-    id: str = ""                                # Provider-assigned ID for multi-turn mapping
+    id: str = ""  # Provider-assigned ID for multi-turn mapping
 
 
 class LLMUsage(BaseModel, frozen=True):
@@ -92,7 +91,9 @@ class LLMRequest(BaseModel, frozen=True):
     fresh_session: bool = False  # ACP: create isolated session for this call
     cache_system_prompt: bool = False  # Enable prompt caching for system prompt
     tools: list[ToolDefinition] | None = None  # Native tool calling definitions
-    messages: list[dict[str, Any]] | None = None  # Multi-turn conversation (overrides system_prompt + user_content)
+    messages: list[dict[str, Any]] | None = (
+        None  # Multi-turn conversation (overrides system_prompt + user_content)
+    )
     tool_choice: str | None = None  # "auto" | "required" | "none" | None=provider default
 
 

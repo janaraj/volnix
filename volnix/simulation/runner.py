@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC
 from enum import StrEnum
 from typing import Any
 
 from volnix.core.envelope import ActionEnvelope
-from volnix.core.types import ActionSource, ActorId, EnvelopePriority, ServiceId
+from volnix.core.types import ActionSource, ActorId
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
 
@@ -219,7 +220,9 @@ class SimulationRunner:
 
         logger.info(
             "SimulationRunner starting: type=%s, mission=%s, queue_pending=%s",
-            self._simulation_type, bool(self._mission), self._queue.has_pending(),
+            self._simulation_type,
+            bool(self._mission),
+            self._queue.has_pending(),
         )
 
         while self._status == SimulationStatus.RUNNING:
@@ -253,15 +256,16 @@ class SimulationRunner:
                 # tick() fires at most once per animator_tick_interval ticks.
                 # Prevents feedback loops where each organic event advances
                 # time and re-triggers tick().
-                from datetime import datetime, timezone
-                current_tick = int(
-                    self._queue.current_time / self._config.tick_interval_seconds
-                )
+                from datetime import datetime
+
+                current_tick = int(self._queue.current_time / self._config.tick_interval_seconds)
                 if current_tick >= self._last_animator_tick + self._config.animator_tick_interval:
                     self._last_animator_tick = current_tick
-                    tick_time = datetime.fromtimestamp(
-                        self._queue.current_time, tz=timezone.utc
-                    ) if self._queue.current_time > 0 else datetime.now(timezone.utc)
+                    tick_time = (
+                        datetime.fromtimestamp(self._queue.current_time, tz=UTC)
+                        if self._queue.current_time > 0
+                        else datetime.now(UTC)
+                    )
                     tick_results = await self._animator.tick(tick_time)
                 else:
                     tick_results = []
@@ -277,7 +281,7 @@ class SimulationRunner:
                             committed = result.get("_event") if isinstance(result, dict) else None
                             if committed:
                                 response_envs = await self._agency.notify(committed)
-                                for env in (response_envs or []):
+                                for env in response_envs or []:
                                     self._queue.submit(env)
 
             # Step 3: AgencyEngine scheduled actions
@@ -297,7 +301,8 @@ class SimulationRunner:
                         # Processed immediately — meta-actions bypass the queue
                         # because they skip the governance pipeline.
                         deliverable_json = await self._agency.generate_deliverable(
-                            env.actor_id, env.payload,
+                            env.actor_id,
+                            env.payload,
                         )
                         self._deliverable_content = deliverable_json
                         self._deliverable_produced = True
@@ -305,12 +310,12 @@ class SimulationRunner:
                         if self._simulation_type == SimulationType.INTERNAL_ONLY:
                             self._current_tick += 1
                             self._queue.current_time = (
-                                float(self._current_tick)
-                                * self._config.tick_interval_seconds
+                                float(self._current_tick) * self._config.tick_interval_seconds
                             )
                         logger.info(
                             "[RUNNER] Deliverable produced by %s: %d bytes",
-                            env.actor_id, len(str(deliverable_json)),
+                            env.actor_id,
+                            len(str(deliverable_json)),
                         )
                     else:
                         self._queue.submit(env)
@@ -328,8 +333,10 @@ class SimulationRunner:
                         target_tick = int(next_time / self._config.tick_interval_seconds)
                         logger.info(
                             "[RUNNER] fast-forward: tick %d -> %d (time %.1f -> %.1f)",
-                            self._current_tick, target_tick,
-                            self._queue.current_time, next_time,
+                            self._current_tick,
+                            target_tick,
+                            self._queue.current_time,
+                            next_time,
                         )
                         self._current_tick = target_tick
                         self._queue.current_time = next_time
@@ -339,15 +346,18 @@ class SimulationRunner:
 
             logger.info(
                 "[RUNNER] dequeued: actor=%s action=%s service=%s source=%s",
-                envelope.actor_id, envelope.action_type,
-                envelope.target_service, envelope.source,
+                envelope.actor_id,
+                envelope.action_type,
+                envelope.target_service,
+                envelope.source,
             )
 
             # Runaway protection
             if not self._check_runaway_limits(envelope):
                 logger.warning(
                     "[RUNNER] runaway protection: dropping %s from %s",
-                    envelope.envelope_id, envelope.actor_id,
+                    envelope.envelope_id,
+                    envelope.actor_id,
                 )
                 continue
 
@@ -380,7 +390,8 @@ class SimulationRunner:
             self._total_events_processed += 1
             logger.info(
                 "[RUNNER] event #%d processed, queue_pending=%s",
-                self._total_events_processed, self._queue.has_pending(),
+                self._total_events_processed,
+                self._queue.has_pending(),
             )
 
             # Track external vs internal for loop breaker
@@ -424,9 +435,7 @@ class SimulationRunner:
                     logical_time=envelope.logical_time,
                     envelope_id=str(envelope.envelope_id),
                     actor_id=str(envelope.actor_id),
-                    activation_reason=envelope.metadata.get(
-                        "activation_reason", "external"
-                    ),
+                    activation_reason=envelope.metadata.get("activation_reason", "external"),
                     activation_tier=envelope.metadata.get("activation_tier", 0),
                     pipeline_result_event_id=(
                         str(committed_event.event_id) if committed_event else None

@@ -1,11 +1,13 @@
 """Shared fixtures for state engine tests."""
+
 import pytest
-from volnix.persistence.sqlite import SQLiteDatabase
-from volnix.persistence.migrations import MigrationRunner
+
+from volnix.engines.state.causal_graph import CausalGraph
+from volnix.engines.state.event_log import EventLog
 from volnix.engines.state.migrations import STATE_MIGRATIONS
 from volnix.engines.state.store import EntityStore
-from volnix.engines.state.event_log import EventLog
-from volnix.engines.state.causal_graph import CausalGraph
+from volnix.persistence.migrations import MigrationRunner
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

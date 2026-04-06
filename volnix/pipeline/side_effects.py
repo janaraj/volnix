@@ -114,9 +114,7 @@ class SideEffectProcessor:
                 pass
             self._task = None
 
-    def _side_effect_to_context(
-        self, se: SideEffect, parent_ctx: ActionContext
-    ) -> ActionContext:
+    def _side_effect_to_context(self, se: SideEffect, parent_ctx: ActionContext) -> ActionContext:
         """Convert a side effect into an action context for pipeline execution.
 
         Args:

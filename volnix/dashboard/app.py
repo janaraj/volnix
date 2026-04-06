@@ -6,7 +6,7 @@ replay, report, and API routes.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class DashboardConfig(BaseModel):

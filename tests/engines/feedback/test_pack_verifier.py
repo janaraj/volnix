@@ -1,4 +1,5 @@
 """Tests for PackVerifier -- validate Tier 1 pack structure."""
+
 from __future__ import annotations
 
 from volnix.engines.feedback.pack_compiler import PackCompiler
@@ -15,22 +16,14 @@ async def test_verify_compiled_pack(make_profile, tmp_path):
     verification = await verifier.verify(result.output_dir)
 
     assert verification.service_name == "twilio"
-    structure_check = next(
-        c for c in verification.checks if c.name == "structure"
-    )
+    structure_check = next(c for c in verification.checks if c.name == "structure")
     assert structure_check.passed is True
-    handler_check = next(
-        c for c in verification.checks if c.name == "handlers"
-    )
+    handler_check = next(c for c in verification.checks if c.name == "handlers")
     assert handler_check.passed is True
     # Tools and entities should now be real checks (M4 fix)
-    tools_check = next(
-        c for c in verification.checks if c.name == "tools"
-    )
+    tools_check = next(c for c in verification.checks if c.name == "tools")
     assert tools_check.passed is True
-    entities_check = next(
-        c for c in verification.checks if c.name == "entities"
-    )
+    entities_check = next(c for c in verification.checks if c.name == "entities")
     assert entities_check.passed is True
 
 
@@ -57,9 +50,7 @@ async def test_verify_stub_handlers_warn(make_profile, tmp_path):
     result = await verifier.verify(compiled.output_dir)
 
     # Stubs are warnings, not errors (M12 fix: AST-based detection)
-    stub_check = next(
-        c for c in result.checks if c.name == "no_stubs"
-    )
+    stub_check = next(c for c in result.checks if c.name == "no_stubs")
     assert stub_check.passed is False
     assert any("NotImplementedError" in w for w in result.warnings)
 
@@ -68,13 +59,7 @@ async def test_verify_existing_email_pack():
     """Verify the real gmail pack passes all checks."""
     from pathlib import Path
 
-    pack_dir = (
-        Path(__file__).resolve().parents[3]
-        / "volnix"
-        / "packs"
-        / "verified"
-        / "gmail"
-    )
+    pack_dir = Path(__file__).resolve().parents[3] / "volnix" / "packs" / "verified" / "gmail"
     if not pack_dir.exists():
         return  # Skip if not available
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from volnix.engines.reporter.scorecard import SCORE_REGISTRY, ScorecardComputer
 
 
@@ -34,7 +32,9 @@ def test_all_compute_metrics_in_registry():
     compute_methods = [
         m.replace("_compute_", "")
         for m in dir(computer)
-        if m.startswith("_compute_") and not m.startswith("_compute_coordination") and not m.startswith("_compute_information")
+        if m.startswith("_compute_")
+        and not m.startswith("_compute_coordination")
+        and not m.startswith("_compute_information")
     ]
     for metric in compute_methods:
         assert metric in SCORE_REGISTRY, (
@@ -56,8 +56,12 @@ async def test_overall_score_is_weighted():
     # Verify it's NOT a simple average of 8 metrics (which would be different
     # because coordination_score and information_sharing are also in collective)
     collective = result["collective"]
-    simple_avg = round(
-        sum(v for v in collective.values() if isinstance(v, (int, float)) and v != collective["overall_score"])
+    round(
+        sum(
+            v
+            for v in collective.values()
+            if isinstance(v, (int, float)) and v != collective["overall_score"]
+        )
         / max(len([v for v in collective.values() if isinstance(v, (int, float))]) - 1, 1),
         1,
     )

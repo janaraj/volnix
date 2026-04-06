@@ -66,7 +66,9 @@ class OrganicGenerator:
         organic_history = ""
         if recent_organic:
             lines = [f"- {e['actor']}: {e['action']} ({e['service']})" for e in recent_organic]
-            organic_history = "Recent organic events (vary the actor and action):\n" + "\n".join(lines)
+            organic_history = "Recent organic events (vary the actor and action):\n" + "\n".join(
+                lines
+            )
 
         try:
             response = await ANIMATOR_EVENT.execute(

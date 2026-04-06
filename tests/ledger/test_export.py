@@ -1,5 +1,7 @@
 """Tests for volnix.ledger.export -- JSON, CSV, and replay export."""
+
 import json
+
 import pytest
 
 from volnix.core.types import ActorId
@@ -141,9 +143,7 @@ async def test_export_json_with_filter(ledger, exporter, tmp_path):
     await ledger.append(_make_pipeline_entry(step_name="step2"))
 
     output = str(tmp_path / "filtered.json")
-    count = await exporter.export_json(
-        LedgerQuery(entry_type="pipeline_step"), output
-    )
+    count = await exporter.export_json(LedgerQuery(entry_type="pipeline_step"), output)
     assert count == 2
 
     data = json.loads(open(output).read())

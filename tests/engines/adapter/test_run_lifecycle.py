@@ -7,11 +7,7 @@ Verifies:
 - No duplicate runs from concurrent requests
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-from starlette.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock
 
 
 def _make_gateway():
@@ -76,7 +72,8 @@ class TestNewRunEndpoint:
         # Simulate the endpoint inline (matching http_rest.py pattern)
         @app.post("/api/v1/runs/new")
         async def new_run():
-            from volnix.core.types import RunId as _R, WorldId as _W
+            from volnix.core.types import RunId as _R
+            from volnix.core.types import WorldId as _W
 
             current = gw._app._current_run_id
             if current:
@@ -89,9 +86,7 @@ class TestNewRunEndpoint:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/v1/runs/new")
 
         assert resp.status_code == 200
@@ -125,9 +120,7 @@ class TestNewRunEndpoint:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/v1/runs/new")
 
         assert resp.status_code == 400
@@ -143,7 +136,8 @@ class TestNewRunEndpoint:
 
         @app.post("/api/v1/runs/new")
         async def new_run():
-            from volnix.core.types import RunId as _R, WorldId as _W
+            from volnix.core.types import RunId as _R
+            from volnix.core.types import WorldId as _W
 
             current = gw._app._current_run_id
             if current:
@@ -156,9 +150,7 @@ class TestNewRunEndpoint:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/v1/runs/new")
 
         assert resp.status_code == 200

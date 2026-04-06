@@ -29,6 +29,4 @@ def load_preset(preset_name: str) -> dict[str, Any] | None:
 
 def list_presets() -> list[str]:
     """List available preset names."""
-    return sorted(
-        p.stem for p in PRESETS_DIR.glob("*.yaml")
-    )
+    return sorted(p.stem for p in PRESETS_DIR.glob("*.yaml"))

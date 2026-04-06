@@ -117,27 +117,20 @@ class SchemaValidator:
             enum_values = field_schema.get("enum")
             if enum_values is not None and value not in enum_values:
                 errors.append(
-                    f"Field '{field_name}' value {value!r} not in "
-                    f"allowed values {enum_values}"
+                    f"Field '{field_name}' value {value!r} not in allowed values {enum_values}"
                 )
 
             # Minimum check
             minimum = field_schema.get("minimum")
             if minimum is not None and isinstance(value, (int, float)):
                 if value < minimum:
-                    errors.append(
-                        f"Field '{field_name}' value {value} is below "
-                        f"minimum {minimum}"
-                    )
+                    errors.append(f"Field '{field_name}' value {value} is below minimum {minimum}")
 
             # Maximum check
             maximum = field_schema.get("maximum")
             if maximum is not None and isinstance(value, (int, float)):
                 if value > maximum:
-                    errors.append(
-                        f"Field '{field_name}' value {value} is above "
-                        f"maximum {maximum}"
-                    )
+                    errors.append(f"Field '{field_name}' value {value} is above maximum {maximum}")
 
             # Nested object validation
             if expected_type == "object" and isinstance(value, dict):
@@ -154,7 +147,9 @@ class SchemaValidator:
                             nested_result = self._validate(item, items_schema)
                             for err in nested_result.errors:
                                 errors.append(f"{field_name}[{i}].{err}")
-                        elif items_schema.get("type") and not _check_type(item, items_schema["type"]):
+                        elif items_schema.get("type") and not _check_type(
+                            item, items_schema["type"]
+                        ):
                             errors.append(
                                 f"{field_name}[{i}] expected type {items_schema['type']}, "
                                 f"got {type(item).__name__}"

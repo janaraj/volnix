@@ -1,7 +1,6 @@
 """Tests for volnix.llm.providers.anthropic -- Anthropic Claude provider."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -9,9 +8,7 @@ from volnix.llm.providers.anthropic import AnthropicProvider
 from volnix.llm.types import LLMRequest
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
-skipif_no_anthropic = pytest.mark.skipif(
-    not ANTHROPIC_KEY, reason="ANTHROPIC_API_KEY not set"
-)
+skipif_no_anthropic = pytest.mark.skipif(not ANTHROPIC_KEY, reason="ANTHROPIC_API_KEY not set")
 
 # Toggle: VOLNIX_RUN_REAL_API_TESTS=1 to enable expensive real API tests
 RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")

@@ -7,7 +7,6 @@ from volnix.core.types import ActorId, ServiceId, SideEffect, StepVerdict
 from volnix.pipeline.dag import PipelineDAG
 from volnix.pipeline.side_effects import SideEffectProcessor
 
-
 # ---------------------------------------------------------------------------
 # Mock helpers
 # ---------------------------------------------------------------------------

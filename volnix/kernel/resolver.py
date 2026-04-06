@@ -8,6 +8,7 @@ Tries sources in confidence order:
 5. LLM inference (D4 callback)
 6. Kernel classification (primitives only)
 """
+
 import logging
 from collections.abc import Awaitable, Callable
 
@@ -92,8 +93,7 @@ class ServiceResolver:
                 fidelity_tier=2,
                 operations=[],
                 entity_schemas={
-                    p["name"]: {"type": "object", "fields": p.get("fields", {})}
-                    for p in primitives
+                    p["name"]: {"type": "object", "fields": p.get("fields", {})} for p in primitives
                 },
                 state_machines={},
                 confidence=0.1,
@@ -110,16 +110,18 @@ class ServiceResolver:
 
         # If spec has parsed operations (from OpenAPI)
         for op_data in spec.get("operations", []):
-            operations.append(APIOperation(
-                name=op_data.get("name", ""),
-                service=service_name,
-                description=op_data.get("description", ""),
-                http_method=op_data.get("http_method", "POST"),
-                http_path=op_data.get("http_path", ""),
-                parameters=op_data.get("parameters", {}),
-                required_params=op_data.get("required_params", []),
-                response_schema=op_data.get("response_schema", {}),
-            ))
+            operations.append(
+                APIOperation(
+                    name=op_data.get("name", ""),
+                    service=service_name,
+                    description=op_data.get("description", ""),
+                    http_method=op_data.get("http_method", "POST"),
+                    http_path=op_data.get("http_path", ""),
+                    parameters=op_data.get("parameters", {}),
+                    required_params=op_data.get("required_params", []),
+                    response_schema=op_data.get("response_schema", {}),
+                )
+            )
 
         # FIX-14: fidelity_tier=2 for all external sources. Differentiate via confidence.
         return ServiceSurface(

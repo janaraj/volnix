@@ -1,10 +1,11 @@
 """Tests for volnix.core.engine — BaseEngine lifecycle and event wiring."""
-import pytest
+
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+
 from volnix.core.engine import BaseEngine
 from volnix.core.events import Event
 from volnix.core.types import Timestamp
-from datetime import datetime, timezone
 
 
 class ConcreteEngine(BaseEngine):
@@ -20,8 +21,8 @@ def _make_event():
     return Event(
         event_type="test",
         timestamp=Timestamp(
-            world_time=datetime.now(timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime.now(UTC),
+            wall_time=datetime.now(UTC),
             tick=0,
         ),
     )
@@ -85,6 +86,7 @@ class TestBaseEngine:
 
 
 # Additional tests outside the class:
+
 
 async def test_init_defaults():
     e = ConcreteEngine()

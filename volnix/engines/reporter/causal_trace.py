@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from volnix.core.types import EventId
 from volnix.core.protocols import StateEngineProtocol
+from volnix.core.types import EventId
 
 
 class CausalTraceRenderer:
@@ -19,9 +19,7 @@ class CausalTraceRenderer:
     concrete CausalGraph class. This maintains engine isolation.
     """
 
-    async def render(
-        self, event_id: EventId, state: StateEngineProtocol
-    ) -> dict[str, Any]:
+    async def render(self, event_id: EventId, state: StateEngineProtocol) -> dict[str, Any]:
         """Render a causal trace rooted at the given event.
 
         Returns a dict with:

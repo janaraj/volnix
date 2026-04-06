@@ -5,16 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from volnix.core.types import RunId
-from volnix.runs.config import RunConfig
 from volnix.persistence.manager import ConnectionManager
+from volnix.runs.config import RunConfig
 
 
 def _make_manager(tmp_path: Path):
     """Create a RunManager with a temp data dir."""
     from volnix.runs.manager import RunManager
+
     config = RunConfig(data_dir=str(tmp_path / "runs"))
     persistence = ConnectionManager.__new__(ConnectionManager)
     persistence._base_dir = tmp_path

@@ -50,7 +50,9 @@ def dedup_entity_dicts(
     if removed > 0:
         logger.debug(
             "dedup_entity_dicts: removed %d duplicates (key=%s, strategy=%s)",
-            removed, key, strategy,
+            removed,
+            key,
+            strategy,
         )
 
     return result

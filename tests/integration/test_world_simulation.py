@@ -14,7 +14,6 @@ Run with `pytest -s` to see actual output from print statements.
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 
@@ -28,12 +27,14 @@ def _ensure_agent(app, agent_id: str):
     compiler = app.registry.get("world_compiler")
     actor_registry = compiler._config.get("_actor_registry")
     if actor_registry and not actor_registry.has_actor(ActorId(agent_id)):
-        actor_registry.register(ActorDefinition(
-            id=ActorId(agent_id),
-            type=ActorType.AGENT,
-            role="test-agent",
-            permissions={"write": "all", "read": "all"},
-        ))
+        actor_registry.register(
+            ActorDefinition(
+                id=ActorId(agent_id),
+                type=ActorType.AGENT,
+                role="test-agent",
+                permissions={"write": "all", "read": "all"},
+            )
+        )
 
 
 # ── Compilation flow ──────────────────────────────────────────────
@@ -267,9 +268,7 @@ class TestEndToEndReport:
         print("=" * 60)
         print(report)
         print(f"\nAgent actions executed: {len(action_results)}")
-        print(
-            f"Successful: {sum(1 for r in action_results if 'error' not in r)}"
-        )
+        print(f"Successful: {sum(1 for r in action_results if 'error' not in r)}")
         print(f"Failed: {sum(1 for r in action_results if 'error' in r)}")
 
 
@@ -292,14 +291,12 @@ class TestNLToWorldFlow:
 
         NOTE: Compilation only (no generate_world) — does NOT need mock LLM.
         """
+
         import yaml
-        from unittest.mock import AsyncMock
-        from volnix.engines.world_compiler.nl_parser import NLParser
+
         from volnix.engines.world_compiler.prompt_templates import (
             NL_TO_WORLD_DEF,
-            NL_TO_COMPILER_SETTINGS,
         )
-        from volnix.llm.types import LLMResponse
 
         # 1. Show what the NL templates look like
         print("\n" + "=" * 70)
@@ -313,9 +310,9 @@ class TestNLToWorldFlow:
             verified_packs="gmail",
             description=description,
         )
-        print(f"\n--- System Prompt (first 200 chars) ---")
+        print("\n--- System Prompt (first 200 chars) ---")
         print(sys_prompt[:200] + "...")
-        print(f"\n--- User Prompt ---")
+        print("\n--- User Prompt ---")
         print(user_prompt)
 
         # 2. Simulate what LLM would return
@@ -454,12 +451,17 @@ class TestNLToWorldFlow:
         print("=" * 70)
 
         _ensure_agent(app, "agent-1")
-        action = await app.handle_action("agent-1", "gmail", "email_send", {
-            "from_addr": "agent@acme.com",
-            "to_addr": "customer@test.com",
-            "subject": "Re: Your support ticket",
-            "body": "We have investigated your issue and found a solution.",
-        })
+        action = await app.handle_action(
+            "agent-1",
+            "gmail",
+            "email_send",
+            {
+                "from_addr": "agent@acme.com",
+                "to_addr": "customer@test.com",
+                "subject": "Re: Your support ticket",
+                "body": "We have investigated your issue and found a solution.",
+            },
+        )
         print(f"  email_send result: {json.dumps(action, indent=4, default=str)[:300]}")
 
         # 7. Query state to show persisted entities
@@ -476,7 +478,7 @@ class TestNLToWorldFlow:
         # Show the email we just sent
         for e in emails:
             if e.get("subject") == "Re: Your support ticket":
-                print(f"\n  Sent email found in state:")
+                print("\n  Sent email found in state:")
                 print(f"    {json.dumps(e, indent=6, default=str)[:300]}")
 
         # 8. Verify everything worked
@@ -506,9 +508,7 @@ class TestNLToWorldFlow:
             )
             # Verify IDs match
             generated_ids = sorted(e.get("id", "") for e in entity_list)
-            stored_ids = sorted(
-                e.get("_entity_id", e.get("id", "")) for e in stored
-            )
+            stored_ids = sorted(e.get("_entity_id", e.get("id", "")) for e in stored)
             assert generated_ids == stored_ids, (
                 f"{entity_type} IDs mismatch: {generated_ids[:3]} vs {stored_ids[:3]}"
             )
@@ -522,8 +522,7 @@ class TestNLToWorldFlow:
                         for k, v in gen_sample.items():
                             if not k.startswith("_"):
                                 assert stored_e.get(k) == v, (
-                                    f"{entity_type}.{k}: expected {v}, "
-                                    f"got {stored_e.get(k)}"
+                                    f"{entity_type}.{k}: expected {v}, got {stored_e.get(k)}"
                                 )
                         break
 
@@ -531,6 +530,7 @@ class TestNLToWorldFlow:
 # ── Live LLM tests (require GOOGLE_API_KEY) ──────────────────────
 
 
+@pytest.mark.live
 @pytest.mark.asyncio
 class TestLiveWorldGeneration:
     """Integration tests that use a REAL LLM via the ``live_app`` fixture.
@@ -573,7 +573,9 @@ class TestLiveWorldGeneration:
 
         # Agent action after generation
         action = await live_app.handle_action(
-            "agent-1", "gmail", "email_send",
+            "agent-1",
+            "gmail",
+            "email_send",
             {
                 "from_addr": "agent@acme.com",
                 "to_addr": "customer@test.com",

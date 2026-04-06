@@ -50,10 +50,7 @@ class EngineRegistry:
         """
         if engine_name not in self._engines:
             available = sorted(self._engines.keys())
-            raise KeyError(
-                f"Engine '{engine_name}' not registered. "
-                f"Available: {available}"
-            )
+            raise KeyError(f"Engine '{engine_name}' not registered. Available: {available}")
         return self._engines[engine_name]
 
     def get_step(self, step_name: str) -> PipelineStep | None:
@@ -116,7 +113,7 @@ class EngineRegistry:
                 if dep not in self._engines:
                     raise EngineDependencyError(
                         message=f"Engine '{name}' depends on '{dep}', which is not registered. "
-                                f"Available: {sorted(self._engines.keys())}",
+                        f"Available: {sorted(self._engines.keys())}",
                         engine_name=name,
                     )
                 dependents[dep].append(name)

@@ -40,12 +40,12 @@ class ReportGeneratorEngine(BaseEngine):
 
     async def _on_initialize(self) -> None:
         """Create sub-components for report generation."""
-        from volnix.engines.reporter.scorecard import ScorecardComputer
+        from volnix.engines.reporter.agent_boundaries import AgentBoundaryAnalyzer
         from volnix.engines.reporter.capability_gaps import GapAnalyzer
         from volnix.engines.reporter.causal_trace import CausalTraceRenderer
         from volnix.engines.reporter.diff import CounterfactualDiffer
+        from volnix.engines.reporter.scorecard import ScorecardComputer
         from volnix.engines.reporter.world_challenges import WorldChallengeAnalyzer
-        from volnix.engines.reporter.agent_boundaries import AgentBoundaryAnalyzer
 
         self._scorecard = ScorecardComputer()
         self._gap_analyzer = GapAnalyzer()
@@ -55,6 +55,7 @@ class ReportGeneratorEngine(BaseEngine):
         self._boundary_analyzer = AgentBoundaryAnalyzer()
 
         from volnix.engines.reporter.governance_report import GovernanceReportGenerator
+
         self._governance_report = GovernanceReportGenerator(
             scorecard_computer=self._scorecard,
             gap_analyzer=self._gap_analyzer,
@@ -140,8 +141,16 @@ class ReportGeneratorEngine(BaseEngine):
         # Supplement with actors discovered from events (external agents
         # that connected at runtime may not be in the static registry).
         known_ids = {a.get("id") or a.get("actor_id") for a in actors}
-        internal = {"world_compiler", "animator", "system", "policy",
-                    "budget", "state", "permission", "responder"}
+        internal = {
+            "world_compiler",
+            "animator",
+            "system",
+            "policy",
+            "budget",
+            "state",
+            "permission",
+            "responder",
+        }
         for evt in events:
             aid = evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
             if aid and str(aid) not in known_ids and str(aid) not in internal:
@@ -191,7 +200,8 @@ class ReportGeneratorEngine(BaseEngine):
         gap_log = await self.generate_gap_log(world_id)
         gap_summary = await self._gap_analyzer.get_gap_summary(events)
         condition_report = await self.generate_condition_report(
-            world_id, actors=actors,
+            world_id,
+            actors=actors,
         )
 
         return {
@@ -227,9 +237,7 @@ class ReportGeneratorEngine(BaseEngine):
             if not actor_id:
                 continue
 
-            challenges = await self._challenge_analyzer.analyze(
-                events, actor_id, conditions
-            )
+            challenges = await self._challenge_analyzer.analyze(events, actor_id, conditions)
             world_to_agent[actor_id] = [
                 {
                     "turn": c.turn,

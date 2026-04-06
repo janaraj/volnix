@@ -23,12 +23,27 @@ def _make_world_context() -> WorldContextBundle:
         mission="Evaluate agent support quality.",
         seeds=["VIP customer waiting 3 days for refund"],
         available_services=[
-            {"name": "reply_ticket", "service": "helpdesk", "http_method": "POST",
-             "description": "Reply to a ticket", "required_params": ["ticket_id", "text"]},
-            {"name": "list_tickets", "service": "helpdesk", "http_method": "GET",
-             "description": "List tickets", "required_params": []},
-            {"name": "email_search", "service": "email", "http_method": "GET",
-             "description": "Search emails", "required_params": ["q"]},
+            {
+                "name": "reply_ticket",
+                "service": "helpdesk",
+                "http_method": "POST",
+                "description": "Reply to a ticket",
+                "required_params": ["ticket_id", "text"],
+            },
+            {
+                "name": "list_tickets",
+                "service": "helpdesk",
+                "http_method": "GET",
+                "description": "List tickets",
+                "required_params": [],
+            },
+            {
+                "name": "email_search",
+                "service": "email",
+                "http_method": "GET",
+                "description": "Search emails",
+                "required_params": ["q"],
+            },
         ],
     )
 
@@ -215,9 +230,7 @@ def test_autonomous_prompt_has_team_and_instructions():
     builder = ActorPromptBuilder(ctx)
     actor = _make_actor(autonomous=True)
     actor.team_channel = "#research"
-    actor.subscriptions = [
-        Subscription(service_id="slack", filter={"channel": "#research"})
-    ]
+    actor.subscriptions = [Subscription(service_id="slack", filter={"channel": "#research"})]
 
     prompt = builder.build_individual_prompt(
         actor=actor,

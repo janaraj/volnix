@@ -11,11 +11,11 @@ by :class:`ConnectionManager`.
 
 from __future__ import annotations
 
-from volnix.persistence.database import Database
-from volnix.persistence.append_log import AppendOnlyLog
 from volnix.ledger.config import LedgerConfig
 from volnix.ledger.entries import LedgerEntry, deserialize_entry
 from volnix.ledger.query import LedgerQuery
+from volnix.persistence.append_log import AppendOnlyLog
+from volnix.persistence.database import Database
 
 
 class Ledger:
@@ -67,13 +67,15 @@ class Ledger:
         """
         if self._entry_types_enabled and entry.entry_type not in self._entry_types_enabled:
             return -1
-        return await self._log.append({
-            "entry_type": entry.entry_type,
-            "timestamp": entry.timestamp.isoformat(),
-            "actor_id": _extract_actor_id(entry),
-            "engine_name": _extract_engine_name(entry),
-            "payload": entry.model_dump_json(),
-        })
+        return await self._log.append(
+            {
+                "entry_type": entry.entry_type,
+                "timestamp": entry.timestamp.isoformat(),
+                "actor_id": _extract_actor_id(entry),
+                "engine_name": _extract_engine_name(entry),
+                "payload": entry.model_dump_json(),
+            }
+        )
 
     async def query(self, filters: LedgerQuery) -> list[LedgerEntry]:
         """Query the ledger with structured filters.

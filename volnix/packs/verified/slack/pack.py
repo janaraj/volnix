@@ -16,22 +16,22 @@ from volnix.core.context import ResponseProposal
 from volnix.core.types import ToolName
 from volnix.packs.base import ActionHandler, ServicePack
 from volnix.packs.verified.slack.handlers import (
-    handle_reactions_add,
+    handle_channels_list,
+    handle_chat_delete,
+    handle_chat_postMessage,
+    handle_chat_replyToThread,
+    handle_chat_update,
     handle_conversations_archive,
     handle_conversations_create,
-    handle_chat_delete,
     handle_conversations_history,
     handle_conversations_info,
-    handle_conversations_replies,
-    handle_users_profile_get,
-    handle_users_list,
     handle_conversations_join,
-    handle_channels_list,
-    handle_chat_postMessage,
-    handle_reactions_remove,
-    handle_chat_replyToThread,
+    handle_conversations_replies,
     handle_conversations_setTopic,
-    handle_chat_update,
+    handle_reactions_add,
+    handle_reactions_remove,
+    handle_users_list,
+    handle_users_profile_get,
 )
 from volnix.packs.verified.slack.schemas import (
     CHANNEL_ENTITY_SCHEMA,

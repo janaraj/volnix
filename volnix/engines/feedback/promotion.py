@@ -10,6 +10,7 @@ The standard promotion path:
   bootstrapped → curated_profile (Tier 2)
   curated_profile → verified_pack (Tier 1, via compile-pack + verify)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,7 +36,7 @@ class TierPromoter:
         self,
         annotation_store: AnnotationStore,
         profile_registry: Any,  # ProfileRegistry
-        profile_loader: Any,    # ProfileLoader
+        profile_loader: Any,  # ProfileLoader
         config: FeedbackConfig | None = None,
     ) -> None:
         self._annotations = annotation_store
@@ -57,12 +58,8 @@ class TierPromoter:
         criteria_missing: list[str] = []
 
         # Get current profile
-        profile = (
-            self._registry.get_profile(name) if self._registry else None
-        )
-        current_fidelity = (
-            profile.fidelity_source if profile else captured.fidelity_source
-        )
+        profile = self._registry.get_profile(name) if self._registry else None
+        current_fidelity = profile.fidelity_source if profile else captured.fidelity_source
 
         # Already curated — nothing to promote to
         if current_fidelity == "curated_profile":
@@ -74,8 +71,7 @@ class TierPromoter:
                 criteria_met=["Already curated"],
                 criteria_missing=[],
                 recommendation=(
-                    "Service is already a curated profile. "
-                    "Use compile-pack for Tier 1."
+                    "Service is already a curated profile. Use compile-pack for Tier 1."
                 ),
             )
 
@@ -83,13 +79,9 @@ class TierPromoter:
         annotation_count = await self._annotations.count_by_service(name)
         min_ann = self._config.promotion_min_annotations
         if annotation_count >= min_ann:
-            criteria_met.append(
-                f"Annotations: {annotation_count} >= {min_ann}"
-            )
+            criteria_met.append(f"Annotations: {annotation_count} >= {min_ann}")
         else:
-            criteria_missing.append(
-                f"Annotations: {annotation_count} < {min_ann} required"
-            )
+            criteria_missing.append(f"Annotations: {annotation_count} < {min_ann} required")
 
         # Criterion 2: Operations count (from config — C3 fix)
         op_count = len(captured.operations_observed)
@@ -97,39 +89,26 @@ class TierPromoter:
         if op_count >= min_ops:
             criteria_met.append(f"Operations: {op_count} >= {min_ops}")
         else:
-            criteria_missing.append(
-                f"Operations: {op_count} < {min_ops} required"
-            )
+            criteria_missing.append(f"Operations: {op_count} < {min_ops} required")
 
         # Criterion 3: Error rate (from config — C4 fix)
-        total_errors = sum(
-            e.error_count for e in captured.operations_observed
-        )
-        total_calls = sum(
-            o.call_count for o in captured.operations_observed
-        )
+        total_errors = sum(e.error_count for e in captured.operations_observed)
+        total_calls = sum(o.call_count for o in captured.operations_observed)
         max_error_rate = self._config.promotion_max_error_rate
         if total_calls > 0:
             error_rate = total_errors / total_calls
             if error_rate <= max_error_rate:
-                criteria_met.append(
-                    f"Error rate: {error_rate:.0%} "
-                    f"<= {max_error_rate:.0%}"
-                )
+                criteria_met.append(f"Error rate: {error_rate:.0%} <= {max_error_rate:.0%}")
             else:
                 criteria_missing.append(
-                    f"Error rate: {error_rate:.0%} "
-                    f"> {max_error_rate:.0%} threshold"
+                    f"Error rate: {error_rate:.0%} > {max_error_rate:.0%} threshold"
                 )
         else:
             criteria_missing.append("No operations observed in run")
 
         # Criterion 4: Has entity mutations
         if captured.entity_mutations:
-            criteria_met.append(
-                f"Entity mutations: "
-                f"{len(captured.entity_mutations)} types"
-            )
+            criteria_met.append(f"Entity mutations: {len(captured.entity_mutations)} types")
         else:
             criteria_missing.append("No entity mutations observed")
 
@@ -145,9 +124,7 @@ class TierPromoter:
             service_name=name,
             eligible=eligible,
             current_fidelity=current_fidelity,
-            proposed_fidelity=(
-                "curated_profile" if eligible else current_fidelity
-            ),
+            proposed_fidelity=("curated_profile" if eligible else current_fidelity),
             criteria_met=criteria_met,
             criteria_missing=criteria_missing,
             recommendation=recommendation,
@@ -170,10 +147,12 @@ class TierPromoter:
         new_version = self._increment_version(old_version)
 
         # Create updated profile (frozen model — must copy)
-        promoted = new_profile.model_copy(update={
-            "fidelity_source": "curated_profile",
-            "version": new_version,
-        })
+        promoted = new_profile.model_copy(
+            update={
+                "fidelity_source": "curated_profile",
+                "version": new_version,
+            }
+        )
 
         # Save to disk (H2 fix: async file I/O)
         profile_path = ""
@@ -187,7 +166,9 @@ class TierPromoter:
 
         logger.info(
             "Promoted '%s' from '%s' to 'curated_profile' (v%s)",
-            service_name, previous_fidelity, new_version,
+            service_name,
+            previous_fidelity,
+            new_version,
         )
 
         return PromotionResult(
@@ -206,19 +187,17 @@ class TierPromoter:
         candidates: list[dict[str, Any]] = []
         for profile in self._registry.list_profiles():
             if profile.fidelity_source == "bootstrapped":
-                count = await self._annotations.count_by_service(
-                    profile.service_name
+                count = await self._annotations.count_by_service(profile.service_name)
+                candidates.append(
+                    {
+                        "service_name": profile.service_name,
+                        "fidelity_source": profile.fidelity_source,
+                        "operations": len(profile.operations),
+                        "entities": len(profile.entities),
+                        "annotation_count": count,
+                        "min_annotations": (self._config.promotion_min_annotations),
+                    }
                 )
-                candidates.append({
-                    "service_name": profile.service_name,
-                    "fidelity_source": profile.fidelity_source,
-                    "operations": len(profile.operations),
-                    "entities": len(profile.entities),
-                    "annotation_count": count,
-                    "min_annotations": (
-                        self._config.promotion_min_annotations
-                    ),
-                })
 
         return candidates
 

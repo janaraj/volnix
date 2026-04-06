@@ -11,11 +11,8 @@ Requires: codex-acp binary available (uses volnix.toml routing)
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
-
-from volnix.core.types import RunId
 
 
 @pytest.fixture
@@ -221,9 +218,7 @@ class TestCollaborationLiveWorld:
 
         result = await compiler.generate_world(plan)
 
-        entity_summary = {
-            etype: len(elist) for etype, elist in result["entities"].items()
-        }
+        entity_summary = {etype: len(elist) for etype, elist in result["entities"].items()}
         total_entities = sum(entity_summary.values())
         print(f"  Generated entities: {json.dumps(entity_summary, indent=4)}")
         print(f"  Total: {total_entities} entities")
@@ -275,10 +270,7 @@ class TestCollaborationLiveWorld:
                             sensitivity="immediate",
                         )
                     )
-                print(
-                    f"  {actor_state.role}: "
-                    f"{len(actor_state.subscriptions)} subscriptions"
-                )
+                print(f"  {actor_state.role}: {len(actor_state.subscriptions)} subscriptions")
         except Exception as e:
             print(f"  Subscription setup error: {e}")
 
@@ -312,10 +304,7 @@ class TestCollaborationLiveWorld:
                     "intended_for": ["all"],
                 },
             )
-            print(
-                f"  Kickstart posted: "
-                f"{json.dumps(kickstart, indent=4, default=str)[:300]}"
-            )
+            print(f"  Kickstart posted: {json.dumps(kickstart, indent=4, default=str)[:300]}")
         except Exception as e:
             print(f"  Kickstart error: {e}")
 
@@ -337,17 +326,13 @@ class TestCollaborationLiveWorld:
                     {
                         "channel_id": "#research",
                         "text": (
-                            f"[{actor_state.role}] Sharing initial analysis "
-                            f"of the jet stream data."
+                            f"[{actor_state.role}] Sharing initial analysis of the jet stream data."
                         ),
                         "intended_for": ["all"],
                     },
                 )
                 action_results.append(action)
-                print(
-                    f"  {actor_state.role} posted: "
-                    f"{json.dumps(action, default=str)[:200]}"
-                )
+                print(f"  {actor_state.role} posted: {json.dumps(action, default=str)[:200]}")
             except Exception as e:
                 print(f"  {actor_state.role} action error: {e}")
 
@@ -357,9 +342,7 @@ class TestCollaborationLiveWorld:
             from datetime import UTC, datetime
 
             events = await animator.tick(datetime.now(UTC))
-            print(
-                f"  Animator generated {len(events) if events else 0} events"
-            )
+            print(f"  Animator generated {len(events) if events else 0} events")
         except Exception as e:
             print(f"  Animator tick: {e}")
 
@@ -403,8 +386,7 @@ class TestCollaborationLiveWorld:
                 if actor_state.recent_interactions:
                     actors_with_interactions += 1
                     print(
-                        f"  {actor_state.role}: "
-                        f"{len(actor_state.recent_interactions)} interactions"
+                        f"  {actor_state.role}: {len(actor_state.recent_interactions)} interactions"
                     )
             print(f"  Actors with interactions: {actors_with_interactions}")
         except Exception as e:
@@ -431,9 +413,7 @@ class TestCollaborationLiveWorld:
 
         # Actors have interaction records from collaboration
         try:
-            assert actors_with_interactions > 0, (
-                "No actors have interaction records"
-            )
+            assert actors_with_interactions > 0, "No actors have interaction records"
             print(f"  Actors with interactions ({actors_with_interactions}): PASS")
         except AssertionError as e:
             print(f"  Actor interactions: SOFT FAIL ({e})")
@@ -448,9 +428,7 @@ class TestCollaborationLiveWorld:
         # Verify subscriptions were set
         try:
             all_states = agency.get_all_states()
-            actors_with_subs = sum(
-                1 for s in all_states if s.subscriptions
-            )
+            actors_with_subs = sum(1 for s in all_states if s.subscriptions)
             assert actors_with_subs >= 3, (
                 f"Expected at least 3 actors with subscriptions, got {actors_with_subs}"
             )

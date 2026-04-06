@@ -8,9 +8,8 @@ does when connecting to Volnix's HTTP API:
 
 No LLM required — uses mock gateway with realistic Zendesk/Gmail responses.
 """
-from __future__ import annotations
 
-import json
+from __future__ import annotations
 
 import httpx
 import pytest
@@ -24,9 +23,7 @@ class TestToolDiscovery:
 
     async def test_discover_tools_returns_list(self, http_transport):
         """GET /api/v1/tools returns a list of tool definitions."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/tools")
 
         assert resp.status_code == 200
@@ -36,9 +33,7 @@ class TestToolDiscovery:
 
     async def test_tools_have_mcp_schema(self, http_transport):
         """Each tool has name, description, and inputSchema."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/tools")
 
         tools = resp.json()
@@ -49,9 +44,7 @@ class TestToolDiscovery:
 
     async def test_expected_tools_present(self, http_transport):
         """Volnix exposes the Zendesk/Gmail tools we need."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/tools")
 
         tool_names = {t["name"] for t in resp.json()}
@@ -71,9 +64,7 @@ class TestRawArgumentExecution:
 
     async def test_raw_args_auto_detected(self, http_transport):
         """POST with raw args (no wrapper) is accepted."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
@@ -86,9 +77,7 @@ class TestRawArgumentExecution:
 
     async def test_single_entity_unwrapped(self, http_transport):
         """Single-entity responses are unwrapped from Zendesk wrapper."""
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
@@ -109,9 +98,7 @@ class TestRawArgumentExecution:
         )
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.update",
                 json={"id": "ticket-001", "status": "closed"},
@@ -132,9 +119,7 @@ class TestRawArgumentExecution:
         )
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.list",
                 json={},
@@ -149,9 +134,7 @@ class TestRawArgumentExecution:
         adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
@@ -169,9 +152,7 @@ class TestBackwardCompatibility:
         """Wrapped requests get raw response (no envelope)."""
         _, gateway = volnix_http_adapter
 
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={
@@ -189,9 +170,7 @@ class TestBackwardCompatibility:
         """Wrapped requests use actor_id from body."""
         _, gateway = volnix_http_adapter
 
-        async with httpx.AsyncClient(
-            transport=http_transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             await client.post(
                 "/api/v1/actions/tickets.read",
                 json={
@@ -223,12 +202,8 @@ class TestTriageWorkflowHTTP:
         await adapter.start_server()
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/tickets.list", json={}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/tickets.list", json={})
         assert resp.status_code == 200
         tickets = resp.json()["structured_content"]["tickets"]
         assert len(tickets) == 2
@@ -245,9 +220,7 @@ class TestTriageWorkflowHTTP:
         }
         gateway.handle_request.return_value = show_result
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
@@ -267,9 +240,7 @@ class TestTriageWorkflowHTTP:
         }
         gateway.handle_request.return_value = update_result
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.update",
                 json={"id": "ticket-001", "status": "open"},
@@ -290,14 +261,10 @@ class TestEdgeCasesAndFailures:
     async def test_raw_mode_gateway_returns_none(self, volnix_http_adapter):
         """Gateway returning None → enveloped with is_error=True."""
         adapter, gateway = volnix_http_adapter
-        gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
-            return_value=None
-        )
+        gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(return_value=None)
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "ticket-001"},
@@ -315,12 +282,8 @@ class TestEdgeCasesAndFailures:
         )
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/some_tool", json={}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/some_tool", json={})
 
         data = resp.json()
         assert data["structured_content"] == "plain text error"
@@ -333,12 +296,8 @@ class TestEdgeCasesAndFailures:
         )
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/tickets.read", json={"id": "t-1"}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/tickets.read", json={"id": "t-1"})
 
         data = resp.json()
         # {"ticket": None} has one key, but value is not dict → no unwrap
@@ -352,12 +311,8 @@ class TestEdgeCasesAndFailures:
         )
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/some_tool", json={}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/some_tool", json={})
 
         data = resp.json()
         # Single key but value is list, not dict → NOT unwrapped
@@ -366,17 +321,11 @@ class TestEdgeCasesAndFailures:
     async def test_empty_dict_response(self, volnix_http_adapter):
         """Empty dict response → passed through as-is in envelope."""
         adapter, gateway = volnix_http_adapter
-        gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(
-            return_value={}
-        )
+        gateway.handle_request = pytest.importorskip("unittest.mock").AsyncMock(return_value={})
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/some_tool", json={}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/some_tool", json={})
 
         data = resp.json()
         assert data["structured_content"] == {}
@@ -387,9 +336,7 @@ class TestEdgeCasesAndFailures:
         adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/v1/actions/tickets.read",
                 json={"id": "t-1", "actor_id": "impersonator"},
@@ -404,9 +351,7 @@ class TestEdgeCasesAndFailures:
         adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/tickets.read",
                 json={
@@ -425,12 +370,8 @@ class TestEdgeCasesAndFailures:
         adapter, gateway = volnix_http_adapter
         transport = httpx.ASGITransport(app=adapter.fastapi_app)
 
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.post(
-                "/api/v1/actions/tickets.list", json={}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/actions/tickets.list", json={})
 
         assert resp.status_code == 200
         call_kwargs = gateway.handle_request.call_args.kwargs

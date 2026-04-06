@@ -3,7 +3,7 @@
 import pytest
 
 from volnix.core.context import ActionContext, StepResult
-from volnix.core.types import ActorId, EventId, ServiceId, StepVerdict
+from volnix.core.types import EventId, StepVerdict
 from volnix.pipeline.step import BasePipelineStep
 
 

@@ -8,7 +8,7 @@ snapshot/fork/diff operations.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -19,7 +19,6 @@ from volnix.core import (
     EntityId,
     Event,
     EventId,
-    PipelineStep,
     ServiceId,
     SnapshotId,
     StateDelta,
@@ -58,13 +57,13 @@ class StateEngine(BaseEngine):
 
     async def _on_initialize(self) -> None:
         """Set up the database, apply migrations, and wire sub-components."""
+        from volnix.engines.state.causal_graph import CausalGraph
+        from volnix.engines.state.config import StateConfig
+        from volnix.engines.state.event_log import EventLog
         from volnix.engines.state.migrations import STATE_MIGRATIONS
         from volnix.engines.state.store import EntityStore
-        from volnix.engines.state.event_log import EventLog
-        from volnix.engines.state.causal_graph import CausalGraph
         from volnix.persistence.migrations import MigrationRunner
         from volnix.persistence.snapshot import SnapshotStore
-        from volnix.engines.state.config import StateConfig
 
         # Parse config through typed model (no hardcoded defaults in engine)
         config = StateConfig(**{k: v for k, v in self._config.items() if not k.startswith("_")})
@@ -77,6 +76,7 @@ class StateEngine(BaseEngine):
             self._db = injected_db
         else:
             from volnix.persistence.manager import create_database
+
             Path(config.db_path).parent.mkdir(parents=True, exist_ok=True)
             self._db = await create_database(config.db_path)
         try:
@@ -93,6 +93,7 @@ class StateEngine(BaseEngine):
 
             # Snapshot support
             from volnix.persistence.config import PersistenceConfig
+
             self._snapshot_store = SnapshotStore(PersistenceConfig(base_dir=config.snapshot_dir))
         except Exception:
             if self._db is not None:
@@ -116,13 +117,13 @@ class StateEngine(BaseEngine):
         Used by ``VolnixApp`` to switch between a world's state.db
         and a run's state.db during the world/run lifecycle.
         """
+        from volnix.engines.state.causal_graph import CausalGraph
+        from volnix.engines.state.event_log import EventLog
         from volnix.engines.state.migrations import STATE_MIGRATIONS
         from volnix.engines.state.store import EntityStore
-        from volnix.engines.state.event_log import EventLog
-        from volnix.engines.state.causal_graph import CausalGraph
-        from volnix.persistence.migrations import MigrationRunner
-        from volnix.persistence.manager import create_database
         from volnix.persistence.config import PersistenceConfig
+        from volnix.persistence.manager import create_database
+        from volnix.persistence.migrations import MigrationRunner
         from volnix.persistence.snapshot import SnapshotStore
 
         # Close current DB
@@ -150,9 +151,7 @@ class StateEngine(BaseEngine):
 
             # Reinitialise snapshot store to use the same directory as the DB
             snapshot_dir = str(db_dir / "snapshots")
-            self._snapshot_store = SnapshotStore(
-                PersistenceConfig(base_dir=snapshot_dir)
-            )
+            self._snapshot_store = SnapshotStore(PersistenceConfig(base_dir=snapshot_dir))
         except Exception:
             if self._db is not None:
                 await self._db.close()
@@ -210,8 +209,11 @@ class StateEngine(BaseEngine):
                 elif delta.operation == "delete":
                     previous = await self._store.delete(delta.entity_type, delta.entity_id)
                     if previous is None:
-                        logger.warning("Delete of non-existent entity %s/%s — skipping ledger entry",
-                                       delta.entity_type, delta.entity_id)
+                        logger.warning(
+                            "Delete of non-existent entity %s/%s — skipping ledger entry",
+                            delta.entity_type,
+                            delta.entity_id,
+                        )
                         continue
                     applied_deltas.append(
                         StateDelta(
@@ -224,9 +226,11 @@ class StateEngine(BaseEngine):
                     )
 
             # 2. Create and persist the world event
-            wall_now = datetime.now(timezone.utc)
+            wall_now = datetime.now(UTC)
             if ctx.world_time is None:
-                logger.warning("ActionContext missing world_time — using wall clock (breaks replay determinism)")
+                logger.warning(
+                    "ActionContext missing world_time — using wall clock (breaks replay determinism)"
+                )
 
             # Derive outcome from pipeline verdicts
             outcome = "success"
@@ -281,7 +285,8 @@ class StateEngine(BaseEngine):
                 service_id=ctx.service_id,
                 action=ctx.action,
                 # Use explicit target or infer from first delta
-                target_entity=ctx.target_entity or (applied_deltas[0].entity_id if applied_deltas else None),
+                target_entity=ctx.target_entity
+                or (applied_deltas[0].entity_id if applied_deltas else None),
                 input_data=ctx.input_data or {},
                 response_body=response_body,
                 outcome=outcome,
@@ -349,9 +354,7 @@ class StateEngine(BaseEngine):
         """Query entities of a given type with optional filters."""
         return await self._store.query(entity_type, filters)
 
-    async def populate_entities(
-        self, entities: dict[str, list[dict[str, Any]]]
-    ) -> int:
+    async def populate_entities(self, entities: dict[str, list[dict[str, Any]]]) -> int:
         """Bulk-create entities for world generation.
 
         Creates entities in EntityStore AND records each creation to:
@@ -375,40 +378,34 @@ class StateEngine(BaseEngine):
         """
         count = 0
         created_events: list[WorldEvent] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         async with self._db.transaction():
             for entity_type, entity_list in entities.items():
                 for entity in entity_list:
-                    entity_id = EntityId(
-                        entity.get("id", f"{entity_type}_{count}")
-                    )
-                    fields = {
-                        k: v
-                        for k, v in entity.items()
-                        if not k.startswith("_")
-                    }
+                    entity_id = EntityId(entity.get("id", f"{entity_type}_{count}"))
+                    fields = {k: v for k, v in entity.items() if not k.startswith("_")}
                     await self._store.create(entity_type, entity_id, fields)
                     count += 1
 
                     # Create WorldEvent for traceability
                     event = WorldEvent(
                         event_type=f"world.populate.{entity_type}",
-                        timestamp=Timestamp(
-                            world_time=now, wall_time=now, tick=0
-                        ),
+                        timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
                         actor_id=ActorId("world_compiler"),
                         service_id=ServiceId("world_compiler"),
                         action="populate",
                         target_entity=entity_id,
                         input_data=fields,
-                        state_deltas=[{
-                            "entity_type": entity_type,
-                            "entity_id": str(entity_id),
-                            "operation": "create",
-                            "fields": fields,
-                            "previous_fields": None,
-                        }],
+                        state_deltas=[
+                            {
+                                "entity_type": entity_type,
+                                "entity_id": str(entity_id),
+                                "operation": "create",
+                                "fields": fields,
+                                "previous_fields": None,
+                            }
+                        ],
                         outcome="success",
                     )
                     await self._event_log.append(event)
@@ -469,9 +466,7 @@ class StateEngine(BaseEngine):
         from volnix.core.types import RunId
 
         run_id = RunId(self._config.get("run_id", "default"))
-        snapshot_id = await self._snapshot_store.save_snapshot(
-            run_id, label, self._db
-        )
+        snapshot_id = await self._snapshot_store.save_snapshot(run_id, label, self._db)
 
         # Record to ledger (SnapshotEntry exists but was never used — now it is)
         if self._ledger is not None:
@@ -486,16 +481,12 @@ class StateEngine(BaseEngine):
             )
             await self._ledger.append(entry)
 
-        logger.info(
-            "Snapshot '%s' created: %s", label, snapshot_id
-        )
+        logger.info("Snapshot '%s' created: %s", label, snapshot_id)
         return snapshot_id
 
     async def _get_total_entity_count(self) -> int:
         """Count all entities across all types for snapshot metadata."""
-        row = await self._db.fetchone(
-            "SELECT COUNT(*) as cnt FROM entities"
-        )
+        row = await self._db.fetchone("SELECT COUNT(*) as cnt FROM entities")
         return row["cnt"] if row else 0
 
     async def fork(self, snapshot_id: SnapshotId) -> WorldId:

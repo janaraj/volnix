@@ -53,20 +53,17 @@ const OUTCOME_OPTIONS: Record<string, string> = {
 
 const EVENT_TYPE_OPTIONS: Record<string, string> = {
   '': 'All types',
-  agent_action: 'Agent Action',
-  policy_hold: 'Policy Hold',
-  policy_block: 'Policy Block',
-  policy_escalate: 'Policy Escalate',
-  policy_flag: 'Policy Flag',
-  permission_denied: 'Permission Denied',
-  budget_deduction: 'Budget Deduction',
-  budget_warning: 'Budget Warning',
-  budget_exhausted: 'Budget Exhausted',
-  capability_gap: 'Capability Gap',
-  animator_event: 'Animator Event',
-  state_change: 'State Change',
-  side_effect: 'Side Effect',
-  system_event: 'System Event',
+  world: 'Agent Action',
+  'policy.hold': 'Policy Hold',
+  'policy.block': 'Policy Block',
+  'policy.escalate': 'Policy Escalate',
+  'policy.flag': 'Policy Flag',
+  'permission.denied': 'Permission Denied',
+  'budget.deduction': 'Budget Deduction',
+  'budget.warning': 'Budget Warning',
+  'budget.exhausted': 'Budget Exhausted',
+  'capability.gap': 'Capability Gap',
+  animator: 'Animator Event',
 };
 
 // ---------------------------------------------------------------------------

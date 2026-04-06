@@ -6,6 +6,7 @@ Adding a new format = one function + one line in PAYLOAD_FORMATTERS.
 If no service-specific formatter exists, the raw Volnix event
 envelope is used.
 """
+
 from __future__ import annotations
 
 import base64
@@ -30,7 +31,8 @@ def format_payload(event: Any, service: str = "") -> dict[str, Any]:
         except Exception as exc:
             logger.warning(
                 "Formatter for '%s' failed: %s — using default",
-                service, exc,
+                service,
+                exc,
             )
     return _default_format(event)
 
@@ -73,9 +75,7 @@ def _gmail_format(event: Any) -> dict[str, Any]:
     if hasattr(event, "model_dump"):
         data = event.model_dump(mode="json")
 
-    encoded = base64.b64encode(
-        json.dumps(data, default=str).encode()
-    ).decode()
+    encoded = base64.b64encode(json.dumps(data, default=str).encode()).decode()
 
     return {
         "message": {

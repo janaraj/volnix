@@ -7,6 +7,7 @@ to the actual tool names available in a running Volnix world
 Uses keyword matching against tool names and descriptions — no LLM needed.
 The mapping is deterministic and computed at connection time.
 """
+
 from __future__ import annotations
 
 from typing import Any

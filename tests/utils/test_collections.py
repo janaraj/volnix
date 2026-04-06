@@ -56,7 +56,9 @@ class TestDedupEntityDicts:
 
     def test_preserves_order(self):
         entities = [
-            {"id": "c"}, {"id": "a"}, {"id": "b"},
+            {"id": "c"},
+            {"id": "a"},
+            {"id": "b"},
         ]
         result = dedup_entity_dicts(entities)
         assert [e["id"] for e in result] == ["c", "a", "b"]
@@ -91,7 +93,8 @@ class TestDedupEntityCollection:
                 {"id": "C1", "name": "general-updated"},
             ],
             "message": [
-                {"id": "M1"}, {"id": "M2"},
+                {"id": "M1"},
+                {"id": "M2"},
             ],
         }
         result = dedup_entity_collection(collection)

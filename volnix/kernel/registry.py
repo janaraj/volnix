@@ -3,6 +3,7 @@
 Maps service names to categories and provides canonical primitives.
 33+ pre-mapped services across 9 categories. Dynamic registration supported.
 """
+
 import logging
 import tomllib
 from pathlib import Path
@@ -15,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class SemanticRegistry:
-
     def __init__(self) -> None:
         self._categories: dict[str, SemanticCategory] = {}
         self._service_map: dict[str, str] = {}
@@ -38,7 +38,8 @@ class SemanticRegistry:
         self._initialized = True
         logger.info(
             "Kernel: %d categories, %d services",
-            len(self._categories), len(self._service_map),
+            len(self._categories),
+            len(self._service_map),
         )
 
     def _check_initialized(self) -> None:

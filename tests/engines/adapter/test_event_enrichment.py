@@ -10,8 +10,6 @@ from __future__ import annotations
 import copy
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 
 def _make_gateway(run_data: dict, events: list[dict]):
     """Build a mock gateway for endpoint testing."""
@@ -32,10 +30,20 @@ def _make_gateway(run_data: dict, events: list[dict]):
 async def test_causal_child_ids_populated():
     """Event A causes B -> A.causal_child_ids should contain B's id."""
     events = [
-        {"event_id": "evt-a", "event_type": "world.send", "actor_id": "agent-1",
-         "caused_by": None, "causes": []},
-        {"event_id": "evt-b", "event_type": "world.reply", "actor_id": "agent-1",
-         "caused_by": "evt-a", "causes": []},
+        {
+            "event_id": "evt-a",
+            "event_type": "world.send",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": [],
+        },
+        {
+            "event_id": "evt-b",
+            "event_type": "world.reply",
+            "actor_id": "agent-1",
+            "caused_by": "evt-a",
+            "causes": [],
+        },
     ]
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)
@@ -60,10 +68,20 @@ async def test_causal_child_ids_populated():
 async def test_causal_child_ids_via_causes_field():
     """Event B lists A in its 'causes' -> A.causal_child_ids should contain B."""
     events = [
-        {"event_id": "evt-a", "event_type": "world.send", "actor_id": "agent-1",
-         "caused_by": None, "causes": []},
-        {"event_id": "evt-b", "event_type": "world.reply", "actor_id": "agent-1",
-         "caused_by": None, "causes": ["evt-a"]},
+        {
+            "event_id": "evt-a",
+            "event_type": "world.send",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": [],
+        },
+        {
+            "event_id": "evt-b",
+            "event_type": "world.reply",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": ["evt-a"],
+        },
     ]
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)
@@ -85,8 +103,13 @@ async def test_causal_child_ids_via_causes_field():
 async def test_actor_role_from_world_def():
     """Actor role should be populated from world_def actors."""
     events = [
-        {"event_id": "evt-1", "event_type": "world.send", "actor_id": "agent-1",
-         "caused_by": None, "causes": []},
+        {
+            "event_id": "evt-1",
+            "event_type": "world.send",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": [],
+        },
     ]
     run_data = {
         "run_id": "run-1",
@@ -110,8 +133,13 @@ async def test_actor_role_from_world_def():
 async def test_actor_role_empty_for_unknown():
     """Unknown actor_id -> actor_role should be empty string."""
     events = [
-        {"event_id": "evt-1", "event_type": "world.send", "actor_id": "unknown-actor",
-         "caused_by": None, "causes": []},
+        {
+            "event_id": "evt-1",
+            "event_type": "world.send",
+            "actor_id": "unknown-actor",
+            "caused_by": None,
+            "causes": [],
+        },
     ]
     run_data = {
         "run_id": "run-1",
@@ -135,8 +163,13 @@ async def test_actor_role_empty_for_unknown():
 async def test_enrichment_does_not_mutate_originals():
     """Regression: original event dicts should not be modified by enrichment."""
     original_events = [
-        {"event_id": "evt-1", "event_type": "world.send", "actor_id": "agent-1",
-         "caused_by": None, "causes": []},
+        {
+            "event_id": "evt-1",
+            "event_type": "world.send",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": [],
+        },
     ]
     frozen_copy = copy.deepcopy(original_events)
 
@@ -162,14 +195,34 @@ async def test_enrichment_does_not_mutate_originals():
 async def test_multiple_children_collected():
     """An event with multiple causal children should list all of them."""
     events = [
-        {"event_id": "root", "event_type": "world.trigger", "actor_id": "agent-1",
-         "caused_by": None, "causes": []},
-        {"event_id": "child-1", "event_type": "world.a", "actor_id": "agent-1",
-         "caused_by": "root", "causes": []},
-        {"event_id": "child-2", "event_type": "world.b", "actor_id": "agent-1",
-         "caused_by": "root", "causes": []},
-        {"event_id": "child-3", "event_type": "world.c", "actor_id": "agent-1",
-         "caused_by": "root", "causes": []},
+        {
+            "event_id": "root",
+            "event_type": "world.trigger",
+            "actor_id": "agent-1",
+            "caused_by": None,
+            "causes": [],
+        },
+        {
+            "event_id": "child-1",
+            "event_type": "world.a",
+            "actor_id": "agent-1",
+            "caused_by": "root",
+            "causes": [],
+        },
+        {
+            "event_id": "child-2",
+            "event_type": "world.b",
+            "actor_id": "agent-1",
+            "caused_by": "root",
+            "causes": [],
+        },
+        {
+            "event_id": "child-3",
+            "event_type": "world.c",
+            "actor_id": "agent-1",
+            "caused_by": "root",
+            "causes": [],
+        },
     ]
     run_data = {"run_id": "run-1", "world_def": {"actors": []}}
     gateway = _make_gateway(run_data, events)

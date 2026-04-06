@@ -14,6 +14,7 @@ Subscribed bus events:
 - ``world``: tracks service usage
 - ``simulation``: tracks run completions for promotion readiness
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -80,9 +81,7 @@ class FeedbackEngine(BaseEngine):
         # ValidationError from extra TOML keys (e.g., annotations_db_path)
         known_fields = set(FeedbackConfig.model_fields.keys())
         config_dict = {
-            k: v
-            for k, v in self._config.items()
-            if not k.startswith("_") and k in known_fields
+            k: v for k, v in self._config.items() if not k.startswith("_") and k in known_fields
         }
         self._feedback_config = FeedbackConfig(**config_dict)
 
@@ -100,9 +99,7 @@ class FeedbackEngine(BaseEngine):
 
         # Service capture
         if artifact_store and self._annotation_store:
-            self._capture = ServiceCapture(
-                artifact_store, self._annotation_store
-            )
+            self._capture = ServiceCapture(artifact_store, self._annotation_store)
 
         # Tier promotion
         if self._annotation_store and profile_registry and profile_loader:
@@ -154,9 +151,7 @@ class FeedbackEngine(BaseEngine):
                 annotation_store=self._annotation_store,
                 profile_registry=profile_registry,
                 max_runs=self._feedback_config.signals_max_runs,
-                include_event_logs=(
-                    self._feedback_config.signals_include_event_logs
-                ),
+                include_event_logs=(self._feedback_config.signals_include_event_logs),
             )
 
         self._initialized = True
@@ -206,33 +201,25 @@ class FeedbackEngine(BaseEngine):
         )
 
         # Record in ledger
-        await self._record_annotation_ledger(
-            str(service_id), text, author
-        )
+        await self._record_annotation_ledger(str(service_id), text, author)
 
         # B2 fix: publish AnnotationEvent to bus
         await self._publish_annotation_event(str(service_id), text, author)
 
         return seq
 
-    async def get_annotations(
-        self, service_id: ServiceId | str
-    ) -> list[dict[str, Any]]:
+    async def get_annotations(self, service_id: ServiceId | str) -> list[dict[str, Any]]:
         """Retrieve all annotations for a service."""
         await self._ensure_initialized()
         if self._annotation_store is None:
             return []
         return await self._annotation_store.get_by_service(service_id)
 
-    async def capture_service(
-        self, run_id: RunId | str, service_name: str
-    ) -> CapturedSurface:
+    async def capture_service(self, run_id: RunId | str, service_name: str) -> CapturedSurface:
         """Capture a service's behavioral fingerprint from a run."""
         await self._ensure_initialized()
         if self._capture is None:
-            raise RuntimeError(
-                "ServiceCapture not initialized (missing artifact store)"
-            )
+            raise RuntimeError("ServiceCapture not initialized (missing artifact store)")
 
         captured = await self._capture.capture(str(run_id), service_name)
 
@@ -260,9 +247,7 @@ class FeedbackEngine(BaseEngine):
         await self._ensure_initialized()
         if self._promoter is None:
             raise RuntimeError("TierPromoter not initialized")
-        return await self._promoter.evaluate_candidate(
-            service_name, captured
-        )
+        return await self._promoter.evaluate_candidate(service_name, captured)
 
     async def promote_service(
         self,
@@ -298,9 +283,7 @@ class FeedbackEngine(BaseEngine):
 
     # -- G4b: Sync API ---------------------------------------------------------
 
-    async def check_sync(
-        self, service_name: str
-    ) -> list[Any]:
+    async def check_sync(self, service_name: str) -> list[Any]:
         """Check a service for external API drift."""
         await self._ensure_initialized()
         if self._sync_checker is None:
@@ -308,7 +291,9 @@ class FeedbackEngine(BaseEngine):
         reports = await self._sync_checker.check_drift(service_name)
         for report in reports:
             await self._record_sync_ledger(
-                service_name, report.source, report.has_drift,
+                service_name,
+                report.source,
+                report.has_drift,
                 len(report.operations_added),
                 len(report.operations_removed),
             )
@@ -332,36 +317,30 @@ class FeedbackEngine(BaseEngine):
         if self._sync_checker is None:
             return []
         config = self._feedback_config or FeedbackConfig()
-        reports = await self._sync_checker.check_all(
-            max_concurrent=config.sync_max_concurrent
-        )
+        reports = await self._sync_checker.check_all(max_concurrent=config.sync_max_concurrent)
         for report in reports:
             await self._record_sync_ledger(
-                report.service_name, report.source, report.has_drift,
+                report.service_name,
+                report.source,
+                report.has_drift,
                 len(report.operations_added),
                 len(report.operations_removed),
             )
         return reports
 
-    async def propose_sync_update(
-        self, service_name: str
-    ) -> Any:
+    async def propose_sync_update(self, service_name: str) -> Any:
         """Check drift + propose update for a service."""
         await self._ensure_initialized()
         if self._sync_checker is None:
             return None
         return await self._sync_checker.propose_update(service_name)
 
-    async def apply_sync_update(
-        self, service_name: str, proposal: Any
-    ) -> Any:
+    async def apply_sync_update(self, service_name: str, proposal: Any) -> Any:
         """Apply a proposed sync update."""
         await self._ensure_initialized()
         if self._sync_checker is None:
             raise RuntimeError("Sync checker not initialized")
-        result = await self._sync_checker.apply_update(
-            service_name, proposal
-        )
+        result = await self._sync_checker.apply_update(service_name, proposal)
         await self._record_sync_update_ledger(
             service_name,
             len(proposal.proposed_changes),
@@ -371,13 +350,12 @@ class FeedbackEngine(BaseEngine):
 
     # -- G4b: Signals API ------------------------------------------------------
 
-    async def get_local_signals(
-        self, signal_names: list[str] | None = None
-    ) -> Any:
+    async def get_local_signals(self, signal_names: list[str] | None = None) -> Any:
         """Compute local signals from user's run history."""
         await self._ensure_initialized()
         if self._signal_aggregator is None:
             from volnix.engines.feedback.signals import LocalSignals
+
             return LocalSignals(
                 computed_at="",
                 total_runs=0,
@@ -411,8 +389,7 @@ class FeedbackEngine(BaseEngine):
         await self.add_annotation(
             service_id=service_id,
             text=(
-                f"Capability gap: agent '{actor_id}' requested "
-                f"tool '{tool}' which is not available"
+                f"Capability gap: agent '{actor_id}' requested tool '{tool}' which is not available"
             ),
             author="system",
             tag="capability_gap",
@@ -465,9 +442,7 @@ class FeedbackEngine(BaseEngine):
 
     # -- Ledger recording (typed entries) --------------------------------------
 
-    async def _record_annotation_ledger(
-        self, service_id: str, text: str, author: str
-    ) -> None:
+    async def _record_annotation_ledger(self, service_id: str, text: str, author: str) -> None:
         """Record an annotation in the ledger using typed entry."""
         if not hasattr(self, "_ledger") or self._ledger is None:
             return
@@ -572,9 +547,7 @@ class FeedbackEngine(BaseEngine):
 
     # -- Bus event publishing --------------------------------------------------
 
-    async def _publish_promotion_event(
-        self, service_name: str, result: PromotionResult
-    ) -> None:
+    async def _publish_promotion_event(self, service_name: str, result: PromotionResult) -> None:
         """B1: Publish TierPromotionEvent to bus."""
         from volnix.core.events import TierPromotionEvent
         from volnix.core.types import FidelityTier, Timestamp
@@ -592,9 +565,7 @@ class FeedbackEngine(BaseEngine):
         except Exception as exc:
             logger.warning("Failed to publish promotion event: %s", exc)
 
-    async def _publish_annotation_event(
-        self, service_id: str, text: str, author: str
-    ) -> None:
+    async def _publish_annotation_event(self, service_id: str, text: str, author: str) -> None:
         """B2: Publish AnnotationEvent to bus."""
         from volnix.core.events import AnnotationEvent
         from volnix.core.types import Timestamp
@@ -612,9 +583,7 @@ class FeedbackEngine(BaseEngine):
         except Exception as exc:
             logger.warning("Failed to publish annotation event: %s", exc)
 
-    async def _publish_feedback_event(
-        self, event_type: str, **kwargs: Any
-    ) -> None:
+    async def _publish_feedback_event(self, event_type: str, **kwargs: Any) -> None:
         """Generic feedback event publisher for B3-B5."""
         from volnix.core.events import Event
         from volnix.core.types import Timestamp

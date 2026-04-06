@@ -19,8 +19,6 @@ from volnix.core.types import (
 from volnix.packs.base import ServicePack
 from volnix.packs.registry import PackRegistry
 from volnix.packs.runtime import PackRuntime
-from volnix.validation.schema import SchemaValidator
-
 
 # ---------------------------------------------------------------------------
 # MockPack variants

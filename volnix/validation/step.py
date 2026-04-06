@@ -1,4 +1,5 @@
 """Validation pipeline step -- wraps ValidationPipeline as a PipelineStep."""
+
 from __future__ import annotations
 
 import logging
@@ -31,15 +32,13 @@ class ValidationStep(BasePipelineStep):
             await self._record_validation(
                 ctx.action, passed=True, details={"reason": "no proposal"}
             )
-            return self._make_result(
-                StepVerdict.ALLOW, message="No proposal to validate"
-            )
+            return self._make_result(StepVerdict.ALLOW, message="No proposal to validate")
 
         # Validate entity deltas against basic structural rules.
         errors: list[str] = []
         proposal = ctx.response_proposal
 
-        for delta in (proposal.proposed_state_deltas or []):
+        for delta in proposal.proposed_state_deltas or []:
             if not delta.entity_type:
                 errors.append("StateDelta missing entity_type")
             if not delta.entity_id:
@@ -55,15 +54,11 @@ class ValidationStep(BasePipelineStep):
         )
 
         if errors:
-            return self._make_result(
-                StepVerdict.ERROR, message="; ".join(errors)
-            )
+            return self._make_result(StepVerdict.ERROR, message="; ".join(errors))
 
         return self._make_result(StepVerdict.ALLOW)
 
-    async def _record_validation(
-        self, target: str, passed: bool, details: dict[str, Any]
-    ) -> None:
+    async def _record_validation(self, target: str, passed: bool, details: dict[str, Any]) -> None:
         """L1: Record ValidationEntry to ledger."""
         if self._ledger is None:
             return

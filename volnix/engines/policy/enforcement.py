@@ -8,7 +8,7 @@ an appropriate ``StepResult`` with the corresponding governance event.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from volnix.core.context import ActionContext, StepResult
@@ -19,7 +19,6 @@ from volnix.core.events import (
     PolicyHoldEvent,
 )
 from volnix.core.types import (
-    ActorId,
     EnforcementMode,
     PolicyId,
     StepVerdict,
@@ -29,7 +28,7 @@ from volnix.core.types import (
 
 def _now_timestamp() -> Timestamp:
     """Create a Timestamp for the current moment."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -41,9 +40,11 @@ def _policy_id(policy: dict[str, Any]) -> PolicyId:
 class EnforcementHandler:
     """Dispatches enforcement actions based on policy mode."""
 
-    async def handle_block(
-        self, ctx: ActionContext, policy: dict[str, Any]
-    ) -> StepResult:
+    @staticmethod
+    def _run_id(ctx: ActionContext) -> str | None:
+        return str(ctx.run_id) if ctx.run_id else None
+
+    async def handle_block(self, ctx: ActionContext, policy: dict[str, Any]) -> StepResult:
         """Block the action outright."""
         reason = policy.get("reason", f"Blocked by policy '{policy.get('name', 'unknown')}'")
         event = PolicyBlockEvent(
@@ -53,6 +54,7 @@ class EnforcementHandler:
             actor_id=ctx.actor_id,
             action=ctx.action,
             reason=reason,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -79,6 +81,7 @@ class EnforcementHandler:
             approver_role=approver_role,
             timeout_seconds=timeout_seconds,
             hold_id=hold_id,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -100,6 +103,7 @@ class EnforcementHandler:
             action=ctx.action,
             target_role=target_role,
             original_actor=ctx.actor_id,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -108,9 +112,7 @@ class EnforcementHandler:
             message=f"Action escalated to '{target_role}' by policy '{policy.get('name', 'unknown')}'",
         )
 
-    async def handle_log(
-        self, ctx: ActionContext, policy: dict[str, Any]
-    ) -> StepResult:
+    async def handle_log(self, ctx: ActionContext, policy: dict[str, Any]) -> StepResult:
         """Log the policy match without enforcement."""
         event = PolicyFlagEvent(
             event_type="policy.flag",
@@ -118,6 +120,7 @@ class EnforcementHandler:
             policy_id=_policy_id(policy),
             actor_id=ctx.actor_id,
             action=ctx.action,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",

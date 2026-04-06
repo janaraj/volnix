@@ -4,10 +4,8 @@ import pytest
 
 from volnix.core.context import ResponseProposal
 from volnix.core.errors import DuplicatePackError, PackNotFoundError
-from volnix.core.types import ToolName
 from volnix.packs.base import ServicePack
 from volnix.packs.registry import PackRegistry
-
 
 # ---------------------------------------------------------------------------
 # MockPack — proves the framework is generic (never uses EmailPack here)

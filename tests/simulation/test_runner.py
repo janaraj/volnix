@@ -555,9 +555,7 @@ class TestMaxEnvelopeCapping:
         )
 
         # Agency returns 100 response envelopes on first call, then empty
-        big_response = [
-            _make_envelope(logical_time=float(i + 10)) for i in range(100)
-        ]
+        big_response = [_make_envelope(logical_time=float(i + 10)) for i in range(100)]
         call_count = 0
 
         async def notify_once(ev):
@@ -574,7 +572,10 @@ class TestMaxEnvelopeCapping:
         agency.update_states_for_event = AsyncMock()
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, config=config, agency_engine=agency,
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            agency_engine=agency,
         )
         q.submit(_make_envelope(logical_time=1.0))
 
@@ -618,7 +619,10 @@ class TestMaxEnvelopeCapping:
         animator.has_scheduled_events = lambda: False
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, config=config, animator=animator,
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            animator=animator,
         )
         q.submit(_make_envelope(logical_time=1.0))
 
@@ -645,11 +649,13 @@ class TestTimeAdvancement:
             nonlocal fired
             if not fired and current_time >= scheduled_time:
                 fired = True
-                return [_make_envelope(
-                    logical_time=current_time,
-                    source=ActionSource.INTERNAL,
-                    priority=EnvelopePriority.SYSTEM,
-                )]
+                return [
+                    _make_envelope(
+                        logical_time=current_time,
+                        source=ActionSource.INTERNAL,
+                        priority=EnvelopePriority.SYSTEM,
+                    )
+                ]
             return []
 
         agency = AsyncMock()
@@ -666,7 +672,10 @@ class TestTimeAdvancement:
         )
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, config=config, agency_engine=agency,
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            agency_engine=agency,
         )
         # Force internal-only detection
         runner._simulation_type = SimulationType.INTERNAL_ONLY
@@ -695,7 +704,9 @@ class TestTimeAdvancement:
         agency.update_states_for_event = AsyncMock()
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, agency_engine=agency,
+            queue=q,
+            pipeline_executor=executor,
+            agency_engine=agency,
         )
         runner._simulation_type = SimulationType.INTERNAL_ONLY
 
@@ -724,7 +735,10 @@ class TestTimeAdvancement:
         )
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, config=config, agency_engine=agency,
+            queue=q,
+            pipeline_executor=executor,
+            config=config,
+            agency_engine=agency,
         )
         runner._simulation_type = SimulationType.INTERNAL_ONLY
 
@@ -748,7 +762,9 @@ class TestTimeAdvancement:
         agency.update_states_for_event = AsyncMock()
 
         runner = _make_runner(
-            queue=q, pipeline_executor=executor, agency_engine=agency,
+            queue=q,
+            pipeline_executor=executor,
+            agency_engine=agency,
         )
         # Default is EXTERNAL_DRIVEN (no actor_specs)
         assert runner._simulation_type == SimulationType.EXTERNAL_DRIVEN
@@ -876,10 +892,12 @@ class TestAnimatorGate:
 
         # Submit 10 envelopes — each processes as 1 tick in INTERNAL_ONLY
         for i in range(10):
-            q.submit(_make_envelope(
-                source=ActionSource.INTERNAL,
-                priority=EnvelopePriority.INTERNAL,
-            ))
+            q.submit(
+                _make_envelope(
+                    source=ActionSource.INTERNAL,
+                    priority=EnvelopePriority.INTERNAL,
+                )
+            )
 
         await runner.run()
 
@@ -902,11 +920,13 @@ class TestAnimatorGate:
         # Animator returns 3 organic events
         animator = AsyncMock()
         organic_event = _make_world_event(actor_id="npc-1")
-        animator.tick = AsyncMock(return_value=[
-            {"_event": organic_event},
-            {"_event": organic_event},
-            {"_event": organic_event},
-        ])
+        animator.tick = AsyncMock(
+            return_value=[
+                {"_event": organic_event},
+                {"_event": organic_event},
+                {"_event": organic_event},
+            ]
+        )
         animator.check_scheduled_events = AsyncMock(return_value=[])
         animator.notify_event = AsyncMock(return_value=[])
         animator.has_scheduled_events = lambda: False

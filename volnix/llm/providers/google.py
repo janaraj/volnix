@@ -26,7 +26,9 @@ class GoogleNativeProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "google"
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview", timeout: float = 300.0) -> None:
+    def __init__(
+        self, api_key: str, default_model: str = "gemini-3-flash-preview", timeout: float = 300.0
+    ) -> None:
         self._client = genai.Client(api_key=api_key)
         self._default_model = default_model
         self._timeout = timeout
@@ -76,10 +78,7 @@ class GoogleNativeProvider(LLMProvider):
             # different tool sets produce different caches.
             cached_content_name = None
             if request.cache_system_prompt and request.system_prompt:
-                tool_sig = (
-                    ",".join(sorted(t.name for t in request.tools))
-                    if request.tools else ""
-                )
+                tool_sig = ",".join(sorted(t.name for t in request.tools)) if request.tools else ""
                 cache_key = hashlib.sha256(
                     f"{model}:{request.system_prompt}:{tool_sig}".encode()
                 ).hexdigest()[:16]
@@ -105,7 +104,9 @@ class GoogleNativeProvider(LLMProvider):
                         self._prompt_cache[cache_key] = cached_content_name
                         logger.info(
                             "Gemini cache created: %s for model %s (tools=%d)",
-                            cache_key, model, len(request.tools or []),
+                            cache_key,
+                            model,
+                            len(request.tools or []),
                         )
                     except Exception as exc:
                         logger.warning("Gemini cache creation failed (non-fatal): %s", exc)
@@ -157,7 +158,9 @@ class GoogleNativeProvider(LLMProvider):
                         elif role == "assistant":
                             tc = msg.get("tool_calls")
                             if tc:
-                                parts.append(f"[Tool Call] {tc[0].get('function', {}).get('name', '')}")
+                                parts.append(
+                                    f"[Tool Call] {tc[0].get('function', {}).get('name', '')}"
+                                )
                             elif text:
                                 parts.append(text)
                         else:
@@ -203,7 +206,8 @@ class GoogleNativeProvider(LLMProvider):
                     items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
                     logger.info(
                         "Gemini structured output parsed: %d items, %d chars",
-                        items, len(content),
+                        items,
+                        len(content),
                     )
                 except json.JSONDecodeError:
                     logger.warning(
@@ -213,15 +217,11 @@ class GoogleNativeProvider(LLMProvider):
 
             usage_meta = response.usage_metadata
             usage = LLMUsage(
-                prompt_tokens=(
-                    getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0
-                ),
+                prompt_tokens=(getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0),
                 completion_tokens=(
                     getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
                 ),
-                total_tokens=(
-                    getattr(usage_meta, "total_token_count", 0) if usage_meta else 0
-                ),
+                total_tokens=(getattr(usage_meta, "total_token_count", 0) if usage_meta else 0),
             )
             return LLMResponse(
                 content=content,
@@ -238,6 +238,7 @@ class GoogleNativeProvider(LLMProvider):
             # Rate limit errors should propagate so callers can retry
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 from volnix.core.errors import LLMError
+
                 raise LLMError(
                     f"Gemini rate limit exceeded. {error_str[:200]}",
                     context={"provider": "google", "model": model},

@@ -187,9 +187,7 @@ class TestActorStateMutable:
         """ActorState.waiting_for can be assigned."""
         state = ActorState(actor_id=ActorId("a1"), role="customer")
         assert state.waiting_for is None
-        state.waiting_for = WaitingFor(
-            description="Waiting for agent", since=1.0, patience=5.0
-        )
+        state.waiting_for = WaitingFor(description="Waiting for agent", since=1.0, patience=5.0)
         assert state.waiting_for is not None
         assert state.waiting_for.description == "Waiting for agent"
 
@@ -394,9 +392,7 @@ class TestRegistryStateManagement:
         """Actor state management works independently from actor definition registration."""
         reg = ActorRegistry()
         # Register a definition
-        defn = ActorDefinition(
-            id=ActorId("a1"), type=ActorType.HUMAN, role="customer"
-        )
+        defn = ActorDefinition(id=ActorId("a1"), type=ActorType.HUMAN, role="customer")
         reg.register(defn)
 
         # Set state for the same actor

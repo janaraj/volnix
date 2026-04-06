@@ -71,11 +71,11 @@ async def test_registry_factory_types(monkeypatch):
     registry = ProviderRegistry()
     await registry.initialize_all(config)
 
-    from volnix.llm.providers.anthropic import AnthropicProvider
-    from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
-    from volnix.llm.providers.google import GoogleNativeProvider
     from volnix.llm.providers.acp_client import ACPClientProvider
+    from volnix.llm.providers.anthropic import AnthropicProvider
     from volnix.llm.providers.cli_subprocess import CLISubprocessProvider
+    from volnix.llm.providers.google import GoogleNativeProvider
+    from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
 
     assert isinstance(registry.get("p_anthropic"), AnthropicProvider)
     assert isinstance(registry.get("p_openai"), OpenAICompatibleProvider)

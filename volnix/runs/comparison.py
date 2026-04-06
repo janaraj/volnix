@@ -103,13 +103,8 @@ class RunComparator:
                 for i in range(1, len(run_strs)):
                     prev_val = values[run_strs[i - 1]]
                     curr_val = values[run_strs[i]]
-                    if (
-                        isinstance(prev_val, (int, float))
-                        and isinstance(curr_val, (int, float))
-                    ):
-                        deltas[f"{run_strs[i - 1]}→{run_strs[i]}"] = (
-                            curr_val - prev_val
-                        )
+                    if isinstance(prev_val, (int, float)) and isinstance(curr_val, (int, float)):
+                        deltas[f"{run_strs[i - 1]}→{run_strs[i]}"] = curr_val - prev_val
                     else:
                         deltas[f"{run_strs[i - 1]}→{run_strs[i]}"] = None
                 metrics[metric]["deltas"] = deltas
@@ -152,9 +147,7 @@ class RunComparator:
         # Build the breakdown by event type
         by_type: dict[str, dict[str, int]] = {}
         for event_type in sorted(all_types):
-            by_type[event_type] = {
-                str(r): per_run[str(r)].get(event_type, 0) for r in run_ids
-            }
+            by_type[event_type] = {str(r): per_run[str(r)].get(event_type, 0) for r in run_ids}
 
         return {
             "totals": totals,
@@ -186,9 +179,7 @@ class RunComparator:
                     if isinstance(data, list):
                         entity_counts[entity_type] = len(data)
                     elif isinstance(data, dict):
-                        entity_counts[entity_type] = data.get(
-                            "count", len(data)
-                        )
+                        entity_counts[entity_type] = data.get("count", len(data))
                     elif isinstance(data, int):
                         entity_counts[entity_type] = data
             elif isinstance(entities, list):
@@ -208,16 +199,15 @@ class RunComparator:
         # Build per-type comparison
         by_type: dict[str, dict[str, int]] = {}
         for entity_type in sorted(all_types):
-            by_type[entity_type] = {
-                str(r): per_run[str(r)].get(entity_type, 0) for r in run_ids
-            }
+            by_type[entity_type] = {str(r): per_run[str(r)].get(entity_type, 0) for r in run_ids}
 
         return {
             "by_type": by_type,
         }
 
     async def compute_divergence_points(
-        self, run_ids: list[RunId],
+        self,
+        run_ids: list[RunId],
     ) -> list[dict[str, Any]]:
         """Find ticks where runs diverge in their event signatures.
 
@@ -264,17 +254,19 @@ class RunComparator:
 
             frozen_sigs = [frozenset(s) for s in sigs.values()]
             if len(frozen_sigs) >= 2 and len(set(frozen_sigs)) > 1:
-                points.append({
-                    "tick": tick,
-                    "type": "event_set_mismatch",
-                    "per_run": {
-                        rid: [
-                            {"event_type": s[0], "actor_id": s[1], "action": s[2]}
-                            for s in sig_set
-                        ]
-                        for rid, sig_set in sigs.items()
-                    },
-                })
+                points.append(
+                    {
+                        "tick": tick,
+                        "type": "event_set_mismatch",
+                        "per_run": {
+                            rid: [
+                                {"event_type": s[0], "actor_id": s[1], "action": s[2]}
+                                for s in sig_set
+                            ]
+                            for rid, sig_set in sigs.items()
+                        },
+                    }
+                )
 
         return points
 
@@ -318,9 +310,7 @@ class RunComparator:
                 row_parts = [metric]
                 for rid in run_ids:
                     val = values.get(rid)
-                    row_parts.append(
-                        _format_value(val)
-                    )
+                    row_parts.append(_format_value(val))
                 deltas = data.get("deltas", {})
                 if deltas:
                     # Show the last delta
@@ -393,12 +383,8 @@ class RunComparator:
         base = await self.compare([governed_run_id, ungoverned_run_id])
 
         # Load event logs for both runs
-        gov_events = await self._artifact_store.load_artifact(
-            governed_run_id, "event_log"
-        )
-        ungov_events = await self._artifact_store.load_artifact(
-            ungoverned_run_id, "event_log"
-        )
+        gov_events = await self._artifact_store.load_artifact(governed_run_id, "event_log")
+        ungov_events = await self._artifact_store.load_artifact(ungoverned_run_id, "event_log")
         if not isinstance(gov_events, list):
             gov_events = []
         if not isinstance(ungov_events, list):

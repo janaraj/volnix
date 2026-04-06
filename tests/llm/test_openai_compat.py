@@ -8,9 +8,7 @@ from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
 from volnix.llm.types import LLMRequest
 
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
-skipif_no_openai = pytest.mark.skipif(
-    not OPENAI_KEY, reason="OPENAI_API_KEY not set"
-)
+skipif_no_openai = pytest.mark.skipif(not OPENAI_KEY, reason="OPENAI_API_KEY not set")
 
 # Toggle: VOLNIX_RUN_REAL_API_TESTS=1 to enable expensive real API tests
 RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")

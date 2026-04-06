@@ -7,8 +7,6 @@ automatic (interval-based) snapshotting.
 
 from __future__ import annotations
 
-from typing import Any
-
 from volnix.core.types import RunId, SnapshotId
 from volnix.persistence import ConnectionManager
 from volnix.persistence.config import PersistenceConfig
@@ -33,9 +31,7 @@ class SnapshotManager:
     def _get_store(self) -> SnapshotStore:
         """Lazy-init SnapshotStore using the runs data_dir."""
         if self._snapshot_store is None:
-            self._snapshot_store = SnapshotStore(
-                PersistenceConfig(base_dir=self._config.data_dir)
-            )
+            self._snapshot_store = SnapshotStore(PersistenceConfig(base_dir=self._config.data_dir))
         return self._snapshot_store
 
     async def take_snapshot(self, run_id: RunId, label: str, tick: int) -> SnapshotId:

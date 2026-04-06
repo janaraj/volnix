@@ -54,9 +54,7 @@ def normalize_entity_schema(schema: dict[str, Any]) -> NormalizedEntitySchema:
     for field_name, field_schema in properties.items():
         ref_meta = field_schema.get("x-volnix-ref")
         if isinstance(ref_meta, str) and ref_meta:
-            references.append(
-                ReferenceRule(field=field_name, target_entity_type=ref_meta)
-            )
+            references.append(ReferenceRule(field=field_name, target_entity_type=ref_meta))
         elif isinstance(ref_meta, dict):
             target_entity_type = ref_meta.get("entity_type")
             if target_entity_type:
@@ -82,10 +80,7 @@ def normalize_entity_schemas(
     schemas: dict[str, dict[str, Any]],
 ) -> dict[str, NormalizedEntitySchema]:
     """Normalize every entity schema in a service surface."""
-    return {
-        entity_type: normalize_entity_schema(schema)
-        for entity_type, schema in schemas.items()
-    }
+    return {entity_type: normalize_entity_schema(schema) for entity_type, schema in schemas.items()}
 
 
 def _normalize_json_schema(schema: dict[str, Any]) -> dict[str, Any]:

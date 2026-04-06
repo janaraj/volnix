@@ -6,8 +6,8 @@ import json
 import logging
 from typing import Any
 
-from volnix.core.types import EntityId
 from volnix.core.errors import EntityNotFoundError, StateError
+from volnix.core.types import EntityId
 from volnix.persistence.database import Database
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,7 @@ class EntityStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(
-        self, entity_type: str, entity_id: EntityId, fields: dict[str, Any]
-    ) -> None:
+    async def create(self, entity_type: str, entity_id: EntityId, fields: dict[str, Any]) -> None:
         """Insert a new entity."""
         try:
             await self._db.execute(
@@ -37,9 +35,7 @@ class EntityStore:
                 raise StateError(f"Entity already exists: {entity_type}/{entity_id}") from exc
             raise
 
-    async def read(
-        self, entity_type: str, entity_id: EntityId
-    ) -> dict[str, Any] | None:
+    async def read(self, entity_type: str, entity_id: EntityId) -> dict[str, Any] | None:
         """Read an entity by type and id, returning ``None`` if missing."""
         row = await self._db.fetchone(
             "SELECT data FROM entities WHERE entity_type = ? AND entity_id = ?",

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 
-from volnix.core.engine import BaseEngine
 from volnix.config.schema import VolnixConfig
+from volnix.core.engine import BaseEngine
 from volnix.registry.registry import EngineRegistry
 
 logger = logging.getLogger(__name__)

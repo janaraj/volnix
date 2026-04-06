@@ -1,15 +1,16 @@
 """Tests for volnix.config.loader — config loading, merging, and env overrides."""
-import pytest
+
 from pathlib import Path
+
+import pytest
+
 from volnix.config.loader import ConfigLoader
 
 
 def test_load_base_config(tmp_path: Path):
     """Loading a base volnix.toml produces a valid config."""
     toml_file = tmp_path / "volnix.toml"
-    toml_file.write_text(
-        '[simulation]\nseed = 100\nmode = "governed"\n'
-    )
+    toml_file.write_text('[simulation]\nseed = 100\nmode = "governed"\n')
     loader = ConfigLoader(base_dir=tmp_path)
     config = loader.load()
     assert config.simulation.seed == 100
@@ -56,9 +57,7 @@ def test_resolve_secure_refs(monkeypatch, tmp_path: Path):
     """Secure *_ref fields are resolved from environment variables."""
     base = tmp_path / "volnix.toml"
     base.write_text(
-        '[llm.providers.anthropic]\n'
-        'type = "anthropic"\n'
-        'api_key_ref = "MY_SECRET_KEY"\n'
+        '[llm.providers.anthropic]\ntype = "anthropic"\napi_key_ref = "MY_SECRET_KEY"\n'
     )
     monkeypatch.setenv("MY_SECRET_KEY", "sk-test-12345")
     loader = ConfigLoader(base_dir=tmp_path)
@@ -138,9 +137,7 @@ def test_secure_ref_missing_env_var(tmp_path: Path):
     """Missing env var for a *_ref leaves the ref string as-is."""
     base = tmp_path / "volnix.toml"
     base.write_text(
-        '[llm.providers.anthropic]\n'
-        'type = "anthropic"\n'
-        'api_key_ref = "NONEXISTENT_SECRET_KEY"\n'
+        '[llm.providers.anthropic]\ntype = "anthropic"\napi_key_ref = "NONEXISTENT_SECRET_KEY"\n'
     )
     loader = ConfigLoader(base_dir=tmp_path)
     config = loader.load()

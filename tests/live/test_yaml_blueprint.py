@@ -19,6 +19,7 @@ This test:
 Run with:
     source .env && pytest tests/live/test_yaml_blueprint.py -v -s
 """
+
 from __future__ import annotations
 
 import json

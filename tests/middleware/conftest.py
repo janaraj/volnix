@@ -1,4 +1,5 @@
 """Test harness for API surface middleware."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -50,22 +51,26 @@ def prefix_config():
 def mock_gateway():
     """Mock gateway for middleware tests."""
     gw = MagicMock()
-    gw.get_tool_manifest = AsyncMock(return_value=[
-        {
-            "method": "POST",
-            "path": "/v1/charges",
-            "tool_name": "stripe_create_charge",
-        },
-        {
-            "method": "GET",
-            "path": "/v1/charges/{id}",
-            "tool_name": "stripe_get_charge",
-        },
-    ])
-    gw.handle_request = AsyncMock(return_value={
-        "id": "ch_123",
-        "object": "charge",
-    })
+    gw.get_tool_manifest = AsyncMock(
+        return_value=[
+            {
+                "method": "POST",
+                "path": "/v1/charges",
+                "tool_name": "stripe_create_charge",
+            },
+            {
+                "method": "GET",
+                "path": "/v1/charges/{id}",
+                "tool_name": "stripe_get_charge",
+            },
+        ]
+    )
+    gw.handle_request = AsyncMock(
+        return_value={
+            "id": "ch_123",
+            "object": "charge",
+        }
+    )
 
     mock_app = MagicMock()
     mock_app.bus = MagicMock()

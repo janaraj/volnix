@@ -1,13 +1,14 @@
 """Tests for reporter world challenge analysis."""
+
 import pytest
 
-from volnix.engines.reporter.world_challenges import (
-    ChallengeResponse,
-    WorldChallengeAnalyzer,
-)
 from tests.engines.reporter.conftest import (
     make_animator_event,
     make_world_event,
+)
+from volnix.engines.reporter.world_challenges import (
+    ChallengeResponse,
+    WorldChallengeAnalyzer,
 )
 
 

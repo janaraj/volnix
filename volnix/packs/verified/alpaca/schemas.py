@@ -75,8 +75,13 @@ ORDER_ENTITY_SCHEMA: dict = {
         "status": {
             "type": "string",
             "enum": [
-                "new", "accepted", "partially_filled", "filled",
-                "cancelled", "expired", "rejected",
+                "new",
+                "accepted",
+                "partially_filled",
+                "filled",
+                "cancelled",
+                "expired",
+                "rejected",
             ],
         },
         "order_class": {"type": "string", "default": "simple"},
@@ -787,8 +792,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "create_bar",
         "description": (
-            "Create a new OHLCV bar. Used by the Animator to advance "
-            "price series in dynamic mode."
+            "Create a new OHLCV bar. Used by the Animator to advance price series in dynamic mode."
         ),
         "http_path": "/volnix/market/bar",
         "http_method": "POST",

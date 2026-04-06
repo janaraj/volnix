@@ -6,8 +6,7 @@ Tests static and dynamic modes end-to-end through the real pipeline.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,7 +22,7 @@ from volnix.scheduling.scheduler import WorldScheduler
 def _utc(**kwargs):
     defaults = {"year": 2026, "month": 3, "day": 22, "hour": 12}
     defaults.update(kwargs)
-    return datetime(**defaults, tzinfo=timezone.utc)
+    return datetime(**defaults, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -97,13 +96,17 @@ async def test_dynamic_mode_scheduled_events_executed():
 
     # Register a one-shot event
     t = _utc()
-    scheduler.register_event(t, {
-        "actor_id": "npc_support",
-        "service_id": "gmail",
-        "action": "send_reminder",
-        "input_data": {"subject": "Follow up"},
-        "sub_type": "scheduled",
-    }, source="test")
+    scheduler.register_event(
+        t,
+        {
+            "actor_id": "npc_support",
+            "service_id": "gmail",
+            "action": "send_reminder",
+            "input_data": {"subject": "Follow up"},
+            "sub_type": "scheduled",
+        },
+        source="test",
+    )
 
     results = await engine.tick(t)
     assert len(results) >= 1
@@ -121,6 +124,7 @@ async def test_dynamic_mode_scheduled_events_executed():
     bus.publish.assert_called()
     published = bus.publish.call_args_list[0][0][0]
     from volnix.core.events import AnimatorEvent
+
     assert isinstance(published, AnimatorEvent)
     assert published.sub_type == "scheduled"
 
@@ -180,18 +184,25 @@ async def test_scheduler_shared_across_engines():
 
     # Another engine registers an event on the shared scheduler
     t = _utc()
-    scheduler.register_event(t, {
-        "actor_id": "system",
-        "service_id": "world",
-        "action": "approval_timeout",
-        "input_data": {"hold_id": "hold_001"},
-        "sub_type": "scheduled",
-    }, source="policy_engine")
+    scheduler.register_event(
+        t,
+        {
+            "actor_id": "system",
+            "service_id": "world",
+            "action": "approval_timeout",
+            "input_data": {"hold_id": "hold_001"},
+            "sub_type": "scheduled",
+        },
+        source="policy_engine",
+    )
 
-    results = await engine.tick(t)
+    await engine.tick(t)
     # The policy engine's event should be picked up by the animator
-    assert any(
-        call.kwargs.get("action") == "approval_timeout" or
-        (len(call.args) >= 3 and call.args[2] == "approval_timeout")
-        for call in mock_app.handle_action.call_args_list
-    ) or mock_app.handle_action.call_count >= 1
+    assert (
+        any(
+            call.kwargs.get("action") == "approval_timeout"
+            or (len(call.args) >= 3 and call.args[2] == "approval_timeout")
+            for call in mock_app.handle_action.call_args_list
+        )
+        or mock_app.handle_action.call_count >= 1
+    )

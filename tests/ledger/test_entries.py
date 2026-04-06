@@ -1,7 +1,6 @@
 """Tests for volnix.ledger.entries -- typed ledger entry dataclasses."""
-from datetime import datetime
 
-import pytest
+from datetime import datetime
 
 from volnix.core.types import ActorId, EntityId, EnvelopeId, EventId, RunId, SnapshotId
 from volnix.ledger.entries import (
@@ -166,17 +165,17 @@ def test_entry_registry_all_types():
     """ENTRY_REGISTRY should contain all concrete entry types."""
     from volnix.ledger.entries import (
         ActivationCompleteEntry,
+        CollaborationNotificationEntry,
         FeedbackAnnotationEntry,
         FeedbackCaptureEntry,
         FeedbackPromotionEntry,
         FeedbackSyncEntry,
         FeedbackSyncUpdateEntry,
-        WorldCompilationEntry,
-        ServiceResolutionEntry,
         ProfileInferenceEntry,
+        ServiceResolutionEntry,
         SubscriptionMatchEntry,
-        CollaborationNotificationEntry,
         ToolLoopStepEntry,
+        WorldCompilationEntry,
     )
 
     expected = {

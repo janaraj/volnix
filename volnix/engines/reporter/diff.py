@@ -17,9 +17,7 @@ class CounterfactualDiffer:
     def __init__(self, scorecard_computer: Any = None) -> None:
         self._scorecard_computer = scorecard_computer
 
-    async def compare(
-        self, run_ids: list[str], state: StateEngineProtocol
-    ) -> dict[str, Any]:
+    async def compare(self, run_ids: list[str], state: StateEngineProtocol) -> dict[str, Any]:
         """Compare multiple runs and return a structured diff.
 
         For now, compares two report dicts rather than querying separate runs.
@@ -74,14 +72,16 @@ class CounterfactualDiffer:
         # Compute deltas (last - first)
         for metric, data in diff.items():
             values = data["values"]
-            if len(values) >= 2 and isinstance(values[0], (int, float)) and isinstance(values[-1], (int, float)):
+            if (
+                len(values) >= 2
+                and isinstance(values[0], (int, float))
+                and isinstance(values[-1], (int, float))
+            ):
                 data["delta"] = round(values[-1] - values[0], 1)
 
         return diff
 
-    def _diff_events(
-        self, event_logs: list[list[Any]]
-    ) -> dict[str, Any]:
+    def _diff_events(self, event_logs: list[list[Any]]) -> dict[str, Any]:
         """Diff event logs across runs.
 
         Returns event count comparisons and type-level breakdowns.
@@ -107,9 +107,7 @@ class CounterfactualDiffer:
 
         return diff
 
-    def _diff_entity_states(
-        self, states: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _diff_entity_states(self, states: list[dict[str, Any]]) -> dict[str, Any]:
         """Diff final entity states across runs.
 
         Returns a comparison of entity counts and field-level differences.
@@ -123,10 +121,7 @@ class CounterfactualDiffer:
         }
 
         for state_dict in states:
-            entity_count = sum(
-                len(v) if isinstance(v, list) else 1
-                for v in state_dict.values()
-            )
+            entity_count = sum(len(v) if isinstance(v, list) else 1 for v in state_dict.values())
             diff["entity_counts"].append(entity_count)
 
         # Find entities that differ between runs
@@ -136,10 +131,12 @@ class CounterfactualDiffer:
                 v0 = states[0].get(key)
                 v1 = states[1].get(key)
                 if v0 != v1:
-                    diff["changed_entities"].append({
-                        "entity": key,
-                        "run_0": v0,
-                        "run_1": v1,
-                    })
+                    diff["changed_entities"].append(
+                        {
+                            "entity": key,
+                            "run_0": v0,
+                            "run_1": v1,
+                        }
+                    )
 
         return diff

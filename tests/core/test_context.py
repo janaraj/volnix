@@ -1,7 +1,9 @@
 """Tests for volnix.core.context — ActionContext, StepResult, ResponseProposal."""
+
 import pytest
-from volnix.core.context import ActionContext, StepResult, ResponseProposal
-from volnix.core.types import StepVerdict, ActorId, ServiceId
+
+from volnix.core.context import ActionContext, ResponseProposal, StepResult
+from volnix.core.types import ActorId, ServiceId, StepVerdict
 
 
 def test_action_context_mutable():

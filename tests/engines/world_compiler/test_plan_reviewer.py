@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
-from volnix.engines.world_compiler.plan import WorldPlan, ServiceResolution
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
 from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 from volnix.kernel.surface import ServiceSurface
 from volnix.packs.verified.gmail.pack import EmailPack
 from volnix.reality.presets import load_preset
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 

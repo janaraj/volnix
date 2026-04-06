@@ -2,16 +2,16 @@
 
 import pytest
 
-from volnix.core.context import ActionContext, StepResult
+from volnix.core.context import StepResult
 from volnix.core.types import StepVerdict
 from volnix.pipeline.builder import build_pipeline_from_config
 from volnix.pipeline.config import PipelineConfig
 from volnix.pipeline.dag import PipelineDAG
 
-
 # ---------------------------------------------------------------------------
 # MockStep helper
 # ---------------------------------------------------------------------------
+
 
 class MockStep:
     """Configurable mock pipeline step for testing."""

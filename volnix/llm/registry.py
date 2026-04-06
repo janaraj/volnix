@@ -12,7 +12,7 @@ from volnix.llm.config import LLMConfig, LLMProviderEntry
 
 logger = logging.getLogger(__name__)
 from volnix.llm.provider import LLMProvider
-from volnix.llm.secrets import ChainResolver, EnvVarResolver, SecretResolver
+from volnix.llm.secrets import EnvVarResolver, SecretResolver
 from volnix.llm.types import ProviderInfo
 
 
@@ -78,7 +78,9 @@ class ProviderRegistry:
             # Skip providers whose required API key is not available
             if entry.api_key_ref and not resolver.resolve(entry.api_key_ref):
                 logger.debug(
-                    "Skipping provider '%s': %s not set", name, entry.api_key_ref,
+                    "Skipping provider '%s': %s not set",
+                    name,
+                    entry.api_key_ref,
                 )
                 continue
             try:
@@ -86,7 +88,9 @@ class ProviderRegistry:
                 self.register(name, provider)
             except Exception as exc:
                 logger.warning(
-                    "Failed to initialize provider '%s': %s (skipping)", name, exc,
+                    "Failed to initialize provider '%s': %s (skipping)",
+                    name,
+                    exc,
                 )
 
     def _create_provider(
@@ -159,9 +163,7 @@ class ProviderRegistry:
             return MockLLMProvider()
         else:
             valid_types = ["anthropic", "openai_compatible", "google", "acp", "cli", "mock"]
-            raise ValueError(
-                f"Unknown provider type: '{entry.type}'. Valid types: {valid_types}"
-            )
+            raise ValueError(f"Unknown provider type: '{entry.type}'. Valid types: {valid_types}")
 
     async def shutdown_all(self) -> None:
         """Gracefully shut down all registered providers.
@@ -170,7 +172,7 @@ class ProviderRegistry:
         the internal registry.
         """
         for name, provider in self._providers.items():
-            if hasattr(provider, 'close') and callable(provider.close):
+            if hasattr(provider, "close") and callable(provider.close):
                 try:
                     await provider.close()
                 except Exception:

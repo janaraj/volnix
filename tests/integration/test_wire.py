@@ -13,16 +13,16 @@ These tests MUST NOT be removed when governance is added in Phase F.
 They verify the wire stays intact regardless of what the governance
 steps do internally.
 """
+
 from __future__ import annotations
 
 import asyncio
 
 import pytest
 
-from volnix.core.types import ActorId, ActorType, FidelityTier, StepVerdict
 from volnix.actors.definition import ActorDefinition
+from volnix.core.types import ActorId, ActorType, StepVerdict
 from volnix.ledger.query import LedgerQuery
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -34,16 +34,22 @@ def _register_test_agents(app):
     if actor_registry is None:
         return
     test_agent_ids = [
-        "agent-1", "agent-2", "a1", "actor-A", "actor-B",
+        "agent-1",
+        "agent-2",
+        "a1",
+        "actor-A",
+        "actor-B",
     ]
     for aid in test_agent_ids:
         if not actor_registry.has_actor(ActorId(aid)):
-            actor_registry.register(ActorDefinition(
-                id=ActorId(aid),
-                type=ActorType.AGENT,
-                role="test-agent",
-                permissions={"write": "all", "read": "all"},
-            ))
+            actor_registry.register(
+                ActorDefinition(
+                    id=ActorId(aid),
+                    type=ActorType.AGENT,
+                    role="test-agent",
+                    permissions={"write": "all", "read": "all"},
+                )
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -77,7 +83,9 @@ class TestAgentSimulation:
     async def test_agent_sends_email(self, app):
         """A1: Agent sends an email — response has email_id, status, thread_id."""
         result = await app.handle_action(
-            "agent-1", "email", "email_send",
+            "agent-1",
+            "email",
+            "email_send",
             _send_payload(subject="Hello Bob", body="How are you?"),
         )
         assert "email_id" in result
@@ -88,13 +96,17 @@ class TestAgentSimulation:
     async def test_agent_reads_email(self, app):
         """A2: Agent sends, then another agent reads it — email returned with status."""
         send_result = await app.handle_action(
-            "agent-1", "email", "email_send",
+            "agent-1",
+            "email",
+            "email_send",
             _send_payload(subject="Read me", body="Please read."),
         )
         email_id = send_result["email_id"]
 
         read_result = await app.handle_action(
-            "agent-2", "email", "email_read",
+            "agent-2",
+            "email",
+            "email_read",
             {"email_id": email_id},
         )
         assert "email" in read_result
@@ -105,14 +117,18 @@ class TestAgentSimulation:
     async def test_agent_replies_to_email(self, app):
         """A3: Agent sends, another agent replies — same thread_id, in_reply_to set."""
         send = await app.handle_action(
-            "agent-1", "email", "email_send",
-            _send_payload(from_addr="alice@test.com", to_addr="bob@test.com",
-                          subject="Topic", body="Start."),
+            "agent-1",
+            "email",
+            "email_send",
+            _send_payload(
+                from_addr="alice@test.com", to_addr="bob@test.com", subject="Topic", body="Start."
+            ),
         )
         reply = await app.handle_action(
-            "agent-2", "email", "email_reply",
-            {"email_id": send["email_id"], "from_addr": "bob@test.com",
-             "body": "Reply."},
+            "agent-2",
+            "email",
+            "email_reply",
+            {"email_id": send["email_id"], "from_addr": "bob@test.com", "body": "Reply."},
         )
         assert "email_id" in reply
         assert reply["thread_id"] == send["thread_id"]
@@ -122,12 +138,15 @@ class TestAgentSimulation:
         """A4: Send 3 emails to bob, bob lists inbox — count is 3."""
         for i in range(3):
             await app.handle_action(
-                "agent-1", "email", "email_send",
-                _send_payload(to_addr="bob@test.com", subject=f"Email {i}",
-                              body=f"Body {i}"),
+                "agent-1",
+                "email",
+                "email_send",
+                _send_payload(to_addr="bob@test.com", subject=f"Email {i}", body=f"Body {i}"),
             )
         list_result = await app.handle_action(
-            "agent-2", "email", "email_list",
+            "agent-2",
+            "email",
+            "email_list",
             {"mailbox_owner": "bob@test.com"},
         )
         assert list_result["count"] == 3
@@ -136,23 +155,28 @@ class TestAgentSimulation:
     async def test_agent_full_conversation(self, app):
         """A5: send -> read -> reply -> reply — multi-turn, same thread."""
         s1 = await app.handle_action(
-            "agent-1", "email", "email_send",
-            _send_payload(from_addr="a@t.com", to_addr="b@t.com",
-                          subject="Chat", body="Hi"),
+            "agent-1",
+            "email",
+            "email_send",
+            _send_payload(from_addr="a@t.com", to_addr="b@t.com", subject="Chat", body="Hi"),
         )
         await app.handle_action(
-            "agent-2", "email", "email_read",
+            "agent-2",
+            "email",
+            "email_read",
             {"email_id": s1["email_id"]},
         )
         r1 = await app.handle_action(
-            "agent-2", "email", "email_reply",
-            {"email_id": s1["email_id"], "from_addr": "b@t.com",
-             "body": "Hey"},
+            "agent-2",
+            "email",
+            "email_reply",
+            {"email_id": s1["email_id"], "from_addr": "b@t.com", "body": "Hey"},
         )
         r2 = await app.handle_action(
-            "agent-1", "email", "email_reply",
-            {"email_id": r1["email_id"], "from_addr": "a@t.com",
-             "body": "Sup"},
+            "agent-1",
+            "email",
+            "email_reply",
+            {"email_id": r1["email_id"], "from_addr": "a@t.com", "body": "Sup"},
         )
         # All share the same thread
         assert s1["thread_id"] == r1["thread_id"]
@@ -173,7 +197,9 @@ class TestWireIntegrity:
     async def test_all_7_steps_execute(self, app):
         """B1: All 7 PipelineStepEntry recorded in ledger with correct names."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         entries = await app.ledger.query(
@@ -181,15 +207,22 @@ class TestWireIntegrity:
         )
         step_names = [e.step_name for e in entries]
         expected = [
-            "permission", "policy", "budget", "capability",
-            "responder", "validation", "commit",
+            "permission",
+            "policy",
+            "budget",
+            "capability",
+            "responder",
+            "validation",
+            "commit",
         ]
         assert step_names == expected
 
     async def test_all_steps_return_allow(self, app):
         """B2: Every step verdict is ALLOW for a valid email_send."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         entries = await app.ledger.query(
@@ -203,7 +236,9 @@ class TestWireIntegrity:
     async def test_state_committed_to_store(self, app):
         """B3: Entity exists in StateEngine after pipeline executes."""
         result = await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         email_id = result["email_id"]
@@ -217,7 +252,9 @@ class TestWireIntegrity:
     async def test_event_persisted_to_log(self, app):
         """B4: WorldEvent appears in StateEngine event log."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         state_engine = app.registry.get("state")
@@ -234,7 +271,9 @@ class TestWireIntegrity:
 
         await app.bus.subscribe("*", _capture)
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         # Give the bus consumer task time to drain the queue
@@ -247,7 +286,9 @@ class TestWireIntegrity:
     async def test_ledger_has_state_mutation(self, app):
         """B6: StateMutationEntry recorded with entity_type, operation, after."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         entries = await app.ledger.query(
@@ -275,7 +316,9 @@ class TestWireIntegrity:
         (verified by unit tests in test_pack_runtime.py).
         """
         result = await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         # If we got a successful response with email_id, the responder
@@ -298,11 +341,15 @@ class TestReplayAudit:
     async def test_bus_event_replay(self, app):
         """C1: Events from bus persistence can be replayed in order."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(subject="First"),
         )
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(subject="Second"),
         )
         replayed = await app.bus.replay(from_sequence=0)
@@ -315,11 +362,15 @@ class TestReplayAudit:
     async def test_ledger_query_by_actor(self, app):
         """C2: Ledger entries filterable by actor_id."""
         await app.handle_action(
-            "actor-A", "email", "email_send",
+            "actor-A",
+            "email",
+            "email_send",
             _send_payload(),
         )
         await app.handle_action(
-            "actor-B", "email", "email_send",
+            "actor-B",
+            "email",
+            "email_send",
             _send_payload(),
         )
         entries_a = await app.ledger.query(
@@ -348,11 +399,15 @@ class TestReplayAudit:
     async def test_state_timeline(self, app):
         """C3: StateEngine.get_timeline() returns events in correct order."""
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(subject="First"),
         )
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(subject="Second"),
         )
         state_engine = app.registry.get("state")
@@ -365,15 +420,17 @@ class TestReplayAudit:
     async def test_causal_chain_through_pipeline(self, app):
         """C4: Two linked actions produce traceable events."""
         s1 = await app.handle_action(
-            "agent-1", "email", "email_send",
-            _send_payload(from_addr="a@t.com", to_addr="b@t.com",
-                          subject="Cause", body="Start"),
+            "agent-1",
+            "email",
+            "email_send",
+            _send_payload(from_addr="a@t.com", to_addr="b@t.com", subject="Cause", body="Start"),
         )
         # Reply creates a second event
         await app.handle_action(
-            "agent-2", "email", "email_reply",
-            {"email_id": s1["email_id"], "from_addr": "b@t.com",
-             "body": "Effect"},
+            "agent-2",
+            "email",
+            "email_reply",
+            {"email_id": s1["email_id"], "from_addr": "b@t.com", "body": "Effect"},
         )
         state_engine = app.registry.get("state")
         timeline = await state_engine.get_timeline()
@@ -408,7 +465,9 @@ class TestDriftPrevention:
         so we verify the verdict is ALLOW for all four governance steps.
         """
         await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         entries = await app.ledger.query(
@@ -425,7 +484,9 @@ class TestDriftPrevention:
     async def test_unknown_action_fails_gracefully(self, app):
         """D2: action='nonexistent_action' -> error response (not crash)."""
         result = await app.handle_action(
-            "a1", "email", "nonexistent_action",
+            "a1",
+            "email",
+            "nonexistent_action",
             {"some": "data"},
         )
         assert "error" in result
@@ -438,7 +499,9 @@ class TestDriftPrevention:
         stops there. (Phase E1: capability check uses PackRegistry.has_tool())
         """
         result = await app.handle_action(
-            "a1", "email", "nonexistent_action",
+            "a1",
+            "email",
+            "nonexistent_action",
             {"some": "data"},
         )
         # The pipeline short-circuited
@@ -462,7 +525,9 @@ class TestDriftPrevention:
         app is functional by running an action and checking basic health.
         """
         result = await app.handle_action(
-            "a1", "email", "email_send",
+            "a1",
+            "email",
+            "email_send",
             _send_payload(),
         )
         assert "email_id" in result
@@ -476,14 +541,20 @@ class TestDriftPrevention:
         """D5: Two actions in parallel both succeed (basic concurrency)."""
         results = await asyncio.gather(
             app.handle_action(
-                "agent-1", "email", "email_send",
-                _send_payload(from_addr="a@t.com", to_addr="b@t.com",
-                              subject="Concurrent 1", body="Body 1"),
+                "agent-1",
+                "email",
+                "email_send",
+                _send_payload(
+                    from_addr="a@t.com", to_addr="b@t.com", subject="Concurrent 1", body="Body 1"
+                ),
             ),
             app.handle_action(
-                "agent-2", "email", "email_send",
-                _send_payload(from_addr="c@t.com", to_addr="d@t.com",
-                              subject="Concurrent 2", body="Body 2"),
+                "agent-2",
+                "email",
+                "email_send",
+                _send_payload(
+                    from_addr="c@t.com", to_addr="d@t.com", subject="Concurrent 2", body="Body 2"
+                ),
             ),
         )
         assert len(results) == 2

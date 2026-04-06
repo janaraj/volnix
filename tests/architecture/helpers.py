@@ -147,10 +147,7 @@ def _normalized_signature(method: Any) -> tuple[bool, list[tuple[str, inspect._P
     params = list(inspect.signature(method).parameters.values())
     if params and params[0].name == "self":
         params = params[1:]
-    simplified = [
-        (param.name, param.kind)
-        for param in params
-    ]
+    simplified = [(param.name, param.kind) for param in params]
     return inspect.iscoroutinefunction(method), simplified
 
 

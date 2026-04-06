@@ -7,11 +7,10 @@ checking against configured warning/critical levels.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from volnix.core.events import (
-    BudgetDeductionEvent,
     BudgetExhaustedEvent,
     BudgetWarningEvent,
     Event,
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _now_timestamp() -> Timestamp:
     """Create a Timestamp for the current moment."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -104,7 +103,9 @@ class BudgetTracker:
 
         state["api_calls_remaining"] = max(0, state["api_calls_remaining"] - cost.api_calls)
         state["llm_spend_remaining"] = max(0.0, state["llm_spend_remaining"] - cost.llm_spend_usd)
-        state["world_actions_remaining"] = max(0, state["world_actions_remaining"] - cost.world_actions)
+        state["world_actions_remaining"] = max(
+            0, state["world_actions_remaining"] - cost.world_actions
+        )
         state["spend_usd_remaining"] = max(0.0, state["spend_usd_remaining"] - cost.spend_usd)
 
         return state
@@ -142,8 +143,12 @@ class BudgetTracker:
                 used_pct = ((total - remaining) / total) * 100.0
                 events.extend(
                     self._check_dimension_threshold(
-                        actor_id, "api_calls", used_pct, remaining,
-                        warning_pct, critical_pct,
+                        actor_id,
+                        "api_calls",
+                        used_pct,
+                        remaining,
+                        warning_pct,
+                        critical_pct,
                     )
                 )
 
@@ -155,8 +160,12 @@ class BudgetTracker:
                 used_pct = ((total - remaining) / total) * 100.0
                 events.extend(
                     self._check_dimension_threshold(
-                        actor_id, "llm_spend", used_pct, remaining,
-                        warning_pct, critical_pct,
+                        actor_id,
+                        "llm_spend",
+                        used_pct,
+                        remaining,
+                        warning_pct,
+                        critical_pct,
                     )
                 )
 
@@ -168,8 +177,12 @@ class BudgetTracker:
                 used_pct = ((total - remaining) / total) * 100.0
                 events.extend(
                     self._check_dimension_threshold(
-                        actor_id, "world_actions", used_pct, remaining,
-                        warning_pct, critical_pct,
+                        actor_id,
+                        "world_actions",
+                        used_pct,
+                        remaining,
+                        warning_pct,
+                        critical_pct,
                     )
                 )
 
@@ -181,8 +194,12 @@ class BudgetTracker:
                 used_pct = ((total - remaining) / total) * 100.0
                 events.extend(
                     self._check_dimension_threshold(
-                        actor_id, "spend_usd", used_pct, remaining,
-                        warning_pct, critical_pct,
+                        actor_id,
+                        "spend_usd",
+                        used_pct,
+                        remaining,
+                        warning_pct,
+                        critical_pct,
                     )
                 )
 
@@ -208,40 +225,46 @@ class BudgetTracker:
         if remaining <= 0:
             key = f"{budget_type}_exhausted"
             if key not in warned:
-                events.append(BudgetExhaustedEvent(
-                    event_type="budget.exhausted",
-                    timestamp=ts,
-                    actor_id=actor_id,
-                    budget_type=budget_type,
-                ))
+                events.append(
+                    BudgetExhaustedEvent(
+                        event_type="budget.exhausted",
+                        timestamp=ts,
+                        actor_id=actor_id,
+                        budget_type=budget_type,
+                    )
+                )
                 warned.add(key)
 
         # Check critical threshold
         elif used_pct >= critical_pct:
             key = f"{budget_type}_critical"
             if key not in warned:
-                events.append(BudgetWarningEvent(
-                    event_type="budget.warning",
-                    timestamp=ts,
-                    actor_id=actor_id,
-                    budget_type=budget_type,
-                    threshold_pct=critical_pct,
-                    remaining=remaining,
-                ))
+                events.append(
+                    BudgetWarningEvent(
+                        event_type="budget.warning",
+                        timestamp=ts,
+                        actor_id=actor_id,
+                        budget_type=budget_type,
+                        threshold_pct=critical_pct,
+                        remaining=remaining,
+                    )
+                )
                 warned.add(key)
 
         # Check warning threshold
         elif used_pct >= warning_pct:
             key = f"{budget_type}_warning"
             if key not in warned:
-                events.append(BudgetWarningEvent(
-                    event_type="budget.warning",
-                    timestamp=ts,
-                    actor_id=actor_id,
-                    budget_type=budget_type,
-                    threshold_pct=warning_pct,
-                    remaining=remaining,
-                ))
+                events.append(
+                    BudgetWarningEvent(
+                        event_type="budget.warning",
+                        timestamp=ts,
+                        actor_id=actor_id,
+                        budget_type=budget_type,
+                        threshold_pct=warning_pct,
+                        remaining=remaining,
+                    )
+                )
                 warned.add(key)
 
         self._warned[aid] = warned

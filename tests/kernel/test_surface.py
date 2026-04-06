@@ -1,12 +1,11 @@
 """Tests for volnix.kernel.surface -- APIOperation + ServiceSurface models."""
 
-import pytest
 from volnix.kernel.surface import APIOperation, ServiceSurface
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
+
 
 def _stripe_refund_op() -> APIOperation:
     """A realistic Stripe refund operation for reuse across tests."""
@@ -77,6 +76,7 @@ def _full_surface() -> ServiceSurface:
 # APIOperation tests
 # ---------------------------------------------------------------------------
 
+
 def test_api_operation_creation():
     """APIOperation stores all fields correctly."""
     op = _stripe_refund_op()
@@ -137,6 +137,7 @@ def test_to_anthropic_tool():
 # ---------------------------------------------------------------------------
 # ServiceSurface tests
 # ---------------------------------------------------------------------------
+
 
 def test_service_surface_get_mcp_tools():
     """get_mcp_tools returns a list of MCP tool dicts for all operations."""

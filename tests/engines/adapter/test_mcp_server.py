@@ -3,9 +3,10 @@
 Tests use the REAL MCP server object by verifying registered handlers and
 testing through the gateway delegation pattern.
 """
-import json
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from volnix.engines.adapter.protocols.mcp_server import MCPServerAdapter
 
@@ -15,10 +16,16 @@ def _make_mock_gateway(tools=None, handle_result=None):
     gateway = MagicMock()
 
     mcp_tools = tools or [
-        {"name": "email_send", "description": "Send an email",
-         "inputSchema": {"type": "object", "properties": {}, "required": []}},
-        {"name": "email_read", "description": "Read an email",
-         "inputSchema": {"type": "object", "properties": {}, "required": []}},
+        {
+            "name": "email_send",
+            "description": "Send an email",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "email_read",
+            "description": "Read an email",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
     ]
     gateway.get_tool_manifest = AsyncMock(return_value=mcp_tools)
 
@@ -56,6 +63,7 @@ async def test_mcp_list_tools_handler_registered():
     await adapter.start_server()
 
     from mcp.types import ListToolsRequest
+
     assert ListToolsRequest in adapter._server.request_handlers
 
 
@@ -67,6 +75,7 @@ async def test_mcp_call_tool_handler_registered():
     await adapter.start_server()
 
     from mcp.types import CallToolRequest
+
     assert CallToolRequest in adapter._server.request_handlers
 
 

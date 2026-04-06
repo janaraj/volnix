@@ -1,13 +1,13 @@
 """Tests for NLParser — natural language to structured world plan via LLM."""
+
 import json
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
 
 from volnix.core.errors import NLParseError
 from volnix.engines.world_compiler.nl_parser import NLParser
 from volnix.llm.types import LLMResponse
-
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -21,30 +21,36 @@ class TestNLParser:
     async def test_basic_parse(self, mock_llm_router):
         """NLParser returns (world_def, compiler_settings) tuple."""
         # First call returns world def, second returns compiler settings
-        world_json = json.dumps({
-            "world": {
-                "name": "Support Center",
-                "description": "A support team",
-                "services": {"gmail": "verified/gmail"},
-                "actors": [{"role": "agent", "type": "external", "count": 1}],
-                "policies": [],
-                "seeds": [],
-                "mission": "resolve tickets",
+        world_json = json.dumps(
+            {
+                "world": {
+                    "name": "Support Center",
+                    "description": "A support team",
+                    "services": {"gmail": "verified/gmail"},
+                    "actors": [{"role": "agent", "type": "external", "count": 1}],
+                    "policies": [],
+                    "seeds": [],
+                    "mission": "resolve tickets",
+                }
             }
-        })
-        settings_json = json.dumps({
-            "compiler": {
-                "seed": 42,
-                "behavior": "dynamic",
-                "fidelity": "auto",
-                "mode": "governed",
-                "reality": {"preset": "messy"},
+        )
+        settings_json = json.dumps(
+            {
+                "compiler": {
+                    "seed": 42,
+                    "behavior": "dynamic",
+                    "fidelity": "auto",
+                    "mode": "governed",
+                    "reality": {"preset": "messy"},
+                }
             }
-        })
-        mock_llm_router.route = AsyncMock(side_effect=[
-            LLMResponse(content=world_json, provider="mock", model="mock", latency_ms=0),
-            LLMResponse(content=settings_json, provider="mock", model="mock", latency_ms=0),
-        ])
+        )
+        mock_llm_router.route = AsyncMock(
+            side_effect=[
+                LLMResponse(content=world_json, provider="mock", model="mock", latency_ms=0),
+                LLMResponse(content=settings_json, provider="mock", model="mock", latency_ms=0),
+            ]
+        )
 
         parser = NLParser(mock_llm_router)
         world_def, compiler_settings = await parser.parse("Support team with email")
@@ -75,12 +81,33 @@ class TestNLParser:
                 "mission": "",
             }
         }
-        settings = {"compiler": {"seed": 1, "behavior": "static", "fidelity": "auto",
-                                  "mode": "governed", "reality": {"preset": "ideal"}}}
-        mock_llm_router.route = AsyncMock(side_effect=[
-            LLMResponse(content="", structured_output=structured, provider="mock", model="mock", latency_ms=0),
-            LLMResponse(content="", structured_output=settings, provider="mock", model="mock", latency_ms=0),
-        ])
+        settings = {
+            "compiler": {
+                "seed": 1,
+                "behavior": "static",
+                "fidelity": "auto",
+                "mode": "governed",
+                "reality": {"preset": "ideal"},
+            }
+        }
+        mock_llm_router.route = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    structured_output=structured,
+                    provider="mock",
+                    model="mock",
+                    latency_ms=0,
+                ),
+                LLMResponse(
+                    content="",
+                    structured_output=settings,
+                    provider="mock",
+                    model="mock",
+                    latency_ms=0,
+                ),
+            ]
+        )
 
         parser = NLParser(mock_llm_router)
         world_def, _ = await parser.parse("Structured test")
@@ -90,27 +117,38 @@ class TestNLParser:
     @pytest.mark.asyncio
     async def test_json_in_code_block(self, mock_llm_router):
         """NLParser handles JSON wrapped in markdown code blocks."""
-        world_json = json.dumps({
-            "world": {
-                "name": "Code Block",
-                "description": "wrapped in backticks",
-                "services": {},
-                "actors": [],
-                "policies": [],
-                "seeds": [],
-                "mission": "",
+        world_json = json.dumps(
+            {
+                "world": {
+                    "name": "Code Block",
+                    "description": "wrapped in backticks",
+                    "services": {},
+                    "actors": [],
+                    "policies": [],
+                    "seeds": [],
+                    "mission": "",
+                }
             }
-        })
+        )
         wrapped = f"```json\n{world_json}\n```"
-        settings_json = json.dumps({
-            "compiler": {"seed": 42, "behavior": "dynamic", "fidelity": "auto",
-                         "mode": "governed", "reality": {"preset": "messy"}}
-        })
+        settings_json = json.dumps(
+            {
+                "compiler": {
+                    "seed": 42,
+                    "behavior": "dynamic",
+                    "fidelity": "auto",
+                    "mode": "governed",
+                    "reality": {"preset": "messy"},
+                }
+            }
+        )
 
-        mock_llm_router.route = AsyncMock(side_effect=[
-            LLMResponse(content=wrapped, provider="mock", model="mock", latency_ms=0),
-            LLMResponse(content=settings_json, provider="mock", model="mock", latency_ms=0),
-        ])
+        mock_llm_router.route = AsyncMock(
+            side_effect=[
+                LLMResponse(content=wrapped, provider="mock", model="mock", latency_ms=0),
+                LLMResponse(content=settings_json, provider="mock", model="mock", latency_ms=0),
+            ]
+        )
 
         parser = NLParser(mock_llm_router)
         world_def, _ = await parser.parse("Code block test")
@@ -128,7 +166,10 @@ class TestNLParser:
         assert len(calls) >= 2
         # The request for compiler settings is the second call
         settings_request = calls[1][0][0]  # first positional arg
-        assert "hostile" in settings_request.user_content or "hostile" in settings_request.system_prompt
+        assert (
+            "hostile" in settings_request.user_content
+            or "hostile" in settings_request.system_prompt
+        )
 
     @pytest.mark.asyncio
     async def test_behavior_hint_passed(self, mock_llm_router):
@@ -139,17 +180,21 @@ class TestNLParser:
         calls = mock_llm_router.route.call_args_list
         assert len(calls) >= 2
         settings_request = calls[1][0][0]
-        assert "static" in settings_request.user_content or "static" in settings_request.system_prompt
+        assert (
+            "static" in settings_request.user_content or "static" in settings_request.system_prompt
+        )
 
     @pytest.mark.asyncio
     async def test_invalid_response_raises(self, mock_llm_router):
         """NLParser raises NLParseError when LLM returns unparseable content."""
-        mock_llm_router.route = AsyncMock(return_value=LLMResponse(
-            content="This is not JSON at all",
-            provider="mock",
-            model="mock",
-            latency_ms=0,
-        ))
+        mock_llm_router.route = AsyncMock(
+            return_value=LLMResponse(
+                content="This is not JSON at all",
+                provider="mock",
+                model="mock",
+                latency_ms=0,
+            )
+        )
 
         parser = NLParser(mock_llm_router)
         with pytest.raises(NLParseError):

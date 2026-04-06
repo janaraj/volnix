@@ -45,9 +45,7 @@ class StateMachineValidator:
             all_known_states.update(targets)
 
         if current_state not in transitions:
-            error_msg = (
-                f"State '{current_state}' is not defined in the state machine"
-            )
+            error_msg = f"State '{current_state}' is not defined in the state machine"
         elif new_state not in all_known_states:
             error_msg = (
                 f"Target state '{new_state}' is not a recognized state in the "

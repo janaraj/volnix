@@ -67,10 +67,7 @@ class TemporalValidator:
         )
 
         for ordering in orderings:
-            if (
-                ordering.before_field not in entity
-                or ordering.after_field not in entity
-            ):
+            if ordering.before_field not in entity or ordering.after_field not in entity:
                 continue
 
             before = entity.get(ordering.before_field)
@@ -83,9 +80,7 @@ class TemporalValidator:
                 result = result.merge(
                     ValidationResult(
                         valid=False,
-                        errors=[
-                            f"{entity_type}.{ordering.before_field}: {before_error}"
-                        ],
+                        errors=[f"{entity_type}.{ordering.before_field}: {before_error}"],
                         validation_type=ValidationType.TEMPORAL,
                     )
                 )
@@ -96,21 +91,16 @@ class TemporalValidator:
                 result = result.merge(
                     ValidationResult(
                         valid=False,
-                        errors=[
-                            f"{entity_type}.{ordering.after_field}: {after_error}"
-                        ],
+                        errors=[f"{entity_type}.{ordering.after_field}: {after_error}"],
                         validation_type=ValidationType.TEMPORAL,
                     )
                 )
                 continue
 
             context = ordering.context or (
-                f"{entity_type}.{ordering.before_field} <= "
-                f"{entity_type}.{ordering.after_field}"
+                f"{entity_type}.{ordering.before_field} <= {entity_type}.{ordering.after_field}"
             )
-            result = result.merge(
-                self.validate_ordering(parsed_before, parsed_after, context)
-            )
+            result = result.merge(self.validate_ordering(parsed_before, parsed_after, context))
 
         return result
 

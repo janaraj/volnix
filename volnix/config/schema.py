@@ -4,43 +4,44 @@ This module imports config models from their owning subsystem modules
 and assembles them into the root VolnixConfig. Each subsystem owns
 its config definition (SRP). No duplicate definitions.
 """
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from volnix.actors.config import ActorConfig, SlotManagerConfig
+from volnix.bus.config import BusConfig
+from volnix.engines.adapter.config import AdapterConfig
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.animator.config import AnimatorConfig
+from volnix.engines.budget.config import BudgetConfig
+from volnix.engines.feedback.config import FeedbackConfig
+from volnix.engines.permission.config import PermissionConfig
+from volnix.engines.policy.config import PolicyConfig
+from volnix.engines.reporter.config import ReporterConfig
+from volnix.engines.responder.config import ResponderConfig
+from volnix.engines.state.config import StateConfig
+from volnix.engines.world_compiler.config import WorldCompilerConfig
+from volnix.gateway.config import GatewayConfig
+from volnix.ledger.config import LedgerConfig
+from volnix.llm.config import LLMConfig
+from volnix.middleware.config import MiddlewareConfig
+
 # Import from subsystem config files (each module owns its definition)
 from volnix.persistence.config import PersistenceConfig
-from volnix.bus.config import BusConfig
-from volnix.ledger.config import LedgerConfig
 from volnix.pipeline.config import PipelineConfig
-from volnix.llm.config import LLMConfig
-from volnix.gateway.config import GatewayConfig
 from volnix.reality.config import RealityConfig, SeedConfig
 from volnix.runs.config import RunConfig
-from volnix.actors.config import ActorConfig, SlotManagerConfig
-from volnix.templates.config import TemplateConfig
-from volnix.engines.state.config import StateConfig
-from volnix.engines.policy.config import PolicyConfig
-from volnix.engines.permission.config import PermissionConfig
-from volnix.engines.budget.config import BudgetConfig
-from volnix.engines.responder.config import ResponderConfig
-from volnix.engines.animator.config import AnimatorConfig
-from volnix.engines.adapter.config import AdapterConfig
-from volnix.engines.reporter.config import ReporterConfig
-from volnix.engines.feedback.config import FeedbackConfig
-from volnix.engines.agency.config import AgencyConfig
-from volnix.engines.world_compiler.config import WorldCompilerConfig
-from volnix.worlds.config import WorldsConfig
 from volnix.simulation.config import SimulationRunnerConfig
-from volnix.middleware.config import MiddlewareConfig
-from volnix.webhook.config import WebhookConfig
+from volnix.templates.config import TemplateConfig
 from volnix.validation.config import ValidationConfig
+from volnix.webhook.config import WebhookConfig
+from volnix.worlds.config import WorldsConfig
 
 
 class ProfileConfig(BaseModel):
     """Tier 2 service profile configuration."""
+
     model_config = ConfigDict(frozen=True)
     data_dir: str = "volnix/packs/profiles"
     infer_on_missing: bool = True
@@ -48,12 +49,14 @@ class ProfileConfig(BaseModel):
 
 class FidelityConfig(BaseModel):
     """Service fidelity resolution mode."""
+
     model_config = ConfigDict(frozen=True)
     mode: str = "auto"  # auto | strict | exploratory
 
 
 class LoggingConfig(BaseModel):
     """Application logging configuration."""
+
     model_config = ConfigDict(frozen=True)
     level: str = "WARNING"
     format: str = "text"
@@ -62,6 +65,7 @@ class LoggingConfig(BaseModel):
 
 class DashboardConfig(BaseModel):
     """Web dashboard configuration."""
+
     model_config = ConfigDict(frozen=True)
     host: str = "127.0.0.1"
     port: int = 8200
@@ -70,6 +74,7 @@ class DashboardConfig(BaseModel):
 
 class SimulationConfig(BaseModel):
     """Top-level simulation orchestration config."""
+
     model_config = ConfigDict(frozen=True)
     seed: int = 42
     time_speed: float = 1.0
@@ -82,6 +87,7 @@ class SimulationConfig(BaseModel):
 
 class VolnixConfig(BaseModel):
     """Root configuration — assembles all subsystem configs."""
+
     model_config = ConfigDict(frozen=True)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)

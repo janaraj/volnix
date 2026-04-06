@@ -31,11 +31,41 @@ class TestAllLabelsValid:
 
     def test_all_25_labels_valid(self) -> None:
         all_labels = {
-            "information": ["pristine", "mostly_clean", "somewhat_neglected", "poorly_maintained", "chaotic"],
-            "reliability": ["rock_solid", "mostly_reliable", "occasionally_flaky", "frequently_broken", "barely_functional"],
-            "friction": ["everyone_helpful", "mostly_cooperative", "some_difficult_people", "many_difficult_people", "actively_hostile"],
-            "complexity": ["straightforward", "mostly_clear", "moderately_challenging", "frequently_confusing", "overwhelmingly_complex"],
-            "boundaries": ["locked_down", "well_controlled", "a_few_gaps", "many_gaps", "wide_open"],
+            "information": [
+                "pristine",
+                "mostly_clean",
+                "somewhat_neglected",
+                "poorly_maintained",
+                "chaotic",
+            ],
+            "reliability": [
+                "rock_solid",
+                "mostly_reliable",
+                "occasionally_flaky",
+                "frequently_broken",
+                "barely_functional",
+            ],
+            "friction": [
+                "everyone_helpful",
+                "mostly_cooperative",
+                "some_difficult_people",
+                "many_difficult_people",
+                "actively_hostile",
+            ],
+            "complexity": [
+                "straightforward",
+                "mostly_clear",
+                "moderately_challenging",
+                "frequently_confusing",
+                "overwhelmingly_complex",
+            ],
+            "boundaries": [
+                "locked_down",
+                "well_controlled",
+                "a_few_gaps",
+                "many_gaps",
+                "wide_open",
+            ],
         }
         for dim_name, labels in all_labels.items():
             for label in labels:
@@ -81,7 +111,16 @@ class TestResolveDimensionWithDict:
     """resolve_dimension with a dict creates the dimension from explicit values."""
 
     def test_resolve_dimension_with_dict(self) -> None:
-        dim = resolve_dimension("complexity", {"ambiguity": 50, "edge_cases": 40, "contradictions": 10, "urgency": 25, "volatility": 20})
+        dim = resolve_dimension(
+            "complexity",
+            {
+                "ambiguity": 50,
+                "edge_cases": 40,
+                "contradictions": 10,
+                "urgency": 25,
+                "volatility": 20,
+            },
+        )
         assert isinstance(dim, ComplexityDimension)
         assert dim.ambiguity == 50
         assert dim.edge_cases == 40
@@ -167,7 +206,9 @@ class TestMixedConfig:
         assert info.staleness == 0
 
         # Dict-based resolution
-        bound = resolve_dimension("boundaries", {"access_limits": 50, "rule_clarity": 40, "boundary_gaps": 20})
+        bound = resolve_dimension(
+            "boundaries", {"access_limits": 50, "rule_clarity": 40, "boundary_gaps": 20}
+        )
         assert isinstance(bound, BoundaryDimension)
         assert bound.access_limits == 50
 

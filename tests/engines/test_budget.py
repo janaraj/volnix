@@ -1,29 +1,23 @@
 """Tests for volnix.engines.budget — budget tracking, deduction, and thresholds."""
+
 import pytest
-import pytest_asyncio
-from volnix.engines.budget.engine import BudgetEngine
 
 
 @pytest.mark.asyncio
-async def test_budget_check_sufficient():
-    ...
+async def test_budget_check_sufficient(): ...
 
 
 @pytest.mark.asyncio
-async def test_budget_check_exhausted():
-    ...
+async def test_budget_check_exhausted(): ...
 
 
 @pytest.mark.asyncio
-async def test_budget_deduct():
-    ...
+async def test_budget_deduct(): ...
 
 
 @pytest.mark.asyncio
-async def test_budget_warning_threshold():
-    ...
+async def test_budget_warning_threshold(): ...
 
 
 @pytest.mark.asyncio
-async def test_budget_spend_curve():
-    ...
+async def test_budget_spend_curve(): ...

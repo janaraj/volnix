@@ -2,11 +2,11 @@
 
 import pytest
 
-from volnix.core.types import ActorId, ActorType
-from volnix.core.errors import ActorNotFoundError, DuplicateActorError
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.personality import FrictionProfile
 from volnix.actors.registry import ActorRegistry
+from volnix.core.errors import ActorNotFoundError, DuplicateActorError
+from volnix.core.types import ActorId, ActorType
 
 
 def _make_actor(
@@ -115,8 +115,12 @@ class TestActorRegistry:
     def test_query_friction_category(self) -> None:
         """query(friction_category=...) filters by friction category."""
         reg = ActorRegistry()
-        reg.register(_make_actor(id="c1", friction=FrictionProfile(category="hostile", intensity=80)))
-        reg.register(_make_actor(id="c2", friction=FrictionProfile(category="uncooperative", intensity=30)))
+        reg.register(
+            _make_actor(id="c1", friction=FrictionProfile(category="hostile", intensity=80))
+        )
+        reg.register(
+            _make_actor(id="c2", friction=FrictionProfile(category="uncooperative", intensity=30))
+        )
         reg.register(_make_actor(id="c3"))  # no friction
 
         hostile = reg.query(friction_category="hostile")

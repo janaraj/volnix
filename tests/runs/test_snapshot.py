@@ -1,6 +1,8 @@
 """Tests for volnix.runs.snapshot — run-aware snapshot management."""
+
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from volnix.core.types import RunId, SnapshotId
 from volnix.runs.config import RunConfig
@@ -15,7 +17,9 @@ def _make_manager(tmp_path) -> tuple[SnapshotManager, AsyncMock]:
     mock_store = AsyncMock()
     mock_store.save_snapshot = AsyncMock(return_value=SnapshotId("snap_test_001"))
     mock_store.load_snapshot = AsyncMock()
-    mock_store.list_snapshots = AsyncMock(return_value=[{"snapshot_id": "snap_test_001", "run_id": "run_1", "label": "test"}])
+    mock_store.list_snapshots = AsyncMock(
+        return_value=[{"snapshot_id": "snap_test_001", "run_id": "run_1", "label": "test"}]
+    )
     mgr._snapshot_store = mock_store
     return mgr, mock_store
 

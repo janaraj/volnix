@@ -9,10 +9,10 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from volnix.core.types import ActorId, ActorType
 from volnix.actors.config import ActorConfig
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.personality import FrictionProfile, Personality
+from volnix.core.types import ActorId, ActorType
 from volnix.reality.dimensions import SocialFrictionDimension, WorldConditions
 
 
@@ -88,7 +88,16 @@ class SimpleActorGenerator:
             team = spec.get("team")
 
             # Anything not in known keys goes to metadata
-            known_keys = {"role", "type", "count", "personality", "permissions", "budget", "team", "visibility"}
+            known_keys = {
+                "role",
+                "type",
+                "count",
+                "personality",
+                "permissions",
+                "budget",
+                "team",
+                "visibility",
+            }
             metadata = {k: v for k, v in spec.items() if k not in known_keys}
 
             # Determine friction distribution for non-agent actors
@@ -101,7 +110,9 @@ class SimpleActorGenerator:
             for _i in range(count):
                 actor_id = ActorId(f"{role}-{format(self._rng.getrandbits(32), '08x')}")
 
-                personality = await self.generate_personality(role, hint, conditions, domain_context)
+                personality = await self.generate_personality(
+                    role, hint, conditions, domain_context
+                )
 
                 friction_profile = None
                 if friction_idx < len(friction_assignments):

@@ -122,7 +122,10 @@ class TestBrowserSimulation:
 
         # Action 1: List sites
         r1 = await live_app.handle_action(
-            "agent-browser", "browser", "web_list_sites", {},
+            "agent-browser",
+            "browser",
+            "web_list_sites",
+            {},
         )
         site_count = r1.get("count", 0) if isinstance(r1, dict) else 0
         print(f"\n  Action 1 — web_list_sites: {site_count} sites")
@@ -132,7 +135,10 @@ class TestBrowserSimulation:
 
         # Action 2: Search
         r2 = await live_app.handle_action(
-            "agent-browser", "browser", "web_search", {"query": "support"},
+            "agent-browser",
+            "browser",
+            "web_search",
+            {"query": "support"},
         )
         search_count = r2.get("count", 0) if isinstance(r2, dict) else 0
         print(f"\n  Action 2 — web_search('support'): {search_count} results")
@@ -145,7 +151,10 @@ class TestBrowserSimulation:
             first_page = all_pages[0]
             nav_url = f"{first_page.get('domain', '')}{first_page.get('path', '')}"
             r3 = await live_app.handle_action(
-                "agent-browser", "browser", "web_navigate", {"url": nav_url},
+                "agent-browser",
+                "browser",
+                "web_navigate",
+                {"url": nav_url},
             )
             print(f"\n  Action 3 — web_navigate('{nav_url}'):")
             if isinstance(r3, dict) and r3.get("page"):
@@ -159,10 +168,12 @@ class TestBrowserSimulation:
                 # Action 4: Read current page
                 if session_id:
                     r4 = await live_app.handle_action(
-                        "agent-browser", "browser", "web_read_page",
+                        "agent-browser",
+                        "browser",
+                        "web_read_page",
                         {"session_id": session_id},
                     )
-                    print(f"\n  Action 4 — web_read_page(session):")
+                    print("\n  Action 4 — web_read_page(session):")
                     if isinstance(r4, dict) and r4.get("page"):
                         print(f"    Title: {r4['page'].get('title')}")
 
@@ -170,10 +181,12 @@ class TestBrowserSimulation:
                 page_links = r3["page"].get("links", [])
                 if page_links and session_id:
                     r5 = await live_app.handle_action(
-                        "agent-browser", "browser", "web_click_link",
+                        "agent-browser",
+                        "browser",
+                        "web_click_link",
                         {"session_id": session_id, "link_index": 0},
                     )
-                    print(f"\n  Action 5 — web_click_link(index=0):")
+                    print("\n  Action 5 — web_click_link(index=0):")
                     if isinstance(r5, dict) and r5.get("page"):
                         print(f"    Navigated to: {r5['page'].get('title')}")
                     elif isinstance(r5, dict) and r5.get("error"):

@@ -20,8 +20,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from volnix.core.types import RunId
-
 
 @pytest.fixture
 async def social_app(tmp_path):
@@ -36,13 +34,15 @@ async def social_app(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -133,8 +133,7 @@ class TestSocialMediaSimulation:
                 {
                     "name": "Escalation policy",
                     "description": (
-                        "Posts with 10+ negative engagement require "
-                        "immediate escalation"
+                        "Posts with 10+ negative engagement require immediate escalation"
                     ),
                     "trigger": "post score drops below -10",
                     "enforcement": "escalate",
@@ -149,10 +148,7 @@ class TestSocialMediaSimulation:
                     "Reddit post in r/AcmeSupport: 'Outage affecting "
                     "production — anyone else seeing this?'"
                 ),
-                (
-                    "Several customers are praising Acme's new feature "
-                    "launch on both platforms"
-                ),
+                ("Several customers are praising Acme's new feature launch on both platforms"),
             ],
             mission=(
                 "Monitor social media for customer issues. Respond to "
@@ -175,9 +171,7 @@ class TestSocialMediaSimulation:
 
         result = await compiler.generate_world(plan)
 
-        entity_summary = {
-            etype: len(elist) for etype, elist in result["entities"].items()
-        }
+        entity_summary = {etype: len(elist) for etype, elist in result["entities"].items()}
         total_entities = sum(entity_summary.values())
         print(f"  Generated entities: {json.dumps(entity_summary, indent=4)}")
         print(f"  Total: {total_entities} entities")
@@ -233,22 +227,23 @@ class TestSocialMediaSimulation:
             print(f"\n  4a. Browsing r/{sr_name}...")
 
             r_hot = await app.handle_action(
-                agent_id, "reddit", "subreddit_hot",
+                agent_id,
+                "reddit",
+                "subreddit_hot",
                 {"subreddit": sr_name, "limit": 5},
             )
             hot_posts = r_hot.get("data", {}).get("children", [])
             print(f"      Hot posts: {len(hot_posts)}")
             for p in hot_posts[:3]:
                 pdata = p.get("data", p) if isinstance(p, dict) else p
-                print(
-                    f"        [{pdata.get('score', 0)}] "
-                    f"{pdata.get('title', 'untitled')[:60]}"
-                )
+                print(f"        [{pdata.get('score', 0)}] {pdata.get('title', 'untitled')[:60]}")
 
         # 4b: Agent submits a post
         print("\n  4b. Agent posts a response thread...")
         r_submit = await app.handle_action(
-            agent_id, "reddit", "submit",
+            agent_id,
+            "reddit",
+            "submit",
             {
                 "sr": sr_name if subreddits else "AcmeSupport",
                 "title": "Official Response: Service Outage Update",
@@ -272,27 +267,25 @@ class TestSocialMediaSimulation:
             target_id = target_post.get("id", "")
             print(f"\n  4c. Replying to post: {target_id}...")
             r_comment = await app.handle_action(
-                agent_id, "reddit", "comment",
+                agent_id,
+                "reddit",
+                "comment",
                 {
                     "parent": target_id,
-                    "text": (
-                        "Thanks for reporting this. We're looking into "
-                        "it right now."
-                    ),
+                    "text": ("Thanks for reporting this. We're looking into it right now."),
                     "author_id": agent_id,
                 },
             )
-            print(
-                f"      Comment: "
-                f"{json.dumps(r_comment, default=str)[:200]}"
-            )
+            print(f"      Comment: {json.dumps(r_comment, default=str)[:200]}")
 
         # 4d: Agent upvotes a community post
         if reddit_posts and len(reddit_posts) > 1:
             vote_target = reddit_posts[1]
             print(f"\n  4d. Upvoting post: {vote_target.get('id')}...")
             r_vote = await app.handle_action(
-                agent_id, "reddit", "vote",
+                agent_id,
+                "reddit",
+                "vote",
                 {
                     "id": vote_target["id"],
                     "dir": 1,
@@ -311,7 +304,9 @@ class TestSocialMediaSimulation:
         # 5a: Agent tweets
         print("  5a. Posting tweet about outage update...")
         r_tweet = await app.handle_action(
-            agent_id, "twitter", "create_tweet",
+            agent_id,
+            "twitter",
+            "create_tweet",
             {
                 "text": (
                     "We're aware of the service disruption and our team "
@@ -328,7 +323,9 @@ class TestSocialMediaSimulation:
         # 5b: Search for customer complaints
         print("\n  5b. Searching for complaints...")
         r_search = await app.handle_action(
-            agent_id, "twitter", "search_recent",
+            agent_id,
+            "twitter",
+            "search_recent",
             {"query": "#AcmeSupport", "max_results": 5},
         )
         search_results = r_search.get("data", [])
@@ -337,18 +334,15 @@ class TestSocialMediaSimulation:
         # 5c: Reply to a customer complaint
         tweets = await state_engine.query_entities("tweet")
         complaint_tweets = [
-            t for t in tweets
-            if t.get("author_id") != agent_id
-            and t.get("status") == "published"
+            t for t in tweets if t.get("author_id") != agent_id and t.get("status") == "published"
         ]
         if complaint_tweets:
             complaint = complaint_tweets[0]
-            print(
-                f"\n  5c. Replying to complaint tweet: "
-                f"{complaint.get('id')}..."
-            )
+            print(f"\n  5c. Replying to complaint tweet: {complaint.get('id')}...")
             r_reply = await app.handle_action(
-                agent_id, "twitter", "reply",
+                agent_id,
+                "twitter",
+                "reply",
                 {
                     "text": (
                         "We're sorry for the inconvenience. Our team is "
@@ -359,21 +353,19 @@ class TestSocialMediaSimulation:
                     "in_reply_to_tweet_id": complaint["id"],
                 },
             )
-            print(
-                f"      Reply: {json.dumps(r_reply, default=str)[:200]}"
-            )
+            print(f"      Reply: {json.dumps(r_reply, default=str)[:200]}")
 
         # 5d: Like a positive tweet
         positive_tweets = [
-            t for t in tweets
-            if t.get("like_count", 0) > 0
-            and t.get("status") == "published"
+            t for t in tweets if t.get("like_count", 0) > 0 and t.get("status") == "published"
         ]
         if positive_tweets:
             target = positive_tweets[0]
             print(f"\n  5d. Liking tweet: {target.get('id')}...")
             r_like = await app.handle_action(
-                agent_id, "twitter", "like",
+                agent_id,
+                "twitter",
+                "like",
                 {"user_id": agent_id, "tweet_id": target["id"]},
             )
             print(f"      Like: {json.dumps(r_like, default=str)[:150]}")
@@ -393,9 +385,7 @@ class TestSocialMediaSimulation:
             results = await animator.tick(tick_time)
             print(f"\n  Tick {tick + 1}: {len(results)} events generated")
             for evt in results[:3]:
-                print(
-                    f"    → {json.dumps(evt, default=str)[:150]}"
-                )
+                print(f"    → {json.dumps(evt, default=str)[:150]}")
 
         # ────────────────────────────────────────────────────
         # STEP 7: Query final state
@@ -405,14 +395,12 @@ class TestSocialMediaSimulation:
         print("=" * 70)
 
         # Reddit state
-        for etype in ["subreddit", "reddit_post", "comment",
-                       "reddit_user", "vote"]:
+        for etype in ["subreddit", "reddit_post", "comment", "reddit_user", "vote"]:
             entities = await state_engine.query_entities(etype)
             print(f"  {etype}: {len(entities)} entities")
 
         # Twitter state
-        for etype in ["tweet", "twitter_user", "follow",
-                       "like"]:
+        for etype in ["tweet", "twitter_user", "follow", "like"]:
             entities = await state_engine.query_entities(etype)
             print(f"  {etype}: {len(entities)} entities")
 

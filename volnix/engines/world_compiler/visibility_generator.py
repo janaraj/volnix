@@ -126,7 +126,9 @@ class VisibilityRuleGenerator:
         return self._parse_rules(parsed, plan)
 
     def _parse_rules(
-        self, parsed: Any, plan: WorldPlan,
+        self,
+        parsed: Any,
+        plan: WorldPlan,
     ) -> list[VisibilityRule]:
         """Parse and validate LLM output into VisibilityRule objects."""
         if not isinstance(parsed, list):
@@ -147,7 +149,8 @@ class VisibilityRuleGenerator:
             # Validate entity type exists (or is wildcard)
             if target != "*" and known_types and target not in known_types:
                 logger.debug(
-                    "Skipping visibility rule for unknown entity type: %s", target,
+                    "Skipping visibility rule for unknown entity type: %s",
+                    target,
                 )
                 continue
             try:

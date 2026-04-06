@@ -8,8 +8,9 @@ support.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -73,9 +74,7 @@ class TunableRegistry:
         # Run all validators
         for validator in tunable.validators:
             if not validator(value):
-                raise ValueError(
-                    f"Validation failed for '{field_key}' with value {value!r}"
-                )
+                raise ValueError(f"Validation failed for '{field_key}' with value {value!r}")
 
         tunable.current_value = value
 

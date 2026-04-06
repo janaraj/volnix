@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from volnix.core.events import EngineLifecycleEvent, Event
@@ -88,13 +88,12 @@ class BaseEngine(ABC):
         if self._bus is not None:
             for topic in self.subscriptions:
                 try:
-                    await self._bus.unsubscribe(
-                        topic, self._dispatch_event
-                    )
+                    await self._bus.unsubscribe(topic, self._dispatch_event)
                 except Exception:
                     logger.debug(
                         "Failed to unsubscribe %s from topic %s",
-                        self.engine_name, topic,
+                        self.engine_name,
+                        topic,
                     )
         await self._on_stop()
         await self._record_lifecycle("stop")
@@ -190,7 +189,9 @@ class BaseEngine(ABC):
         try:
             await self._handle_event(event)
         except Exception as exc:
-            logger.exception("Engine %s failed handling event %s", self.engine_name, event.event_type)
+            logger.exception(
+                "Engine %s failed handling event %s", self.engine_name, event.event_type
+            )
             await self._publish_error(exc, source_event=event)
 
     async def _publish_error(
@@ -207,8 +208,8 @@ class BaseEngine(ABC):
         error_event = EngineLifecycleEvent(
             event_type="engine.error",
             timestamp=Timestamp(
-                world_time=datetime.now(timezone.utc),
-                wall_time=datetime.now(timezone.utc),
+                world_time=datetime.now(UTC),
+                wall_time=datetime.now(UTC),
                 tick=0,
             ),
             engine_name=self.engine_name,

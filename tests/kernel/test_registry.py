@@ -1,6 +1,7 @@
 """Tests for volnix.kernel.registry -- SemanticRegistry async initialization and lookups."""
 
 import pytest
+
 from volnix.kernel.registry import SemanticRegistry
 
 

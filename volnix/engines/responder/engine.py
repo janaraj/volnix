@@ -43,7 +43,6 @@ class WorldResponderEngine(BaseEngine):
     async def _on_initialize(self) -> None:
         """Set up pack registry, runtime, Tier1 dispatcher, and Tier2 generator."""
         from volnix.engines.responder.tier1 import Tier1Dispatcher
-        from volnix.engines.responder.tier2 import Tier2Generator
         from volnix.packs.profile_loader import ProfileLoader
         from volnix.packs.profile_registry import ProfileRegistry
         from volnix.packs.registry import PackRegistry
@@ -253,7 +252,10 @@ class WorldResponderEngine(BaseEngine):
             key = self._pluralize(etype)
             try:
                 entities = await self._query_with_visibility(
-                    state_engine, permission_engine, ctx.actor_id, etype,
+                    state_engine,
+                    permission_engine,
+                    ctx.actor_id,
+                    etype,
                 )
                 result[key] = entities
             except Exception as exc:
@@ -278,7 +280,10 @@ class WorldResponderEngine(BaseEngine):
             key = self._pluralize(entity_def.name)
             try:
                 entities = await self._query_with_visibility(
-                    state_engine, permission_engine, ctx.actor_id, entity_def.name,
+                    state_engine,
+                    permission_engine,
+                    ctx.actor_id,
+                    entity_def.name,
                 )
                 result[key] = entities
             except Exception as exc:

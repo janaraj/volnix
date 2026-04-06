@@ -5,10 +5,10 @@ The Animator tick loop calls get_due_events() each tick to fire them.
 """
 
 from volnix.scheduling.scheduler import (
-    WorldScheduler,
-    ScheduledEvent,
     RecurringEvent,
+    ScheduledEvent,
     TriggerEvent,
+    WorldScheduler,
 )
 
 __all__ = [

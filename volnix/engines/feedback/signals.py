@@ -9,6 +9,7 @@ To add a new signal:
 The framework loads run data ONCE into a shared ``SignalContext``,
 then passes it to every registered collector.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,9 +34,7 @@ class SignalContext(BaseModel, frozen=True):
     """
 
     runs: list[dict[str, Any]] = Field(default_factory=list)
-    event_logs: dict[str, list[dict[str, Any]]] = Field(
-        default_factory=dict
-    )
+    event_logs: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
     annotation_counts: dict[str, int] = Field(default_factory=dict)
     profile_fidelities: dict[str, str] = Field(default_factory=dict)
 
@@ -102,10 +101,7 @@ class ServiceUsageSignal:
         return SignalResult(
             signal_name=self.signal_name,
             entries=entries,
-            summary=(
-                f"{len(entries)} services used across "
-                f"{len(ctx.runs)} runs"
-            ),
+            summary=(f"{len(entries)} services used across {len(ctx.runs)} runs"),
         )
 
 
@@ -135,12 +131,14 @@ class BootstrapFailureSignal:
                 continue
             errors = error_counts.get(service, 0)
             rate = errors / total if total > 0 else 0.0
-            entries.append({
-                "service_name": service,
-                "error_rate": round(rate, 2),
-                "total_calls": total,
-                "error_count": errors,
-            })
+            entries.append(
+                {
+                    "service_name": service,
+                    "error_rate": round(rate, 2),
+                    "total_calls": total,
+                    "error_count": errors,
+                }
+            )
 
         # Sort by error rate descending
         entries.sort(key=lambda e: e["error_rate"], reverse=True)
@@ -169,8 +167,7 @@ class CapabilityGapSignal:
                         gap_counts[tool] += 1
 
         entries = [
-            {"tool_name": tool, "request_count": count}
-            for tool, count in gap_counts.most_common()
+            {"tool_name": tool, "request_count": count} for tool, count in gap_counts.most_common()
         ]
 
         return SignalResult(
@@ -193,20 +190,14 @@ class TemplateInsightSignal:
         for run in ctx.runs:
             world_def = run.get("world_def", {})
             if isinstance(world_def, dict):
-                name = world_def.get("name", world_def.get(
-                    "description", "unnamed"
-                ))
+                name = world_def.get("name", world_def.get("description", "unnamed"))
                 if name:
                     template_counts[name] += 1
                     services = world_def.get("services", {})
                     if isinstance(services, dict):
-                        template_services.setdefault(name, set()).update(
-                            services.keys()
-                        )
+                        template_services.setdefault(name, set()).update(services.keys())
                     elif isinstance(services, list):
-                        template_services.setdefault(name, set()).update(
-                            services
-                        )
+                        template_services.setdefault(name, set()).update(services)
 
         entries = [
             {
@@ -297,9 +288,7 @@ class SignalAggregator:
                 result = await collector.collect(ctx)
                 results[name] = result
             except Exception as exc:
-                logger.warning(
-                    "Signal '%s' failed: %s", name, exc
-                )
+                logger.warning("Signal '%s' failed: %s", name, exc)
 
         return LocalSignals(
             computed_at=datetime.now(UTC).isoformat(),
@@ -312,9 +301,7 @@ class SignalAggregator:
         # Runs
         runs: list[dict[str, Any]] = []
         if self._run_manager:
-            runs = await self._run_manager.list_runs(
-                limit=self._max_runs
-            )
+            runs = await self._run_manager.list_runs(limit=self._max_runs)
 
         # Event logs (optional, heavier — H6 fix: cap per-log size)
         max_events_per_log = 5000  # prevent unbounded memory
@@ -324,9 +311,7 @@ class SignalAggregator:
                 run_id = run.get("run_id", "")
                 if run_id:
                     try:
-                        events = await self._artifacts.load_artifact(
-                            run_id, "event_log"
-                        )
+                        events = await self._artifacts.load_artifact(run_id, "event_log")
                         if isinstance(events, list):
                             event_logs[run_id] = events[:max_events_per_log]
                     except Exception:
@@ -336,18 +321,14 @@ class SignalAggregator:
         annotation_counts: dict[str, int] = {}
         if self._annotations and self._profiles:
             for profile in self._profiles.list_profiles():
-                count = await self._annotations.count_by_service(
-                    profile.service_name
-                )
+                count = await self._annotations.count_by_service(profile.service_name)
                 annotation_counts[profile.service_name] = count
 
         # Profile fidelities
         profile_fidelities: dict[str, str] = {}
         if self._profiles:
             for profile in self._profiles.list_profiles():
-                profile_fidelities[profile.service_name] = (
-                    profile.fidelity_source
-                )
+                profile_fidelities[profile.service_name] = profile.fidelity_source
 
         return SignalContext(
             runs=runs,

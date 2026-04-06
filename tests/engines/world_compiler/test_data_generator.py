@@ -52,8 +52,7 @@ def _make_plan(
                 resolution_source="tier1_pack",
             )
         },
-        actor_specs=actor_specs
-        or [{"role": "agent", "type": "external", "count": 1}],
+        actor_specs=actor_specs or [{"role": "agent", "type": "external", "count": 1}],
         conditions=WorldConditions(),
         reality_prompt_context={},
     )
@@ -127,16 +126,12 @@ class TestDetermineCount:
 
     def test_count_from_actor_spec(self) -> None:
         gen = WorldDataGenerator(seed=42)
-        plan = _make_plan(
-            actor_specs=[{"role": "email", "type": "external", "count": 25}]
-        )
+        plan = _make_plan(actor_specs=[{"role": "email", "type": "external", "count": 25}])
         assert gen._determine_count("email", plan) == 25
 
     def test_default_count_10(self) -> None:
         gen = WorldDataGenerator(seed=42)
-        plan = _make_plan(
-            actor_specs=[{"role": "unrelated", "type": "external", "count": 5}]
-        )
+        plan = _make_plan(actor_specs=[{"role": "unrelated", "type": "external", "count": 5}])
         assert gen._determine_count("email", plan) == 10
 
 
@@ -148,9 +143,7 @@ class TestSectionSpecs:
 
     def test_iter_generation_specs(self) -> None:
         gen = WorldDataGenerator(seed=42)
-        plan = _make_plan(
-            actor_specs=[{"role": "email", "type": "external", "count": 25}]
-        )
+        plan = _make_plan(actor_specs=[{"role": "email", "type": "external", "count": 25}])
         specs = gen.iter_generation_specs(plan)
         assert len(specs) == 1
         assert specs[0].entity_type == "email"

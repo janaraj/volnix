@@ -87,8 +87,7 @@ CATEGORIES: dict[str, SemanticCategory] = {
     "social_media": SemanticCategory(
         name="social_media",
         description=(
-            "Services for public content sharing, social engagement,"
-            " and community interaction."
+            "Services for public content sharing, social engagement, and community interaction."
         ),
         primitives=["post", "comment", "vote", "profile", "community", "feed", "thread"],
         example_services=["reddit", "twitter", "linkedin", "facebook"],

@@ -9,6 +9,7 @@ Examples::
     volnix annotate stripe "Refunds on charges >180 days should fail"
     volnix annotate jira "Status transitions require assignee in project role"
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,12 +25,7 @@ logger = logging.getLogger(__name__)
 
 def _escape_like(query: str) -> str:
     """Escape SQL LIKE special characters (``%``, ``_``, ``\\``)."""
-    return (
-        query
-        .replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
-    )
+    return query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class AnnotationStore:
@@ -88,21 +84,17 @@ class AnnotationStore:
         seq = await self._log.append(values)
         logger.debug(
             "AnnotationStore: added annotation #%d for '%s' by '%s'",
-            seq, service_id, author,
+            seq,
+            service_id,
+            author,
         )
         return seq
 
-    async def get_by_service(
-        self, service_id: ServiceId | str
-    ) -> list[dict[str, Any]]:
+    async def get_by_service(self, service_id: ServiceId | str) -> list[dict[str, Any]]:
         """Return all annotations for a service, ordered by creation."""
-        return await self._log.query(
-            filters={"service_id": str(service_id)}
-        )
+        return await self._log.query(filters={"service_id": str(service_id)})
 
-    async def get_by_run(
-        self, run_id: RunId | str
-    ) -> list[dict[str, Any]]:
+    async def get_by_run(self, run_id: RunId | str) -> list[dict[str, Any]]:
         """Return all annotations tagged with a specific run."""
         return await self._log.query(filters={"run_id": str(run_id)})
 
@@ -113,17 +105,9 @@ class AnnotationStore:
         literally.
         """
         escaped = _escape_like(query)
-        sql = (
-            "SELECT * FROM annotations "
-            "WHERE text LIKE ? ESCAPE '\\' "
-            "ORDER BY sequence_id ASC"
-        )
+        sql = "SELECT * FROM annotations WHERE text LIKE ? ESCAPE '\\' ORDER BY sequence_id ASC"
         return await self._db.fetchall(sql, (f"%{escaped}%",))
 
-    async def count_by_service(
-        self, service_id: ServiceId | str
-    ) -> int:
+    async def count_by_service(self, service_id: ServiceId | str) -> int:
         """Return the number of annotations for a service."""
-        return await self._log.count(
-            filters={"service_id": str(service_id)}
-        )
+        return await self._log.count(filters={"service_id": str(service_id)})

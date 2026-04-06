@@ -1,15 +1,15 @@
 """Tests for AgentBoundaryAnalyzer -- agent-to-world observation."""
+
 import pytest
 
-from volnix.engines.reporter.agent_boundaries import (
-    AgentBoundaryAnalyzer,
-    BoundaryCategory,
-    BoundaryFinding,
-)
 from tests.engines.reporter.conftest import (
     make_permission_denied,
     make_policy_block,
     make_world_event,
+)
+from volnix.engines.reporter.agent_boundaries import (
+    AgentBoundaryAnalyzer,
+    BoundaryCategory,
 )
 
 
@@ -76,10 +76,14 @@ async def test_full_analyze_combines_categories(analyzer):
     """Full analyze should combine all boundary categories."""
     events = [
         make_permission_denied(
-            actor_id="agent-1", action="read_private", tick=1,
+            actor_id="agent-1",
+            action="read_private",
+            tick=1,
         ),
         make_policy_block(
-            actor_id="agent-1", action="elevate_permissions", tick=2,
+            actor_id="agent-1",
+            action="elevate_permissions",
+            tick=2,
         ),
     ]
     findings = await analyzer.analyze(events, "agent-1")

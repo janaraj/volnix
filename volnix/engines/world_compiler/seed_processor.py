@@ -69,9 +69,7 @@ class CompilerSeedProcessor:
     ) -> dict[str, list[dict[str, Any]]]:
         """Process ALL seed descriptions via LLM and apply to entity set."""
         if not self._router:
-            raise CompilerError(
-                "LLM router required for seed expansion"
-            )
+            raise CompilerError("LLM router required for seed expansion")
 
         base_vars = ctx.for_seed_expansion()
 
@@ -89,9 +87,7 @@ class CompilerSeedProcessor:
     ) -> SeedExpansionResult:
         """NL seed -> structured modifications via LLM. No fallback."""
         if not self._router:
-            raise CompilerError(
-                "LLM router required for seed expansion"
-            )
+            raise CompilerError("LLM router required for seed expansion")
 
         available: dict[str, Any] = {}
         for etype, entities in all_entities.items():
@@ -105,16 +101,16 @@ class CompilerSeedProcessor:
                 # Include field names + types so LLM knows valid fields
                 json_schema = getattr(schema_obj, "json_schema", {})
                 for fname, fdef in json_schema.get("properties", {}).items():
-                    schema_fields[fname] = fdef.get("type", "string") if isinstance(fdef, dict) else "string"
+                    schema_fields[fname] = (
+                        fdef.get("type", "string") if isinstance(fdef, dict) else "string"
+                    )
                 # Include reference annotations so LLM knows which fields reference which entity types
                 # references is list[ReferenceRule] with .field and .target_entity_type
                 for ref_rule in getattr(schema_obj, "references", []):
                     ref_annotations[ref_rule.field] = ref_rule.target_entity_type
             summaries = []
             for e in entities[: self.ENTITY_CONTEXT_LIMIT]:
-                summary: dict[str, str] = {
-                    id_field: e.get(id_field, e.get("id", ""))
-                }
+                summary: dict[str, str] = {id_field: e.get(id_field, e.get("id", ""))}
                 if "status" in e:
                     summary["status"] = e["status"]
                 summaries.append(summary)
@@ -212,9 +208,7 @@ class CompilerSeedProcessor:
                     identity_field = schema.identity_field
             for entity in updated_entities[mod.entity_type]:
                 entity_identity = (
-                    entity.get(identity_field)
-                    or entity.get("id")
-                    or entity.get("entity_id")
+                    entity.get(identity_field) or entity.get("id") or entity.get("entity_id")
                 )
                 if entity_identity == mod.entity_id:
                     entity.update(mod.field_updates)
@@ -222,9 +216,7 @@ class CompilerSeedProcessor:
 
         return updated_entities
 
-    async def expand_nl_seeds(
-        self, descriptions: list[str]
-    ) -> list[Seed]:
+    async def expand_nl_seeds(self, descriptions: list[str]) -> list[Seed]:
         """Convert NL descriptions to Seed models."""
         seeds: list[Seed] = []
         for desc in descriptions:

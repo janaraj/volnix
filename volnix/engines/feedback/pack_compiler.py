@@ -4,6 +4,7 @@ Produces the standard 4-file pack structure that a developer fills in
 with deterministic handler logic.  The generated code is a starting
 point, NOT a working pack — handlers raise ``NotImplementedError``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,9 +65,7 @@ class PackCompiler:
             output_dir = Path(output_dir)
 
         # All file I/O wrapped in to_thread (H3 fix)
-        result = await asyncio.to_thread(
-            self._write_pack_files, service, output_dir, profile
-        )
+        result = await asyncio.to_thread(self._write_pack_files, service, output_dir, profile)
         return result
 
     def _write_pack_files(
@@ -83,9 +82,7 @@ class PackCompiler:
 
         # __init__.py
         init_path = pack_dir / "__init__.py"
-        init_path.write_text(
-            f'"""Tier 1 verified pack for {service}."""\n'
-        )
+        init_path.write_text(f'"""Tier 1 verified pack for {service}."""\n')
         files.append(str(init_path))
 
         # schemas.py
@@ -112,7 +109,9 @@ class PackCompiler:
 
         logger.info(
             "PackCompiler: generated %d files for '%s' (%d handler stubs)",
-            len(files), service, handler_count,
+            len(files),
+            service,
+            handler_count,
         )
 
         return PackCompileResult(
@@ -144,7 +143,7 @@ class PackCompiler:
             for field_name, field_def in entity.fields.items():
                 ftype = field_def.get("type", "string") if isinstance(field_def, dict) else "string"
                 lines.append(f'        "{field_name}": {{"type": "{ftype}"}},')
-            lines.append('    },')
+            lines.append("    },")
             lines.append(f'    "required": {entity.required},')
             lines.append(f'    "identity_field": "{entity.identity_field}",')
             lines.append("}")
@@ -241,34 +240,24 @@ class PackCompiler:
         M5 fix: sanitizes description strings.
         """
         service = profile.service_name
-        class_name = (
-            "".join(w.capitalize() for w in service.split("_")) + "Pack"
-        )
+        class_name = "".join(w.capitalize() for w in service.split("_")) + "Pack"
 
         # Build import lines — guard against empty lists (M6)
-        handler_parts = [
-            f"handle_{_sanitize_identifier(op.name)}"
-            for op in profile.operations
-        ]
+        handler_parts = [f"handle_{_sanitize_identifier(op.name)}" for op in profile.operations]
         entity_schema_parts = [
-            f"{_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA"
-            for e in profile.entities
+            f"{_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA" for e in profile.entities
         ]
 
         # Handler imports
         if handler_parts:
-            handler_import_line = (
-                f"from .handlers import {', '.join(handler_parts)}"
-            )
+            handler_import_line = f"from .handlers import {', '.join(handler_parts)}"
         else:
             handler_import_line = "# No handlers to import"
 
         # Schema imports
         schema_imports = ["TOOL_DEFINITIONS"]
         schema_imports.extend(entity_schema_parts)
-        schema_import_line = (
-            f"from .schemas import {', '.join(schema_imports)}"
-        )
+        schema_import_line = f"from .schemas import {', '.join(schema_imports)}"
 
         # Handler map
         handler_map = "\n".join(
@@ -280,8 +269,7 @@ class PackCompiler:
 
         # Entity refs
         entity_refs = "\n".join(
-            f'            "{e.name}": '
-            f'{_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA,'
+            f'            "{e.name}": {_sanitize_identifier(e.name).upper()}_ENTITY_SCHEMA,'
             for e in profile.entities
         )
         if not entity_refs:

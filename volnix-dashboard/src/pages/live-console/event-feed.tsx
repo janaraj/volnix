@@ -26,20 +26,17 @@ const OUTCOME_FILTER_OPTIONS: Record<string, string> = {
 
 const EVENT_TYPE_FILTER_OPTIONS: Record<string, string> = {
   '': 'All types',
-  agent_action: 'Agent action',
-  policy_hold: 'Policy hold',
-  policy_block: 'Policy block',
-  policy_escalate: 'Policy escalate',
-  policy_flag: 'Policy flag',
-  permission_denied: 'Permission denied',
-  budget_deduction: 'Budget deduction',
-  budget_warning: 'Budget warning',
-  budget_exhausted: 'Budget exhausted',
-  capability_gap: 'Capability gap',
-  animator_event: 'Animator event',
-  state_change: 'State change',
-  side_effect: 'Side effect',
-  system_event: 'System event',
+  world: 'Agent action',
+  'policy.hold': 'Policy hold',
+  'policy.block': 'Policy block',
+  'policy.escalate': 'Policy escalate',
+  'policy.flag': 'Policy flag',
+  'permission.denied': 'Permission denied',
+  'budget.deduction': 'Budget deduction',
+  'budget.warning': 'Budget warning',
+  'budget.exhausted': 'Budget exhausted',
+  'capability.gap': 'Capability gap',
+  animator: 'Animator event',
 };
 
 const INTERNAL_ACTORS = new Set([

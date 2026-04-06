@@ -14,10 +14,9 @@ Requires: VOLNIX_RUN_REAL_API_TESTS=1 + OPENAI_API_KEY
 
 from __future__ import annotations
 
-import json
 import pytest
 
-from volnix.core.types import ActorId, EntityId, ToolName
+from volnix.core.types import ActorId
 
 
 @pytest.fixture
@@ -126,17 +125,21 @@ class TestVisibilityScopingE2E:
         vis_rules = all_entities.get("visibility_rule", [])
         print(f"  Visibility rules generated: {len(vis_rules)}")
         for rule in vis_rules:
-            ff = str(rule.get('filter_field') or 'none')
-            fv = str(rule.get('filter_value') or 'none')
-            print(f"    {rule.get('actor_role', '?'):15} → {rule.get('target_entity_type', '?'):15} "
-                  f"filter={ff:15} value={fv}")
+            ff = str(rule.get("filter_field") or "none")
+            fv = str(rule.get("filter_value") or "none")
+            print(
+                f"    {rule.get('actor_role', '?'):15} → {rule.get('target_entity_type', '?'):15} "
+                f"filter={ff:15} value={fv}"
+            )
 
         assert len(vis_rules) > 0, "Visibility rules must be generated"
 
         # Verify we have rules for each role
         rule_roles = {r.get("actor_role") for r in vis_rules}
         assert "customer" in rule_roles, "Must have customer visibility rules"
-        assert "support-agent" in rule_roles or "agent" in rule_roles, "Must have agent visibility rules"
+        assert "support-agent" in rule_roles or "agent" in rule_roles, (
+            "Must have agent visibility rules"
+        )
         assert "supervisor" in rule_roles, "Must have supervisor visibility rules"
 
         # ──────────────────────────────────────────────────
@@ -157,10 +160,12 @@ class TestVisibilityScopingE2E:
         print(f"  Visibility rules: {len(vis_rules)}")
 
         for t in tickets[:5]:
-            print(f"    Ticket {t.get('id', '?')[:15]}: "
-                  f"requester={t.get('requester_id', '?')[:15]} "
-                  f"assignee={t.get('assignee_id', 'none')[:15] if t.get('assignee_id') else 'none'} "
-                  f"status={t.get('status', '?')}")
+            print(
+                f"    Ticket {t.get('id', '?')[:15]}: "
+                f"requester={t.get('requester_id', '?')[:15]} "
+                f"assignee={t.get('assignee_id', 'none')[:15] if t.get('assignee_id') else 'none'} "
+                f"status={t.get('status', '?')}"
+            )
 
         # ──────────────────────────────────────────────────
         # STEP 4: Test visibility scoping
@@ -216,8 +221,9 @@ class TestVisibilityScopingE2E:
         print(f"    Total tickets: {len(tickets)}")
 
         if has_customer_rules and customer_visible:
-            assert len(customer_visible) < len(tickets), \
+            assert len(customer_visible) < len(tickets), (
                 "Customer should see fewer tickets than total"
+            )
             print("    ✓ Customer sees subset of tickets")
         else:
             print("    ⚠ No customer visibility rules applied (backward compat mode)")
@@ -234,8 +240,9 @@ class TestVisibilityScopingE2E:
         print(f"    Visible tickets: {len(supervisor_visible)}")
 
         if has_supervisor_rules and supervisor_visible:
-            assert len(supervisor_visible) >= len(customer_visible), \
+            assert len(supervisor_visible) >= len(customer_visible), (
                 "Supervisor should see at least as many tickets as customer"
+            )
             print("    ✓ Supervisor sees more than customer")
 
         # 4c: Agent visibility
@@ -267,9 +274,12 @@ class TestVisibilityScopingE2E:
 
         # The key assertion: information asymmetry exists
         if has_customer_rules and has_supervisor_rules:
-            assert len(customer_visible) <= len(supervisor_visible), \
+            assert len(customer_visible) <= len(supervisor_visible), (
                 "Information asymmetry: customer ≤ supervisor"
+            )
             print("\n  ✓ VISIBILITY SCOPING WORKS — information asymmetry verified")
         else:
-            print("\n  ⚠ Visibility rules not generated for all roles — "
-                  "test inconclusive (LLM may not have produced expected rules)")
+            print(
+                "\n  ⚠ Visibility rules not generated for all roles — "
+                "test inconclusive (LLM may not have produced expected rules)"
+            )

@@ -1,7 +1,8 @@
 """Tests for volnix.kernel.resolver -- ServiceResolver resolution chain."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from volnix.kernel.registry import SemanticRegistry
 from volnix.kernel.resolver import ServiceResolver

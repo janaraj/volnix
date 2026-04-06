@@ -1,4 +1,5 @@
 """Tests for the ConditionEvaluator — safe expression evaluation."""
+
 import pytest
 
 from volnix.engines.policy.evaluator import ConditionEvaluator
@@ -89,27 +90,21 @@ class TestLogicalOperators:
 
     def test_and_both_true(self, evaluator):
         ctx = {"input": {"amount": 10000}, "actor": {"role": "agent"}}
-        assert evaluator.evaluate(
-            'input.amount > 5000 and actor.role != "supervisor"', ctx
-        ) is True
+        assert evaluator.evaluate('input.amount > 5000 and actor.role != "supervisor"', ctx) is True
 
     def test_and_one_false(self, evaluator):
         ctx = {"input": {"amount": 10000}, "actor": {"role": "supervisor"}}
-        assert evaluator.evaluate(
-            'input.amount > 5000 and actor.role != "supervisor"', ctx
-        ) is False
+        assert (
+            evaluator.evaluate('input.amount > 5000 and actor.role != "supervisor"', ctx) is False
+        )
 
     def test_or_one_true(self, evaluator):
         ctx = {"input": {"amount": 100}, "actor": {"role": "supervisor"}}
-        assert evaluator.evaluate(
-            'input.amount > 5000 or actor.role == "supervisor"', ctx
-        ) is True
+        assert evaluator.evaluate('input.amount > 5000 or actor.role == "supervisor"', ctx) is True
 
     def test_or_both_false(self, evaluator):
         ctx = {"input": {"amount": 100}, "actor": {"role": "agent"}}
-        assert evaluator.evaluate(
-            'input.amount > 5000 or actor.role == "supervisor"', ctx
-        ) is False
+        assert evaluator.evaluate('input.amount > 5000 or actor.role == "supervisor"', ctx) is False
 
     def test_not(self, evaluator):
         ctx = {"input": {"amount": 100}}

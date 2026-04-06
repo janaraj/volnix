@@ -76,7 +76,10 @@ MESSAGE_ENTITY_SCHEMA: dict = {
             "type": ["string", "null"],
             "description": "Message subtype (e.g. 'channel_join', 'bot_message').",
         },
-        "thread_ts": {"type": ["string", "null"], "description": "Parent message ts for threaded replies."},
+        "thread_ts": {
+            "type": ["string", "null"],
+            "description": "Parent message ts for threaded replies.",
+        },
         "reply_count": {"type": "integer", "minimum": 0},
         "reactions": {
             "type": "array",

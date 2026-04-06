@@ -1,12 +1,13 @@
 """Tests for GapAnalyzer -- capability gap classification."""
+
 import pytest
 
-from volnix.core import GapResponse
-from volnix.engines.reporter.capability_gaps import GapAnalyzer
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_world_event,
 )
+from volnix.core import GapResponse
+from volnix.engines.reporter.capability_gaps import GapAnalyzer
 
 
 @pytest.fixture

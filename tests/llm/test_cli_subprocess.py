@@ -1,6 +1,5 @@
 """Tests for volnix.llm.providers.cli_subprocess -- CLI subprocess provider."""
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -39,7 +38,9 @@ async def test_cli_subprocess_generate_success():
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"The answer is 42", b""))
 
-    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
+    with patch(
+        "volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc
+    ):
         req = LLMRequest(user_content="What is the answer?")
         resp = await provider.generate(req)
 
@@ -70,7 +71,9 @@ async def test_cli_subprocess_error_exit():
     mock_proc.returncode = 1
     mock_proc.communicate = AsyncMock(return_value=(b"", b"something went wrong"))
 
-    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
+    with patch(
+        "volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc
+    ):
         resp = await provider.generate(LLMRequest(user_content="test"))
 
     assert resp.error is not None
@@ -84,10 +87,14 @@ async def test_cli_subprocess_timeout():
     provider = CLISubprocessProvider(command="my-tool")
 
     mock_proc = AsyncMock()
-    mock_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    mock_proc.communicate = AsyncMock(side_effect=TimeoutError())
 
-    with patch("volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc):
-        with patch("volnix.llm.providers.cli_subprocess.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+    with patch(
+        "volnix.llm.providers.cli_subprocess.asyncio.create_subprocess_exec", return_value=mock_proc
+    ):
+        with patch(
+            "volnix.llm.providers.cli_subprocess.asyncio.wait_for", side_effect=TimeoutError()
+        ):
             resp = await provider.generate(LLMRequest(user_content="test"))
 
     assert resp.error is not None
@@ -127,13 +134,16 @@ HAS_CODEX = shutil.which("codex") is not None
 HAS_GEMINI = shutil.which("gemini") is not None
 
 skipif_no_claude = pytest.mark.skipif(
-    not (HAS_CLAUDE and RUN_REAL), reason="claude CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
+    not (HAS_CLAUDE and RUN_REAL),
+    reason="claude CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set",
 )
 skipif_no_codex = pytest.mark.skipif(
-    not (HAS_CODEX and RUN_REAL), reason="codex CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
+    not (HAS_CODEX and RUN_REAL),
+    reason="codex CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set",
 )
 skipif_no_gemini = pytest.mark.skipif(
-    not (HAS_GEMINI and RUN_REAL), reason="gemini CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set"
+    not (HAS_GEMINI and RUN_REAL),
+    reason="gemini CLI not installed or VOLNIX_RUN_REAL_API_TESTS not set",
 )
 
 
@@ -142,7 +152,10 @@ skipif_no_gemini = pytest.mark.skipif(
 async def test_real_claude_cli():
     """Real Claude CLI: invoke claude -p with a simple prompt."""
     provider = CLISubprocessProvider(
-        command="claude", args=["-p"], default_model="claude-sonnet-4-6", timeout=60.0,
+        command="claude",
+        args=["-p"],
+        default_model="claude-sonnet-4-6",
+        timeout=60.0,
     )
     resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Claude CLI error: {resp.error}"
@@ -155,7 +168,11 @@ async def test_real_claude_cli():
 async def test_real_codex_cli():
     """Real Codex CLI: invoke codex exec with a simple prompt."""
     provider = CLISubprocessProvider(
-        command="codex", args=["exec"], default_model="", timeout=60.0, model_flag="",
+        command="codex",
+        args=["exec"],
+        default_model="",
+        timeout=60.0,
+        model_flag="",
     )
     resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Codex CLI error: {resp.error}"
@@ -168,7 +185,11 @@ async def test_real_codex_cli():
 async def test_real_gemini_cli():
     """Real Gemini CLI: invoke gemini with a simple prompt."""
     provider = CLISubprocessProvider(
-        command="gemini", args=[], default_model="", timeout=60.0, model_flag="",
+        command="gemini",
+        args=[],
+        default_model="",
+        timeout=60.0,
+        model_flag="",
     )
     resp = await provider.generate(LLMRequest(user_content="respond with only the word: volnix"))
     assert resp.error is None, f"Gemini CLI error: {resp.error}"
@@ -185,22 +206,36 @@ async def test_real_claude_cli_multi_turn_via_conversation():
     class CLIRouter:
         def __init__(self):
             self._provider = CLISubprocessProvider(
-                command="claude", args=["-p"], default_model="claude-sonnet-4-6", timeout=60.0,
+                command="claude",
+                args=["-p"],
+                default_model="claude-sonnet-4-6",
+                timeout=60.0,
             )
+
         def get_provider_for(self, engine_name, use_case="default"):
             return self._provider
+
         async def route(self, request, engine_name, use_case="default"):
             return await self._provider.generate(request)
 
     conv = ConversationManager()
     router = CLIRouter()
-    sid = conv.create_session(system_prompt="You have perfect memory. Always recall exactly what the user told you.")
+    sid = conv.create_session(
+        system_prompt="You have perfect memory. Always recall exactly what the user told you."
+    )
 
     resp1 = await conv.generate(sid, router, "Remember this code: CLITEST99", engine_name="test")
     assert resp1.error is None, f"Turn 1 error: {resp1.error}"
 
-    resp2 = await conv.generate(sid, router, "What was the code I told you to remember? Reply with just the code.", engine_name="test")
+    resp2 = await conv.generate(
+        sid,
+        router,
+        "What was the code I told you to remember? Reply with just the code.",
+        engine_name="test",
+    )
     assert resp2.error is None, f"Turn 2 error: {resp2.error}"
-    assert "CLITEST99" in resp2.content.upper(), f"CLI did not retain context. Response: {resp2.content}"
+    assert "CLITEST99" in resp2.content.upper(), (
+        f"CLI did not retain context. Response: {resp2.content}"
+    )
 
     conv.end_session(sid)

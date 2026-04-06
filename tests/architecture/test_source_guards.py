@@ -15,7 +15,6 @@ from tests.architecture.helpers import (
     iter_python_files,
     rel_repo_path,
 )
-from tests.helpers.guardrails import staged_guardrail
 
 pytestmark = pytest.mark.architecture
 
@@ -71,9 +70,7 @@ def test_external_entrypoints_do_not_import_pack_modules():
     offenders = {}
     for path in target_paths:
         matches = sorted(
-            module
-            for module in imported_modules(path)
-            if module.startswith("volnix.packs")
+            module for module in imported_modules(path) if module.startswith("volnix.packs")
         )
         if matches:
             offenders[rel_repo_path(path)] = matches
@@ -98,9 +95,7 @@ def test_verified_packs_do_not_import_runtime_layers():
     """Verified packs should remain isolated from engines, persistence, and bus layers."""
     offenders = find_import_offenders(
         PRODUCT_ROOT / "packs" / "verified",
-        lambda module: module.startswith(
-            ("volnix.persistence", "volnix.engines", "volnix.bus")
-        ),
+        lambda module: module.startswith(("volnix.persistence", "volnix.engines", "volnix.bus")),
     )
     assert offenders == {}
 

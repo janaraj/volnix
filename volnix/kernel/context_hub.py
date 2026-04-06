@@ -15,6 +15,7 @@ Content IDs follow the pattern ``{service}/{topic}`` and vary per
 service (e.g. ``stripe/api``, ``twilio/messaging``, ``jira/issues``).
 The provider discovers the correct ID via ``search`` before fetching.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -83,9 +84,7 @@ class ContextHubProvider:
             results = await self._search(service_name)
             match = self._pick_best_match(results, service_name)
             if match is None:
-                logger.debug(
-                    "Context Hub: no content found for '%s'", service_name
-                )
+                logger.debug("Context Hub: no content found for '%s'", service_name)
                 return None
 
             content_id, lang = match
@@ -102,9 +101,7 @@ class ContextHubProvider:
                 "content_type": "markdown",
             }
         except Exception as exc:
-            logger.warning(
-                "Context Hub fetch failed for '%s': %s", service_name, exc
-            )
+            logger.warning("Context Hub fetch failed for '%s': %s", service_name, exc)
             return None
 
     # -- Public helpers --------------------------------------------------------
@@ -121,22 +118,20 @@ class ContextHubProvider:
 
     # -- Internal subprocess calls ---------------------------------------------
 
-    async def _search(
-        self, query: str
-    ) -> list[tuple[str, list[str]]]:
+    async def _search(self, query: str) -> list[tuple[str, list[str]]]:
         """Run ``chub search`` and return parsed results (cached)."""
         key = query.lower()
         if key in self._search_cache:
             return self._search_cache[key]
 
         proc = await asyncio.create_subprocess_exec(
-            *self._base_cmd, "search", query,
+            *self._base_cmd,
+            "search",
+            query,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(
-            proc.communicate(), timeout=self._timeout
-        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
         if proc.returncode != 0:
             self._search_cache[key] = []
             return []
@@ -148,17 +143,22 @@ class ContextHubProvider:
     async def _get(self, content_id: str, lang: str) -> str | None:
         """Run ``chub get {id} --lang {lang}`` and return content."""
         proc = await asyncio.create_subprocess_exec(
-            *self._base_cmd, "get", content_id, "--lang", lang,
+            *self._base_cmd,
+            "get",
+            content_id,
+            "--lang",
+            lang,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=self._timeout
-        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
         if proc.returncode != 0:
             logger.debug(
                 "chub get %s --lang %s failed (rc=%d): %s",
-                content_id, lang, proc.returncode, stderr.decode()[:200],
+                content_id,
+                lang,
+                proc.returncode,
+                stderr.decode()[:200],
             )
             return None
 
@@ -193,11 +193,7 @@ class ContextHubProvider:
         Language:   ``py`` if available, else first in the list.
         """
         name = service_name.lower()
-        matching = [
-            (cid, langs)
-            for cid, langs in results
-            if cid.lower().startswith(f"{name}/")
-        ]
+        matching = [(cid, langs) for cid, langs in results if cid.lower().startswith(f"{name}/")]
         if not matching:
             return None
 

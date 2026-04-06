@@ -7,6 +7,7 @@ HTTP REST) and the internal Volnix action context.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from typing import Any, ClassVar
 
 from volnix.core import (
@@ -15,7 +16,6 @@ from volnix.core import (
     BaseEngine,
     CapabilityGapEvent,
     Event,
-    PipelineStep,
     StepResult,
     StepVerdict,
 )
@@ -57,7 +57,9 @@ class AgentAdapterEngine(BaseEngine):
             if self._pack_registry.has_tool(ctx.action):
                 logger.debug(
                     "%s: tool '%s' found (tier1) for actor '%s'",
-                    self.step_name, ctx.action, ctx.actor_id,
+                    self.step_name,
+                    ctx.action,
+                    ctx.actor_id,
                 )
                 return StepResult(
                     step_name=self.step_name,
@@ -71,7 +73,10 @@ class AgentAdapterEngine(BaseEngine):
                 if profile is not None:
                     logger.debug(
                         "%s: tool '%s' found (tier2, profile=%s) for actor '%s'",
-                        self.step_name, ctx.action, profile.service_name, ctx.actor_id,
+                        self.step_name,
+                        ctx.action,
+                        profile.service_name,
+                        ctx.actor_id,
                     )
                     return StepResult(
                         step_name=self.step_name,
@@ -82,11 +87,15 @@ class AgentAdapterEngine(BaseEngine):
             # Capability gap
             logger.info(
                 "%s: capability gap — tool '%s' not found for actor '%s'",
-                self.step_name, ctx.action, ctx.actor_id,
+                self.step_name,
+                ctx.action,
+                ctx.actor_id,
             )
+            from datetime import datetime
+
             from volnix.core.types import Timestamp, ToolName
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
+
+            now = datetime.now(UTC)
 
             gap_event = CapabilityGapEvent(
                 event_type="capability.gap",
@@ -105,7 +114,9 @@ class AgentAdapterEngine(BaseEngine):
         # No pack registry injected yet — pass-through for backward compat
         logger.debug(
             "%s: allowing action '%s' for actor '%s' (no pack registry)",
-            self.step_name, ctx.action, ctx.actor_id,
+            self.step_name,
+            ctx.action,
+            ctx.actor_id,
         )
         return StepResult(
             step_name=self.step_name,
@@ -117,26 +128,18 @@ class AgentAdapterEngine(BaseEngine):
 
     async def _handle_event(self, event: Event) -> None:
         """Log event without processing."""
-        logger.debug(
-            "%s: received event %s", self.engine_name, event.event_type
-        )
+        logger.debug("%s: received event %s", self.engine_name, event.event_type)
 
     # -- Adapter operations ----------------------------------------------------
 
-    async def translate_inbound(
-        self, raw_request: Any, protocol: str
-    ) -> ActionContext:
+    async def translate_inbound(self, raw_request: Any, protocol: str) -> ActionContext:
         """Stub -- delegated to protocol adapters."""
         ...
 
-    async def translate_outbound(
-        self, result: ActionContext, protocol: str
-    ) -> Any:
+    async def translate_outbound(self, result: ActionContext, protocol: str) -> Any:
         """Stub -- delegated to protocol adapters."""
         ...
 
-    async def get_tool_manifest(
-        self, actor_id: ActorId, protocol: str
-    ) -> list[dict[str, Any]]:
+    async def get_tool_manifest(self, actor_id: ActorId, protocol: str) -> list[dict[str, Any]]:
         """Stub -- delegated to protocol adapters."""
         ...

@@ -8,7 +8,7 @@ core module free of concrete implementations.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from volnix.core.context import ActionContext, StepResult
 from volnix.core.events import Event
@@ -17,17 +17,14 @@ from volnix.core.types import (
     BudgetState,
     EntityId,
     EventId,
-    FidelityMetadata,
     FidelityTier,
     PolicyId,
     ServiceId,
     SnapshotId,
     StateDelta,
-    Timestamp,
     ToolName,
     WorldId,
 )
-
 
 # ---------------------------------------------------------------------------
 # Event Bus
@@ -130,9 +127,7 @@ class StateEngineProtocol(Protocol):
         """Compute the set of deltas between two snapshots."""
         ...
 
-    async def get_causal_chain(
-        self, event_id: EventId, direction: str = "backward"
-    ) -> list[Event]:
+    async def get_causal_chain(self, event_id: EventId, direction: str = "backward") -> list[Event]:
         """Walk the causal ancestry or descendants of an event."""
         ...
 

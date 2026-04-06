@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
-from unittest.mock import AsyncMock
-
-from volnix.actors.definition import ActorDefinition
-from volnix.actors.personality import Personality
 from volnix.core.errors import CompilerError
 from volnix.engines.world_compiler.generation_context import WorldGenerationContext
 from volnix.engines.world_compiler.personality_generator import (
@@ -22,13 +19,15 @@ from volnix.reality.presets import load_preset
 
 def _make_ctx(conditions=None, description="test world") -> WorldGenerationContext:
     """Build a WorldGenerationContext for tests."""
-    return WorldGenerationContext(WorldPlan(
-        name="Test",
-        description=description,
-        seed=42,
-        conditions=conditions or load_preset("messy"),
-        reality_prompt_context={},
-    ))
+    return WorldGenerationContext(
+        WorldPlan(
+            name="Test",
+            description=description,
+            seed=42,
+            conditions=conditions or load_preset("messy"),
+            reality_prompt_context={},
+        )
+    )
 
 
 # ── Protocol compliance ──────────────────────────────────────────
@@ -103,14 +102,26 @@ class TestLLMGeneration:
     async def test_hostile_world_friction_distribution(self) -> None:
         """Hostile preset produces some actors with friction profiles."""
         router = AsyncMock()
-        router.route = AsyncMock(return_value=LLMResponse(
-            content=json.dumps([{
-                "style": "aggressive", "response_time": "1m",
-                "strengths": ["direct"], "weaknesses": ["impatient"],
-                "description": "An aggressive customer", "traits": {},
-            }] * 20),
-            provider="mock", model="mock", latency_ms=0,
-        ))
+        router.route = AsyncMock(
+            return_value=LLMResponse(
+                content=json.dumps(
+                    [
+                        {
+                            "style": "aggressive",
+                            "response_time": "1m",
+                            "strengths": ["direct"],
+                            "weaknesses": ["impatient"],
+                            "description": "An aggressive customer",
+                            "traits": {},
+                        }
+                    ]
+                    * 20
+                ),
+                provider="mock",
+                model="mock",
+                latency_ms=0,
+            )
+        )
         gen = CompilerPersonalityGenerator(llm_router=router, seed=42)
         conditions = load_preset("hostile")
         ctx = _make_ctx(conditions=conditions, description="hostile world")

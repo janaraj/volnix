@@ -47,24 +47,19 @@ def load_preset(name: str) -> dict[str, Any]:
     if not path.exists():
         available = ", ".join(AVAILABLE_PRESETS)
         raise FileNotFoundError(
-            f"Deliverable preset '{name}' not found. "
-            f"Available presets: {available}"
+            f"Deliverable preset '{name}' not found. Available presets: {available}"
         )
 
     with open(path) as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):
-        raise ValueError(
-            f"Preset '{name}' YAML must be a mapping, got {type(data).__name__}"
-        )
+        raise ValueError(f"Preset '{name}' YAML must be a mapping, got {type(data).__name__}")
 
     required_keys = {"name", "description", "schema", "prompt_instructions"}
     missing = required_keys - set(data.keys())
     if missing:
-        raise ValueError(
-            f"Preset '{name}' missing required keys: {', '.join(sorted(missing))}"
-        )
+        raise ValueError(f"Preset '{name}' missing required keys: {', '.join(sorted(missing))}")
 
     _cache[name] = data
     return data
@@ -79,10 +74,12 @@ def list_presets() -> list[dict[str, str]]:
     for name in AVAILABLE_PRESETS:
         try:
             preset = load_preset(name)
-            result.append({
-                "name": preset["name"],
-                "description": preset["description"],
-            })
+            result.append(
+                {
+                    "name": preset["name"],
+                    "description": preset["description"],
+                }
+            )
         except (FileNotFoundError, ValueError):
             continue
     return result

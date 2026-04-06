@@ -119,9 +119,7 @@ class TestAgencyIntegrationExtended:
         external_actors = [a for a in actors if str(a.type) == "agent"]
         for ext in external_actors:
             found = agency.get_actor_state(ext.id)
-            assert found is None, (
-                f"External actor {ext.id} should NOT have ActorState"
-            )
+            assert found is None, f"External actor {ext.id} should NOT have ActorState"
 
     async def test_agency_engine_notified_on_bus_event(self, app_with_mock_llm) -> None:
         """Publish a WorldEvent to bus -> verify AgencyEngine._handle_event is invoked."""

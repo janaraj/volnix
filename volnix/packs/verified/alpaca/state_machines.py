@@ -24,10 +24,10 @@ ORDER_TRANSITIONS: dict[str, list[str]] = {
     "new": ["accepted", "rejected"],
     "accepted": ["partially_filled", "filled", "cancelled", "expired"],
     "partially_filled": ["filled", "cancelled"],
-    "filled": [],       # terminal
-    "cancelled": [],    # terminal
-    "expired": [],      # terminal
-    "rejected": [],     # terminal
+    "filled": [],  # terminal
+    "cancelled": [],  # terminal
+    "expired": [],  # terminal
+    "rejected": [],  # terminal
 }
 
 # ---------------------------------------------------------------------------

@@ -38,17 +38,27 @@ world:
 
   policies:
     - name: "Block large refunds"
-      trigger:
-        action: "create_refund"
-        condition: "input.amount > 10000"
+      trigger: "refund exceeding $100 without supervisor approval"
       enforcement: block
       reason: "Refunds over $100 require supervisor approval"
 
     - name: "Audit all payments"
-      trigger:
-        action: "create_payment_intent"
+      trigger: "any payment or charge operation on stripe"
       enforcement: log
       reason: "All payment actions are audited"
+
+    - name: "VIP escalation"
+      trigger: "closing or resolving a ticket marked as VIP or high priority"
+      enforcement: hold
+      hold_config:
+        approver_role: "support-lead"
+        timeout: "30m"
+
+    - name: "SLA breach alert"
+      trigger: "updating a ticket that has been idle beyond SLA threshold"
+      enforcement: escalate
+      escalate_config:
+        target_role: "support-lead"
 
   seeds:
     - "VIP customer Acme Corp with pending $249 refund on charge ch_vip_001, ticket TK-201"

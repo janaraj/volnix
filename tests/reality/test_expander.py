@@ -47,9 +47,17 @@ class TestExpandWithDictOverride:
 
     def test_expand_with_dict_override(self) -> None:
         expander = ConditionExpander()
-        wc = expander.expand("ideal", overrides={
-            "information": {"staleness": 50, "incompleteness": 40, "inconsistency": 30, "noise": 25}
-        })
+        wc = expander.expand(
+            "ideal",
+            overrides={
+                "information": {
+                    "staleness": 50,
+                    "incompleteness": 40,
+                    "inconsistency": 30,
+                    "noise": 25,
+                }
+            },
+        )
         assert isinstance(wc, WorldConditions)
         assert wc.information.staleness == 50
         assert wc.information.incompleteness == 40
@@ -64,10 +72,13 @@ class TestExpandMixedOverrides:
 
     def test_expand_mixed_overrides(self) -> None:
         expander = ConditionExpander()
-        wc = expander.expand("ideal", overrides={
-            "friction": "actively_hostile",
-            "boundaries": {"access_limits": 60, "rule_clarity": 70, "boundary_gaps": 40},
-        })
+        wc = expander.expand(
+            "ideal",
+            overrides={
+                "friction": "actively_hostile",
+                "boundaries": {"access_limits": 60, "rule_clarity": 70, "boundary_gaps": 40},
+            },
+        )
         assert isinstance(wc, WorldConditions)
         # friction overridden to "actively_hostile"
         assert wc.friction.uncooperative == 75
@@ -163,8 +174,9 @@ class TestNoApplyToEntities:
 
     def test_no_apply_to_entities(self) -> None:
         expander = ConditionExpander()
-        assert not hasattr(expander, "apply_to_entities"), \
+        assert not hasattr(expander, "apply_to_entities"), (
             "apply_to_entities should have been removed"
+        )
 
 
 class TestNoEntityMutationMethods:
@@ -179,8 +191,9 @@ class TestNoEntityMutationMethods:
             "apply_to_boundaries",
         ]
         for method_name in removed_methods:
-            assert not hasattr(expander, method_name), \
+            assert not hasattr(expander, method_name), (
                 f"{method_name} should have been removed from ConditionExpander"
+            )
 
 
 class TestAllDescriptionsCovered:
@@ -188,13 +201,14 @@ class TestAllDescriptionsCovered:
 
     def test_all_25_descriptions_non_fallback(self) -> None:
         from volnix.reality.labels import LABEL_SCALES, resolve_label
+
         expander = ConditionExpander()
         for dim_name, labels in LABEL_SCALES.items():
             for label in labels:
                 dim = resolve_label(dim_name, label)
                 desc = expander._describe_dimension(dim_name, label, dim.to_dict())
                 # Should NOT be the fallback format "dimension_name: label"
-                assert desc != f"{dim_name}: {label}", \
+                assert desc != f"{dim_name}: {label}", (
                     f"Missing description for ({dim_name}, {label})"
-                assert len(desc) > 20, \
-                    f"Description too short for ({dim_name}, {label}): {desc}"
+                )
+                assert len(desc) > 20, f"Description too short for ({dim_name}, {label}): {desc}"
