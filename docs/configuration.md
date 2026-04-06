@@ -107,6 +107,7 @@ max_ticks = 30                      # Hard tick limit (internal-only worlds)
 max_envelopes_per_event = 20        # Max responses per committed event
 max_actions_per_actor_per_window = 100  # Runaway protection per actor
 loop_breaker_threshold = 50         # Max internal events without external input
+animator_tick_interval = 5          # Animator fires once per N ticks (prevents feedback loops)
 ```
 
 ### Pipeline
@@ -172,6 +173,7 @@ frustration_threshold_tier3 = 0.7   # Promote actor to Tier 3 at this frustratio
 batch_size = 5                      # Max actors per batch LLM call
 max_concurrent_actor_calls = 20     # Semaphore limit for parallel LLM calls
 max_recent_interactions = 20        # Conversation history per actor
+max_tool_calls_per_activation = 20  # Max tool calls an agent can make per activation
 collaboration_mode = "tagged"       # "tagged" | "open"
 collaboration_enabled = true        # Enable subscription-based activation
 synthesis_buffer_pct = 0.10         # Reserve 10% of ticks for deliverable synthesis
@@ -337,6 +339,28 @@ max_tokens = 2048
 temperature = 0.5
 ```
 
+Additional routing entries:
+
+```toml
+[llm.routing.world_compiler_policy_trigger_compilation]
+provider = "openai"
+model = "gpt-5.4-nano"
+max_tokens = 4096
+temperature = 0                     # Deterministic for reproducible policy compilation
+
+[llm.routing.data_generator]
+provider = "gemini"
+model = "gemini-3.1-flash-lite-preview"
+max_tokens = 16384
+temperature = 0
+
+[llm.routing.profile_infer]
+provider = "gemini"
+model = "gemini-3.1-flash-lite-preview"
+max_tokens = 8192
+temperature = 0.4
+```
+
 The routing key format is `{engine_name}_{use_case}`. The router resolves by checking task-specific routing first, then falling back to defaults.
 
 ---
@@ -373,3 +397,71 @@ enabled = true
 [logging]
 level = "DEBUG"
 ```
+
+---
+
+## Tuning Guide
+
+### Simulation Length
+
+| Parameter | Default | Effect | When to change |
+|-----------|---------|--------|---------------|
+| `max_total_events` | 50 | Hard cap on committed events | Increase for longer simulations (100-200 for complex scenarios) |
+| `max_ticks` | 30 | Hard tick limit | Increase if agents need more rounds to complete mission |
+| `max_logical_time` | 86400 | Simulated wall clock limit (seconds) | Rarely needs changing |
+
+**Quick rule**: For a 3-agent team with a synthesis deliverable, 50 events / 30 ticks is usually enough. For 5+ agents or complex multi-step missions, increase to 100-150 events / 50 ticks.
+
+### Agent Behavior
+
+| Parameter | Default | Effect | When to change |
+|-----------|---------|--------|---------------|
+| `max_tool_calls_per_activation` | 20 | Max actions per agent turn | Increase if agents hit the limit before completing their task |
+| `max_recent_interactions` | 20 | Conversation history window | Increase for longer conversations, decrease to reduce LLM token usage |
+| `synthesis_buffer_pct` | 0.10 | Reserve last 10% of ticks for deliverable | Increase if deliverables are cut short |
+| `collaboration_enabled` | true | Agents respond to each other's messages | Disable for isolated agent testing |
+
+### Animator (Dynamic Mode)
+
+| Parameter | Default | Effect | When to change |
+|-----------|---------|--------|---------------|
+| `animator_tick_interval` | 5 | Animator fires once per N ticks | Decrease for more frequent NPC events, increase for calmer worlds |
+| `creativity` | medium | Event creativity level | Set in blueprint YAML, not TOML |
+| `event_frequency` | moderate | How often events occur | Set in blueprint YAML |
+| `escalation_on_inaction` | true | NPCs escalate if agents don't respond | Disable for less pressure |
+
+### Budget Thresholds
+
+| Parameter | Default | Effect | When to change |
+|-----------|---------|--------|---------------|
+| `warning_threshold_pct` | 80 | Emit warning event at 80% budget usage | Lower for earlier visibility |
+| `critical_threshold_pct` | 95 | Emit critical event at 95% | Lower to give agents more warning before exhaustion |
+
+### LLM Cost Control
+
+Route expensive operations to cheaper models:
+
+```toml
+# Cheap model for world compilation and data generation
+[llm.routing.world_compiler]
+provider = "gemini"
+model = "gemini-3.1-flash-lite-preview"
+
+# Cheap model for policy trigger compilation
+[llm.routing.world_compiler_policy_trigger_compilation]
+provider = "openai"
+model = "gpt-5.4-nano"
+
+# Smarter model for agent reasoning
+[llm.routing.agency_individual]
+provider = "openai"
+model = "gpt-4.1-mini"
+```
+
+### Performance
+
+| Parameter | Default | Effect | When to change |
+|-----------|---------|--------|---------------|
+| `max_concurrent_actor_calls` | 20 | Parallel LLM calls | Decrease if hitting rate limits |
+| `pipeline.timeout_per_step_seconds` | 30 | Max time per pipeline step | Increase for slow LLM providers |
+| `bus.queue_size` | 1000 | Event bus queue depth | Increase for very active worlds |
