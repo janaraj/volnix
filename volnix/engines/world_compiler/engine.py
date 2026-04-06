@@ -226,6 +226,9 @@ class WorldCompilerEngine(BaseEngine):
         from volnix.engines.world_compiler.seed_processor import CompilerSeedProcessor
         from volnix.engines.world_compiler.validator import CompilerWorldValidator
 
+        # Step 3.5: COMPILE NL policy triggers → dict triggers
+        plan = await self._compile_policy_triggers(plan)
+
         # Assemble generation context ONCE — shared by all generators
         ctx = WorldGenerationContext(plan)
         validator = CompilerWorldValidator(
@@ -526,6 +529,7 @@ class WorldCompilerEngine(BaseEngine):
                 "final_world": final_validation.model_dump(mode="json"),
             },
             "retry_counts": retry_counts,
+            "compiled_policies": plan.policies,
         }
 
         # Generate report
@@ -582,6 +586,107 @@ class WorldCompilerEngine(BaseEngine):
         ))
 
         return result
+
+    async def _compile_policy_triggers(self, plan: WorldPlan) -> WorldPlan:
+        """Compile NL string triggers into structured dict triggers via LLM.
+
+        Policies with dict triggers pass through unchanged.
+        Returns a new WorldPlan with all NL triggers compiled to dicts.
+        """
+        from volnix.engines.world_compiler.prompt_templates import (
+            POLICY_TRIGGER_COMPILATION,
+        )
+
+        # Partition: find policies with NL string triggers
+        nl_policies: list[tuple[int, dict[str, Any]]] = []
+        for idx, policy in enumerate(plan.policies):
+            if isinstance(policy.get("trigger"), str):
+                nl_policies.append((idx, policy))
+
+        if not nl_policies:
+            return plan  # All triggers already structured
+
+        # Collect available operations from resolved services
+        available_ops: list[str] = []
+        for svc_name, resolution in plan.services.items():
+            for op in resolution.surface.operations:
+                available_ops.append(
+                    f"- {op.name} (service: {svc_name},"
+                    f" description: {op.description})"
+                )
+
+        if not available_ops:
+            logger.warning(
+                "No resolved operations — NL triggers preserved as-is"
+            )
+            return plan
+
+        # Build prompt input
+        trigger_lines = [
+            f'- Policy "{p.get("name", "unnamed")}" '
+            f'(enforcement: {p.get("enforcement", "log")}): "{p["trigger"]}"'
+            for _, p in nl_policies
+        ]
+
+        # Single LLM call for all NL triggers
+        response = await POLICY_TRIGGER_COMPILATION.execute(
+            self._llm_router,
+            _seed=plan.seed,
+            available_operations="\n".join(available_ops),
+            policy_triggers="\n".join(trigger_lines),
+        )
+        result = POLICY_TRIGGER_COMPILATION.parse_json_response(response)
+
+        # Build lookup by policy name
+        compiled_lookup: dict[str, dict[str, Any]] = {
+            entry["policy_name"]: entry
+            for entry in result.get("compiled_policies", [])
+        }
+
+        # Rebuild policies list with compiled triggers
+        new_policies: list[dict[str, Any]] = list(plan.policies)
+        warnings: list[str] = list(plan.warnings)
+
+        for idx, policy in nl_policies:
+            name = policy.get("name", "unnamed")
+            entry = compiled_lookup.get(name)
+
+            if not entry or entry.get("unresolvable"):
+                reason = (entry or {}).get("reason", "no matching operations")
+                warnings.append(
+                    f"Policy '{name}' NL trigger unresolvable: {reason}"
+                )
+                continue
+
+            triggers = entry.get("triggers", [])
+            if not triggers:
+                warnings.append(
+                    f"Policy '{name}' compiled to zero triggers"
+                )
+                continue
+
+            # Replace string trigger with first compiled dict trigger
+            first = dict(policy)
+            first["trigger"] = triggers[0]
+            first["_compiled_from_nl"] = policy["trigger"]
+            new_policies[idx] = first
+
+            # Additional triggers → cloned policies
+            for extra in triggers[1:]:
+                cloned = dict(policy)
+                cloned["trigger"] = extra
+                cloned["_compiled_from_nl"] = policy["trigger"]
+                cloned["name"] = f"{name} ({extra['action']})"
+                new_policies.append(cloned)
+
+        logger.info(
+            "Compiled %d NL policy triggers (%d total policies)",
+            len(nl_policies),
+            len(new_policies),
+        )
+        return plan.model_copy(
+            update={"policies": new_policies, "warnings": warnings}
+        )
 
     async def _generate_validated_entity_section(
         self,

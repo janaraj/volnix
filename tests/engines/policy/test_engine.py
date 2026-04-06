@@ -284,10 +284,11 @@ class TestUngovernedMode:
 
 
 class TestStringTrigger:
-    """Test string-based trigger matching."""
+    """String triggers are no-ops at runtime — they must be compiled first."""
 
     @pytest.mark.asyncio
-    async def test_string_trigger_keyword_match(self, engine):
+    async def test_string_trigger_not_matched_at_runtime(self, engine):
+        """Uncompiled NL triggers don't match at runtime."""
         engine._policies = [
             {
                 "name": "Refund policy",
@@ -296,10 +297,9 @@ class TestStringTrigger:
                 "hold_config": {"approver_role": "supervisor"},
             }
         ]
-        # "refund" is in the trigger, and also in the action name
         ctx = _make_ctx(action="refund_create")
         result = await engine.execute(ctx)
-        assert result.verdict == StepVerdict.HOLD
+        assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
     async def test_string_trigger_no_match(self, engine):
@@ -315,8 +315,8 @@ class TestStringTrigger:
         assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
-    async def test_string_trigger_no_substring_false_positive(self, engine):
-        """'ticket' in trigger must NOT match 'tickets.list' (substring)."""
+    async def test_string_trigger_no_false_positive(self, engine):
+        """String triggers never match at runtime — no false positives."""
         engine._policies = [
             {
                 "name": "SLA escalation",
@@ -328,13 +328,11 @@ class TestStringTrigger:
         for action in ("tickets.list", "tickets.read", "tickets.update"):
             ctx = _make_ctx(action=action, service_id="zendesk")
             result = await engine.execute(ctx)
-            assert result.verdict == StepVerdict.ALLOW, (
-                f"'{action}' should NOT be escalated by trigger 'ticket idle for 4+ hours'"
-            )
+            assert result.verdict == StepVerdict.ALLOW
 
     @pytest.mark.asyncio
-    async def test_string_trigger_exact_word_match(self, engine):
-        """Exact whole-word overlap between action parts and trigger words."""
+    async def test_string_trigger_word_overlap_no_longer_matches(self, engine):
+        """Word-overlap matching removed — string triggers are no-ops."""
         engine._policies = [
             {
                 "name": "Block list operations",
@@ -342,10 +340,81 @@ class TestStringTrigger:
                 "enforcement": "block",
             }
         ]
-        # "list" is both an action part AND a trigger word → should match
         ctx = _make_ctx(action="tickets.list")
         result = await engine.execute(ctx)
-        assert result.verdict == StepVerdict.DENY
+        assert result.verdict == StepVerdict.ALLOW
+
+
+class TestCompiledTriggers:
+    """Test dict triggers (what NL triggers compile to)."""
+
+    @pytest.mark.asyncio
+    async def test_compiled_trigger_exact_match(self, engine):
+        """Compiled dict trigger matches exact action."""
+        engine._policies = [
+            {
+                "name": "Refund approval",
+                "trigger": {"action": "refund_create"},
+                "enforcement": "hold",
+                "hold_config": {"approver_role": "supervisor", "timeout": "30m"},
+                "_compiled_from_nl": "refund amount exceeds agent authority",
+            }
+        ]
+        ctx = _make_ctx(action="refund_create")
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.HOLD
+
+    @pytest.mark.asyncio
+    async def test_compiled_trigger_no_false_positive(self, engine):
+        """Compiled trigger for pages.update must NOT match pages.retrieve."""
+        engine._policies = [
+            {
+                "name": "Archive approval",
+                "trigger": {
+                    "action": "pages.update",
+                    "condition": "input.archived == True",
+                },
+                "enforcement": "hold",
+                "hold_config": {"approver_role": "admin"},
+                "_compiled_from_nl": "archiving a database or more than 5 pages",
+            }
+        ]
+        # pages.retrieve should NOT trigger the archive policy
+        ctx = _make_ctx(action="pages.retrieve", service_id="notion")
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_compiled_trigger_with_condition(self, engine):
+        """Compiled trigger with condition only fires when condition is true."""
+        engine._policies = [
+            {
+                "name": "Archive approval",
+                "trigger": {
+                    "action": "pages.update",
+                    "condition": "input.archived == True",
+                },
+                "enforcement": "hold",
+                "hold_config": {"approver_role": "admin"},
+            }
+        ]
+        # archived=true → should hold
+        ctx_archive = _make_ctx(
+            action="pages.update",
+            service_id="notion",
+            input_data={"archived": True},
+        )
+        result = await engine.execute(ctx_archive)
+        assert result.verdict == StepVerdict.HOLD
+
+        # archived=false → should allow
+        ctx_update = _make_ctx(
+            action="pages.update",
+            service_id="notion",
+            input_data={"archived": False},
+        )
+        result = await engine.execute(ctx_update)
+        assert result.verdict == StepVerdict.ALLOW
 
 
 class TestActorContext:

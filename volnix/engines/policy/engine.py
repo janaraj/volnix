@@ -185,7 +185,7 @@ class PolicyEngine(BaseEngine):
     def _matches_action(self, policy: dict[str, Any], ctx: ActionContext) -> bool:
         """Check if a policy's trigger matches the current action.
 
-        String triggers use whole-word matching against action name parts.
+        String triggers are compiled to dict triggers during world compilation.
         Dict triggers use exact/prefix matching against the ``action`` field.
         """
         trigger = policy.get("trigger")
@@ -195,23 +195,17 @@ class PolicyEngine(BaseEngine):
             return False
 
         if isinstance(trigger, str):
-            # String triggers are natural-language descriptions.  Use whole-word
-            # matching to prevent false positives like "ticket" ⊂ "tickets.list".
-            trigger_lower = trigger.lower()
-            action_lower = ctx.action.lower()
-
-            # Check if full action name appears in trigger text
-            if action_lower in trigger_lower:
-                return True
-
-            # Split action into semantic parts (e.g. "tickets.list" → {"tickets","list"})
-            action_parts = set(action_lower.replace(".", " ").replace("_", " ").split())
-            trigger_words = set(trigger_lower.split())
-
-            # Match only if an exact whole-word overlap exists
-            if action_parts & trigger_words:
-                return True
-
+            # String triggers are compiled to dict triggers during world
+            # compilation (_compile_policy_triggers). If a string trigger
+            # reaches runtime, it was either unresolvable or compilation
+            # was skipped. No heuristic matching — return False.
+            logger.warning(
+                "Uncompiled NL trigger at runtime for policy '%s' — "
+                "string triggers must be compiled to dict triggers "
+                "during world compilation (trigger: %.100s)",
+                policy.get("name", "unknown"),
+                trigger,
+            )
             return False
 
         if isinstance(trigger, dict):

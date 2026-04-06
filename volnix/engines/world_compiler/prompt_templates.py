@@ -562,3 +562,64 @@ Output ONLY valid JSON array.""",
     engine_name="animator",
     use_case="default",
 )
+
+
+# ── Policy Trigger Compilation Template ─────────────────────────
+
+POLICY_TRIGGER_COMPILATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "compiled_policies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "policy_name": {"type": "string"},
+                    "triggers": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "action": {"type": "string"},
+                                "condition": {"type": "string"},
+                            },
+                            "required": ["action"],
+                        },
+                    },
+                    "unresolvable": {"type": "boolean"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["policy_name", "triggers"],
+            },
+        }
+    },
+    "required": ["compiled_policies"],
+}
+
+POLICY_TRIGGER_COMPILATION = PromptTemplate(
+    system="""You are Volnix's policy trigger compiler.
+Given natural-language policy triggers and the available API operations,
+compile each NL trigger into structured dict triggers matching specific operations.
+
+## Available API Operations
+{available_operations}
+
+## Rules
+- Map each NL trigger to the specific operation(s) it refers to.
+- Use EXACT operation names from the list above as the "action" field.
+- If the trigger describes a condition (e.g., "amount exceeds $100"), add a
+  "condition" field using the expression syntax: "input.<field> <operator> <value>"
+  (e.g., "input.amount > 10000").
+- If the trigger mentions a class of operations (e.g., "all list operations"),
+  create one trigger entry per matching operation.
+- If the trigger cannot map to any available operation (e.g., it describes
+  a conceptual situation not tied to an API call), set "unresolvable" to true
+  and explain in "reason".
+- Do NOT invent operation names — only use names from the provided list.
+
+Output ONLY valid JSON.""",
+    user="Compile these policy triggers:\n\n{policy_triggers}",
+    output_schema=POLICY_TRIGGER_COMPILATION_SCHEMA,
+    engine_name="world_compiler",
+    use_case="policy_trigger_compilation",
+)
