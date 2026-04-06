@@ -1,0 +1,40 @@
+# Climate Research Station World
+# Pair with: --internal agents_climate_researchers.yaml
+world:
+  name: "Climate Research Station"
+  description: >
+    A climate research environment with anomalous jet stream patterns,
+    ocean temperature data, and team collaboration channels. Researchers
+    can share findings via Slack and email reports to stakeholders.
+
+  services:
+    slack: verified/slack
+    gmail: verified/gmail
+
+  policies:
+    - name: "Evidence before conclusion"
+      description: "Claims must be supported by explicit evidence and defensible methodology."
+      trigger: "conclusion stated without supporting data"
+      enforcement: hold
+      hold_config:
+        approver_role: lead-researcher
+        timeout: 24h
+
+    - name: "Statistical rigor review"
+      description: "Findings must include confidence intervals and uncertainty quantification."
+      trigger: "finding reported without statistical support"
+      enforcement: hold
+      hold_config:
+        approver_role: statistician
+        timeout: 24h
+
+  seeds:
+    - "Anomalous jet stream data detected in March readings"
+    - "Ocean temperatures in the same region show unusual warming patterns"
+    - "Previous studies on similar anomalies were inconclusive"
+
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

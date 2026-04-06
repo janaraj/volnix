@@ -1,7 +1,7 @@
-"""Tests for terrarium.kernel.registry -- SemanticRegistry async initialization and lookups."""
+"""Tests for volnix.kernel.registry -- SemanticRegistry async initialization and lookups."""
 
 import pytest
-from terrarium.kernel.registry import SemanticRegistry
+from volnix.kernel.registry import SemanticRegistry
 
 
 @pytest.fixture

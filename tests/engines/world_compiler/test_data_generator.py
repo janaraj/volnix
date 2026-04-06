@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.core.errors import CompilerError
-from terrarium.engines.world_compiler.data_generator import WorldDataGenerator
-from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
-from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.llm.types import LLMResponse
-from terrarium.reality.dimensions import WorldConditions
+from volnix.core.errors import CompilerError
+from volnix.engines.world_compiler.data_generator import WorldDataGenerator
+from volnix.engines.world_compiler.generation_context import WorldGenerationContext
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+from volnix.kernel.surface import ServiceSurface
+from volnix.llm.types import LLMResponse
+from volnix.reality.dimensions import WorldConditions
 
 # ── Helpers ──────────────────────────────────────────────────────
 

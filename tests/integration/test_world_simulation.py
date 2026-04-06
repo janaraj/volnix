@@ -1,6 +1,6 @@
 """Integration tests: Full user journey — compile -> generate -> run -> report.
 
-These tests simulate how a real user interacts with Terrarium:
+These tests simulate how a real user interacts with Volnix:
 1. Write YAML world definition + compiler settings
 2. Compile world (resolve services, expand reality)
 3. Generate entities and actors
@@ -18,9 +18,9 @@ import os
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.core.types import ActorId, ActorType
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.actors.definition import ActorDefinition
+from volnix.core.types import ActorId, ActorType
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 
 
 def _ensure_agent(app, agent_id: str):
@@ -141,7 +141,7 @@ class TestWorldGenerationFlow:
         )
         result = await compiler.generate_world(plan)
         report = result["report"]
-        assert "TERRARIUM WORLD GENERATION REPORT" in report
+        assert "VOLNIX WORLD GENERATION REPORT" in report
         assert "GENERATED ENTITIES" in report
         assert "STATUS:" in report
 
@@ -257,7 +257,7 @@ class TestEndToEndReport:
 
         # 4. Verify report
         report = gen_result["report"]
-        assert "TERRARIUM WORLD GENERATION REPORT" in report
+        assert "VOLNIX WORLD GENERATION REPORT" in report
         assert gen_result["entities"]
         assert gen_result["actors"]
 
@@ -294,12 +294,12 @@ class TestNLToWorldFlow:
         """
         import yaml
         from unittest.mock import AsyncMock
-        from terrarium.engines.world_compiler.nl_parser import NLParser
-        from terrarium.engines.world_compiler.prompt_templates import (
+        from volnix.engines.world_compiler.nl_parser import NLParser
+        from volnix.engines.world_compiler.prompt_templates import (
             NL_TO_WORLD_DEF,
             NL_TO_COMPILER_SETTINGS,
         )
-        from terrarium.llm.types import LLMResponse
+        from volnix.llm.types import LLMResponse
 
         # 1. Show what the NL templates look like
         print("\n" + "=" * 70)
@@ -375,8 +375,8 @@ class TestNLToWorldFlow:
         print(yaml.dump(mock_compiler, default_flow_style=False, sort_keys=False))
 
         # 3. Parse through the actual YAML parser
-        from terrarium.engines.world_compiler.yaml_parser import YAMLParser
-        from terrarium.reality.expander import ConditionExpander
+        from volnix.engines.world_compiler.yaml_parser import YAMLParser
+        from volnix.reality.expander import ConditionExpander
 
         parser = YAMLParser(ConditionExpander())
         partial, specs = await parser.parse_from_dicts(mock_world_def, mock_compiler)
@@ -398,7 +398,7 @@ class TestNLToWorldFlow:
         """Full YAML -> compile -> generate -> report with visible output.
 
         Shows the complete flow a user would see when running:
-        `terrarium create acme_support.yaml --settings acme_compiler.yaml`
+        `volnix create acme_support.yaml --settings acme_compiler.yaml`
 
         Uses ``app_with_mock_llm`` because generation requires LLM.
         """

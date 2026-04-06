@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Terrarium Provider Check
+# Volnix Provider Check
 # Checks which LLM providers are available on this system.
-# Called by: terrarium check (CLI command, Phase H1)
+# Called by: volnix check (CLI command, Phase H1)
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo "══════════════════════════════════════════════════════════"
-echo "  Terrarium — Provider Availability Check"
+echo "  Volnix — Provider Availability Check"
 echo "══════════════════════════════════════════════════════════"
 echo ""
 
@@ -101,7 +101,7 @@ echo ""
 echo "── Python SDKs ──"
 echo ""
 
-PYTHON="${TERRARIUM_PYTHON:-.venv/bin/python}"
+PYTHON="${VOLNIX_PYTHON:-.venv/bin/python}"
 
 for pkg in anthropic openai "google.genai" acp_sdk acp; do
     if $PYTHON -c "import $pkg" 2>/dev/null; then

@@ -1,6 +1,6 @@
-"""Tests for terrarium.templates.composer — multi-template composition and merging."""
+"""Tests for volnix.templates.composer — multi-template composition and merging."""
 import pytest
-from terrarium.templates.composer import TemplateComposer
+from volnix.templates.composer import TemplateComposer
 
 
 def test_compose_templates():

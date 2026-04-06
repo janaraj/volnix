@@ -1,13 +1,13 @@
-"""Tests for terrarium.gateway.gateway -- request handling and tool discovery."""
+"""Tests for volnix.gateway.gateway -- request handling and tool discovery."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from terrarium.gateway.gateway import Gateway
-from terrarium.gateway.config import GatewayConfig
+from volnix.gateway.gateway import Gateway
+from volnix.gateway.config import GatewayConfig
 
 
 def _make_mock_app(tools=None, handle_result=None):
-    """Create a mock TerrariumApp with a working registry and pack setup."""
+    """Create a mock VolnixApp with a working registry and pack setup."""
     app = MagicMock()
 
     # Mock ledger

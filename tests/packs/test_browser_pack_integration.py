@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import (
     FidelityTier,
     ToolName,
 )
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.runtime import PackRuntime
+from volnix.packs.registry import PackRegistry
+from volnix.packs.runtime import PackRuntime
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ from terrarium.packs.runtime import PackRuntime
 
 @pytest.fixture
 def verified_dir():
-    return str(Path(__file__).resolve().parents[2] / "terrarium" / "packs" / "verified")
+    return str(Path(__file__).resolve().parents[2] / "volnix" / "packs" / "verified")
 
 
 @pytest.fixture
@@ -437,19 +437,19 @@ class TestBrowserAnimator:
 
 class TestBrowserImportBoundaries:
     def test_browser_pack_imports_only_core(self):
-        """Verify browser pack imports only from terrarium.core.
+        """Verify browser pack imports only from volnix.core.
 
         Packs must NEVER import from persistence/, engines/, or bus/.
         """
-        from terrarium.packs.verified.browser import handlers as handlers_mod
-        from terrarium.packs.verified.browser import pack as pack_mod
-        from terrarium.packs.verified.browser import schemas as schemas_mod
-        from terrarium.packs.verified.browser import state_machines as sm_mod
+        from volnix.packs.verified.browser import handlers as handlers_mod
+        from volnix.packs.verified.browser import pack as pack_mod
+        from volnix.packs.verified.browser import schemas as schemas_mod
+        from volnix.packs.verified.browser import state_machines as sm_mod
 
         forbidden_prefixes = (
-            "terrarium.persistence",
-            "terrarium.engines",
-            "terrarium.bus",
+            "volnix.persistence",
+            "volnix.engines",
+            "volnix.bus",
         )
 
         for mod in [pack_mod, handlers_mod, schemas_mod, sm_mod]:

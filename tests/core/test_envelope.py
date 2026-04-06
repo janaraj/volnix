@@ -1,9 +1,9 @@
-"""Tests for terrarium.core.envelope -- ActionEnvelope and related types."""
+"""Tests for volnix.core.envelope -- ActionEnvelope and related types."""
 
 import pytest
 
-from terrarium.core.envelope import ActionEnvelope, _generate_envelope_id
-from terrarium.core.types import (
+from volnix.core.envelope import ActionEnvelope, _generate_envelope_id
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EnvelopeId,

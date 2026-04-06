@@ -1,0 +1,27 @@
+# Market Prediction Analysis World
+# Pair with: --internal agents_market_analysts.yaml
+world:
+  name: "Market Prediction Analysis"
+  description: >
+    A financial analysis environment with social media sentiment data,
+    community discussions, and team collaboration. Analysts can monitor
+    Twitter trends, Reddit discussions, and coordinate via Slack.
+
+  services:
+    slack: verified/slack
+    twitter: verified/twitter
+    reddit: verified/reddit
+
+  seeds:
+    - "Fed signaled a possible rate pause at the next meeting"
+    - "S&P 500 is in a 3-month uptrend but volume is weakening"
+    - "VIX is at historically low levels despite rising geopolitical tensions"
+    - "Corporate earnings season starts in 2 weeks with mixed guidance"
+    - "#SPX500 trending on Twitter with mixed sentiment"
+    - "Reddit r/wallstreetbets debate on whether market is overbought"
+
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

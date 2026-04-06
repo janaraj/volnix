@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Terrarium Provider Test Runner
+# Volnix Provider Test Runner
 # Tests all configured LLM providers with real API calls.
-# Called by: terrarium check --test (CLI command, Phase H1)
+# Called by: volnix check --test (CLI command, Phase H1)
 #
 # Usage:
 #   bash scripts/test-providers.sh              # test all with available keys
@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PYTHON="${TERRARIUM_PYTHON:-$PROJECT_DIR/.venv/bin/python}"
+PYTHON="${VOLNIX_PYTHON:-$PROJECT_DIR/.venv/bin/python}"
 PYTEST="$PYTHON -m pytest"
 
 # Load .env if exists
@@ -27,7 +27,7 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 echo "══════════════════════════════════════════════════════════"
-echo "  Terrarium — Provider Test Runner"
+echo "  Volnix — Provider Test Runner"
 echo "══════════════════════════════════════════════════════════"
 echo ""
 
@@ -39,7 +39,7 @@ if [ "${1:-}" = "--mock-only" ]; then
 fi
 
 # Enable real API tests
-export TERRARIUM_RUN_REAL_API_TESTS=1
+export VOLNIX_RUN_REAL_API_TESTS=1
 
 echo "── Mock + Unit Tests ──"
 $PYTEST tests/llm/ -v --tb=short -k "not real" 2>&1 | tail -5

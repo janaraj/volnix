@@ -1,0 +1,47 @@
+# ===================================================================
+# WORLD DEFINITION -- Customer Support Escalation (Internal Demo)
+# ===================================================================
+# Showcases all engines: Permission, Policy, Budget, Animator, Responder.
+# 3-agent team handles a messy support queue with dynamic world events.
+#
+# Usage:
+#   volnix serve demo_support_escalation --internal agents_support_team --port 8080
+
+world:
+  name: "Customer Support Escalation"
+  description: >
+    A busy customer support center with tiered agents handling tickets,
+    refunds, and team coordination. Agents must navigate permissions,
+    policies, and budgets while resolving a queue of escalating issues.
+
+  services:
+    stripe: verified/stripe
+    zendesk: verified/zendesk
+    slack: verified/slack
+
+  policies:
+    - name: "Block large refunds"
+      trigger:
+        action: "create_refund"
+        condition: "input.amount > 10000"
+      enforcement: block
+      reason: "Refunds over $100 require supervisor approval"
+
+    - name: "Audit all payments"
+      trigger: "stripe"
+      enforcement: log
+      reason: "All Stripe operations logged for compliance audit"
+
+  seeds:
+    - "VIP customer Acme Corp with pending $249 refund on charge ch_vip_001, escalated ticket TK-201"
+    - "New customer locked out of account, urgent ticket TK-202 filed 2 hours ago"
+    - "Long-term customer reports double charge of $85 on charge ch_double_001, ticket TK-203"
+    - "Slack channel #support-queue has 4 unread messages about SLA breaches"
+    - "Customer satisfaction survey results show 72% rating, down from 85% last month"
+
+  reality:
+    preset: messy
+
+  mode: governed
+  behavior: dynamic
+

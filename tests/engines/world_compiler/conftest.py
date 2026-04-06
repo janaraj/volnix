@@ -4,12 +4,12 @@ import json
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.kernel.registry import SemanticRegistry
-from terrarium.kernel.surface import ServiceSurface, APIOperation
-from terrarium.reality.expander import ConditionExpander
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.gmail.pack import EmailPack
-from terrarium.llm.types import LLMResponse
+from volnix.kernel.registry import SemanticRegistry
+from volnix.kernel.surface import ServiceSurface, APIOperation
+from volnix.reality.expander import ConditionExpander
+from volnix.packs.registry import PackRegistry
+from volnix.packs.verified.gmail.pack import EmailPack
+from volnix.llm.types import LLMResponse
 
 
 @pytest.fixture

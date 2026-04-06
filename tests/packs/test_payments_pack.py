@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.stripe — charge/refund/dispute state machines.
+"""Tests for volnix.packs.verified.stripe — charge/refund/dispute state machines.
 
 NOTE: Comprehensive tests live in tests/packs/verified/test_payments.py.
 These stubs are retained for backwards compatibility.

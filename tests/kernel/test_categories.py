@@ -1,9 +1,9 @@
-"""Tests for terrarium.kernel.categories -- category definitions and metadata."""
+"""Tests for volnix.kernel.categories -- category definitions and metadata."""
 
 import pytest
 from pydantic import ValidationError
 
-from terrarium.kernel.categories import CATEGORIES, SemanticCategory
+from volnix.kernel.categories import CATEGORIES, SemanticCategory
 
 
 EXPECTED_CATEGORY_NAMES = {

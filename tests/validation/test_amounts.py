@@ -1,9 +1,9 @@
-"""Tests for terrarium.validation.amounts -- monetary amount and refund validation."""
+"""Tests for volnix.validation.amounts -- monetary amount and refund validation."""
 
 import pytest
 
-from terrarium.core.types import ValidationType
-from terrarium.validation.amounts import AmountValidator
+from volnix.core.types import ValidationType
+from volnix.validation.amounts import AmountValidator
 
 
 @pytest.fixture

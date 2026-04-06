@@ -1,0 +1,34 @@
+world:
+  name: "HubSpot Sales Pipeline"
+  description: >
+    A B2B sales team qualifying inbound leads and managing their pipeline.
+    Leads arrive via HubSpot CRM, the team communicates via Slack.
+    The sales manager delegates lead qualification to reps who investigate
+    contacts, update deal stages, and identify high-value opportunities.
+  behavior: static
+  mode: governed
+  reality:
+    preset: messy
+
+  services:
+    hubspot: hubspot
+    slack: verified/slack
+
+  actors:
+    - role: sales-rep
+      type: internal
+      count: 2
+      personality: "Motivated sales reps who qualify leads aggressively."
+
+  policies:
+    - name: "High-value deal approval"
+      trigger: "deal value exceeds $50,000"
+      enforcement: hold
+
+  seeds:
+    - "5 inbound leads from last week's webinar, none yet qualified"
+    - "One lead is from a Fortune 500 company asking about enterprise pricing"
+    - "Pipeline has $80K of $200K quarterly target, 3 open deals"
+    - "Two leads went cold after initial contact last month"
+
+  mission: "Qualify all inbound leads, update pipeline stages, and identify the highest-value opportunities."

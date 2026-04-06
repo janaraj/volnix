@@ -1,9 +1,9 @@
-"""Tests for terrarium.core.engine — BaseEngine lifecycle and event wiring."""
+"""Tests for volnix.core.engine — BaseEngine lifecycle and event wiring."""
 import pytest
 from unittest.mock import AsyncMock
-from terrarium.core.engine import BaseEngine
-from terrarium.core.events import Event
-from terrarium.core.types import Timestamp
+from volnix.core.engine import BaseEngine
+from volnix.core.events import Event
+from volnix.core.types import Timestamp
 from datetime import datetime, timezone
 
 

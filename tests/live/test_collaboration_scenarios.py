@@ -2,7 +2,7 @@
 
 Six test classes, one per deliverable preset, each testing a different
 real-world collaboration scenario with REAL LLM calls through the
-actual Terrarium pipeline.
+actual Volnix pipeline.
 
 Each test follows the pattern:
   1. Build WorldPlan programmatically
@@ -12,7 +12,7 @@ Each test follows the pattern:
   5. Kickstart collaboration + agent actions + animator ticks
   6. Query state, print conversation log, assert outcomes
 
-Requires: codex-acp binary available (uses terrarium.toml routing)
+Requires: codex-acp binary available (uses volnix.toml routing)
 
 Run with:
     GOOGLE_API_KEY="unused-codex-acp" uv run pytest tests/live/test_collaboration_scenarios.py -v -s
@@ -27,9 +27,9 @@ from typing import Any
 
 import pytest
 
-from terrarium.actors.state import InteractionRecord, Subscription
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import (
+from volnix.actors.state import InteractionRecord, Subscription
+from volnix.core.events import WorldEvent
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EntityId,
@@ -46,14 +46,14 @@ from terrarium.core.types import (
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM -- uses terrarium.toml config."""
+    """VolnixApp with REAL codex-acp LLM -- uses volnix.toml config."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found -- skipping live test")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -65,7 +65,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -78,23 +78,23 @@ async def live_app_with_codex(tmp_path):
 
 def _build_services(service_names: list[str]) -> dict:
     """Build ServiceResolution objects for the requested packs."""
-    from terrarium.engines.world_compiler.plan import ServiceResolution
-    from terrarium.kernel.surface import ServiceSurface
+    from volnix.engines.world_compiler.plan import ServiceResolution
+    from volnix.kernel.surface import ServiceSurface
 
     _pack_map: dict[str, tuple[str, str, Any]] = {}
 
     if "chat" in service_names or "slack" in service_names:
-        from terrarium.packs.verified.slack.pack import ChatPack
+        from volnix.packs.verified.slack.pack import ChatPack
         pack = ChatPack()
         _pack_map["slack"] = ("slack", "verified/slack", pack)
 
     if "email" in service_names or "gmail" in service_names:
-        from terrarium.packs.verified.gmail.pack import EmailPack
+        from volnix.packs.verified.gmail.pack import EmailPack
         pack = EmailPack()
         _pack_map["gmail"] = ("gmail", "verified/gmail", pack)
 
     if "tickets" in service_names or "zendesk" in service_names:
-        from terrarium.packs.verified.zendesk.pack import TicketsPack
+        from volnix.packs.verified.zendesk.pack import TicketsPack
         pack = TicketsPack()
         _pack_map["zendesk"] = ("zendesk", "verified/zendesk", pack)
 
@@ -328,8 +328,8 @@ class TestSynthesisScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Climate Research Lab (Synthesis)",
@@ -551,8 +551,8 @@ class TestDecisionScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Product Planning (Decision)",
@@ -724,8 +724,8 @@ class TestPredictionScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Market Analysis Desk (Prediction)",
@@ -890,8 +890,8 @@ class TestBrainstormScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Campaign Brainstorm (Brainstorm)",
@@ -1055,8 +1055,8 @@ class TestRecommendationScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Support Triage (Recommendation)",
@@ -1242,8 +1242,8 @@ class TestAssessmentScenario:
         print("STEP 1: BUILD WORLD PLAN")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import WorldPlan
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import WorldPlan
+        from volnix.reality.presets import load_preset
 
         plan = WorldPlan(
             name="Security Audit (Assessment)",

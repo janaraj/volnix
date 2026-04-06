@@ -1,7 +1,7 @@
 # ══════════════════════════════════════════════════════════════
-# Terrarium Development Overrides
+# Volnix Development Overrides
 # ══════════════════════════════════════════════════════════════
-# Layered on top of terrarium.toml in development environment.
+# Layered on top of volnix.toml in development environment.
 # Uses in-memory databases and local paths for fast iteration.
 
 [simulation]

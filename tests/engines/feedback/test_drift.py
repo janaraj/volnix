@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from terrarium.engines.feedback.drift import (
+from volnix.engines.feedback.drift import (
     DriftDetector,
     OpenAPIDriftSource,
     _diff_operations,

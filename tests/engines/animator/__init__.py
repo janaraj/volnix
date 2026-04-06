@@ -1,1 +1,1 @@
-"""Tests for terrarium.engines.animator -- world animator engine."""
+"""Tests for volnix.engines.animator -- world animator engine."""

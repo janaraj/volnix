@@ -1,0 +1,40 @@
+mission: >
+  Qualify inbound leads in HubSpot, update deal stages, and produce
+  a pipeline analysis identifying the highest-value opportunities.
+
+deliverable: synthesis
+
+agents:
+  - role: sales-manager
+    lead: true
+    personality: >
+      Strategic sales leader who delegates lead qualification
+      and synthesizes pipeline health from team findings.
+    permissions:
+      read: [hubspot, slack]
+      write: [hubspot, slack]
+    budget:
+      api_calls: 50
+      spend_usd: 500
+
+  - role: senior-rep
+    personality: >
+      Experienced sales rep who digs into lead details,
+      identifies decision-makers, and assesses deal potential.
+    permissions:
+      read: [hubspot, slack]
+      write: [hubspot, slack]
+    budget:
+      api_calls: 80
+      spend_usd: 500
+
+  - role: sdr
+    personality: >
+      Fast-moving SDR who qualifies leads quickly, updates
+      contact info, and routes hot leads to senior reps.
+    permissions:
+      read: [hubspot, slack]
+      write: [hubspot, slack]
+    budget:
+      api_calls: 80
+      spend_usd: 300

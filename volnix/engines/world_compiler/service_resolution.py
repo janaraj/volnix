@@ -1,0 +1,299 @@
+"""Full service resolution chain for the world compiler.
+
+Bridges PackRegistry (Tier 1/2) with ServiceResolver (external specs + kernel).
+"""
+from __future__ import annotations
+import logging
+from typing import Any
+
+from volnix.core.errors import (
+    KernelError,
+    PackNotFoundError,
+    ServiceResolutionError,
+)
+from volnix.engines.world_compiler.plan import ServiceResolution
+from volnix.kernel.registry import SemanticRegistry
+from volnix.kernel.resolver import ServiceResolver
+from volnix.kernel.surface import ServiceSurface
+from volnix.packs.registry import PackRegistry
+
+logger = logging.getLogger(__name__)
+
+
+class CompilerServiceResolver:
+    """Resolves ALL services in a world definition."""
+
+    def __init__(
+        self,
+        pack_registry: PackRegistry | None = None,
+        kernel: SemanticRegistry | None = None,
+        resolver: ServiceResolver | None = None,
+        profile_loader: Any | None = None,
+        profile_inferrer: Any | None = None,
+        profile_registry: Any | None = None,
+        ledger: Any | None = None,
+        bus: Any | None = None,
+    ) -> None:
+        self._packs = pack_registry
+        self._kernel = kernel
+        self._resolver = resolver
+        self._profile_loader = profile_loader
+        self._profile_inferrer = profile_inferrer
+        self._profile_registry = profile_registry
+        self._ledger = ledger
+        self._bus = bus
+
+    def get_available_categories(self) -> str:
+        """Return comma-separated list of available semantic categories."""
+        if self._kernel:
+            return ", ".join(self._kernel.list_categories())
+        return ""
+
+    def get_available_packs(self) -> str:
+        """Return comma-separated list of available pack names."""
+        if self._packs:
+            return ", ".join(p["pack_name"] for p in self._packs.list_packs())
+        return ""
+
+    async def resolve_all(
+        self,
+        service_specs: dict[str, Any],
+        fidelity_mode: str = "auto",
+    ) -> tuple[dict[str, ServiceResolution], list[str]]:
+        """Resolve ALL services. Returns (resolutions, warnings)."""
+        resolutions: dict[str, ServiceResolution] = {}
+        warnings: list[str] = []
+
+        for svc_name, spec_ref in service_specs.items():
+            try:
+                resolution = await self.resolve_one(svc_name, spec_ref, fidelity_mode)
+                if resolution:
+                    resolutions[svc_name] = resolution
+                else:
+                    warnings.append(f"Could not resolve service '{svc_name}'")
+            except (PackNotFoundError, ServiceResolutionError, KernelError, KeyError, ValueError) as exc:
+                warnings.append(f"Error resolving '{svc_name}': {exc}")
+
+        return resolutions, warnings
+
+    async def resolve_one(
+        self,
+        service_name: str,
+        spec_reference: Any,
+        fidelity_mode: str = "auto",
+    ) -> ServiceResolution | None:
+        """Resolve a single service through the full chain."""
+        tier, name = self._parse_spec_reference(spec_reference)
+
+        # Step 1: Verified pack
+        if tier == "verified" and self._packs:
+            try:
+                pack = self._packs.get_pack(name)
+                surface = ServiceSurface.from_pack(pack)
+                await self._record_resolution(
+                    service_name, "tier1_pack", 1.0,
+                    len(surface.operations),
+                    len(surface.entity_schemas),
+                )
+                return ServiceResolution(
+                    service_name=service_name,
+                    spec_reference=str(spec_reference),
+                    surface=surface,
+                    resolution_source="tier1_pack",
+                )
+            except Exception:
+                logger.debug("No verified pack for '%s'", name)
+
+        # Step 2: Profiled service
+        if tier == "profiled" and self._packs:
+            try:
+                # Try to get the base pack that the profile extends
+                # Profile name often matches the service name
+                profiles = self._packs.get_profiles_for_pack(name)
+                if profiles:
+                    # Use base pack's surface, marked as tier2_profile
+                    try:
+                        base_pack = self._packs.get_pack(profiles[0].extends_pack)
+                        surface = ServiceSurface.from_pack(base_pack)
+                        # Override fidelity to Tier 2
+                        surface = ServiceSurface(
+                            service_name=service_name,
+                            category=surface.category,
+                            source="tier2_profile",
+                            fidelity_tier=2,
+                            operations=surface.operations,
+                            entity_schemas=surface.entity_schemas,
+                            state_machines=surface.state_machines,
+                            confidence=0.8,
+                        )
+                        return ServiceResolution(
+                            service_name=service_name,
+                            spec_reference=str(spec_reference),
+                            surface=surface,
+                            resolution_source="tier2_profile",
+                        )
+                    except Exception:
+                        logger.debug("Could not resolve base pack for profile '%s'", name)
+            except Exception:
+                pass
+
+        # Step 2b: Tier 2 YAML profile on disk (standalone, not extending a pack)
+        if self._profile_loader:
+            profile = self._profile_loader.load(name)
+            if profile:
+                from volnix.packs.profile_surface import profile_to_surface
+
+                surface = profile_to_surface(profile)
+                await self._record_resolution(
+                    service_name, "tier2_yaml_profile",
+                    surface.confidence,
+                    len(surface.operations),
+                    len(surface.entity_schemas),
+                )
+                return ServiceResolution(
+                    service_name=service_name,
+                    spec_reference=str(spec_reference),
+                    surface=surface,
+                    resolution_source="tier2_yaml_profile",
+                )
+
+        # Steps 3-6: External specs + kernel (via D3 ServiceResolver)
+        if self._resolver:
+            surface = await self._resolver.resolve(service_name)
+            if surface:
+                # Check fidelity threshold in strict mode
+                if fidelity_mode == "strict" and surface.confidence < 0.5:
+                    logger.warning("Skipping '%s' in strict mode (confidence=%.1f)", service_name, surface.confidence)
+                    return None
+                return ServiceResolution(
+                    service_name=service_name,
+                    spec_reference=str(spec_reference),
+                    surface=surface,
+                    resolution_source=surface.source,
+                )
+
+        # Step 7: Infer pipeline -- generate profile from sources via LLM
+        if self._profile_inferrer:
+            try:
+                profile = await self._profile_inferrer.infer(name)
+                if profile:
+                    from volnix.packs.profile_surface import profile_to_surface
+
+                    # Validate via conversion BEFORE saving/registering
+                    surface = profile_to_surface(profile)
+                    if surface.operations:
+                        if self._profile_loader:
+                            self._profile_loader.save(profile)
+                        if self._profile_registry:
+                            self._profile_registry.register(profile)
+
+                    # L5: Record profile inference
+                    if self._ledger:
+                        from volnix.ledger.entries import (
+                            ProfileInferenceEntry,
+                        )
+
+                        try:
+                            await self._ledger.append(
+                                ProfileInferenceEntry(
+                                    service_name=name,
+                                    sources_used=list(
+                                        profile.source_chain or []
+                                    ),
+                                    confidence=profile.confidence,
+                                    operations_count=len(
+                                        profile.operations
+                                    ),
+                                    entities_count=len(
+                                        profile.entities
+                                    ),
+                                    fidelity_source=(
+                                        profile.fidelity_source
+                                    ),
+                                )
+                            )
+                        except Exception:
+                            pass
+
+                    await self._record_resolution(
+                        service_name, "tier2_inferred",
+                        surface.confidence,
+                        len(surface.operations),
+                        len(surface.entity_schemas),
+                    )
+                    return ServiceResolution(
+                        service_name=service_name,
+                        spec_reference=str(spec_reference),
+                        surface=surface,
+                        resolution_source="tier2_inferred",
+                    )
+            except Exception as exc:
+                logger.warning("Infer pipeline failed for '%s': %s", name, exc)
+
+        return None
+
+    def _parse_spec_reference(self, spec_ref: Any) -> tuple[str, str]:
+        """Parse spec reference into (tier, name).
+
+        'verified/gmail' → ('verified', 'gmail')
+        'profiled/stripe' → ('profiled', 'stripe')
+        'stripe' → ('auto', 'stripe')
+        dict → ('complex', pack_name_from_provider_key)
+        """
+        if isinstance(spec_ref, dict):
+            provider = spec_ref.get("provider", "")
+            if "/" in provider:
+                parts = provider.split("/", 1)
+                return parts[0], parts[1]
+            return "complex", provider
+        if isinstance(spec_ref, str) and "/" in spec_ref:
+            parts = spec_ref.split("/", 1)
+            return parts[0], parts[1]
+        return "auto", str(spec_ref)
+
+    async def _record_resolution(
+        self,
+        service_name: str,
+        resolution_source: str,
+        confidence: float,
+        operations_count: int,
+        entities_count: int,
+    ) -> None:
+        """Record service resolution to ledger + publish to bus."""
+        if self._ledger:
+            from volnix.ledger.entries import ServiceResolutionEntry
+
+            try:
+                await self._ledger.append(ServiceResolutionEntry(
+                    service_name=service_name,
+                    resolution_source=resolution_source,
+                    confidence=confidence,
+                    operations_count=operations_count,
+                    entities_count=entities_count,
+                ))
+            except Exception:
+                pass
+
+        if self._bus:
+            from volnix.core.events import WorldEvent
+            from volnix.core.types import ActorId, ServiceId, Timestamp
+            from datetime import UTC, datetime
+
+            now = datetime.now(UTC)
+            try:
+                await self._bus.publish(WorldEvent(
+                    event_type="world.service_resolved",
+                    timestamp=Timestamp(
+                        world_time=now, wall_time=now, tick=0,
+                    ),
+                    actor_id=ActorId("world_compiler"),
+                    service_id=ServiceId(service_name),
+                    action="resolve_service",
+                    input_data={
+                        "resolution_source": resolution_source,
+                        "confidence": confidence,
+                        "operations": operations_count,
+                    },
+                ))
+            except Exception:
+                pass

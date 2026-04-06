@@ -1,9 +1,9 @@
-"""Tests for terrarium.validation.state_machine -- state transition validation."""
+"""Tests for volnix.validation.state_machine -- state transition validation."""
 
 import pytest
 
-from terrarium.core.types import ValidationType
-from terrarium.validation.state_machine import StateMachineValidator
+from volnix.core.types import ValidationType
+from volnix.validation.state_machine import StateMachineValidator
 
 
 SM: dict = {

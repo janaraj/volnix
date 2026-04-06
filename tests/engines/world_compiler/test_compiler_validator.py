@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import Personality
-from terrarium.core.types import ActorId, ActorType
-from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-from terrarium.engines.world_compiler.validator import CompilerWorldValidator
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.reality.dimensions import WorldConditions
-from terrarium.reality.seeds import EntitySelector, SeedInvariant
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.personality import Personality
+from volnix.core.types import ActorId, ActorType
+from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+from volnix.engines.world_compiler.validator import CompilerWorldValidator
+from volnix.kernel.surface import ServiceSurface
+from volnix.reality.dimensions import WorldConditions
+from volnix.reality.seeds import EntitySelector, SeedInvariant
 
 
 def _make_plan() -> WorldPlan:
@@ -23,7 +23,7 @@ def _make_plan() -> WorldPlan:
         entity_schemas={
             "customer": {
                 "type": "object",
-                "x-terrarium-identity": "customer_id",
+                "x-volnix-identity": "customer_id",
                 "required": ["customer_id"],
                 "properties": {
                     "customer_id": {"type": "string"},
@@ -32,16 +32,16 @@ def _make_plan() -> WorldPlan:
             },
             "ticket": {
                 "type": "object",
-                "x-terrarium-identity": "ticket_id",
+                "x-volnix-identity": "ticket_id",
                 "required": ["ticket_id", "customer_id", "status"],
                 "properties": {
                     "ticket_id": {"type": "string"},
-                    "customer_id": {"type": "string", "x-terrarium-ref": "customer"},
+                    "customer_id": {"type": "string", "x-volnix-ref": "customer"},
                     "status": {"type": "string"},
                     "created_at": {"type": "string"},
                     "updated_at": {"type": "string"},
                 },
-                "x-terrarium-ordering": [
+                "x-volnix-ordering": [
                     {"before": "created_at", "after": "updated_at", "context": "ticket lifecycle"},
                 ],
             },

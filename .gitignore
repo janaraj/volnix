@@ -1,13 +1,30 @@
 # ──────────────────────────────────────────────
-# Terrarium .gitignore
+# Volnix .gitignore
 # ──────────────────────────────────────────────
 
-# Terrarium local config & runtime data
-terrarium.local.toml
+# Volnix local config & runtime data
+volnix.local.toml
+volnix.development.toml.bak
+terrarium.development.toml.bak
 data/
+dev_data/
+volnix_data/
+terrarium_data/
 logs/
 reports/
 snapshots/
+
+# Old pre-rename directories (should not be tracked)
+terrarium-dashboard/
+=6.0
+
+# Internal docs (specs, plans — not for public release)
+internal_docs/
+
+# Internal development tracking
+IMPLEMENTATION_STATUS.md
+MASTER_ISSUES.md
+OPEN_QUESTIONS.md
 
 # Python
 __pycache__/
@@ -24,6 +41,7 @@ env/
 # Distribution / packaging
 build/
 dist/
+!volnix-dashboard/dist/
 *.egg-info/
 *.egg
 sdist/

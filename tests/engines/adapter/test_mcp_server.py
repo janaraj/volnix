@@ -1,4 +1,4 @@
-"""Tests for terrarium.engines.adapter.protocols.mcp_server -- MCP protocol.
+"""Tests for volnix.engines.adapter.protocols.mcp_server -- MCP protocol.
 
 Tests use the REAL MCP server object by verifying registered handlers and
 testing through the gateway delegation pattern.
@@ -7,7 +7,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.engines.adapter.protocols.mcp_server import MCPServerAdapter
+from volnix.engines.adapter.protocols.mcp_server import MCPServerAdapter
 
 
 def _make_mock_gateway(tools=None, handle_result=None):
@@ -45,7 +45,7 @@ async def test_mcp_server_start_creates_server():
     await adapter.start_server()
 
     assert adapter._server is not None
-    assert adapter._server.name == "terrarium-world"
+    assert adapter._server.name == "volnix-world"
 
 
 @pytest.mark.asyncio

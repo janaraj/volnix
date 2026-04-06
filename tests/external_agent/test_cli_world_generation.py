@@ -1,9 +1,9 @@
 """E2E tests: CLI world generation flows.
 
 Tests three NL-to-world entry points:
-  A. terrarium create "desc" → YAML → serve
-  B. terrarium run "desc" --serve (zero-YAML)
-  C. terrarium mcp "desc" (zero-YAML MCP)
+  A. volnix create "desc" → YAML → serve
+  B. volnix run "desc" --serve (zero-YAML)
+  C. volnix mcp "desc" (zero-YAML MCP)
 
 These tests require an LLM provider configured. They are skipped
 automatically if no provider is available.
@@ -22,22 +22,22 @@ runner = CliRunner()
 def _has_llm_provider() -> bool:
     """Check if live API tests are explicitly enabled."""
     import os
-    return os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
+    return os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
 
 
 skip_no_llm = pytest.mark.skipif(
     not _has_llm_provider(),
-    reason="TERRARIUM_RUN_REAL_API_TESTS not set — required for NL world compilation",
+    reason="VOLNIX_RUN_REAL_API_TESTS not set — required for NL world compilation",
 )
 
 
 class TestCreateAndServe:
-    """Test A: terrarium create 'desc' → YAML → verify structure."""
+    """Test A: volnix create 'desc' → YAML → verify structure."""
 
     @skip_no_llm
     def test_create_generates_yaml_with_services(self, tmp_path):
-        """terrarium create produces a YAML file with requested services."""
-        from terrarium.cli import app as cli_app
+        """volnix create produces a YAML file with requested services."""
+        from volnix.cli import app as cli_app
 
         output_path = tmp_path / "test_world.yaml"
         result = runner.invoke(
@@ -66,7 +66,7 @@ class TestCreateAndServe:
         """Generated YAML can be parsed and has required sections."""
         import yaml
 
-        from terrarium.cli import app as cli_app
+        from volnix.cli import app as cli_app
 
         output_path = tmp_path / "test_world.yaml"
         result = runner.invoke(
@@ -88,17 +88,17 @@ class TestCreateAndServe:
 
 
 class TestRunWithServe:
-    """Test B: terrarium run 'desc' --serve (zero-YAML)."""
+    """Test B: volnix run 'desc' --serve (zero-YAML)."""
 
     @skip_no_llm
     async def test_run_nl_compiles_world(self):
-        """terrarium run with NL description compiles a world plan."""
+        """volnix run with NL description compiles a world plan."""
         # We test the compilation step programmatically rather than
         # starting the full server (which would block).
-        from terrarium.cli_helpers import app_context
+        from volnix.cli_helpers import app_context
 
-        async with app_context() as terrarium:
-            compiler = terrarium.registry.get("world_compiler")
+        async with app_context() as volnix:
+            compiler = volnix.registry.get("world_compiler")
             plan = await compiler.compile_from_nl(
                 description="Support team with email and tickets",
                 reality="messy",
@@ -115,11 +115,11 @@ class TestRunWithServe:
 
 
 class TestMCPCommand:
-    """Test C: terrarium mcp command exists and accepts args."""
+    """Test C: volnix mcp command exists and accepts args."""
 
     def test_mcp_command_registered(self):
         """The mcp command is registered in the CLI."""
-        from terrarium.cli import app as cli_app
+        from volnix.cli import app as cli_app
 
         result = runner.invoke(cli_app, ["mcp", "--help"])
         assert result.exit_code == 0
@@ -127,7 +127,7 @@ class TestMCPCommand:
 
     def test_mcp_command_requires_world_arg(self):
         """The mcp command requires a world argument."""
-        from terrarium.cli import app as cli_app
+        from volnix.cli import app as cli_app
 
         result = runner.invoke(cli_app, ["mcp"])
         # Missing required argument

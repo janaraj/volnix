@@ -1,18 +1,18 @@
-"""Tests for terrarium.actors.state and ActorRegistry state management."""
+"""Tests for volnix.actors.state and ActorRegistry state management."""
 
 import pytest
 from pydantic import ValidationError
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.actors.state import (
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.actors.state import (
     ActorBehaviorTraits,
     ActorState,
     InteractionRecord,
     ScheduledAction,
     WaitingFor,
 )
-from terrarium.core.types import ActorId, ActorType, EntityId
+from volnix.core.types import ActorId, ActorType, EntityId
 
 
 class TestActorStateCreation:
@@ -32,7 +32,7 @@ class TestActorStateCreation:
         assert state.urgency == 0.3
         assert state.pending_notifications == []
         assert state.recent_interactions == []
-        assert state.scheduled_action is None
+        assert state.scheduled_actions == []
         assert state.activation_tier == 0
         assert state.watched_entities == []
         assert state.max_recent_interactions == 20
@@ -82,15 +82,15 @@ class TestActorStateCreation:
                     event_id="evt-1",
                 ),
             ],
-            scheduled_action=scheduled,
+            scheduled_actions=[scheduled],
             activation_tier=2,
             watched_entities=[EntityId("leave-req-001")],
         )
         assert state.behavior_traits.cooperation_level == 0.8
         assert state.waiting_for is not None
         assert state.waiting_for.escalation_action == "escalate_to_manager"
-        assert state.scheduled_action is not None
-        assert state.scheduled_action.payload == {"template": "reminder"}
+        assert len(state.scheduled_actions) == 1
+        assert state.scheduled_actions[0].payload == {"template": "reminder"}
         assert state.activation_tier == 2
         assert EntityId("leave-req-001") in state.watched_entities
 

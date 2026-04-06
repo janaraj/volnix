@@ -1,0 +1,24 @@
+# Campaign Brainstorm World
+# Pair with: --internal agents_campaign_creatives.yaml
+world:
+  name: "Campaign Brainstorm"
+  description: >
+    A creative brainstorming environment for a product launch campaign.
+    FlowState is a new productivity app for remote workers who struggle
+    with focus. The team collaborates via Slack to generate bold,
+    channel-aware campaign ideas.
+
+  services:
+    slack: verified/slack
+
+  seeds:
+    - "FlowState launches in 6 weeks with a $50K marketing budget"
+    - "Target audience: remote workers aged 25-40 who use Slack daily"
+    - "Competitors are focused on productivity guilt messaging"
+    - "Beta users say the app feels like putting on noise-canceling headphones for your brain"
+
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

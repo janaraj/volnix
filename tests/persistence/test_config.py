@@ -1,12 +1,12 @@
-"""Tests for terrarium.persistence.config — persistence configuration model."""
+"""Tests for volnix.persistence.config — persistence configuration model."""
 import pytest
-from terrarium.persistence.config import PersistenceConfig
+from volnix.persistence.config import PersistenceConfig
 
 
 def test_persistence_config_defaults():
     """Default values should match the documented contract."""
     cfg = PersistenceConfig()
-    assert cfg.base_dir == "terrarium_data"
+    assert cfg.base_dir == "volnix_data"
     assert cfg.wal_mode is True
     assert cfg.max_connections == 5
     assert cfg.migration_auto_run is True

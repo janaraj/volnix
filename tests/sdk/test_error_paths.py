@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.sdk import (
-    TerrariumAPIError,
-    TerrariumClient,
-    TerrariumConnectionError,
-    TerrariumSDKError,
+from volnix.sdk import (
+    VolnixAPIError,
+    VolnixClient,
+    VolnixConnectionError,
+    VolnixSDKError,
     execute_tool,
     get_tool_manifest,
 )
@@ -16,14 +16,14 @@ from terrarium.sdk import (
 
 
 async def test_get_tool_manifest_connection_refused():
-    """Connection refused raises TerrariumConnectionError."""
-    with pytest.raises(TerrariumConnectionError):
+    """Connection refused raises VolnixConnectionError."""
+    with pytest.raises(VolnixConnectionError):
         await get_tool_manifest(url="http://localhost:1", timeout=1)
 
 
 async def test_get_tool_manifest_invalid_url():
-    """Invalid URL raises TerrariumConnectionError."""
-    with pytest.raises(TerrariumConnectionError):
+    """Invalid URL raises VolnixConnectionError."""
+    with pytest.raises(VolnixConnectionError):
         await get_tool_manifest(
             url="http://invalid-host-that-does-not-exist:9999",
             timeout=2,
@@ -34,8 +34,8 @@ async def test_get_tool_manifest_invalid_url():
 
 
 async def test_execute_tool_connection_refused():
-    """Connection refused raises TerrariumConnectionError."""
-    with pytest.raises(TerrariumConnectionError):
+    """Connection refused raises VolnixConnectionError."""
+    with pytest.raises(VolnixConnectionError):
         await execute_tool(
             url="http://localhost:1",
             tool="email_send",
@@ -43,30 +43,30 @@ async def test_execute_tool_connection_refused():
         )
 
 
-# -- TerrariumClient errors ---------------------------------------------------
+# -- VolnixClient errors ---------------------------------------------------
 
 
 async def test_client_connection_refused():
-    """Client raises TerrariumConnectionError on server down."""
-    async with TerrariumClient(
+    """Client raises VolnixConnectionError on server down."""
+    async with VolnixClient(
         url="http://localhost:1", timeout=1
     ) as terra:
-        with pytest.raises(TerrariumConnectionError):
+        with pytest.raises(VolnixConnectionError):
             await terra.tools()
 
 
 async def test_client_call_invalid_host():
-    """Client raises TerrariumConnectionError for unreachable host."""
-    async with TerrariumClient(
+    """Client raises VolnixConnectionError for unreachable host."""
+    async with VolnixClient(
         url="http://invalid-host-xyz:9999", timeout=2
     ) as terra:
-        with pytest.raises(TerrariumConnectionError):
+        with pytest.raises(VolnixConnectionError):
             await terra.call("any_tool")
 
 
 async def test_client_double_close(test_adapter, transport):
     """Closing client twice doesn't raise."""
-    terra = TerrariumClient(url="http://test", _transport=transport)
+    terra = VolnixClient(url="http://test", _transport=transport)
     await terra.close()
     await terra.close()  # Should not raise
 
@@ -75,12 +75,12 @@ async def test_client_double_close(test_adapter, transport):
 
 
 def test_errors_inherit_from_base():
-    """All SDK errors inherit from TerrariumSDKError."""
-    assert issubclass(TerrariumConnectionError, TerrariumSDKError)
-    assert issubclass(TerrariumAPIError, TerrariumSDKError)
+    """All SDK errors inherit from VolnixSDKError."""
+    assert issubclass(VolnixConnectionError, VolnixSDKError)
+    assert issubclass(VolnixAPIError, VolnixSDKError)
 
 
 def test_api_error_has_status_code():
-    """TerrariumAPIError carries status_code."""
-    err = TerrariumAPIError("test", status_code=404)
+    """VolnixAPIError carries status_code."""
+    err = VolnixAPIError("test", status_code=404)
     assert err.status_code == 404

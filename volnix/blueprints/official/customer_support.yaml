@@ -1,0 +1,58 @@
+# Customer Support World Blueprint
+# First-class Volnix blueprint for customer support scenarios.
+world:
+  name: "Customer Support"
+  description: >
+    A customer support organization with email, chat, tickets, and payments.
+    Two support agents handle customer inquiries under governance policies
+    including refund approval thresholds and SLA-based escalation.
+
+  services:
+    gmail: verified/gmail
+    slack: verified/slack
+    zendesk: verified/zendesk
+    stripe: profiled/stripe
+
+  actors:
+    - role: support-agent
+      type: external
+      count: 2
+      permissions:
+        read: [gmail, slack, zendesk, stripe]
+        write: [gmail, slack, zendesk]
+      budget:
+        api_calls: 500
+        llm_spend: 10.00
+
+    - role: supervisor
+      type: internal
+      count: 1
+      permissions:
+        read: [gmail, slack, zendesk, stripe]
+        write: [gmail, slack, zendesk, stripe]
+
+    - role: customer
+      type: internal
+      count: 10
+
+  policies:
+    - name: "Refund approval"
+      description: "Require supervisor approval for refunds above $100."
+      trigger: "refund amount exceeds $100"
+      enforcement: hold
+
+    - name: "SLA escalation"
+      description: "Auto-escalate tickets not responded to within 4 hours."
+      trigger: "ticket idle for 4+ hours"
+      enforcement: escalate
+
+  seeds:
+    - "VIP customer with a pending $249 refund request, waiting 3 days"
+    - "New customer locked out of their account, filed ticket 2 hours ago"
+    - "Billing dispute from a long-term customer about double charge"
+
+  behavior: reactive
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

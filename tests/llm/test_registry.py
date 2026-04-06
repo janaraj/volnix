@@ -1,11 +1,11 @@
-"""Tests for terrarium.llm.registry -- provider registration and lookup."""
+"""Tests for volnix.llm.registry -- provider registration and lookup."""
 
 import pytest
 
-from terrarium.llm.config import LLMConfig, LLMProviderEntry
-from terrarium.llm.providers.mock import MockLLMProvider
-from terrarium.llm.registry import ProviderRegistry
-from terrarium.llm.types import ProviderInfo
+from volnix.llm.config import LLMConfig, LLMProviderEntry
+from volnix.llm.providers.mock import MockLLMProvider
+from volnix.llm.registry import ProviderRegistry
+from volnix.llm.types import ProviderInfo
 
 
 def test_registry_register_provider():
@@ -71,11 +71,11 @@ async def test_registry_factory_types(monkeypatch):
     registry = ProviderRegistry()
     await registry.initialize_all(config)
 
-    from terrarium.llm.providers.anthropic import AnthropicProvider
-    from terrarium.llm.providers.openai_compat import OpenAICompatibleProvider
-    from terrarium.llm.providers.google import GoogleNativeProvider
-    from terrarium.llm.providers.acp_client import ACPClientProvider
-    from terrarium.llm.providers.cli_subprocess import CLISubprocessProvider
+    from volnix.llm.providers.anthropic import AnthropicProvider
+    from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
+    from volnix.llm.providers.google import GoogleNativeProvider
+    from volnix.llm.providers.acp_client import ACPClientProvider
+    from volnix.llm.providers.cli_subprocess import CLISubprocessProvider
 
     assert isinstance(registry.get("p_anthropic"), AnthropicProvider)
     assert isinstance(registry.get("p_openai"), OpenAICompatibleProvider)

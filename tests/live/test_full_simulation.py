@@ -1,9 +1,9 @@
 """Live Test: Full E2E Simulation
 
 Simulates the complete user journey:
-    terrarium create "Support team with email" --reality messy
-    terrarium run world.yaml --agent agent-1
-    terrarium report world --format markdown
+    volnix create "Support team with email" --reality messy
+    volnix run world.yaml --agent agent-1
+    volnix report world --format markdown
 
 This test:
 1. Compile world from YAML blueprint
@@ -24,7 +24,7 @@ import json
 
 import pytest
 
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 
 
 @pytest.mark.asyncio
@@ -154,7 +154,7 @@ class TestFullSimulation:
         )
         result = await compiler.generate_world(plan)
 
-        # Export plan as YAML (what user would get from `terrarium plan --export`)
+        # Export plan as YAML (what user would get from `volnix plan --export`)
         reviewer = PlanReviewer()
 
         print("\n" + "=" * 70)
@@ -173,5 +173,5 @@ class TestFullSimulation:
         print("=" * 70)
         print(result["report"])
 
-        assert "TERRARIUM WORLD GENERATION REPORT" in result["report"]
+        assert "VOLNIX WORLD GENERATION REPORT" in result["report"]
         assert result["entities"]

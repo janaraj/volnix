@@ -1,0 +1,33 @@
+# Open Sandbox World Blueprint
+# Minimal world with all service packs and no governance policies.
+world:
+  name: "Open Sandbox"
+  description: >
+    Minimal starter world with all services enabled and no governance.
+    Use this for exploration, testing, and prototyping.
+
+  services:
+    gmail: verified/gmail
+    slack: verified/slack
+    zendesk: verified/zendesk
+    stripe: profiled/stripe
+    github: verified/github
+    google_calendar: verified/google_calendar
+
+  actors:
+    - role: agent
+      type: external
+      count: 1
+      permissions:
+        read: [gmail, slack, zendesk, stripe, github, google_calendar]
+        write: [gmail, slack, zendesk, stripe, github, google_calendar]
+      budget:
+        api_calls: 1000
+
+  policies: []
+
+  behavior: static
+  fidelity: auto
+  mode: ungoverned
+  reality:
+    preset: ideal

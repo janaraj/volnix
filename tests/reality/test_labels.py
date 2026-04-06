@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.labels -- label system.
+"""Tests for volnix.reality.labels -- label system.
 
 Tests the two-level config system that maps human-readable labels (e.g.
 "somewhat_neglected") to concrete dimension attribute values (0-100).
@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.core.errors import InvalidLabelError
-from terrarium.reality.dimensions import (
+from volnix.core.errors import InvalidLabelError
+from volnix.reality.dimensions import (
     BoundaryDimension,
     ComplexityDimension,
     InformationQualityDimension,
     ReliabilityDimension,
     SocialFrictionDimension,
 )
-from terrarium.reality.labels import (
+from volnix.reality.labels import (
     LABEL_SCALES,
     is_valid_label,
     label_to_intensity,

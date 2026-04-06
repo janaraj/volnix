@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from terrarium.cli_exports.templates import (
+from volnix.cli_exports.templates import (
     EXPORT_REGISTRY,
     claude_desktop,
     cursor,
@@ -25,8 +25,8 @@ def test_claude_desktop_valid_json():
     output = claude_desktop(url="http://localhost:8080", tools=[])
     config = json.loads(output)
     assert "mcpServers" in config
-    assert "terrarium" in config["mcpServers"]
-    assert "/mcp" in config["mcpServers"]["terrarium"]["url"]
+    assert "volnix" in config["mcpServers"]
+    assert "/mcp" in config["mcpServers"]["volnix"]["url"]
 
 
 def test_cursor_valid_json():
@@ -56,20 +56,20 @@ def test_env_vars_format():
     """env-vars export produces shell export statements."""
     tools = [{"name": "email_send"}, {"name": "tickets.update"}]
     output = env_vars(url="http://localhost:8080", tools=tools)
-    assert "export TERRARIUM_URL=http://localhost:8080" in output
-    assert "export TERRARIUM_MCP_URL=" in output
+    assert "export VOLNIX_URL=http://localhost:8080" in output
+    assert "export VOLNIX_MCP_URL=" in output
 
 
 def test_python_sdk_snippet():
-    """python-sdk export contains TerrariumClient usage."""
+    """python-sdk export contains VolnixClient usage."""
     output = python_sdk(url="http://localhost:8080", tools=[])
-    assert "TerrariumClient" in output
+    assert "VolnixClient" in output
     assert "localhost:8080" in output
 
 
 def test_anthropic_tools_format():
     """anthropic-tools export returns tool list as JSON."""
-    from terrarium.cli_exports.templates import anthropic_tools
+    from volnix.cli_exports.templates import anthropic_tools
 
     tools = [{"name": "test", "input_schema": {}}]
     output = anthropic_tools(url="http://localhost:8080", tools=tools)
@@ -79,7 +79,7 @@ def test_anthropic_tools_format():
 
 def test_docker_compose_uses_port():
     """M3: docker-compose uses the port from url."""
-    from terrarium.cli_exports.templates import docker_compose
+    from volnix.cli_exports.templates import docker_compose
 
     output = docker_compose(url="http://localhost:9090", tools=[])
     assert "9090" in output

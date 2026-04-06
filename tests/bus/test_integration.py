@@ -3,14 +3,14 @@ import asyncio
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.bus import EventBus
-from terrarium.bus.config import BusConfig
-from terrarium.bus.middleware import MetricsMiddleware
-from terrarium.core.events import Event
-from terrarium.core.types import Timestamp
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.persistence.manager import ConnectionManager
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.bus.bus import EventBus
+from volnix.bus.config import BusConfig
+from volnix.bus.middleware import MetricsMiddleware
+from volnix.core.events import Event
+from volnix.core.types import Timestamp
+from volnix.persistence.config import PersistenceConfig
+from volnix.persistence.manager import ConnectionManager
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 def _make_event(event_type: str = "test.event") -> Event:

@@ -1,7 +1,7 @@
-"""Tests for terrarium.kernel.openapi_provider -- OpenAPI spec parsing."""
+"""Tests for volnix.kernel.openapi_provider -- OpenAPI spec parsing."""
 
 import pytest
-from terrarium.kernel.openapi_provider import OpenAPIProvider
+from volnix.kernel.openapi_provider import OpenAPIProvider
 
 
 SIMPLE_OPENAPI_YAML = """\

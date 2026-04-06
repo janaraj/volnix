@@ -1,4 +1,4 @@
-"""Tests for terrarium.scheduling.scheduler -- WorldScheduler.
+"""Tests for volnix.scheduling.scheduler -- WorldScheduler.
 
 Covers: one-shot events, recurring events, trigger events,
         cancellation, empty scheduler, ordering.
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from terrarium.scheduling.scheduler import (
+from volnix.scheduling.scheduler import (
     WorldScheduler,
     ScheduledEvent,
     RecurringEvent,

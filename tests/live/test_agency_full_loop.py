@@ -16,28 +16,28 @@ import shutil
 
 import pytest
 
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.types import (
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EnvelopePriority,
     ServiceId,
 )
-from terrarium.simulation.config import SimulationRunnerConfig
-from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from volnix.simulation.config import SimulationRunnerConfig
+from volnix.simulation.event_queue import EventQueue
+from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
 
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM."""
+    """VolnixApp with REAL codex-acp LLM."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -49,7 +49,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app
     await app.stop()
@@ -80,11 +80,11 @@ class TestFullAgencyLoop:
         print("STEP 1: COMPILE WORLD")
         print("=" * 70)
 
-        from terrarium.engines.world_compiler.plan import ServiceResolution, WorldPlan
-        from terrarium.kernel.surface import ServiceSurface
-        from terrarium.packs.verified.gmail.pack import EmailPack
-        from terrarium.packs.verified.zendesk.pack import TicketsPack
-        from terrarium.reality.presets import load_preset
+        from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
+        from volnix.kernel.surface import ServiceSurface
+        from volnix.packs.verified.gmail.pack import EmailPack
+        from volnix.packs.verified.zendesk.pack import TicketsPack
+        from volnix.reality.presets import load_preset
 
         email_surface = ServiceSurface.from_pack(EmailPack())
         tickets_surface = ServiceSurface.from_pack(TicketsPack())
@@ -143,8 +143,8 @@ class TestFullAgencyLoop:
 
         # Pipeline executor: converts ActionEnvelope → pipeline execution → WorldEvent
         async def pipeline_executor(envelope: ActionEnvelope):
-            from terrarium.core.events import WorldEvent
-            from terrarium.core.types import EntityId, Timestamp
+            from volnix.core.events import WorldEvent
+            from volnix.core.types import EntityId, Timestamp
             from datetime import UTC, datetime
 
             now = datetime.now(UTC)

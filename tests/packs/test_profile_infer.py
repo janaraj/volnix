@@ -15,15 +15,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import yaml
 
-from terrarium.llm.types import LLMResponse
-from terrarium.packs.profile_infer import (
+from volnix.llm.types import LLMResponse
+from volnix.packs.profile_infer import (
     _CONFIDENCE_HUB,
     _CONFIDENCE_KERNEL,
     _CONFIDENCE_LLM_ONLY,
     _CONFIDENCE_OPENAPI,
     ProfileInferrer,
 )
-from terrarium.packs.profile_schema import ServiceProfileData
+from volnix.packs.profile_schema import ServiceProfileData
 
 # ---------------------------------------------------------------------------
 # Helpers

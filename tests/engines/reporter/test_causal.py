@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.core.types import EventId
-from terrarium.engines.reporter.causal_trace import CausalTraceRenderer
+from volnix.core.types import EventId
+from volnix.engines.reporter.causal_trace import CausalTraceRenderer
 from tests.engines.reporter.conftest import make_world_event
 
 

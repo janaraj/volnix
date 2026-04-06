@@ -1,0 +1,46 @@
+# ===================================================================
+# WORLD DEFINITION -- E-commerce Support (External Demo)
+# ===================================================================
+# Showcases easy setup: YAML -> compile -> serve -> connect agent.
+# Two external agents with different permissions hit different governance blocks.
+#
+# Usage:
+#   volnix serve demo_ecommerce --agents examples/launch-demo/external/agents.yaml --port 8080
+
+world:
+  name: "E-commerce Support"
+  description: >
+    An e-commerce store with order management, payment processing, and
+    customer support. Agents handle refund requests, resolve complaints,
+    and coordinate via team chat.
+
+  services:
+    stripe: verified/stripe
+    zendesk: verified/zendesk
+    slack: verified/slack
+
+  policies:
+    - name: "Block large refunds"
+      trigger:
+        action: "create_refund"
+        condition: "input.amount > 25000"
+      enforcement: block
+      reason: "Refunds over $250 require manager approval"
+
+    - name: "Audit all payments"
+      trigger: "stripe"
+      enforcement: log
+      reason: "All payment operations logged for compliance"
+
+  seeds:
+    - "Customer Alice with order for $150, fully paid on charge ch_alice_001"
+    - "Customer Bob filed refund request for $45 on charge ch_bob_001, ticket TK-301"
+    - "Customer Carol reports wrong item shipped, wants refund of $89 on charge ch_carol_001, ticket TK-302"
+    - "Slack channel #orders has 2 messages about shipping delays"
+
+  reality:
+    preset: messy
+
+  mode: governed
+  behavior: reactive
+

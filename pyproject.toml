@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "terrarium"
+name = "volnix"
 version = "0.1.0"
 description = "Programmable worlds for artificial intelligence"
 readme = "README.md"
@@ -35,7 +35,7 @@ dev = [
 ]
 
 [project.scripts]
-terrarium = "terrarium.cli:app"
+volnix = "volnix.cli:app"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -60,7 +60,7 @@ python_version = "3.12"
 strict = true
 
 [tool.coverage.run]
-source = ["terrarium"]
+source = ["volnix"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 90

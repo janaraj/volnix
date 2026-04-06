@@ -1,6 +1,6 @@
-"""Tests for terrarium.persistence.sqlite — SQLite adapter operations."""
+"""Tests for volnix.persistence.sqlite — SQLite adapter operations."""
 import pytest
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 @pytest.fixture

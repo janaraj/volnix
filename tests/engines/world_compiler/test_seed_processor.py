@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.core.errors import CompilerError
-from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.engines.world_compiler.seed_processor import CompilerSeedProcessor
-from terrarium.llm.types import LLMResponse
+from volnix.core.errors import CompilerError
+from volnix.engines.world_compiler.generation_context import WorldGenerationContext
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.engines.world_compiler.seed_processor import CompilerSeedProcessor
+from volnix.llm.types import LLMResponse
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -139,7 +139,7 @@ class TestExpandNlSeeds:
 
     @pytest.mark.asyncio
     async def test_expand_nl_seeds_returns_seeds(self) -> None:
-        from terrarium.reality.seeds import Seed
+        from volnix.reality.seeds import Seed
 
         proc = CompilerSeedProcessor(llm_router=None)
         seeds = await proc.expand_nl_seeds(["VIP scenario", "Angry customer"])

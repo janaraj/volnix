@@ -1,8 +1,8 @@
 """Tests for ProfileUpdateProposer -- generate update proposals from drift."""
 from __future__ import annotations
 
-from terrarium.engines.feedback.drift import DriftReport
-from terrarium.engines.feedback.proposer import ProfileUpdateProposer
+from volnix.engines.feedback.drift import DriftReport
+from volnix.engines.feedback.proposer import ProfileUpdateProposer
 
 
 async def test_propose_added_operation(make_profile):

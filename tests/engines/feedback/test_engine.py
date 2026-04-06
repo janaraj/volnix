@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.core.events import CapabilityGapEvent
-from terrarium.core.types import ActorId, Timestamp, ToolName
-from terrarium.engines.feedback.engine import FeedbackEngine
+from volnix.core.events import CapabilityGapEvent
+from volnix.core.types import ActorId, Timestamp, ToolName
+from volnix.engines.feedback.engine import FeedbackEngine
 
 
 def _make_gap_event(

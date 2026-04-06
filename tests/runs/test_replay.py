@@ -1,10 +1,10 @@
-"""Tests for terrarium.runs.replay — run replay engine."""
+"""Tests for volnix.runs.replay — run replay engine."""
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.core.types import RunId
-from terrarium.runs.config import RunConfig
-from terrarium.runs.replay import RunReplayer
+from volnix.core.types import RunId
+from volnix.runs.config import RunConfig
+from volnix.runs.replay import RunReplayer
 
 
 def _make_replayer(tmp_path) -> RunReplayer:

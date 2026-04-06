@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "volnix": {
+      "command": "volnix",
+      "args": ["mcp", "customer_support"],
+      "transport": "stdio"
+    }
+  }
+}

@@ -1,11 +1,11 @@
-"""Tests for terrarium.bus.persistence — durable event storage."""
+"""Tests for volnix.bus.persistence — durable event storage."""
 import pytest
 from datetime import datetime, timezone
 
-from terrarium.bus.persistence import BusPersistence
-from terrarium.core.events import Event
-from terrarium.core.types import EventId, Timestamp
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.bus.persistence import BusPersistence
+from volnix.core.events import Event
+from volnix.core.types import EventId, Timestamp
+from volnix.persistence.sqlite import SQLiteDatabase
 
 
 def _make_event(event_type: str = "test.event", event_id: str | None = None) -> Event:

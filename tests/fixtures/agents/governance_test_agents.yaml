@@ -1,0 +1,35 @@
+# ===================================================================
+# AGENT PROFILE -- Governance Test (3-tier support team)
+# ===================================================================
+# Tests Permission, Policy, and Budget engines together.
+#
+# junior-support: limited read, can only write to slack
+# senior-support: broader read/write, spend budget $200
+# manager:        full access, spend budget $500, policies still apply
+
+agents:
+  - id: junior-support
+    role: junior-support
+    permissions:
+      read: [zendesk, slack]
+      write: [slack]
+    budget:
+      api_calls: 50
+
+  - id: senior-support
+    role: senior-support
+    permissions:
+      read: [zendesk, stripe, slack]
+      write: [zendesk, slack]
+    budget:
+      api_calls: 100
+      spend_usd: 200
+
+  - id: manager
+    role: manager
+    permissions:
+      read: all
+      write: [stripe, zendesk, slack]
+    budget:
+      api_calls: 100
+      spend_usd: 500

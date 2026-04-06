@@ -1,11 +1,11 @@
-"""Tests for terrarium.packs.verified.slack -- ChatPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.slack -- ChatPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.slack.pack import ChatPack
-from terrarium.packs.verified.slack.schemas import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.slack.pack import ChatPack
+from volnix.packs.verified.slack.schemas import (
     CHANNEL_ENTITY_SCHEMA,
     MESSAGE_ENTITY_SCHEMA,
     USER_ENTITY_SCHEMA,
@@ -284,15 +284,15 @@ class TestChatPackMetadata:
 
     def test_channel_schema_identity(self):
         """Channel identity field is 'id'."""
-        assert CHANNEL_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert CHANNEL_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_message_schema_identity(self):
         """Message identity field is 'ts'."""
-        assert MESSAGE_ENTITY_SCHEMA["x-terrarium-identity"] == "ts"
+        assert MESSAGE_ENTITY_SCHEMA["x-volnix-identity"] == "ts"
 
     def test_user_schema_identity(self):
         """User identity field is 'id'."""
-        assert USER_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert USER_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_channel_schema_has_p1_fields(self):
         """Channel schema includes all P1 fields."""

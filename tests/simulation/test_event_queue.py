@@ -1,10 +1,10 @@
-"""Tests for terrarium.simulation.event_queue.EventQueue."""
+"""Tests for volnix.simulation.event_queue.EventQueue."""
 
 from __future__ import annotations
 
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.types import ActionSource, ActorId, EnvelopePriority, ServiceId
-from terrarium.simulation.event_queue import EventQueue
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.types import ActionSource, ActorId, EnvelopePriority, ServiceId
+from volnix.simulation.event_queue import EventQueue
 
 
 def _make_envelope(

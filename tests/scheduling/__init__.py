@@ -1,1 +1,1 @@
-"""Tests for terrarium.scheduling -- shared event scheduler."""
+"""Tests for volnix.scheduling -- shared event scheduler."""

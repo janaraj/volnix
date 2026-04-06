@@ -1,9 +1,9 @@
-"""Tests for terrarium.actors.personality -- Personality, FrictionProfile, AdversarialProfile."""
+"""Tests for volnix.actors.personality -- Personality, FrictionProfile, AdversarialProfile."""
 
 import pytest
 from pydantic import ValidationError
 
-from terrarium.actors.personality import (
+from volnix.actors.personality import (
     AdversarialProfile,
     FrictionProfile,
     Personality,

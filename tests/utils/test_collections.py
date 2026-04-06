@@ -1,6 +1,6 @@
-"""Tests for terrarium.utils.collections."""
+"""Tests for volnix.utils.collections."""
 
-from terrarium.utils.collections import dedup_entity_collection, dedup_entity_dicts
+from volnix.utils.collections import dedup_entity_collection, dedup_entity_dicts
 
 
 class TestDedupEntityDicts:

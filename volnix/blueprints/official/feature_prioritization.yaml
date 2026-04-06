@@ -1,0 +1,37 @@
+# Feature Prioritization World
+# Pair with: --internal agents_feature_team.yaml
+world:
+  name: "Feature Prioritization Decision"
+  description: >
+    A product team environment at a growing B2B SaaS company. Customer
+    feedback, engineering estimates, and competitive data available for
+    the team to analyze and discuss via Slack.
+
+  services:
+    slack: verified/slack
+
+  policies:
+    - name: "Evidence-backed decision"
+      description: "Final recommendation must consider customer demand, engineering effort, strategic value, and churn risk."
+      trigger: "recommendation without supporting data"
+      enforcement: hold
+      hold_config:
+        approver_role: product-lead
+        timeout: 2h
+
+    - name: "Decision traceability"
+      description: "Final prioritization must include rationale and alternatives considered."
+      trigger: "decision finalized"
+      enforcement: log
+
+  seeds:
+    - "Customer surveys: 40% want dark mode, 30% want API v2, 20% want mobile app"
+    - "Engineering estimates: dark mode 3 weeks, API v2 8 weeks, mobile app 12 weeks"
+    - "Two enterprise customers threatened to churn without API v2"
+    - "Mobile app usage from competitors shows 60% engagement lift"
+
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

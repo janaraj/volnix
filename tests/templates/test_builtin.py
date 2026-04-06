@@ -1,8 +1,8 @@
-"""Tests for terrarium.templates.builtin — built-in world templates."""
+"""Tests for volnix.templates.builtin — built-in world templates."""
 import pytest
-from terrarium.templates.builtin.customer_support import CustomerSupportTemplate
-from terrarium.templates.builtin.incident_response import IncidentResponseTemplate
-from terrarium.templates.builtin.open_sandbox import OpenSandboxTemplate
+from volnix.templates.builtin.customer_support import CustomerSupportTemplate
+from volnix.templates.builtin.incident_response import IncidentResponseTemplate
+from volnix.templates.builtin.open_sandbox import OpenSandboxTemplate
 
 
 def test_customer_support_template():

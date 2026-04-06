@@ -1,18 +1,18 @@
-"""Tests for terrarium.packs.verified.github -- ReposPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.github -- ReposPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.github.pack import ReposPack
-from terrarium.packs.verified.github.schemas import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.github.pack import ReposPack
+from volnix.packs.verified.github.schemas import (
     COMMIT_ENTITY_SCHEMA,
     ISSUE_ENTITY_SCHEMA,
     PULL_REQUEST_ENTITY_SCHEMA,
     REPOSITORY_ENTITY_SCHEMA,
     REVIEW_ENTITY_SCHEMA,
 )
-from terrarium.packs.verified.github.state_machines import (
+from volnix.packs.verified.github.state_machines import (
     ISSUE_TRANSITIONS,
     PULL_REQUEST_TRANSITIONS,
     REVIEW_TRANSITIONS,
@@ -315,23 +315,23 @@ class TestReposPackMetadata:
 
     def test_issue_schema_identity_is_number(self):
         """Issue identity field is 'number', not 'id'."""
-        assert ISSUE_ENTITY_SCHEMA["x-terrarium-identity"] == "number"
+        assert ISSUE_ENTITY_SCHEMA["x-volnix-identity"] == "number"
 
     def test_pr_schema_identity_is_number(self):
         """Pull request identity field is 'number'."""
-        assert PULL_REQUEST_ENTITY_SCHEMA["x-terrarium-identity"] == "number"
+        assert PULL_REQUEST_ENTITY_SCHEMA["x-volnix-identity"] == "number"
 
     def test_repository_schema_identity(self):
         """Repository identity field is 'id'."""
-        assert REPOSITORY_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert REPOSITORY_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_commit_schema_identity(self):
         """Commit identity field is 'sha'."""
-        assert COMMIT_ENTITY_SCHEMA["x-terrarium-identity"] == "sha"
+        assert COMMIT_ENTITY_SCHEMA["x-volnix-identity"] == "sha"
 
     def test_review_schema_identity(self):
         """Review identity field is 'id'."""
-        assert REVIEW_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert REVIEW_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_issue_schema_has_new_fields(self):
         """Issue schema includes P1 audit fields."""
@@ -1108,7 +1108,7 @@ class TestStateMachines:
 class TestDispatchError:
     async def test_unknown_action_raises(self, repos_pack, sample_state):
         """Dispatching an unknown action raises PackNotFoundError."""
-        from terrarium.core.errors import PackNotFoundError
+        from volnix.core.errors import PackNotFoundError
 
         with pytest.raises(PackNotFoundError):
             await repos_pack.handle_action(

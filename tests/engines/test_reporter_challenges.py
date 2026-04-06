@@ -1,7 +1,7 @@
 """Tests for reporter world challenge analysis."""
 import pytest
 
-from terrarium.engines.reporter.world_challenges import (
+from volnix.engines.reporter.world_challenges import (
     ChallengeResponse,
     WorldChallengeAnalyzer,
 )

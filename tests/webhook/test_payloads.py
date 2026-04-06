@@ -4,16 +4,16 @@ from __future__ import annotations
 import base64
 import json
 
-from terrarium.webhook.payloads import (
+from volnix.webhook.payloads import (
     PAYLOAD_FORMATTERS,
     format_payload,
 )
 
 
 def test_default_format(sample_event):
-    """Default format wraps event in Terrarium envelope."""
+    """Default format wraps event in Volnix envelope."""
     payload = format_payload(sample_event)
-    assert payload["source"] == "terrarium"
+    assert payload["source"] == "volnix"
     assert payload["event_type"] == "world.email_send"
     assert "data" in payload
 
@@ -28,7 +28,7 @@ def test_gmail_format(sample_event):
         base64.b64decode(payload["message"]["data"])
     )
     assert "event_type" in decoded
-    assert payload["subscription"] == "terrarium-simulated"
+    assert payload["subscription"] == "volnix-simulated"
 
 
 def test_slack_format(sample_event):
@@ -51,7 +51,7 @@ def test_stripe_format(sample_event):
 def test_unknown_service_uses_default(sample_event):
     """Unknown service falls back to default format."""
     payload = format_payload(sample_event, service="unknown_svc")
-    assert payload["source"] == "terrarium"
+    assert payload["source"] == "volnix"
 
 
 def test_formatter_registry():

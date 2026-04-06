@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from terrarium.core.types import WorldId
-from terrarium.worlds.manager import WorldManager
+from volnix.core.types import WorldId
+from volnix.worlds.manager import WorldManager
 
 
 @pytest.fixture

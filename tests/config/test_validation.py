@@ -1,7 +1,7 @@
-"""Tests for terrarium.config.validation — cross-section config validation."""
+"""Tests for volnix.config.validation — cross-section config validation."""
 import pytest
-from terrarium.config.schema import TerrariumConfig
-from terrarium.config.validation import ConfigValidator
+from volnix.config.schema import VolnixConfig
+from volnix.config.validation import ConfigValidator
 
 
 @pytest.fixture
@@ -11,7 +11,7 @@ def validator():
 
 @pytest.fixture
 def default_config():
-    return TerrariumConfig()
+    return VolnixConfig()
 
 
 def test_validate_pipeline_steps_valid(validator, default_config):
@@ -23,7 +23,7 @@ def test_validate_pipeline_steps_valid(validator, default_config):
 
 def test_validate_pipeline_steps_invalid(validator):
     """Pipeline steps referencing missing engines produce errors."""
-    config = TerrariumConfig.model_validate({
+    config = VolnixConfig.model_validate({
         "pipeline": {"steps": ["permission", "nonexistent_step"]}
     })
     engines = ["permission", "policy", "budget"]
@@ -34,7 +34,7 @@ def test_validate_pipeline_steps_invalid(validator):
 
 def test_validate_llm_routing_valid(validator):
     """Valid LLM routing with matching providers produces no errors."""
-    config = TerrariumConfig.model_validate({
+    config = VolnixConfig.model_validate({
         "llm": {
             "providers": {"anthropic": {"type": "anthropic"}},
             "routing": {"world_compiler": {"provider": "anthropic", "model": "claude"}},
@@ -46,7 +46,7 @@ def test_validate_llm_routing_valid(validator):
 
 def test_validate_llm_routing_invalid(validator):
     """LLM routing referencing unknown provider produces errors."""
-    config = TerrariumConfig.model_validate({
+    config = VolnixConfig.model_validate({
         "llm": {
             "providers": {"anthropic": {"type": "anthropic"}},
             "routing": {"world_compiler": {"provider": "nonexistent", "model": "m"}},
@@ -71,7 +71,7 @@ def test_validate_all(validator, default_config):
 
 def test_validate_reality_preset_invalid(validator):
     """Invalid reality preset produces an error."""
-    config = TerrariumConfig.model_validate({
+    config = VolnixConfig.model_validate({
         "simulation": {"reality": {"preset": "fantasy"}}
     })
     errors = validator.validate_cross_references(config)
@@ -80,7 +80,7 @@ def test_validate_reality_preset_invalid(validator):
 
 def test_validate_simulation_mode_invalid(validator):
     """Invalid simulation mode produces an error."""
-    config = TerrariumConfig.model_validate({
+    config = VolnixConfig.model_validate({
         "simulation": {"mode": "chaos"}
     })
     errors = validator.validate_cross_references(config)

@@ -8,16 +8,16 @@ import pytest
 
 from unittest.mock import AsyncMock
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import Personality
-from terrarium.core.errors import CompilerError
-from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
-from terrarium.engines.world_compiler.personality_generator import (
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.personality import Personality
+from volnix.core.errors import CompilerError
+from volnix.engines.world_compiler.generation_context import WorldGenerationContext
+from volnix.engines.world_compiler.personality_generator import (
     CompilerPersonalityGenerator,
 )
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.llm.types import LLMResponse
-from terrarium.reality.presets import load_preset
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.llm.types import LLMResponse
+from volnix.reality.presets import load_preset
 
 
 def _make_ctx(conditions=None, description="test world") -> WorldGenerationContext:

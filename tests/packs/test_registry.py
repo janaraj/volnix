@@ -1,12 +1,12 @@
-"""Tests for terrarium.packs.registry — PackRegistry with generic MockPack (never EmailPack)."""
+"""Tests for volnix.packs.registry — PackRegistry with generic MockPack (never EmailPack)."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.errors import DuplicatePackError, PackNotFoundError
-from terrarium.core.types import ToolName
-from terrarium.packs.base import ServicePack
-from terrarium.packs.registry import PackRegistry
+from volnix.core.context import ResponseProposal
+from volnix.core.errors import DuplicatePackError, PackNotFoundError
+from volnix.core.types import ToolName
+from volnix.packs.base import ServicePack
+from volnix.packs.registry import PackRegistry
 
 
 # ---------------------------------------------------------------------------

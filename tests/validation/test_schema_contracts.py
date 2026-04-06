@@ -1,15 +1,15 @@
 """Tests for compiler schema-contract normalization."""
 
-from terrarium.validation.schema_contracts import normalize_entity_schema
+from volnix.validation.schema_contracts import normalize_entity_schema
 
 
 def test_normalize_json_schema_with_reference_and_identity():
     schema = {
         "type": "object",
-        "x-terrarium-identity": "ticket_id",
+        "x-volnix-identity": "ticket_id",
         "properties": {
             "ticket_id": {"type": "string"},
-            "customer_id": {"type": "string", "x-terrarium-ref": "customer"},
+            "customer_id": {"type": "string", "x-volnix-ref": "customer"},
         },
     }
 
@@ -27,7 +27,7 @@ def test_normalize_json_schema_with_temporal_ordering():
             "created_at": {"type": "string"},
             "updated_at": {"type": "string"},
         },
-        "x-terrarium-ordering": [
+        "x-volnix-ordering": [
             {"before": "created_at", "after": "updated_at", "context": "entity lifecycle"},
         ],
     }
@@ -50,5 +50,5 @@ def test_normalize_legacy_ref_schema():
     normalized = normalize_entity_schema(schema)
 
     assert normalized.identity_field == "id"
-    assert normalized.json_schema["properties"]["charge"]["x-terrarium-ref"] == "charge"
+    assert normalized.json_schema["properties"]["charge"]["x-volnix-ref"] == "charge"
     assert normalized.references[0].target_entity_type == "charge"

@@ -14,8 +14,8 @@ import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
-from terrarium.core.context import ActionContext
-from terrarium.core.types import (
+from volnix.core.context import ActionContext
+from volnix.core.types import (
     ActorId,
     EntityId,
     FidelitySource,
@@ -23,9 +23,9 @@ from terrarium.core.types import (
     ServiceId,
     StepVerdict,
 )
-from terrarium.engines.responder.tier2 import Tier2Generator
-from terrarium.llm.types import LLMResponse
-from terrarium.packs.profile_schema import (
+from volnix.engines.responder.tier2 import Tier2Generator
+from volnix.llm.types import LLMResponse
+from volnix.packs.profile_schema import (
     ProfileEntity,
     ProfileErrorMode,
     ProfileExample,
@@ -595,7 +595,7 @@ async def test_tier2_with_current_state():
 
 async def test_responder_falls_back_to_tier2():
     """When Tier 1 has no pack, responder falls back to Tier 2 profile."""
-    from terrarium.engines.responder.engine import WorldResponderEngine
+    from volnix.engines.responder.engine import WorldResponderEngine
 
     engine = WorldResponderEngine()
     await engine.initialize(
@@ -625,7 +625,7 @@ async def test_responder_falls_back_to_tier2():
 
 async def test_responder_returns_error_when_no_handler():
     """When neither Tier 1 nor Tier 2 handles the action, return error."""
-    from terrarium.engines.responder.engine import WorldResponderEngine
+    from volnix.engines.responder.engine import WorldResponderEngine
 
     engine = WorldResponderEngine()
     await engine.initialize(
@@ -646,7 +646,7 @@ async def test_responder_returns_error_when_no_handler():
 
 async def test_responder_profile_registry_accessible():
     """Profile registry is accessible via engine property."""
-    from terrarium.engines.responder.engine import WorldResponderEngine
+    from volnix.engines.responder.engine import WorldResponderEngine
 
     engine = WorldResponderEngine()
     await engine.initialize(

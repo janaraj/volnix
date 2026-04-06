@@ -17,10 +17,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from terrarium.actors.state import ActorBehaviorTraits, ActorState, WaitingFor
-from terrarium.core.envelope import ActionEnvelope
-from terrarium.core.events import WorldEvent
-from terrarium.core.types import (
+from volnix.actors.state import ActorBehaviorTraits, ActorState, WaitingFor
+from volnix.core.envelope import ActionEnvelope
+from volnix.core.events import WorldEvent
+from volnix.core.types import (
     ActionSource,
     ActorId,
     EnvelopePriority,
@@ -29,12 +29,12 @@ from terrarium.core.types import (
     ServiceId,
     Timestamp,
 )
-from terrarium.engines.agency.config import AgencyConfig
-from terrarium.engines.agency.engine import AgencyEngine
-from terrarium.simulation.config import SimulationRunnerConfig
-from terrarium.simulation.event_queue import EventQueue
-from terrarium.simulation.runner import SimulationRunner, SimulationStatus, StopReason
-from terrarium.simulation.world_context import WorldContextBundle
+from volnix.engines.agency.config import AgencyConfig
+from volnix.engines.agency.engine import AgencyEngine
+from volnix.simulation.config import SimulationRunnerConfig
+from volnix.simulation.event_queue import EventQueue
+from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from volnix.simulation.world_context import WorldContextBundle
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -95,12 +95,12 @@ def _make_world_event(
 
 
 def _mock_llm_router(response_json: dict | list | None = None):
-    """Create a mock LLM router that returns format-appropriate JSON responses.
+    """Create a mock LLM router that returns native tool_calls.
 
-    Individual (Tier 3) calls get: {"action_type": ..., "reasoning": ...}
-    Batch (Tier 2) calls get: {"actor_actions": [{"actor_id": ..., "action_type": ...}]}
+    All calls (Tier 2 and Tier 3) now go through individual activation
+    with native tool calling — no batch text-based path.
     """
-    from terrarium.llm.types import LLMResponse
+    from volnix.llm.types import LLMResponse, ToolCall
 
     individual_response = {
         "action_type": "email_send",
@@ -110,61 +110,33 @@ def _mock_llm_router(response_json: dict | list | None = None):
     }
 
     def _route_side_effect(request, engine_name="", use_case=""):
-        # If a custom response was provided, use it for individual calls
-        # AND derive batch response from it
-        if response_json and "batch" in use_case:
-            action_type = response_json.get("action_type", "do_nothing")
-            import re
-            prompt = request.user_content or ""
-            ids = re.findall(r"\(ID:\s*([^)]+)\)", prompt)
-            actor_actions = [
-                {"actor_id": aid.strip(), "action_type": action_type,
-                 "reasoning": response_json.get("reasoning", ""), **{
-                     k: v for k, v in response_json.items()
-                     if k not in ("action_type", "reasoning")
-                 }}
-                for aid in ids
-            ]
-            return LLMResponse(
-                content=json.dumps({"actor_actions": actor_actions}),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
-        if "batch" in use_case:
-            # Extract actor IDs from the prompt to build batch response
-            prompt = request.user_content or ""
-            # Build response for each actor mentioned
-            actor_actions = []
-            # Find actor IDs from batch prompt format: "(ID: customer-001)"
-            import re
-            ids = re.findall(r"\(ID:\s*([^)]+)\)", prompt)
-            if not ids:
-                ids = re.findall(r"Actor ID:\s*(\S+)", prompt)
-            for aid in ids:
-                aid = aid.strip("'\"`,")
-                actor_actions.append({
-                    "actor_id": aid,
-                    "action_type": "email_send",
-                    "target_service": "email",
-                    "payload": {"to": "agent@acme.com"},
-                    "reasoning": f"Actor {aid} wants update.",
-                })
-            # If no IDs found, return one generic action
-            if not actor_actions:
-                actor_actions = [{"actor_id": "unknown", "action_type": "do_nothing", "reasoning": "no context"}]
-
-            return LLMResponse(
-                content=json.dumps({"actor_actions": actor_actions}),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
-        else:
-            return LLMResponse(
-                content=json.dumps(response_json or individual_response),
-                provider="mock", model="mock", latency_ms=5.0,
-            )
+        # All calls return native tool_calls
+        data = response_json or individual_response
+        tool_name = data.get("action_type", "do_nothing")
+        tool_args = {**data.get("payload", {}), "reasoning": data.get("reasoning", "")}
+        return LLMResponse(
+            content="",
+            provider="mock", model="mock", latency_ms=5.0,
+            tool_calls=[ToolCall(name=tool_name, arguments=tool_args)],
+        )
 
     router = AsyncMock()
     router.route = AsyncMock(side_effect=_route_side_effect)
     return router
+
+
+def _mock_tool_executor():
+    """Create a mock tool executor that returns a committed WorldEvent mock.
+
+    The tool_executor is ``async callable(ActionEnvelope) -> WorldEvent | None``.
+    It runs the full governance pipeline; in tests we return a mock committed event.
+    """
+    committed_event = AsyncMock()
+    committed_event.response_body = {"status": "ok"}
+    committed_event.event_id = EventId("evt-mock-committed")
+
+    executor = AsyncMock(return_value=committed_event)
+    return executor
 
 
 async def _create_agency_engine(
@@ -180,6 +152,9 @@ async def _create_agency_engine(
     }
     bus = AsyncMock()
     await engine.initialize(config, bus)
+
+    # Set tool executor for multi-turn activation loop
+    engine.set_tool_executor(_mock_tool_executor())
 
     # Configure with actor states
     ctx = world_context or _make_world_context()
@@ -247,36 +222,79 @@ class TestFullLoopWithMockLLM:
         customer2 = _make_actor_state("cust-002", watched=["tck_001"])
         supervisor = _make_actor_state("sup-001", role="supervisor", watched=["tck_001"], authority=0.8)
 
-        # Mock batch response for Tier 2 actors
-        batch_response = {
-            "actor_actions": [
-                {"actor_id": "cust-001", "action_type": "email_send", "target_service": "email",
-                 "payload": {}, "reasoning": "Checking status"},
-                {"actor_id": "cust-002", "action_type": "do_nothing", "reasoning": "Will wait"},
-            ]
-        }
-        router = _mock_llm_router()
-        # First call = batch (Tier 2), second call = individual (Tier 3)
-        router.route = AsyncMock(side_effect=[
-            # Tier 3 individual call (supervisor first since Tier 3 processed first)
-            type(router.route.return_value)(
-                content=json.dumps({"action_type": "tickets.update", "target_service": "tickets",
-                                    "payload": {"id": "tck_001", "status": "open"}, "reasoning": "Reviewing"}),
-                provider="mock", model="mock", latency_ms=5.0,
-            ),
-            # Tier 2 batch call (customers)
-            type(router.route.return_value)(
-                content=json.dumps(batch_response),
-                provider="mock", model="mock", latency_ms=5.0,
-            ),
-        ])
+        # Multi-turn loop: each actor that makes a tool call consumes 2+ LLM
+        # calls (action + follow-up do_nothing). Use per-actor responses keyed
+        # by the messages content so ordering from asyncio.gather doesn't matter.
+        from volnix.llm.types import LLMResponse, ToolCall
+
+        # Track how many calls each activation has made via call index per actor.
+        actor_call_counts: dict[str, int] = {}
+
+        async def _route_per_actor(request, engine_name="", use_case=""):
+            # Identify actor from the identity line "## You are: ... (ID: xxx)"
+            # in the user prompt. Must match "ID: xxx)" to avoid matching
+            # teammate IDs listed in the team roster section.
+            messages = request.messages or []
+            actor_id = "unknown"
+            # Check user prompt message (index 1) for identity
+            if len(messages) >= 2:
+                user_content = messages[1].get("content", "") or ""
+                # Identity is first line: "## You are: role (ID: actor-id)"
+                first_line = user_content.split("\n")[0] if user_content else ""
+                for aid in ("sup-001", "cust-001", "cust-002"):
+                    if aid in first_line:
+                        actor_id = aid
+                        break
+
+            call_idx = actor_call_counts.get(actor_id, 0)
+            actor_call_counts[actor_id] = call_idx + 1
+
+            if actor_id == "sup-001" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="tickets_update",
+                        arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
+                    )],
+                )
+            elif actor_id == "cust-001" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="email_send",
+                        arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
+                    )],
+                )
+            elif actor_id == "cust-002" and call_idx == 0:
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="do_nothing",
+                        arguments={"reasoning": "Will wait"},
+                    )],
+                )
+            else:
+                # Follow-up calls: terminate the loop
+                return LLMResponse(
+                    content="",
+                    provider="mock", model="mock", latency_ms=5.0,
+                    tool_calls=[ToolCall(
+                        name="do_nothing",
+                        arguments={"reasoning": "Done"},
+                    )],
+                )
+
+        router = AsyncMock()
+        router.route = _route_per_actor
 
         engine = await _create_agency_engine([customer1, customer2, supervisor], llm_router=router)
         event = _make_world_event(target_entity="tck_001")
         envelopes = await engine.notify(event)
 
-        # Supervisor (Tier 3) + cust-001 (Tier 2, do action) = 2 envelopes
-        # cust-002 said do_nothing = skipped
+        # Supervisor + cust-001 = 2 envelopes. cust-002 = do_nothing = skipped
         assert len(envelopes) == 2
         actor_ids = {str(e.actor_id) for e in envelopes}
         assert "sup-001" in actor_ids

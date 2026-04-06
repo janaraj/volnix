@@ -1,11 +1,11 @@
-"""Tests for terrarium.pipeline.side_effects -- deferred side-effect queue."""
+"""Tests for volnix.pipeline.side_effects -- deferred side-effect queue."""
 
 import pytest
 
-from terrarium.core.context import ActionContext, ResponseProposal, StepResult
-from terrarium.core.types import ActorId, ServiceId, SideEffect, StepVerdict
-from terrarium.pipeline.dag import PipelineDAG
-from terrarium.pipeline.side_effects import SideEffectProcessor
+from volnix.core.context import ActionContext, ResponseProposal, StepResult
+from volnix.core.types import ActorId, ServiceId, SideEffect, StepVerdict
+from volnix.pipeline.dag import PipelineDAG
+from volnix.pipeline.side_effects import SideEffectProcessor
 
 
 # ---------------------------------------------------------------------------

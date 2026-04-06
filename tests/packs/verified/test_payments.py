@@ -1,12 +1,12 @@
-"""Tests for terrarium.packs.verified.stripe -- PaymentsPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.stripe -- PaymentsPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.stripe.pack import PaymentsPack
-from terrarium.validation.schema import SchemaValidator
-from terrarium.validation.state_machine import StateMachineValidator
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.stripe.pack import PaymentsPack
+from volnix.validation.schema import SchemaValidator
+from volnix.validation.state_machine import StateMachineValidator
 
 
 @pytest.fixture

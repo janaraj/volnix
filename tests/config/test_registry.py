@@ -1,12 +1,12 @@
-"""Tests for terrarium.config.registry — live config registry and subscriptions."""
+"""Tests for volnix.config.registry — live config registry and subscriptions."""
 import pytest
-from terrarium.config.registry import ConfigRegistry
-from terrarium.config.schema import TerrariumConfig
+from volnix.config.registry import ConfigRegistry
+from volnix.config.schema import VolnixConfig
 
 
 def test_get_section():
     """get_section returns the correct section model."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     sim = registry.get_section("simulation")
     assert sim.mode == "governed"
@@ -15,7 +15,7 @@ def test_get_section():
 
 def test_get_value():
     """get() retrieves a specific key from a section."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     assert registry.get("simulation", "seed") == 42
     assert registry.get("budget", "warning_threshold_pct") == 80.0
@@ -23,7 +23,7 @@ def test_get_value():
 
 def test_get_missing_section():
     """get_section raises AttributeError for unknown section."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     with pytest.raises(AttributeError):
         registry.get_section("nonexistent_section")
@@ -31,7 +31,7 @@ def test_get_missing_section():
 
 def test_update_tunable():
     """update_tunable changes the runtime config value."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     registry.update_tunable("simulation", "seed", 999)
     assert registry.get("simulation", "seed") == 999
@@ -39,7 +39,7 @@ def test_update_tunable():
 
 def test_subscribe_and_notify():
     """Subscribed callbacks are notified on update_tunable."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     notifications: list[tuple] = []
 
@@ -54,7 +54,7 @@ def test_subscribe_and_notify():
 
 def test_get_missing_key():
     """get() raises AttributeError for unknown key within a valid section."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     with pytest.raises(AttributeError):
         registry.get("simulation", "nonexistent_key")
@@ -62,7 +62,7 @@ def test_get_missing_key():
 
 def test_update_tunable_notifies_multiple():
     """Multiple subscribers all receive notification."""
-    config = TerrariumConfig()
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     results_a: list = []
     results_b: list = []
@@ -78,8 +78,8 @@ def test_update_tunable_notifies_multiple():
 
 def test_get_section_returns_typed():
     """get_section returns the actual typed Pydantic model, not a dict."""
-    from terrarium.config.schema import SimulationConfig
-    config = TerrariumConfig()
+    from volnix.config.schema import SimulationConfig
+    config = VolnixConfig()
     registry = ConfigRegistry(config)
     section = registry.get_section("simulation")
     assert isinstance(section, SimulationConfig)

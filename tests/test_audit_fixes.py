@@ -10,17 +10,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.registry import ActorRegistry
-from terrarium.core.context import ActionContext, ResponseProposal, StepResult
-from terrarium.core.errors import EntityNotFoundError, ValidationError
-from terrarium.core.events import (
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
+from volnix.core.context import ActionContext, ResponseProposal, StepResult
+from volnix.core.errors import EntityNotFoundError, ValidationError
+from volnix.core.events import (
     BudgetExhaustedEvent,
     Event,
     PermissionDeniedEvent,
     WorldEvent,
 )
-from terrarium.core.types import (
+from volnix.core.types import (
     ActionCost,
     ActorId,
     ActorType,
@@ -34,9 +34,9 @@ from terrarium.core.types import (
     Timestamp,
     ValidationType,
 )
-from terrarium.engines.budget.engine import BudgetEngine
-from terrarium.engines.permission.engine import PermissionEngine
-from terrarium.validation.consistency import ConsistencyValidator
+from volnix.engines.budget.engine import BudgetEngine
+from volnix.engines.permission.engine import PermissionEngine
+from volnix.validation.consistency import ConsistencyValidator
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ class TestP01DefaultActorGovernance:
 
     @pytest.mark.asyncio
     async def test_app_registers_default_gateway_actors(self):
-        """TerrariumApp._inject_cross_engine_deps registers http-agent and mcp-agent."""
+        """VolnixApp._inject_cross_engine_deps registers http-agent and mcp-agent."""
         # This is tested indirectly: the app fixture in integration tests now
         # registers these actors. We test the ActorRegistry directly.
         reg = ActorRegistry()
@@ -179,7 +179,7 @@ class TestP02EntityEndpointPermission:
     async def test_entity_endpoint_has_actor_id_param(self):
         """The entity query endpoint now accepts actor_id query param."""
         import httpx
-        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         permission_engine = AsyncMock()
         permission_engine.execute = AsyncMock(return_value=StepResult(
@@ -224,7 +224,7 @@ class TestP02EntityEndpointPermission:
     async def test_entity_endpoint_denied_returns_403(self):
         """When permission is denied, entity endpoint returns 403."""
         import httpx
-        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         permission_engine = AsyncMock()
         permission_engine.execute = AsyncMock(return_value=StepResult(
@@ -330,7 +330,7 @@ class TestP15WebSocketSubscribe:
         """WebSocket endpoint subscribes to '*' (all events), not 'world'."""
         import httpx
         from starlette.testclient import TestClient
-        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_topics = []
 
@@ -377,7 +377,7 @@ class TestP16MountedRoutePathParams:
     async def test_get_route_extracts_path_params(self):
         """GET route with {email_id} path param forwards it in arguments."""
         import httpx
-        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_args = {}
 
@@ -425,7 +425,7 @@ class TestP16MountedRoutePathParams:
     async def test_get_route_merges_query_params(self):
         """GET route merges query params into arguments."""
         import httpx
-        from terrarium.engines.adapter.protocols.http_rest import HTTPRestAdapter
+        from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_args = {}
 
@@ -497,7 +497,7 @@ class TestP29ProposedEventsType:
 
     def test_proposed_events_still_accepts_strings(self):
         """proposed_events should still accept EventId strings (backward compat)."""
-        from terrarium.core.types import EventId
+        from volnix.core.types import EventId
         proposal = ResponseProposal(
             response_body={},
             proposed_events=[EventId("evt-001"), EventId("evt-002")],
@@ -525,9 +525,9 @@ class TestP210UpdateValidationConstraints:
     @pytest.mark.asyncio
     async def test_update_validates_enum_constraint(self):
         """Update with value not in enum raises ValidationError."""
-        from terrarium.packs.base import ServicePack
-        from terrarium.packs.registry import PackRegistry
-        from terrarium.packs.runtime import PackRuntime
+        from volnix.packs.base import ServicePack
+        from volnix.packs.registry import PackRegistry
+        from volnix.packs.runtime import PackRuntime
 
         class EnumPack(ServicePack):
             pack_name = "enum_test"
@@ -576,9 +576,9 @@ class TestP210UpdateValidationConstraints:
     @pytest.mark.asyncio
     async def test_update_validates_minimum_constraint(self):
         """Update with value below minimum raises ValidationError."""
-        from terrarium.packs.base import ServicePack
-        from terrarium.packs.registry import PackRegistry
-        from terrarium.packs.runtime import PackRuntime
+        from volnix.packs.base import ServicePack
+        from volnix.packs.registry import PackRegistry
+        from volnix.packs.runtime import PackRuntime
 
         class MinPack(ServicePack):
             pack_name = "min_test"
@@ -627,9 +627,9 @@ class TestP210UpdateValidationConstraints:
     @pytest.mark.asyncio
     async def test_update_validates_maximum_constraint(self):
         """Update with value above maximum raises ValidationError."""
-        from terrarium.packs.base import ServicePack
-        from terrarium.packs.registry import PackRegistry
-        from terrarium.packs.runtime import PackRuntime
+        from volnix.packs.base import ServicePack
+        from volnix.packs.registry import PackRegistry
+        from volnix.packs.runtime import PackRuntime
 
         class MaxPack(ServicePack):
             pack_name = "max_test"
@@ -678,9 +678,9 @@ class TestP210UpdateValidationConstraints:
     @pytest.mark.asyncio
     async def test_update_valid_within_constraints_passes(self):
         """Update with valid enum/min/max values passes."""
-        from terrarium.packs.base import ServicePack
-        from terrarium.packs.registry import PackRegistry
-        from terrarium.packs.runtime import PackRuntime
+        from volnix.packs.base import ServicePack
+        from volnix.packs.registry import PackRegistry
+        from volnix.packs.runtime import PackRuntime
 
         class ValidPack(ServicePack):
             pack_name = "valid_test"

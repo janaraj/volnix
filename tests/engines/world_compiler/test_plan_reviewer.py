@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.engines.world_compiler.plan import WorldPlan, ServiceResolution
-from terrarium.engines.world_compiler.plan_reviewer import PlanReviewer
-from terrarium.kernel.surface import ServiceSurface
-from terrarium.packs.verified.gmail.pack import EmailPack
-from terrarium.reality.presets import load_preset
+from volnix.engines.world_compiler.plan import WorldPlan, ServiceResolution
+from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
+from volnix.kernel.surface import ServiceSurface
+from volnix.packs.verified.gmail.pack import EmailPack
+from volnix.reality.presets import load_preset
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestGenerateReport:
             "snapshot_id": "snap_123",
         }
         report = reviewer.generate_report(plan, result)
-        assert "TERRARIUM WORLD GENERATION REPORT" in report
+        assert "VOLNIX WORLD GENERATION REPORT" in report
         assert "email: 1 entities" in report
         assert "customer: 2 entities" in report
         assert "TOTAL: 3 entities" in report

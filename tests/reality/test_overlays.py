@@ -1,4 +1,4 @@
-"""Tests for terrarium.reality.overlays -- OverlayRegistry and Overlay ABC.
+"""Tests for volnix.reality.overlays -- OverlayRegistry and Overlay ABC.
 
 Tests the registry framework for registering, retrieving, and listing
 condition overlays. Also verifies the ABC cannot be directly instantiated.
@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from terrarium.reality.overlays import Overlay, OverlayRegistry
+from volnix.reality.overlays import Overlay, OverlayRegistry
 
 
 class _TestOverlay(Overlay):

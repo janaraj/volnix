@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from terrarium.middleware.config import MiddlewareConfig
+from volnix.middleware.config import MiddlewareConfig
 
 
 @pytest.fixture

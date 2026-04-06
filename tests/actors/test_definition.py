@@ -1,11 +1,11 @@
-"""Tests for terrarium.actors.definition -- ActorDefinition model."""
+"""Tests for volnix.actors.definition -- ActorDefinition model."""
 
 import pytest
 from pydantic import ValidationError
 
-from terrarium.core.types import ActorId, ActorType
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import FrictionProfile, Personality
+from volnix.core.types import ActorId, ActorType
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.personality import FrictionProfile, Personality
 
 
 class TestActorDefinition:

@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report a bug in Volnix
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill out the sections below so we can reproduce and fix it.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Run `volnix serve customer_support --port 8080`
+        2. Connect an agent
+        3. Call `email_send` with ...
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Paste any relevant logs or error messages.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Volnix Version
+      description: Output of `volnix --version`
+      placeholder: "0.1.0"
+
+  - type: input
+    id: python
+    attributes:
+      label: Python Version
+      placeholder: "3.12.1"
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: "macOS 15.2 / Ubuntu 24.04 / Windows 11"

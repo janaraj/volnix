@@ -20,14 +20,14 @@ import pytest
 
 @pytest.fixture
 async def live_app_with_codex(tmp_path):
-    """TerrariumApp with REAL codex-acp LLM + webhook enabled."""
+    """VolnixApp with REAL codex-acp LLM + webhook enabled."""
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found")
 
-    from terrarium.app import TerrariumApp
-    from terrarium.config.loader import ConfigLoader
-    from terrarium.engines.state.config import StateConfig
-    from terrarium.persistence.config import PersistenceConfig
+    from volnix.app import VolnixApp
+    from volnix.config.loader import ConfigLoader
+    from volnix.engines.state.config import StateConfig
+    from volnix.persistence.config import PersistenceConfig
 
     loader = ConfigLoader()
     config = loader.load()
@@ -40,7 +40,7 @@ async def live_app_with_codex(tmp_path):
         ),
     })
 
-    app = TerrariumApp(config)
+    app = VolnixApp(config)
     await app.start()
     yield app, tmp_path
     await app.stop()
@@ -120,7 +120,7 @@ class TestPhase1SDK:
                         "from_addr": "agent@test.com",
                         "to_addr": "user@test.com",
                         "subject": "Test from SDK",
-                        "body": "Hello from Terrarium SDK",
+                        "body": "Hello from Volnix SDK",
                     },
                 },
             )
@@ -130,11 +130,11 @@ class TestPhase1SDK:
         # 403 = permission denied (actor not registered) — governance working
         assert resp.status_code in (200, 400, 403, 422)
 
-        # Step 4: Test TerrariumClient
-        print("\n  Step 4: TerrariumClient integration...")
-        from terrarium.sdk import TerrariumClient
+        # Step 4: Test VolnixClient
+        print("\n  Step 4: VolnixClient integration...")
+        from volnix.sdk import VolnixClient
 
-        async with TerrariumClient(
+        async with VolnixClient(
             url="http://test", _transport=transport
         ) as terra:
             tools = await terra.tools(fmt="mcp")
@@ -143,7 +143,7 @@ class TestPhase1SDK:
 
         # Step 5: Test config export
         print("\n  Step 5: Config export templates...")
-        from terrarium.cli_exports.templates import EXPORT_REGISTRY
+        from volnix.cli_exports.templates import EXPORT_REGISTRY
 
         for target in ["claude-desktop", "openai-tools", "env-vars",
                        "python-sdk"]:

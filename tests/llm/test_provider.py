@@ -1,9 +1,9 @@
-"""Tests for terrarium.llm.provider -- abstract LLM provider interface."""
+"""Tests for volnix.llm.provider -- abstract LLM provider interface."""
 
 import pytest
 
-from terrarium.llm.provider import LLMProvider
-from terrarium.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.provider import LLMProvider
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 
 
 def test_llm_provider_abc():

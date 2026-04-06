@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from terrarium.core.context import ResponseProposal, StepResult
-from terrarium.core.events import Event, WorldEvent
-from terrarium.core.types import (
+from volnix.core.context import ResponseProposal, StepResult
+from volnix.core.events import Event, WorldEvent
+from volnix.core.types import (
     ActorId,
     EntityId,
     ServiceId,
@@ -16,12 +16,12 @@ from terrarium.core.types import (
     StepVerdict,
     Timestamp,
 )
-from terrarium.packs.base import ServicePack
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.runtime import PackRuntime
-from terrarium.persistence.config import PersistenceConfig
-from terrarium.persistence.snapshot import SnapshotStore
-from terrarium.persistence.sqlite import SQLiteDatabase
+from volnix.packs.base import ServicePack
+from volnix.packs.registry import PackRegistry
+from volnix.packs.runtime import PackRuntime
+from volnix.persistence.config import PersistenceConfig
+from volnix.persistence.snapshot import SnapshotStore
+from volnix.persistence.sqlite import SQLiteDatabase
 from tests.helpers.guardrails import staged_guardrail
 
 pytestmark = [pytest.mark.architecture, pytest.mark.contract]
@@ -153,7 +153,7 @@ async def test_pack_runtime_enforces_update_schema_constraints():
     registry.register(ConstraintUpdatePack())
     runtime = PackRuntime(registry)
 
-    from terrarium.core.errors import ValidationError
+    from volnix.core.errors import ValidationError
 
     with pytest.raises(ValidationError):
         await runtime.execute("constraint_update", {})

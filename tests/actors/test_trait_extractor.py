@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from terrarium.actors.definition import ActorDefinition
-from terrarium.actors.personality import FrictionProfile, Personality
-from terrarium.actors.state import ActorBehaviorTraits
-from terrarium.actors.trait_extractor import extract_behavior_traits
-from terrarium.core.types import ActorId, ActorType
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.personality import FrictionProfile, Personality
+from volnix.actors.state import ActorBehaviorTraits
+from volnix.actors.trait_extractor import extract_behavior_traits
+from volnix.core.types import ActorId, ActorType
 
 
 def _make_actor(**kwargs) -> ActorDefinition:

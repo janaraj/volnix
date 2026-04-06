@@ -1,9 +1,9 @@
-"""Tests for terrarium.llm.providers.mock -- deterministic mock LLM provider."""
+"""Tests for volnix.llm.providers.mock -- deterministic mock LLM provider."""
 
 import pytest
 
-from terrarium.llm.providers.mock import MockLLMProvider
-from terrarium.llm.types import LLMRequest
+from volnix.llm.providers.mock import MockLLMProvider
+from volnix.llm.types import LLMRequest
 
 
 @pytest.mark.asyncio

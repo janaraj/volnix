@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.engines.reporter.scorecard import SCORE_REGISTRY, ScorecardComputer
+from volnix.engines.reporter.scorecard import SCORE_REGISTRY, ScorecardComputer
 
 
 def test_weights_sum_to_one():

@@ -1,0 +1,47 @@
+# Security Posture Assessment World
+# Pair with: --internal agents_security_team.yaml
+world:
+  name: "Security Posture Assessment"
+  description: >
+    A security assessment environment with vulnerability tracking,
+    compliance audit data, and team collaboration. Security team can
+    track tickets in Zendesk and coordinate findings via Slack.
+
+  services:
+    slack: verified/slack
+    zendesk: verified/zendesk
+
+  policies:
+    - name: "Critical risk consensus"
+      description: "Critical or urgent items must be reviewed by security lead before finalization."
+      trigger: "critical risk identified"
+      enforcement: hold
+      hold_config:
+        approver_role: security-lead
+        timeout: 24h
+
+    - name: "Audit gap escalation"
+      description: "Compliance gaps threatening SOC 2 readiness must be escalated immediately."
+      trigger: "compliance gap identified"
+      enforcement: escalate
+      hold_config:
+        approver_role: compliance-officer
+        timeout: 12h
+
+    - name: "Assessment traceability"
+      description: "All material findings and decisions should be recorded."
+      trigger: "finding documented"
+      enforcement: log
+
+  seeds:
+    - "Last quarter's pentest found 3 critical and 7 high vulnerabilities"
+    - "Two critical patches are 30 days overdue on production servers"
+    - "SOC 2 audit in 6 weeks — 4 controls have documented gaps"
+    - "Phishing attempt last month compromised one employee credential"
+    - "New microservices deployment has no network segmentation yet"
+
+  behavior: dynamic
+  fidelity: auto
+  mode: governed
+  reality:
+    preset: messy

@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock
 
-from terrarium.engines.reporter.diff import CounterfactualDiffer
-from terrarium.engines.reporter.scorecard import ScorecardComputer
+from volnix.engines.reporter.diff import CounterfactualDiffer
+from volnix.engines.reporter.scorecard import ScorecardComputer
 from tests.engines.reporter.conftest import make_world_event
 
 

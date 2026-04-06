@@ -5,11 +5,11 @@ import pytest
 import yaml
 from unittest.mock import AsyncMock, MagicMock
 
-from terrarium.engines.world_compiler.engine import WorldCompilerEngine
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.llm.types import LLMResponse
-from terrarium.packs.registry import PackRegistry
-from terrarium.packs.verified.gmail.pack import EmailPack
+from volnix.engines.world_compiler.engine import WorldCompilerEngine
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.llm.types import LLMResponse
+from volnix.packs.registry import PackRegistry
+from volnix.packs.verified.gmail.pack import EmailPack
 
 
 # ---------------------------------------------------------------------------

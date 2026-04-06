@@ -1,11 +1,11 @@
-"""Tests for terrarium.packs.verified.google_calendar -- CalendarPack through pack's own handle_action."""
+"""Tests for volnix.packs.verified.google_calendar -- CalendarPack through pack's own handle_action."""
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.google_calendar.pack import CalendarPack
-from terrarium.packs.verified.google_calendar.schemas import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.google_calendar.pack import CalendarPack
+from volnix.packs.verified.google_calendar.schemas import (
     ATTENDEE_ENTITY_SCHEMA,
     CALENDAR_ENTITY_SCHEMA,
     EVENT_ENTITY_SCHEMA,
@@ -180,15 +180,15 @@ class TestCalendarPackMetadata:
 
     def test_event_schema_identity(self):
         """Event identity field is 'id'."""
-        assert EVENT_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert EVENT_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_calendar_schema_identity(self):
         """Calendar identity field is 'id'."""
-        assert CALENDAR_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert CALENDAR_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_attendee_schema_identity(self):
         """Attendee identity field is 'id'."""
-        assert ATTENDEE_ENTITY_SCHEMA["x-terrarium-identity"] == "id"
+        assert ATTENDEE_ENTITY_SCHEMA["x-volnix-identity"] == "id"
 
     def test_event_schema_has_new_fields(self):
         """Event schema includes P1 audit fields."""

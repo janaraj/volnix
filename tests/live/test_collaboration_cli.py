@@ -1,6 +1,6 @@
 """Live CLI tests for collaboration scenarios.
 
-Runs real worlds through `terrarium run` CLI command.
+Runs real worlds through `volnix run` CLI command.
 Verifies results via dashboard API endpoints.
 Results persist to data/runs/ for frontend viewing.
 
@@ -16,19 +16,19 @@ from pathlib import Path
 import httpx
 import pytest
 
-TERRARIUM_CMD = ["uv", "run", "terrarium"]
+VOLNIX_CMD = ["uv", "run", "volnix"]
 DASHBOARD_URL = "http://127.0.0.1:8200"
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "worlds" / "collaboration"
 
 
 def _run_world(yaml_name: str, tag: str, behavior: str = "dynamic", timeout: int = 300) -> subprocess.CompletedProcess:
-    """Run a world YAML through the terrarium CLI."""
+    """Run a world YAML through the volnix CLI."""
     yaml_path = FIXTURES_DIR / yaml_name
     assert yaml_path.exists(), f"Fixture not found: {yaml_path}"
 
     result = subprocess.run(
         [
-            *TERRARIUM_CMD,
+            *VOLNIX_CMD,
             "run",
             str(yaml_path),
             "--behavior", behavior,

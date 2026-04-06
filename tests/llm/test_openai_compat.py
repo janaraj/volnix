@@ -1,20 +1,20 @@
-"""Tests for terrarium.llm.providers.openai_compat -- OpenAI-compatible provider."""
+"""Tests for volnix.llm.providers.openai_compat -- OpenAI-compatible provider."""
 
 import os
 
 import pytest
 
-from terrarium.llm.providers.openai_compat import OpenAICompatibleProvider
-from terrarium.llm.types import LLMRequest
+from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
+from volnix.llm.types import LLMRequest
 
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 skipif_no_openai = pytest.mark.skipif(
     not OPENAI_KEY, reason="OPENAI_API_KEY not set"
 )
 
-# Toggle: TERRARIUM_RUN_REAL_API_TESTS=1 to enable expensive real API tests
-RUN_REAL = os.environ.get("TERRARIUM_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
-skipif_no_real = pytest.mark.skipif(not RUN_REAL, reason="TERRARIUM_RUN_REAL_API_TESTS not enabled")
+# Toggle: VOLNIX_RUN_REAL_API_TESTS=1 to enable expensive real API tests
+RUN_REAL = os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
+skipif_no_real = pytest.mark.skipif(not RUN_REAL, reason="VOLNIX_RUN_REAL_API_TESTS not enabled")
 
 
 def test_openai_compat_init():
@@ -85,17 +85,17 @@ async def test_openai_compat_error_handling():
 @skipif_no_real
 @pytest.mark.asyncio
 async def test_openai_real_generate():
-    """Real OpenAI API call -- enable with TERRARIUM_RUN_REAL_API_TESTS=1."""
+    """Real OpenAI API call -- enable with VOLNIX_RUN_REAL_API_TESTS=1."""
     provider = OpenAICompatibleProvider(
         api_key=OPENAI_KEY,
         base_url="https://api.openai.com/v1",
     )
     resp = await provider.generate(
         LLMRequest(
-            system_prompt="Reply with exactly the word 'terrarium'",
+            system_prompt="Reply with exactly the word 'volnix'",
             user_content="What word?",
             max_tokens=50,
         )
     )
     assert resp.error is None
-    assert "terrarium" in resp.content.lower()
+    assert "volnix" in resp.content.lower()

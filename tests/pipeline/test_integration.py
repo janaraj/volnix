@@ -8,24 +8,24 @@ import asyncio
 
 import pytest
 
-from terrarium.bus.bus import EventBus
-from terrarium.bus.config import BusConfig
-from terrarium.core.context import ActionContext, ResponseProposal, StepResult
-from terrarium.core.events import Event
-from terrarium.core.types import (
+from volnix.bus.bus import EventBus
+from volnix.bus.config import BusConfig
+from volnix.core.context import ActionContext, ResponseProposal, StepResult
+from volnix.core.events import Event
+from volnix.core.types import (
     ActorId,
     ServiceId,
     SideEffect,
     StepVerdict,
     Timestamp,
 )
-from terrarium.ledger.config import LedgerConfig
-from terrarium.ledger.entries import PipelineStepEntry
-from terrarium.ledger.ledger import Ledger
-from terrarium.ledger.query import LedgerQuery
-from terrarium.persistence.sqlite import SQLiteDatabase
-from terrarium.pipeline.dag import PipelineDAG
-from terrarium.pipeline.side_effects import SideEffectProcessor
+from volnix.ledger.config import LedgerConfig
+from volnix.ledger.entries import PipelineStepEntry
+from volnix.ledger.ledger import Ledger
+from volnix.ledger.query import LedgerQuery
+from volnix.persistence.sqlite import SQLiteDatabase
+from volnix.pipeline.dag import PipelineDAG
+from volnix.pipeline.side_effects import SideEffectProcessor
 
 from datetime import datetime, timezone
 

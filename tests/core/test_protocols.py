@@ -1,6 +1,6 @@
-"""Tests for terrarium.core.protocols — runtime-checkable Protocol definitions."""
+"""Tests for volnix.core.protocols — runtime-checkable Protocol definitions."""
 import pytest
-from terrarium.core.protocols import (
+from volnix.core.protocols import (
     PipelineStep, StateEngineProtocol, PolicyEngineProtocol,
     EventBusProtocol, PermissionEngineProtocol, BudgetEngineProtocol,
     ResponderProtocol, AnimatorProtocol, AdapterProtocol,

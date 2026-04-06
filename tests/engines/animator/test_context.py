@@ -1,4 +1,4 @@
-"""Tests for terrarium.engines.animator.context -- AnimatorContext.
+"""Tests for volnix.engines.animator.context -- AnimatorContext.
 
 Covers: get_probability, for_organic_generation, WorldGenerationContext reuse.
 """
@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.reality.dimensions import (
+from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.reality.dimensions import (
     BoundaryDimension,
     ComplexityDimension,
     InformationQualityDimension,
@@ -144,7 +144,7 @@ def test_reuses_world_generation_context():
     """AnimatorContext internally creates a WorldGenerationContext."""
     ctx = AnimatorContext(_make_plan(_messy_conditions()))
     # _base should be a WorldGenerationContext
-    from terrarium.engines.world_compiler.generation_context import WorldGenerationContext
+    from volnix.engines.world_compiler.generation_context import WorldGenerationContext
     assert isinstance(ctx._base, WorldGenerationContext)
 
 

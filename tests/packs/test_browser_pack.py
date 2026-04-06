@@ -1,4 +1,4 @@
-"""Tests for terrarium.packs.verified.browser — web browsing simulation.
+"""Tests for volnix.packs.verified.browser — web browsing simulation.
 
 Tests cover all 11 handlers, state machines, entity schemas, and
 the SideEffect bridge for form submissions.
@@ -6,10 +6,10 @@ the SideEffect bridge for form submissions.
 
 import pytest
 
-from terrarium.core.context import ResponseProposal
-from terrarium.core.types import ToolName
-from terrarium.packs.verified.browser.pack import BrowserPack
-from terrarium.packs.verified.browser.state_machines import (
+from volnix.core.context import ResponseProposal
+from volnix.core.types import ToolName
+from volnix.packs.verified.browser.pack import BrowserPack
+from volnix.packs.verified.browser.state_machines import (
     WEB_PAGE_STATES,
     WEB_PAGE_TRANSITIONS,
     WEB_SESSION_STATES,
@@ -213,9 +213,9 @@ class TestBrowserPackMetadata:
         assert "web_page" in schemas
         assert "web_session" in schemas
         # Verify identity fields
-        assert schemas["web_site"]["x-terrarium-identity"] == "id"
-        assert schemas["web_page"]["x-terrarium-identity"] == "id"
-        assert schemas["web_session"]["x-terrarium-identity"] == "id"
+        assert schemas["web_site"]["x-volnix-identity"] == "id"
+        assert schemas["web_page"]["x-volnix-identity"] == "id"
+        assert schemas["web_session"]["x-volnix-identity"] == "id"
 
     def test_state_machines(self, browser_pack):
         """State machines for web_page and web_session are present."""

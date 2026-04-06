@@ -1,11 +1,11 @@
-"""Tests for terrarium.engines.adapter.engine -- AdapterEngine capability checks."""
+"""Tests for volnix.engines.adapter.engine -- AdapterEngine capability checks."""
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from terrarium.engines.adapter.engine import AgentAdapterEngine
-from terrarium.core.context import ActionContext
-from terrarium.core.types import ActorId, ServiceId, StepVerdict
+from volnix.engines.adapter.engine import AgentAdapterEngine
+from volnix.core.context import ActionContext
+from volnix.core.types import ActorId, ServiceId, StepVerdict
 
 
 def _make_engine(pack_registry=None):
@@ -90,8 +90,8 @@ async def test_adapter_no_pack_registry_passthrough():
 async def test_adapter_handle_event():
     """_handle_event logs but does not raise."""
     engine = _make_engine()
-    from terrarium.core.events import Event
-    from terrarium.core.types import Timestamp
+    from volnix.core.events import Event
+    from volnix.core.types import Timestamp
 
     now = datetime.now(timezone.utc)
     event = Event(

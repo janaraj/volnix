@@ -1,4 +1,4 @@
-"""Tests for terrarium.engines.animator.engine -- WorldAnimatorEngine.
+"""Tests for volnix.engines.animator.engine -- WorldAnimatorEngine.
 
 Covers: static mode, dynamic mode, reactive mode, event execution,
         creativity budget, configure(), probabilistic events.
@@ -11,17 +11,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from terrarium.engines.animator.config import AnimatorConfig
-from terrarium.engines.animator.context import AnimatorContext
-from terrarium.engines.animator.engine import WorldAnimatorEngine, _parse_duration
-from terrarium.engines.world_compiler.plan import WorldPlan
-from terrarium.reality.dimensions import (
+from volnix.engines.animator.config import AnimatorConfig
+from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.animator.engine import WorldAnimatorEngine, _parse_duration
+from volnix.engines.world_compiler.plan import WorldPlan
+from volnix.reality.dimensions import (
     WorldConditions,
     ReliabilityDimension,
     ComplexityDimension,
     BoundaryDimension,
 )
-from terrarium.scheduling.scheduler import WorldScheduler
+from volnix.scheduling.scheduler import WorldScheduler
 
 
 def _utc(**kwargs):
@@ -126,7 +126,7 @@ async def test_dynamic_mode_scheduled_events():
 @pytest.mark.asyncio
 async def test_dynamic_mode_organic_events():
     """Dynamic mode: organic events from generator are returned (mocked LLM)."""
-    from terrarium.llm.types import LLMResponse
+    from volnix.llm.types import LLMResponse
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
@@ -174,9 +174,9 @@ async def test_reactive_mode_no_events_without_actions():
 @pytest.mark.asyncio
 async def test_reactive_mode_events_with_actions():
     """Reactive mode: events only when recent_actions exist."""
-    from terrarium.llm.types import LLMResponse
-    from terrarium.core.events import WorldEvent
-    from terrarium.core.types import Timestamp, ActorId, ServiceId
+    from volnix.llm.types import LLMResponse
+    from volnix.core.events import WorldEvent
+    from volnix.core.types import Timestamp, ActorId, ServiceId
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
@@ -257,7 +257,7 @@ async def test_execute_event_publishes_animator_event():
     # Check bus.publish was called
     engine._bus.publish.assert_called()
     published = engine._bus.publish.call_args[0][0]
-    from terrarium.core.events import AnimatorEvent
+    from volnix.core.events import AnimatorEvent
     assert isinstance(published, AnimatorEvent)
     assert published.sub_type == "scheduled"
 
@@ -270,7 +270,7 @@ async def test_execute_event_publishes_animator_event():
 @pytest.mark.asyncio
 async def test_creativity_budget_respected():
     """Organic events are capped at creativity_budget_per_tick."""
-    from terrarium.llm.types import LLMResponse
+    from volnix.llm.types import LLMResponse
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
