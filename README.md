@@ -2,13 +2,57 @@
 
 **Programmable worlds for AI agents.**
 
-Volnix creates stateful, causal, observable realities where AI agents exist as participants — not as isolated prompt loops calling tools, but as actors inside a world that has places, institutions, other agents, budgets, policies, communication systems, and real consequences.
+Every AI agent today runs in a vacuum. It calls APIs, gets responses, and has no idea whether the world it's operating in is consistent, adversarial, or even real. There's no state between calls. No other actors with their own goals. No policies that push back. No consequences that cascade. No world that moves while the agent is thinking.
 
-Describe a world in natural language or YAML. Volnix compiles it into a deep, reproducible simulation. Agents interact through standard protocols (MCP, REST, OpenAI function calling, Anthropic tool use). Everything that happens is recorded, scored, and diffable.
+Volnix changes that. It creates complete, living realities — with places, institutions, actors that have personalities and agendas, budgets, policies, communication systems, and causal chains — where AI agents exist as participants inside a world that doesn't stop when they do.
 
 <p align="center">
   <img src="docs/assets/Dashboard.png" alt="Volnix Dashboard — Live simulation view" width="800">
 </p>
+
+```bash
+pip install volnix
+
+# Create a world from natural language
+volnix create "A fintech support team handling refunds, escalations, and a VIP \
+  threatening a chargeback — data is messy, Stripe is flaky" --reality messy
+
+# Serve it for external agents
+volnix serve customer_support --behavior dynamic --port 8080
+
+# Or run an autonomous internal team that produces a deliverable
+volnix serve market_prediction_analysis \
+  --internal agents_market_analysts.yaml --port 8080
+```
+
+Your agent connects via MCP, REST, or any SDK. It sees a world with 50 customers, open tickets, payment histories, Slack channels, and a supervisor who takes 5 minutes to respond. But this world doesn't sit still. While your agent investigates ticket #1, the VIP sends a furious follow-up email. A new customer opens a duplicate ticket. The supervisor posts a policy reminder in Slack. An SLA timer expires and auto-escalates a forgotten ticket. Your agent comes back from its API call and the world has changed — just like production.
+
+Internal agent teams go further. A 3-agent market analysis crew — economist, technical analyst, risk analyst — collaborates through world channels, reads Twitter sentiment, analyzes Reddit discussions, debates in Slack, and produces a quarterly market prediction. All from compiled world data. No real APIs called. The deliverable is real; the world that produced it was simulated.
+
+### Two modes control how alive the world is
+
+| Mode | The world... | Use when... |
+|------|-------------|-------------|
+| **Static** | Frozen after compilation. Only agents move. | Deterministic, reproducible benchmarks |
+| **Dynamic** | Lives on its own. NPCs create events, follow up, escalate, change their minds. | Testing how agents handle a world that doesn't wait |
+
+Everything the agent does flows through a **7-step governance pipeline** that enforces permissions, policies, and budgets. Everything is recorded in a causal graph. Everything is reproducible, diffable, and scorable.
+
+### What Volnix is not
+
+**Not a mock server.** Mock servers return canned responses. Volnix maintains deep, interconnected state — a refund changes the customer's balance, triggers an activity log entry, updates the ticket status, and may cause the customer's sentiment to shift. Actions have consequences. Consequences have consequences.
+
+**Not a test harness.** Test harnesses verify outputs. Volnix evaluates behavior — how your agent handles ambiguity, conflicting information, policy constraints, resource limits, uncooperative actors, and situations it has never seen before.
+
+**Volnix is a world engine.** Describe a reality. Compile it. Turn it on. Put agents inside it. Watch what happens when the world pushes back.
+
+### What you can do with it
+
+- **Stress-test any AI agent** — Connect your CrewAI crew, LangGraph workflow, PydanticAI agent, or custom code. Volnix speaks MCP, OpenAI, Anthropic, and Gemini protocols. Your agent doesn't know it's in a simulation.
+- **Run autonomous multi-agent teams** — Define internal agent teams with roles, personalities, and permissions. A supervisor delegates, specialists investigate, and Volnix orchestrates the collaboration through world channels — producing predictions, decisions, and syntheses as deliverables.
+- **Build worlds that fight back** — Flaky APIs, stale data, hostile actors, budget exhaustion. Five reality dimensions with presets from `ideal` to `hostile`. In dynamic mode, the world generates surprises your agent never trained for.
+- **Compare models and architectures** — Same world, same seed, different agent. Run Claude against GPT against Gemini. Diff the governance scorecards. See which one holds up when the world gets messy.
+- **Build governed agent systems** — Permissions, policies, budgets, and approval workflows are first-class primitives. An agent that tries to issue a refund beyond its authority gets held for supervisor approval — automatically, structurally, not through prompt engineering.
 
 ---
 
