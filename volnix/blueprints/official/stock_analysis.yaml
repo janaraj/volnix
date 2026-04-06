@@ -1,0 +1,45 @@
+world:
+  name: "Stock Analysis Trading Floor"
+  description: >
+    A trading environment with market data, social sentiment feeds,
+    and news for financial analysis. Analysts research stocks, check
+    positions, and execute trades through Alpaca.
+
+  services:
+    alpaca: verified/alpaca
+
+  policies:
+    - name: "Large order approval"
+      trigger: "placing a buy or sell order exceeding 100 shares"
+      enforcement: hold
+      hold_config:
+        approver_role: "investment-advisor"
+        timeout: "15m"
+
+    - name: "Short selling block"
+      trigger: "creating a sell order for a position not currently held"
+      enforcement: block
+      reason: "Short selling is not permitted in this account"
+
+    - name: "Audit all trades"
+      trigger: "any order creation or cancellation"
+      enforcement: log
+
+    - name: "Position close review"
+      trigger: "closing an entire position"
+      enforcement: escalate
+      escalate_config:
+        target_role: "investment-advisor"
+
+  seeds:
+    - "AAPL position: 150 shares at avg cost $178.50, current price $192.30"
+    - "GOOGL position: 50 shares at avg cost $142.00, current price $158.75"
+    - "Account buying power $45,000, portfolio value $89,500"
+    - "Recent news: Fed signals rate pause, tech earnings beat expectations"
+    - "Social sentiment: AAPL bullish 72%, GOOGL neutral 55%"
+
+  reality:
+    preset: messy
+
+  mode: governed
+  behavior: static

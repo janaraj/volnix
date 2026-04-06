@@ -313,8 +313,8 @@ timeout_seconds = 300
 # model (anthropic): "claude-sonnet-4-6" | "claude-haiku-4-5-20251001"
 
 [llm.routing.world_compiler]
-provider = "gemini"                     # "openai" for OpenAI
-model = "gemini-3.1-flash-lite-preview"        # "gpt-5.4-nano" for OpenAI
+provider = "openai"                     # "gemini"
+model = "gpt-5.4-nano"                 # "gemini-3.1-flash-lite-preview"
 max_tokens = 16384
 temperature = 0
 
@@ -343,8 +343,8 @@ max_tokens = 2048
 temperature = 0.5
 
 [llm.routing.data_generator]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-5.4-nano"
+provider = "openai"
+model = "gpt-5.4-nano"
 max_tokens = 16384
 temperature = 0
 
@@ -361,7 +361,7 @@ max_tokens = 8192
 temperature = 0
 
 [llm.routing.world_compiler_policy_trigger_compilation]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-5.4-nano"
+provider = "openai"                     # "gemini"
+model = "gpt-5.4-nano"                 # "gemini-3.1-flash-lite-preview"
 max_tokens = 4096
 temperature = 0

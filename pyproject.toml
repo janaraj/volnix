@@ -9,6 +9,24 @@ description = "Programmable worlds for artificial intelligence"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
+authors = [
+    {name = "Janarthanan Rajendran"},
+]
+keywords = ["ai", "agents", "world-simulator", "dynamic-world", "simulation", "mcp", "governance", "multi-agent", "prediction", "synthesis", "tool-use", "observability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/janaraj/volnix"
+Documentation = "https://github.com/janaraj/volnix/tree/main/docs"
+Repository = "https://github.com/janaraj/volnix"
+Issues = "https://github.com/janaraj/volnix/issues"
 dependencies = [
     "pydantic>=2.0",
     "aiosqlite>=0.19",

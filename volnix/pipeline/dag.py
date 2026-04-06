@@ -102,6 +102,17 @@ class PipelineDAG:
             await self._record_to_ledger(ctx, result)
 
             for event in result.events:
+                # Stamp context fields so governance events carry full
+                # lineage: which run, which action, which service.
+                updates: dict[str, Any] = {}
+                if ctx.run_id and not event.run_id:
+                    updates["run_id"] = str(ctx.run_id)
+                if ctx.action and not event.action:
+                    updates["action"] = ctx.action
+                if ctx.service_id and not event.service_id:
+                    updates["service_id"] = str(ctx.service_id)
+                if updates:
+                    event = event.model_copy(update=updates)
                 await self._publish_step_event(event)
 
             if result.is_terminal:

@@ -89,12 +89,24 @@ class OpenAICompatibleProvider(LLMProvider):
 
             # Structured output: force valid JSON matching the schema.
             # Uses response_format with json_schema type.
+            # OpenAI requires root schema to be type: "object". If the
+            # caller sends type: "array", wrap it automatically.
+            _unwrap_array = False
             if request.output_schema:
+                schema = request.output_schema
+                if schema.get("type") == "array":
+                    # Wrap array in object: {"items": [...]}
+                    schema = {
+                        "type": "object",
+                        "properties": {"items": schema},
+                        "required": ["items"],
+                    }
+                    _unwrap_array = True
                 kwargs["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "response",
-                        "schema": request.output_schema,
+                        "schema": schema,
                         "strict": False,
                     },
                 }
@@ -118,16 +130,23 @@ class OpenAICompatibleProvider(LLMProvider):
                 kwargs["tool_choice"] = request.tool_choice or "required"
 
             # Newer OpenAI models (gpt-5.x, o-series) use max_completion_tokens
-            # instead of max_tokens. Try the new parameter first, fall back to old.
+            # instead of max_tokens. Try new parameter first, fall back to old,
+            # then try without either (some models reject both when using
+            # structured output / response_format).
             kwargs["max_completion_tokens"] = request.max_tokens
             try:
                 response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
             except (openai.BadRequestError, TypeError, KeyError):
-                # Fall back: remove new-style params unsupported by older models/endpoints
+                # Fall back: try max_tokens (older models)
                 kwargs.pop("max_completion_tokens", None)
                 kwargs.pop("prompt_cache_retention", None)
                 kwargs["max_tokens"] = request.max_tokens
-                response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+                try:
+                    response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+                except (openai.BadRequestError, TypeError, KeyError):
+                    # Last resort: omit token limit entirely
+                    kwargs.pop("max_tokens", None)
+                    response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
 
             latency = (time.monotonic() - start) * 1000
             message = response.choices[0].message if response.choices else None
@@ -197,6 +216,9 @@ class OpenAICompatibleProvider(LLMProvider):
             if request.output_schema and content:
                 try:
                     parsed_structured = json.loads(content)
+                    # Unwrap array that was wrapped in object for OpenAI compat
+                    if _unwrap_array and isinstance(parsed_structured, dict):
+                        parsed_structured = parsed_structured.get("items", parsed_structured)
                     items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
                     logger.info("OpenAI structured output parsed: %d items, %d chars", items, len(content))
                 except json.JSONDecodeError:

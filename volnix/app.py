@@ -520,6 +520,33 @@ class VolnixApp:
             "entities": entities,
         }
 
+    async def _ensure_active_run(self) -> None:
+        """Auto-create a run if there's a world but no active run.
+
+        Reuses the same pattern as the CLI serve path (cli.py:765-776):
+        load plan from world → create_run(). Ensures external agents
+        connecting via MCP/HTTP always have a run for event tracking.
+        """
+        if self._current_run_id or not self._current_world_id:
+            return
+        if not self._world_manager:
+            return
+        plan = await self._world_manager.load_plan(
+            WorldId(self._current_world_id)
+        )
+        if plan is None:
+            return
+        run_id = await self.create_run(
+            plan,
+            mode=plan.mode,
+            world_id=WorldId(self._current_world_id),
+        )
+        logger.info(
+            "Auto-created run %s for world %s",
+            run_id,
+            self._current_world_id,
+        )
+
     async def handle_action(
         self,
         actor_id: str,
@@ -531,6 +558,9 @@ class VolnixApp:
         """Execute a single action through the full 7-step pipeline."""
         if not self._started:
             raise RuntimeError("VolnixApp is not started. Call start() first.")
+
+        # Auto-create run if needed (external agent connected after previous run completed)
+        await self._ensure_active_run()
 
         # Track last action time for idle auto-complete
         self._last_action_time = datetime.now(UTC)

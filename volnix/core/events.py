@@ -66,6 +66,9 @@ class Event(BaseModel, frozen=True):
         timestamp: When the event occurred (world + wall time).
         caused_by: Optional parent event that triggered this one.
         metadata: Arbitrary metadata bag.
+        run_id: The evaluation run this event belongs to.
+        action: The action that produced this event.
+        service_id: The service the action targeted.
     """
 
     event_id: EventId = Field(default_factory=_generate_event_id)
@@ -73,6 +76,9 @@ class Event(BaseModel, frozen=True):
     timestamp: Timestamp
     caused_by: EventId | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    run_id: str | None = None
+    action: str = ""
+    service_id: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +125,6 @@ class WorldEvent(Event):
     outcome: str = "success"
     state_deltas: list[dict[str, Any]] = Field(default_factory=list)
     cost: dict[str, Any] | None = None
-    run_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -155,13 +160,11 @@ class PolicyEvent(Event):
         policy_id: The policy that produced this event.
         actor_id: The actor whose action triggered policy evaluation.
         action: The action under evaluation.
-        run_id: The evaluation run this event belongs to.
     """
 
     policy_id: PolicyId
     actor_id: ActorId
     action: str
-    run_id: str | None = None
 
 
 class PolicyBlockEvent(PolicyEvent):

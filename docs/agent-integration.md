@@ -269,53 +269,170 @@ except VolnixAPIError as e:
 
 ---
 
-## Framework Adapters
+## Integration Modes
 
-Export tool definitions for popular agent frameworks:
+Every external agent integration uses one of two modes. These are framework-agnostic — they work with CrewAI, PydanticAI, LangGraph, AutoGen, OpenAI SDK, Anthropic SDK, or any HTTP client.
 
-### OpenAI Function Calling
+### Mode 1: Single Agent (No Profile)
 
-```bash
-volnix config --export openai-tools --port 8080
-```
-
-Returns JSON array of OpenAI function definitions. Pass these as `tools` to the OpenAI Chat Completions API.
-
-### Anthropic Tool Use
+Start Volnix without `--agents`. Any agent that connects is auto-registered as a default gateway actor (`mcp-agent`, `http-agent`) with full permissions.
 
 ```bash
-volnix config --export anthropic-tools --port 8080
+uv run volnix serve customer_support --port 8080
 ```
 
-Returns JSON array of Anthropic tool definitions. Pass these as `tools` to the Anthropic Messages API.
+Best for: quick testing, single-agent workflows, Claude Desktop / Cursor / Windsurf.
 
-### LangGraph
+### Mode 2: Multi-Agent with Profile
+
+Define an agent profile YAML with roles, permissions, and budgets. Each agent connects with its `actor_id` — Volnix maps it to the matching profile and enforces per-agent governance.
+
+```yaml
+# agents_stock_analysts.yaml
+agents:
+  - id: financial-analyst
+    role: financial-analyst
+    permissions:
+      read: [alpaca]
+      write: []
+    budget:
+      api_calls: 200
+
+  - id: research-analyst
+    role: research-analyst
+    permissions:
+      read: [alpaca]
+      write: []
+    budget:
+      api_calls: 200
+
+  - id: investment-advisor
+    role: investment-advisor
+    permissions:
+      read: [alpaca]
+      write: [alpaca]
+    budget:
+      api_calls: 300
+```
 
 ```bash
-volnix config --export langgraph --port 8080
+uv run volnix serve stock_analysis --agents agents_stock_analysts.yaml --port 8080
 ```
 
-Returns a Python code snippet for integrating Volnix tools into a LangGraph agent.
+Best for: multi-agent crews, per-agent permission testing, budget enforcement validation.
+
+**The `actor_id` is the contract.** Your framework passes it on every tool call. Volnix matches it to the profile and routes through the governance pipeline with that agent's permissions and budgets.
+
+---
+
+## Framework Examples
 
 ### CrewAI
 
-```bash
-volnix config --export crewai --port 8080
+Uses the `volnix.adapters.crewai` adapter to bind tools per agent:
+
+```python
+from volnix.adapters.crewai import crewai_tools
+from crewai import Agent, Crew, Task, Process
+
+# Each agent gets tools bound to its identity — permissions enforced per-agent
+analyst_tools = await crewai_tools("http://localhost:8080", actor_id="financial-analyst")
+research_tools = await crewai_tools("http://localhost:8080", actor_id="research-analyst")
+advisor_tools = await crewai_tools("http://localhost:8080", actor_id="investment-advisor")
+
+analyst = Agent(role="Financial Analyst", tools=analyst_tools, llm="gpt-4.1-mini")
+researcher = Agent(role="Research Analyst", tools=research_tools, llm="gpt-4.1-mini")
+advisor = Agent(role="Investment Advisor", tools=advisor_tools, llm="gpt-4.1-mini")
+
+crew = Crew(agents=[analyst, researcher, advisor], tasks=[...], process=Process.sequential)
+crew.kickoff(inputs={"company_stock": "AAPL"})
 ```
 
-### AutoGen
+### PydanticAI
 
-```bash
-volnix config --export autogen --port 8080
+Connects directly via MCP — zero Volnix imports:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPServerStreamableHTTP
+
+server = MCPServerStreamableHTTP("http://localhost:8080/mcp/")
+agent = Agent("openai:gpt-4.1-mini", toolsets=[server])
+
+async with agent:
+    result = await agent.run("Review the support queue and handle urgent tickets.")
+    print(result.output)
 ```
 
-### Docker Compose
+### OpenAI SDK
 
-```bash
-volnix config --export docker-compose --port 8080
+Uses the OpenAI compat endpoint — zero Volnix imports:
+
+```python
+import httpx
+from openai import OpenAI
+
+tools = httpx.get("http://localhost:8080/openai/v1/tools").json()
+client = OpenAI()
+
+response = client.chat.completions.create(
+    model="gpt-4.1-mini",
+    tools=tools,
+    messages=[{"role": "user", "content": "Check account status and get AAPL snapshot."}],
+)
+
+# Execute tool calls against Volnix
+for tool_call in response.choices[0].message.tool_calls:
+    result = httpx.post(
+        "http://localhost:8080/openai/v1/tools/call",
+        json={
+            "id": tool_call.id,
+            "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments},
+            "actor_id": "financial-analyst",
+        },
+    ).json()
 ```
 
-Returns a `docker-compose.yml` snippet with network aliases matching the simulated services.
+### Anthropic SDK
+
+Uses the Anthropic compat endpoint:
+
+```python
+import httpx
+import anthropic
+
+tools = httpx.get("http://localhost:8080/anthropic/v1/tools").json()
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-sonnet-4-6",
+    tools=tools,
+    messages=[{"role": "user", "content": "Search for open tickets and prioritize them."}],
+)
+```
+
+### Export Config Snippets
+
+For quick setup, export framework-specific configuration:
+
+```bash
+volnix config --export claude-desktop --port 8080   # MCP config for Claude Desktop
+volnix config --export cursor --port 8080            # MCP config for Cursor
+volnix config --export windsurf --port 8080          # MCP config for Windsurf
+volnix config --export openai-tools --port 8080      # OpenAI function definitions
+volnix config --export anthropic-tools --port 8080   # Anthropic tool definitions
+volnix config --export crewai --port 8080            # CrewAI integration snippet
+volnix config --export langgraph --port 8080         # LangGraph integration snippet
+volnix config --export autogen --port 8080           # AutoGen integration snippet
+volnix config --export python-sdk --port 8080        # Python SDK snippet
+volnix config --export typescript-sdk --port 8080    # TypeScript SDK snippet
+volnix config --export docker-compose --port 8080    # Docker Compose config
+volnix config --export mcp-raw --port 8080           # Raw MCP config JSON
+volnix config --export env-vars --port 8080          # Environment variables
+
+# List all available exports:
+volnix config --export ""
+```
 
 ---
 
