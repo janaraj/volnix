@@ -176,9 +176,16 @@ class TestCheckCommand:
 
     def test_check_help_shows_test_flag(self):
         """check --help mentions the --test flag."""
-        result = runner.invoke(app, ["check", "--help"], color=False)
+        import os
+
+        env = {**os.environ, "NO_COLOR": "1", "TERM": "dumb"}
+        result = runner.invoke(app, ["check", "--help"], color=False, env=env)
         assert result.exit_code == 0
-        assert "--test" in result.output
+        # Strip any remaining ANSI sequences for CI compatibility
+        import re
+
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--test" in clean
 
 
 # ===================================================================
