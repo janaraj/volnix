@@ -104,7 +104,7 @@ Each step can halt the action. A refund that exceeds the agent's authority is he
 | **uv** | latest | Package manager ([install](https://docs.astral.sh/uv/getting-started/installation/)) |
 | **SQLite** | 3.35+ | Bundled with Python — no separate install needed |
 | **Node.js** | 18+ | Dashboard only (optional) |
-| **LLM API key** | any one | Google (`GOOGLE_API_KEY`), OpenAI (`OPENAI_API_KEY`), or Anthropic (`ANTHROPIC_API_KEY`) |
+| **LLM API key** | any one | Google (`GOOGLE_API_KEY`), OpenAI (`OPENAI_API_KEY`), or Anthropic (`ANTHROPIC_API_KEY`). See [docs/llm-providers.md](docs/llm-providers.md) |
 
 ### Install
 
@@ -264,7 +264,7 @@ world:
     gmail: verified/gmail
     slack: verified/slack
     zendesk: verified/zendesk
-    stripe: profiled/stripe
+    stripe: verified/stripe
 
   actors:
     - role: support-agent
@@ -445,6 +445,8 @@ All protocols expose the same world tools and go through the same governance pip
 
 ### World Definitions
 
+Worlds with `Dynamic` behavior generate organic events and work with `--internal` agent teams. `Reactive` worlds wait for external agents to connect. `Static` worlds are frozen after compilation.
+
 | Blueprint | Domain | Behavior | Services |
 |-----------|--------|----------|----------|
 | `customer_support` | Support | Reactive | Gmail, Slack, Zendesk, Stripe |
@@ -523,6 +525,20 @@ Volnix uses a layered TOML configuration system:
 | Env vars | `VOLNIX__section__key` | Runtime overrides |
 
 See [docs/configuration.md](docs/configuration.md) and `volnix.toml` for the complete reference.
+
+### LLM Providers
+
+Volnix supports any OpenAI SDK-compatible provider, plus native Gemini, Anthropic, CLI tools, and ACP (Agent Communication Protocol). Different engine tasks route to different providers — use a cheap model for compilation, a strong model for agent reasoning, and a local model for the animator.
+
+| Provider Type | Examples | Auth |
+|---|---|---|
+| `google` | Gemini (native) | `GOOGLE_API_KEY` |
+| `anthropic` | Claude (native) | `ANTHROPIC_API_KEY` |
+| `openai_compatible` | OpenAI, Gemini-via-OpenAI, Ollama, vLLM, Together, Groq | `*_API_KEY` or none |
+| `cli` | `claude`, `codex`, `gemini` CLI tools | Local auth |
+| `acp` | `codex-acp`, `claude-agent-acp` | Local auth |
+
+See [docs/llm-providers.md](docs/llm-providers.md) for the full provider guide, tested models, and how to add custom providers.
 
 ---
 

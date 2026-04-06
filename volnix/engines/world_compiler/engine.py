@@ -1006,7 +1006,12 @@ class WorldCompilerEngine(BaseEngine):
                 section_name=section,
                 failing_payload=expansion.model_dump(mode="json"),
                 validation_errors=result.errors,
-                relevant_schema={"description": description},
+                relevant_schema={
+                    "description": description,
+                    "available_entities": seed_processor.build_entity_context(
+                        all_entities, schemas
+                    ),
+                },
                 output_contract=(
                     "JSON object with entities_to_create, entities_to_modify, and "
                     "explicit invariants that verify the seed scenario."

@@ -79,18 +79,30 @@ agents:
 ### Running It
 
 ```bash
-# Pair with a world blueprint
-uv run volnix serve customer_support \
-  --internal agents_support_team.yaml \
+# Pair with a dynamic world blueprint
+uv run volnix serve demo_support_escalation \
+  --internal agents_support_team \
   --port 8080
 
 # Or with an existing compiled world
 uv run volnix serve --world world_83a6d1e351f5 \
-  --internal agents_support_team.yaml \
+  --internal agents_support_team \
   --port 8080
 ```
 
 The `--internal` flag tells Volnix to load the agent team, exclude NPC actors from the Agency Engine (they're driven by the Animator instead), and schedule the lead's activation lifecycle.
+
+### World Behavior Mode Matters
+
+The world paired with `--internal` must use `behavior: dynamic` for agents to stay active. In dynamic mode, the Animator generates organic events (new tickets, follow-ups, escalations) that trigger agent activations. Worlds with `behavior: reactive` only respond to agent actions — without an initial driver, internal agents will stall after the kick-off message.
+
+| World Behavior | Internal Agent Result |
+|---|---|
+| `dynamic` | Agents stay active — Animator generates events that trigger new activations |
+| `reactive` | Agents stall after initial kick-off — nothing drives further activation |
+| `static` | World is frozen — no events generated at all |
+
+**Mode 1 worlds** (like `customer_support`) are designed for external agents to connect to. They typically use `reactive` behavior and define external actor slots. Pair `--internal` with **Mode 2 worlds** (like `demo_support_escalation`, `dynamic_support_center`) which use `dynamic` behavior and are built for autonomous agent teams.
 
 ---
 
@@ -215,7 +227,7 @@ The deliverable JSON is saved alongside the run artifacts in `~/.volnix/data/run
 
 | Profile | Team | Roles | Deliverable | Pair With |
 |---------|------|-------|-------------|-----------|
-| `agents_support_team` | 3 | Supervisor, Senior-agent, Triage-agent | Synthesis | `customer_support`, `demo_support_escalation` |
+| `agents_support_team` | 3 | Supervisor, Senior-agent, Triage-agent | Synthesis | `demo_support_escalation` (dynamic) |
 | `agents_dynamic_support` | 3 | Supervisor, Senior-agent, Triage-agent | Synthesis | `dynamic_support_center` |
 | `agents_market_analysts` | 3 | Macro-economist, Technical-analyst, Risk-analyst | Prediction | `market_prediction_analysis` |
 | `agents_climate_researchers` | 4 | Lead-researcher, Physicist, Oceanographer, Statistician | Synthesis | `climate_research_station` |

@@ -63,7 +63,7 @@ services:
   gmail: verified/gmail
   slack: verified/slack
   zendesk: verified/zendesk
-  stripe: profiled/stripe
+  stripe: verified/stripe
   github: verified/github
   google_calendar: verified/google_calendar
 ```
@@ -81,7 +81,7 @@ services:
 | `verified/reddit` | Reddit API | posts, comments, subreddits |
 | `verified/alpaca` | Alpaca API | orders, positions, market data |
 | `verified/browser` | Web browsing | GET/POST to custom sites |
-| `profiled/stripe` | Stripe API | charges, customers, refunds, invoices |
+| `verified/stripe` | Stripe API | charges, customers, refunds, invoices |
 
 ### Custom Sites (Browser Pack)
 

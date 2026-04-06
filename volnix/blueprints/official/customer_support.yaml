@@ -11,7 +11,7 @@ world:
     gmail: verified/gmail
     slack: verified/slack
     zendesk: verified/zendesk
-    stripe: profiled/stripe
+    stripe: verified/stripe
 
   actors:
     - role: support-agent

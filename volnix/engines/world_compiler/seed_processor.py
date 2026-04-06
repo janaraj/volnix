@@ -78,17 +78,16 @@ class CompilerSeedProcessor:
             all_entities = self.apply_modifications(mods, all_entities, schemas=schemas)
         return all_entities
 
-    async def expand_seed(
+    def build_entity_context(
         self,
-        description: str,
         all_entities: dict[str, list[dict[str, Any]]],
-        base_vars: dict[str, str],
         schemas: dict[str, Any] | None = None,
-    ) -> SeedExpansionResult:
-        """NL seed -> structured modifications via LLM. No fallback."""
-        if not self._router:
-            raise CompilerError("LLM router required for seed expansion")
+    ) -> dict[str, Any]:
+        """Build available entity context for LLM prompts.
 
+        Used by both seed expansion and seed repair to provide entity IDs,
+        field schemas, and reference annotations.
+        """
         available: dict[str, Any] = {}
         for etype, entities in all_entities.items():
             id_field = "id"
@@ -98,14 +97,11 @@ class CompilerSeedProcessor:
                 schema_obj = schemas[etype]
                 if hasattr(schema_obj, "identity_field") and schema_obj.identity_field:
                     id_field = schema_obj.identity_field
-                # Include field names + types so LLM knows valid fields
                 json_schema = getattr(schema_obj, "json_schema", {})
                 for fname, fdef in json_schema.get("properties", {}).items():
                     schema_fields[fname] = (
                         fdef.get("type", "string") if isinstance(fdef, dict) else "string"
                     )
-                # Include reference annotations so LLM knows which fields reference which entity types
-                # references is list[ReferenceRule] with .field and .target_entity_type
                 for ref_rule in getattr(schema_obj, "references", []):
                     ref_annotations[ref_rule.field] = ref_rule.target_entity_type
             summaries = []
@@ -123,6 +119,20 @@ class CompilerSeedProcessor:
             if ref_annotations:
                 entry["references"] = ref_annotations
             available[etype] = entry
+        return available
+
+    async def expand_seed(
+        self,
+        description: str,
+        all_entities: dict[str, list[dict[str, Any]]],
+        base_vars: dict[str, str],
+        schemas: dict[str, Any] | None = None,
+    ) -> SeedExpansionResult:
+        """NL seed -> structured modifications via LLM. No fallback."""
+        if not self._router:
+            raise CompilerError("LLM router required for seed expansion")
+
+        available = self.build_entity_context(all_entities, schemas)
 
         response = await SEED_EXPANSION.execute(
             self._router,

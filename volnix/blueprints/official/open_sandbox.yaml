@@ -10,7 +10,7 @@ world:
     gmail: verified/gmail
     slack: verified/slack
     zendesk: verified/zendesk
-    stripe: profiled/stripe
+    stripe: verified/stripe
     github: verified/github
     google_calendar: verified/google_calendar
 

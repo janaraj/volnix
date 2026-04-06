@@ -315,38 +315,10 @@ Route specific engine tasks to different providers/models:
 
 ```toml
 [llm.routing.world_compiler]
-provider = "openai"
-model = "gpt-4.1-mini"
+provider = "gemini"
+model = "gemini-3.1-flash-lite-preview"
 max_tokens = 16384
 temperature = 0
-
-[llm.routing.responder_tier2]
-provider = "openai"
-model = "gpt-4.1-mini"
-max_tokens = 4096
-temperature = 0.7
-
-[llm.routing.agency_individual]
-provider = "anthropic"
-model = "claude-sonnet-4-6"
-max_tokens = 4096
-temperature = 0
-
-[llm.routing.animator]
-provider = "ollama"
-model = "llama3"
-max_tokens = 2048
-temperature = 0.5
-```
-
-Additional routing entries:
-
-```toml
-[llm.routing.world_compiler_policy_trigger_compilation]
-provider = "openai"
-model = "gpt-5.4-nano"
-max_tokens = 4096
-temperature = 0                     # Deterministic for reproducible policy compilation
 
 [llm.routing.data_generator]
 provider = "gemini"
@@ -354,14 +326,38 @@ model = "gemini-3.1-flash-lite-preview"
 max_tokens = 16384
 temperature = 0
 
-[llm.routing.profile_infer]
+[llm.routing.responder_tier2]
 provider = "gemini"
 model = "gemini-3.1-flash-lite-preview"
+max_tokens = 4096
+temperature = 0.7
+
+[llm.routing.agency_individual]
+provider = "openai"
+model = "gpt-5.4-mini"
+max_tokens = 4096
+temperature = 0
+
+[llm.routing.agency_batch]
+provider = "openai"
+model = "gpt-5.4-mini"
 max_tokens = 8192
-temperature = 0.4
+temperature = 0
+
+[llm.routing.animator]
+provider = "gemini"
+model = "gemini-3.1-flash-lite-preview"
+max_tokens = 2048
+temperature = 0.5
+
+[llm.routing.world_compiler_policy_trigger_compilation]
+provider = "openai"
+model = "gpt-5.4-nano"
+max_tokens = 4096
+temperature = 0
 ```
 
-The routing key format is `{engine_name}_{use_case}`. The router resolves by checking task-specific routing first, then falling back to defaults.
+The routing key format is `{engine_name}_{use_case}`. The router resolves by checking task-specific routing first, then falling back to defaults. See [LLM Providers](llm-providers.md) for the full provider guide and tested models.
 
 ---
 

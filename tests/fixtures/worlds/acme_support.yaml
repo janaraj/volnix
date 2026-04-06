@@ -14,7 +14,7 @@ world:
     gmail: verified/gmail
     slack: verified/slack
     zendesk: verified/zendesk
-    stripe: profiled/stripe
+    stripe: verified/stripe
     web:
       provider: verified/browser
       sites:

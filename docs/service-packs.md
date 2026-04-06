@@ -293,7 +293,7 @@ In world YAML, you can hint which tier to use:
 world:
   services:
     slack: verified/slack       # Force Tier 1 verified pack
-    stripe: profiled/stripe     # Force Tier 2 profile
+    stripe: verified/stripe     # Force Tier 1 verified pack
     jira: jira                  # Auto-resolve (compiler picks best tier)
     notion: notion              # Unknown — will be bootstrapped at compile time
 ```
