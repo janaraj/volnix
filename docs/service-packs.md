@@ -256,26 +256,29 @@ examples:
 
 ## Service Resolution
 
-When the compiler encounters a service name in the world YAML, it resolves through a multi-step priority chain. Each step tries progressively lower-fidelity sources:
+When the compiler encounters a service name in the world YAML, it resolves through a multi-step priority chain. **Most steps produce a usable service surface directly — no LLM required.** The LLM is only the last fallback.
 
 ```
-1. Verified Pack?          → Tier 1 (deterministic, confidence=1.0)
+1. Verified Pack?          → Tier 1, direct (deterministic Python, confidence=1.0)
    |
    v not found
-2. Curated Profile?        → Tier 2 (hand-written YAML, confidence=0.8-0.9)
+2. Curated Profile?        → Tier 2, direct (hand-written YAML, confidence=0.8-0.9)
    |
    v not found
-3. Context Hub docs?       → Tier 2 (curated external docs, confidence=0.7)
-   |
+3. Context Hub?            → Tier 2, direct (curated docs → surface, confidence=0.7)
+   |                         NO LLM — operations extracted from real documentation
    v not found
-4. OpenAPI spec?           → Tier 2 (local spec file, confidence=0.5-0.6)
-   |
+4. OpenAPI spec?           → Tier 2, direct (spec parsed → surface, confidence=0.5-0.6)
+   |                         NO LLM — operations extracted from real API spec
    v not found
 5. Semantic Kernel?        → Category primitives (confidence=0.1-0.4)
-   |
-   v combine all available sources
-6. Profile Inference (LLM) → Tier 2 bootstrapped (confidence=0.3-0.7)
+   |                         NO LLM — static registry lookup
+   v none of the above resolved
+6. Profile Inference       → Tier 2 bootstrapped (LLM, but uses ALL sources above as context)
+                             confidence=0.3-0.7 depending on what sources were available
 ```
+
+**Key point:** Steps 3-5 are NOT "inputs to LLM generation." They are **direct resolution paths** that produce a working service surface without any LLM call. The LLM inference at Step 6 is only reached when all direct paths fail. And even then, it gathers whatever partial information the earlier steps found (Context Hub docs, OpenAPI operations, Kernel primitives) to give the LLM maximum context.
 
 In world YAML, you can hint which tier to use:
 
@@ -312,35 +315,45 @@ When the compiler encounters `jira`, the Kernel classifies it as `work_managemen
 
 Service mappings are in `volnix/kernel/data/services.toml` (33+ pre-mapped services).
 
-### Context Hub
+### Context Hub (Direct Resolution — No LLM)
 
-The **Context Hub** (`@aisuite/chub`) is a curated API documentation provider. It fetches real, maintained documentation for popular services — NOT LLM-generated.
+The **Context Hub** ([`@aisuite/chub`](https://github.com/andrewyng/context-hub)) is a curated API documentation provider. It fetches real, maintained documentation for popular services.
 
 ```
-Context Hub flow:
+Context Hub resolution (NO LLM involved):
   1. chub search "stripe" → finds content IDs: stripe/api, stripe/webhooks
   2. chub get stripe/api --lang py → returns curated Python-focused markdown
-  3. Volnix parses the docs to understand operations, entities, patterns
+  3. Volnix parses the docs → extracts operations, entities, patterns
+  4. Converts directly to ServiceSurface (confidence=0.7)
 ```
 
-When Context Hub docs are available, the profile inference has much higher confidence (0.7) because the LLM works from real documentation rather than general knowledge.
+This is a **direct resolution** — the Context Hub docs produce a working service surface without any LLM call. The operations, parameters, and response schemas come from real curated documentation.
 
-Context Hub is optional — if `npx` is not available or the service isn't in the hub, the resolver continues to the next source.
+Context Hub is an open-source library with curated docs for hundreds of services (Stripe, Twilio, Jira, Shopify, etc.). Volnix uses it as a primary source before falling back to LLM inference.
 
-### OpenAPI Specs
+Context Hub is optional — if `npx` is not available or the service isn't in the hub, the resolver continues to the next source. If Context Hub partially resolves a service (docs found but incomplete), those docs are still used as context if LLM inference is needed later.
 
-Volnix can parse **local OpenAPI 3.x specs** (YAML or JSON) placed in the spec directory. The OpenAPI provider:
+### OpenAPI Specs (Direct Resolution — No LLM)
+
+Volnix can parse **local OpenAPI 3.x specs** (YAML or JSON) placed in the spec directory. Like Context Hub, this is a direct resolution with no LLM involved:
 
 1. Loads `{service_name}.yaml` or `{service_name}.json` from the configured spec directory
 2. Extracts all operations (paths + methods → tool definitions)
 3. Resolves `$ref` references in parameters and response schemas
-4. Produces a `ServiceSurface` with confidence 0.5-0.6
+4. Converts directly to `ServiceSurface` with confidence 0.5-0.6
 
-This is useful when you have the actual API spec for a service but don't want to build a full verified pack.
+This is useful when you have the actual API spec for a service. Drop the spec file in the spec directory and Volnix picks it up automatically:
 
-### Profile Inference (Bootstrapping)
+```bash
+# Place your spec in the configured spec directory
+cp my_service_openapi.yaml volnix/specs/my_service.yaml
 
-When no pack, profile, or external spec exists, the **ProfileInferrer** generates a draft profile. This is NOT raw LLM hallucination — it gathers all available context first:
+# Now reference it in your world YAML — Volnix auto-discovers the spec
+```
+
+### Profile Inference (Last Resort — LLM with Context)
+
+Profile inference is the **last fallback** — it only runs when Steps 1-5 all fail to produce a complete service surface. Even then, it's not blind LLM generation — it gathers whatever partial information the earlier steps found:
 
 **Step 1: Gather sources**
 ```
