@@ -63,11 +63,12 @@ class GovernanceReportGenerator:
                 continue
             try:
                 challenges = await self._challenges.analyze(
-                    events, actor_id, self._conditions,
+                    events,
+                    actor_id,
+                    self._conditions,
                 )
                 world_challenges[str(actor_id)] = [
-                    c.model_dump() if hasattr(c, "model_dump") else c
-                    for c in challenges
+                    c.model_dump() if hasattr(c, "model_dump") else c for c in challenges
                 ]
             except Exception:
                 world_challenges[str(actor_id)] = []
@@ -75,20 +76,22 @@ class GovernanceReportGenerator:
             try:
                 boundaries = await self._boundaries.analyze(events, actor_id)
                 agent_boundaries[str(actor_id)] = [
-                    b.model_dump() if hasattr(b, "model_dump") else b
-                    for b in boundaries
+                    b.model_dump() if hasattr(b, "model_dump") else b for b in boundaries
                 ]
             except Exception:
                 agent_boundaries[str(actor_id)] = []
 
         # Count external agent actions
         world_events = [
-            e for e in events
-            if (e.get("event_type", "") if isinstance(e, dict)
-                else getattr(e, "event_type", "")).startswith("world.")
+            e
+            for e in events
+            if (
+                e.get("event_type", "") if isinstance(e, dict) else getattr(e, "event_type", "")
+            ).startswith("world.")
         ]
         external_actors = [
-            a for a in actors
+            a
+            for a in actors
             if (a.get("type") if isinstance(a, dict) else getattr(a, "type", ""))
             in ("agent", "external")
         ]
@@ -98,9 +101,7 @@ class GovernanceReportGenerator:
             "summary": {
                 "total_actions": len(world_events),
                 "external_actors": len(external_actors),
-                "overall_score": scorecard.get("collective", {}).get(
-                    "overall_score"
-                ),
+                "overall_score": scorecard.get("collective", {}).get("overall_score"),
                 "total_gaps": len(gaps),
             },
             "scorecard": scorecard,

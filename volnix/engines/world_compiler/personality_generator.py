@@ -60,9 +60,7 @@ class CompilerPersonalityGenerator:
     ) -> list[Personality]:
         """Generate a single role batch without rebuilding actor structure."""
         if not self._router:
-            raise CompilerError(
-                "LLM router required for actor generation"
-            )
+            raise CompilerError("LLM router required for actor generation")
         return await self._generate_batch_for_role(
             role=role,
             count=count,
@@ -78,9 +76,7 @@ class CompilerPersonalityGenerator:
     ) -> Personality:
         """Generate a single personality via LLM. No fallback."""
         if not self._router:
-            raise CompilerError(
-                "LLM router required for personality generation"
-            )
+            raise CompilerError("LLM router required for personality generation")
 
         base_vars = ctx.for_personality_batch()
         personalities = await self._generate_batch_for_role(
@@ -125,21 +121,23 @@ class CompilerPersonalityGenerator:
 
         personalities: list[Personality] = []
         for item in items:
-            personalities.append(Personality(
-                style=item.get("style", "balanced"),
-                response_time=item.get("response_time", "5m"),
-                strengths=item.get("strengths", []),
-                weaknesses=item.get("weaknesses", []),
-                description=item.get("description", ""),
-                traits=item.get("traits", {}),
-            ))
+            personalities.append(
+                Personality(
+                    style=item.get("style", "balanced"),
+                    response_time=item.get("response_time", "5m"),
+                    strengths=item.get("strengths", []),
+                    weaknesses=item.get("weaknesses", []),
+                    description=item.get("description", ""),
+                    traits=item.get("traits", {}),
+                )
+            )
 
         # If LLM returned fewer than count, duplicate last to fill
         if len(personalities) < count:
             logger.warning(
-                "LLM returned %d personalities for role, expected %d — "
-                "duplicating last to fill",
-                len(personalities), count,
+                "LLM returned %d personalities for role, expected %d — duplicating last to fill",
+                len(personalities),
+                count,
             )
             while len(personalities) < count:
                 personalities.append(personalities[-1])
@@ -169,9 +167,7 @@ class CompilerPersonalityGenerator:
         Groups actors by ROLE — makes ONE LLM call per role, not per actor.
         """
         if not self._router:
-            raise CompilerError(
-                "LLM router required for actor generation"
-            )
+            raise CompilerError("LLM router required for actor generation")
 
         # SimpleActorGenerator provides STRUCTURE: count expansion, friction
         # distribution, type mapping. Deterministic math, NOT heuristic.

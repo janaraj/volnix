@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Preset tests
 # ---------------------------------------------------------------------------
@@ -61,7 +60,14 @@ class TestPresetLoading:
         """The 6 documented presets must all exist."""
         from volnix.deliverable_presets import AVAILABLE_PRESETS
 
-        expected = {"synthesis", "decision", "prediction", "brainstorm", "recommendation", "assessment"}
+        expected = {
+            "synthesis",
+            "decision",
+            "prediction",
+            "brainstorm",
+            "recommendation",
+            "assessment",
+        }
         actual = set(AVAILABLE_PRESETS)
         missing = expected - actual
         assert not missing, f"Missing documented presets: {missing}"
@@ -142,8 +148,9 @@ class TestCLIFlagsHarness:
 
     def test_run_command_has_deliverable_option(self):
         """The run command must accept --deliverable."""
-        from volnix.cli import app
         from typer.testing import CliRunner
+
+        from volnix.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
@@ -151,8 +158,9 @@ class TestCLIFlagsHarness:
 
     def test_run_command_has_actors_option(self):
         """The run command must accept --actors."""
-        from volnix.cli import app
         from typer.testing import CliRunner
+
+        from volnix.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
@@ -160,10 +168,20 @@ class TestCLIFlagsHarness:
 
     def test_deliverable_help_lists_all_types(self):
         """--deliverable help text must mention all 6 types."""
-        from volnix.cli import app
         from typer.testing import CliRunner
+
+        from volnix.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
-        for name in ["synthesis", "decision", "prediction", "brainstorm", "recommendation", "assessment"]:
-            assert name in result.output, f"Deliverable '{name}' not mentioned in --deliverable help"
+        for name in [
+            "synthesis",
+            "decision",
+            "prediction",
+            "brainstorm",
+            "recommendation",
+            "assessment",
+        ]:
+            assert name in result.output, (
+                f"Deliverable '{name}' not mentioned in --deliverable help"
+            )

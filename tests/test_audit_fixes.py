@@ -2,10 +2,10 @@
 
 Each test verifies the ROOT CAUSE fix, not symptoms.
 """
+
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,31 +13,24 @@ import pytest
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.registry import ActorRegistry
 from volnix.core.context import ActionContext, ResponseProposal, StepResult
-from volnix.core.errors import EntityNotFoundError, ValidationError
+from volnix.core.errors import ValidationError
 from volnix.core.events import (
-    BudgetExhaustedEvent,
     Event,
     PermissionDeniedEvent,
     WorldEvent,
 )
 from volnix.core.types import (
-    ActionCost,
     ActorId,
     ActorType,
     EntityId,
-    FidelityMetadata,
-    FidelitySource,
-    FidelityTier,
     ServiceId,
     StateDelta,
     StepVerdict,
     Timestamp,
-    ValidationType,
 )
 from volnix.engines.budget.engine import BudgetEngine
 from volnix.engines.permission.engine import PermissionEngine
 from volnix.validation.consistency import ConsistencyValidator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -74,8 +67,9 @@ def _make_agent(
 
 
 def _timestamp():
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    from datetime import datetime
+
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -131,10 +125,12 @@ class TestP01DefaultActorGovernance:
         """Registered default gateway actor (http-agent) passes through governance."""
         engine = PermissionEngine()
         reg = ActorRegistry()
-        reg.register(_make_agent(
-            actor_id="http-agent",
-            permissions={"write": "all", "read": "all"},
-        ))
+        reg.register(
+            _make_agent(
+                actor_id="http-agent",
+                permissions={"write": "all", "read": "all"},
+            )
+        )
         engine._actor_registry = reg
         engine._world_mode = "governed"
 
@@ -179,32 +175,40 @@ class TestP02EntityEndpointPermission:
     async def test_entity_endpoint_has_actor_id_param(self):
         """The entity query endpoint now accepts actor_id query param."""
         import httpx
+
         from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         permission_engine = AsyncMock()
-        permission_engine.execute = AsyncMock(return_value=StepResult(
-            step_name="permission", verdict=StepVerdict.ALLOW,
-        ))
+        permission_engine.execute = AsyncMock(
+            return_value=StepResult(
+                step_name="permission",
+                verdict=StepVerdict.ALLOW,
+            )
+        )
 
         state = AsyncMock()
         state.query_entities = AsyncMock(return_value=[])
 
         registry = MagicMock()
+
         def _get(name):
             if name == "permission":
                 return permission_engine
             return state
+
         registry.get = MagicMock(side_effect=_get)
 
         mock_app = MagicMock()
         mock_app.registry = registry
         mock_app.bus = MagicMock()
         mock_app.bus.subscribe = AsyncMock()
-        mock_app.read_entities = AsyncMock(return_value={
-            "entity_type": "email",
-            "count": 0,
-            "entities": [],
-        })
+        mock_app.read_entities = AsyncMock(
+            return_value={
+                "entity_type": "email",
+                "count": 0,
+                "entities": [],
+            }
+        )
 
         gateway = MagicMock()
         gateway.get_tool_manifest = AsyncMock(return_value=[])
@@ -224,20 +228,26 @@ class TestP02EntityEndpointPermission:
     async def test_entity_endpoint_denied_returns_403(self):
         """When permission is denied, entity endpoint returns 403."""
         import httpx
+
         from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         permission_engine = AsyncMock()
-        permission_engine.execute = AsyncMock(return_value=StepResult(
-            step_name="permission", verdict=StepVerdict.DENY,
-            message="No read access",
-        ))
+        permission_engine.execute = AsyncMock(
+            return_value=StepResult(
+                step_name="permission",
+                verdict=StepVerdict.DENY,
+                message="No read access",
+            )
+        )
 
         state = AsyncMock()
         registry = MagicMock()
+
         def _get(name):
             if name == "permission":
                 return permission_engine
             return state
+
         registry.get = MagicMock(side_effect=_get)
 
         mock_app = MagicMock()
@@ -245,11 +255,13 @@ class TestP02EntityEndpointPermission:
         mock_app.bus = MagicMock()
         mock_app.bus.subscribe = AsyncMock()
         # read_entities returns empty result (permission is enforced at app level)
-        mock_app.read_entities = AsyncMock(return_value={
-            "entity_type": "email",
-            "count": 0,
-            "entities": [],
-        })
+        mock_app.read_entities = AsyncMock(
+            return_value={
+                "entity_type": "email",
+                "count": 0,
+                "entities": [],
+            }
+        )
 
         gateway = MagicMock()
         gateway.get_tool_manifest = AsyncMock(return_value=[])
@@ -277,6 +289,7 @@ class TestP14ConsistencyValidatorSignature:
     @pytest.mark.asyncio
     async def test_validate_references_calls_with_two_args(self):
         """validate_references passes entity_type to state.get_entity."""
+
         class TrackingState:
             def __init__(self):
                 self.calls = []
@@ -302,6 +315,7 @@ class TestP14ConsistencyValidatorSignature:
     @pytest.mark.asyncio
     async def test_validate_entity_exists_calls_with_two_args(self):
         """validate_entity_exists passes entity_type to state.get_entity."""
+
         class TrackingState:
             def __init__(self):
                 self.calls = []
@@ -328,8 +342,8 @@ class TestP15WebSocketSubscribe:
     @pytest.mark.asyncio
     async def test_websocket_subscribes_to_wildcard(self):
         """WebSocket endpoint subscribes to '*' (all events), not 'world'."""
-        import httpx
         from starlette.testclient import TestClient
+
         from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_topics = []
@@ -344,7 +358,7 @@ class TestP15WebSocketSubscribe:
         bus.subscribe = AsyncMock(side_effect=tracking_subscribe)
         bus.unsubscribe = AsyncMock()
 
-        permission_engine = AsyncMock()
+        AsyncMock()
         state = AsyncMock()
         registry = MagicMock()
         registry.get = MagicMock(return_value=state)
@@ -377,6 +391,7 @@ class TestP16MountedRoutePathParams:
     async def test_get_route_extracts_path_params(self):
         """GET route with {email_id} path param forwards it in arguments."""
         import httpx
+
         from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_args = {}
@@ -386,10 +401,15 @@ class TestP16MountedRoutePathParams:
             return {"ok": True}
 
         gateway = MagicMock()
-        gateway.get_tool_manifest = AsyncMock(return_value=[
-            {"method": "GET", "path": "/email/v1/messages/{email_id}",
-             "tool_name": "email_read"},
-        ])
+        gateway.get_tool_manifest = AsyncMock(
+            return_value=[
+                {
+                    "method": "GET",
+                    "path": "/email/v1/messages/{email_id}",
+                    "tool_name": "email_read",
+                },
+            ]
+        )
         gateway.handle_request = AsyncMock(side_effect=mock_handle_request)
 
         bus = MagicMock()
@@ -399,10 +419,12 @@ class TestP16MountedRoutePathParams:
         state = AsyncMock()
         state.query_entities = AsyncMock(return_value=[])
         registry = MagicMock()
+
         def _get(name):
             if name == "permission":
                 return permission_engine
             return state
+
         registry.get = MagicMock(side_effect=_get)
 
         mock_app = MagicMock()
@@ -425,6 +447,7 @@ class TestP16MountedRoutePathParams:
     async def test_get_route_merges_query_params(self):
         """GET route merges query params into arguments."""
         import httpx
+
         from volnix.engines.adapter.protocols.http_rest import HTTPRestAdapter
 
         captured_args = {}
@@ -434,10 +457,11 @@ class TestP16MountedRoutePathParams:
             return {"ok": True}
 
         gateway = MagicMock()
-        gateway.get_tool_manifest = AsyncMock(return_value=[
-            {"method": "GET", "path": "/email/v1/messages",
-             "tool_name": "email_list"},
-        ])
+        gateway.get_tool_manifest = AsyncMock(
+            return_value=[
+                {"method": "GET", "path": "/email/v1/messages", "tool_name": "email_list"},
+            ]
+        )
         gateway.handle_request = AsyncMock(side_effect=mock_handle_request)
 
         bus = MagicMock()
@@ -447,10 +471,12 @@ class TestP16MountedRoutePathParams:
         state = AsyncMock()
         state.query_entities = AsyncMock(return_value=[])
         registry = MagicMock()
+
         def _get(name):
             if name == "permission":
                 return permission_engine
             return state
+
         registry.get = MagicMock(side_effect=_get)
 
         mock_app = MagicMock()
@@ -498,6 +524,7 @@ class TestP29ProposedEventsType:
     def test_proposed_events_still_accepts_strings(self):
         """proposed_events should still accept EventId strings (backward compat)."""
         from volnix.core.types import EventId
+
         proposal = ResponseProposal(
             response_body={},
             proposed_events=[EventId("evt-001"), EventId("evt-002")],
@@ -535,8 +562,13 @@ class TestP210UpdateValidationConstraints:
             fidelity_tier = 1
 
             def get_tools(self):
-                return [{"name": "enum_update", "description": "test",
-                         "parameters": {"type": "object", "properties": {}, "required": []}}]
+                return [
+                    {
+                        "name": "enum_update",
+                        "description": "test",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    }
+                ]
 
             def get_entity_schemas(self):
                 return {
@@ -586,8 +618,13 @@ class TestP210UpdateValidationConstraints:
             fidelity_tier = 1
 
             def get_tools(self):
-                return [{"name": "min_update", "description": "test",
-                         "parameters": {"type": "object", "properties": {}, "required": []}}]
+                return [
+                    {
+                        "name": "min_update",
+                        "description": "test",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    }
+                ]
 
             def get_entity_schemas(self):
                 return {
@@ -637,8 +674,13 @@ class TestP210UpdateValidationConstraints:
             fidelity_tier = 1
 
             def get_tools(self):
-                return [{"name": "max_update", "description": "test",
-                         "parameters": {"type": "object", "properties": {}, "required": []}}]
+                return [
+                    {
+                        "name": "max_update",
+                        "description": "test",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    }
+                ]
 
             def get_entity_schemas(self):
                 return {
@@ -688,8 +730,13 @@ class TestP210UpdateValidationConstraints:
             fidelity_tier = 1
 
             def get_tools(self):
-                return [{"name": "valid_update", "description": "test",
-                         "parameters": {"type": "object", "properties": {}, "required": []}}]
+                return [
+                    {
+                        "name": "valid_update",
+                        "description": "test",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    }
+                ]
 
             def get_entity_schemas(self):
                 return {

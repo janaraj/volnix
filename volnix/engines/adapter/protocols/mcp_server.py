@@ -64,10 +64,12 @@ class MCPServerAdapter(ProtocolAdapter):
             # Unwrap single-entity wrappers for cleaner tool output
             if isinstance(result, dict):
                 result = unwrap_single_entity(result)
-            return [TextContent(
-                type="text",
-                text=json.dumps(result, default=str),
-            )]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(result, default=str),
+                )
+            ]
 
         self._server = server
         logger.info("MCP server created with tool handlers")
@@ -77,10 +79,9 @@ class MCPServerAdapter(ProtocolAdapter):
         if not self._server:
             await self.start_server()
         from mcp.server.stdio import stdio_server
+
         async with stdio_server() as (read, write):
-            await self._server.run(
-                read, write, self._server.create_initialization_options()
-            )
+            await self._server.run(read, write, self._server.create_initialization_options())
 
     async def stop_server(self) -> None:
         """Stop the MCP server."""

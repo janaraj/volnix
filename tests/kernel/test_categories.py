@@ -3,8 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from volnix.kernel.categories import CATEGORIES, SemanticCategory
-
+from volnix.kernel.categories import CATEGORIES
 
 EXPECTED_CATEGORY_NAMES = {
     "communication",

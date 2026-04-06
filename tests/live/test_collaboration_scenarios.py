@@ -27,17 +27,7 @@ from typing import Any
 
 import pytest
 
-from volnix.actors.state import InteractionRecord, Subscription
-from volnix.core.events import WorldEvent
-from volnix.core.types import (
-    ActionSource,
-    ActorId,
-    EntityId,
-    EventId,
-    ServiceId,
-    Timestamp,
-)
-
+from volnix.actors.state import Subscription
 
 # ---------------------------------------------------------------------------
 # Shared fixture
@@ -57,13 +47,15 @@ async def live_app_with_codex(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -85,16 +77,19 @@ def _build_services(service_names: list[str]) -> dict:
 
     if "chat" in service_names or "slack" in service_names:
         from volnix.packs.verified.slack.pack import ChatPack
+
         pack = ChatPack()
         _pack_map["slack"] = ("slack", "verified/slack", pack)
 
     if "email" in service_names or "gmail" in service_names:
         from volnix.packs.verified.gmail.pack import EmailPack
+
         pack = EmailPack()
         _pack_map["gmail"] = ("gmail", "verified/gmail", pack)
 
     if "tickets" in service_names or "zendesk" in service_names:
         from volnix.packs.verified.zendesk.pack import TicketsPack
+
         pack = TicketsPack()
         _pack_map["zendesk"] = ("zendesk", "verified/zendesk", pack)
 
@@ -110,7 +105,9 @@ def _build_services(service_names: list[str]) -> dict:
     return services
 
 
-def _make_subscriptions_chat(channel_name: str, sensitivity: str = "immediate") -> list[Subscription]:
+def _make_subscriptions_chat(
+    channel_name: str, sensitivity: str = "immediate"
+) -> list[Subscription]:
     """Create a subscription list for a single chat channel."""
     return [
         Subscription(
@@ -156,7 +153,11 @@ async def _kickstart_mission(app, channel_id: str, mission: str, tick: int = 0) 
 
 
 async def _agent_post(
-    app, actor_id: str, channel_id: str, text: str, tick: int = 0,
+    app,
+    actor_id: str,
+    channel_id: str,
+    text: str,
+    tick: int = 0,
 ) -> dict:
     """Have an actor post a message in a chat channel."""
     return await app.handle_action(
@@ -215,9 +216,7 @@ async def _get_actor_interaction_records(app) -> dict[str, list]:
     actor_states = getattr(agency, "_actor_states", {})
     for actor_id, state in actor_states.items():
         if state.recent_interactions:
-            records[str(actor_id)] = [
-                ir.model_dump() for ir in state.recent_interactions
-            ]
+            records[str(actor_id)] = [ir.model_dump() for ir in state.recent_interactions]
     return records
 
 
@@ -251,9 +250,7 @@ async def _compile_generate_configure(
     if result is None:
         pytest.fail(f"World generation failed after 3 attempts: {last_error}")
 
-    entity_summary = {
-        etype: len(elist) for etype, elist in result["entities"].items()
-    }
+    entity_summary = {etype: len(elist) for etype, elist in result["entities"].items()}
     total_entities = sum(entity_summary.values())
     print(f"  Generated entities: {json.dumps(entity_summary, indent=4)}")
     print(f"  Total: {total_entities} entities")
@@ -267,7 +264,9 @@ async def _compile_generate_configure(
         if elist:
             sample = elist[0]
             fields = list(sample.keys())[:5]
-            print(f"  Sample {etype}: {json.dumps({k: sample.get(k) for k in fields}, default=str)}")
+            print(
+                f"  Sample {etype}: {json.dumps({k: sample.get(k) for k in fields}, default=str)}"
+            )
 
     # STEP 3: Configure governance + animator + agency
     print("\n" + "=" * 70)
@@ -438,12 +437,19 @@ class TestSynthesisScenario:
 
         actors = result["actors"]
         lead = next((a for a in actors if "lead" in a.role), actors[0])
-        physicist = next((a for a in actors if "atmospheric" in a.role or "physicist" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        oceanographer = next((a for a in actors if "ocean" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        physicist = next(
+            (a for a in actors if "atmospheric" in a.role or "physicist" in a.role),
+            actors[1] if len(actors) > 1 else actors[0],
+        )
+        oceanographer = next(
+            (a for a in actors if "ocean" in a.role), actors[2] if len(actors) > 2 else actors[0]
+        )
 
         # Lead posts initial analysis request
         r1 = await _agent_post(
-            app, str(lead.id), channel_id,
+            app,
+            str(lead.id),
+            channel_id,
             "Team, I need your initial findings on the March jet stream anomaly. "
             "The 15-degree northward shift is significant. "
             "@atmospheric-physicist what do your models show? "
@@ -454,7 +460,9 @@ class TestSynthesisScenario:
 
         # Physicist responds
         r2 = await _agent_post(
-            app, str(physicist.id), channel_id,
+            app,
+            str(physicist.id),
+            channel_id,
             "Looking at the reanalysis data, the jet stream deviation correlates "
             "with an unusually strong polar vortex weakening event. "
             "Sample size is small though -- only 3 comparable events since 1979.",
@@ -464,7 +472,9 @@ class TestSynthesisScenario:
 
         # Oceanographer responds
         r3 = await _agent_post(
-            app, str(oceanographer.id), channel_id,
+            app,
+            str(oceanographer.id),
+            channel_id,
             "The ARGO float data shows anomalous SST in the North Atlantic, "
             "but satellite readings disagree by 0.8C. Could be sensor calibration. "
             "I need another week to reconcile the datasets.",
@@ -645,11 +655,17 @@ class TestDecisionScenario:
 
         actors = result["actors"]
         lead = next((a for a in actors if "product" in a.role or "lead" in a.role), actors[0])
-        engineer = next((a for a in actors if "engineer" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        designer = next((a for a in actors if "designer" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        engineer = next(
+            (a for a in actors if "engineer" in a.role), actors[1] if len(actors) > 1 else actors[0]
+        )
+        designer = next(
+            (a for a in actors if "designer" in a.role), actors[2] if len(actors) > 2 else actors[0]
+        )
 
         r1 = await _agent_post(
-            app, str(lead.id), channel_id,
+            app,
+            str(lead.id),
+            channel_id,
             "Team, we need to decide on next quarter's feature. "
             "I want to hear both perspectives before committing. "
             "What are the strongest arguments for your preferred option?",
@@ -658,7 +674,9 @@ class TestDecisionScenario:
         print(f"  Lead posted: ok={r1.get('ok', 'error')}")
 
         r2 = await _agent_post(
-            app, str(engineer.id), channel_id,
+            app,
+            str(engineer.id),
+            channel_id,
             "API v2 is critical. Acme Corp is a $500K ARR account and "
             "they've given us a 90-day ultimatum. Dark mode is nice-to-have "
             "but won't prevent churn. Mobile can wait.",
@@ -667,7 +685,9 @@ class TestDecisionScenario:
         print(f"  Engineer posted: ok={r2.get('ok', 'error')}")
 
         r3 = await _agent_post(
-            app, str(designer.id), channel_id,
+            app,
+            str(designer.id),
+            channel_id,
             "Dark mode has 450 requests and affects retention across ALL users, "
             "not just one account. The mobile traffic growth means we're leaving "
             "money on the table. API v2 affects one client.",
@@ -818,11 +838,18 @@ class TestPredictionScenario:
 
         actors = result["actors"]
         macro = next((a for a in actors if "macro" in a.role or "economist" in a.role), actors[0])
-        tech = next((a for a in actors if "technical" in a.role or "analyst" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        risk = next((a for a in actors if "risk" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        tech = next(
+            (a for a in actors if "technical" in a.role or "analyst" in a.role),
+            actors[1] if len(actors) > 1 else actors[0],
+        )
+        risk = next(
+            (a for a in actors if "risk" in a.role), actors[2] if len(actors) > 2 else actors[0]
+        )
 
         await _agent_post(
-            app, str(macro.id), channel_id,
+            app,
+            str(macro.id),
+            channel_id,
             "The Fed's dovish pivot is the dominant signal. Historical data shows "
             "S&P rallies 12% on average in the 6 months following the first rate cut. "
             "My base case is +8-12% from here.",
@@ -830,7 +857,9 @@ class TestPredictionScenario:
         )
 
         await _agent_post(
-            app, str(tech.id), channel_id,
+            app,
+            str(tech.id),
+            channel_id,
             "Charts tell a different story. Market breadth is narrowing -- only 5 stocks "
             "driving 60% of gains. RSI divergence on the weekly is bearish. "
             "I see a 10-15% correction before any sustained rally.",
@@ -838,7 +867,9 @@ class TestPredictionScenario:
         )
 
         await _agent_post(
-            app, str(risk.id), channel_id,
+            app,
+            str(risk.id),
+            channel_id,
             "Neither of you is pricing in tail risk. South China Sea escalation "
             "has a 15% probability and would trigger a 20%+ drawdown. "
             "Our VaR models are underestimating volatility by 30%.",
@@ -982,12 +1013,21 @@ class TestBrainstormScenario:
         print("=" * 70)
 
         actors = result["actors"]
-        director = next((a for a in actors if "creative" in a.role or "director" in a.role), actors[0])
-        copywriter = next((a for a in actors if "copy" in a.role or "writer" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        social = next((a for a in actors if "social" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        director = next(
+            (a for a in actors if "creative" in a.role or "director" in a.role), actors[0]
+        )
+        copywriter = next(
+            (a for a in actors if "copy" in a.role or "writer" in a.role),
+            actors[1] if len(actors) > 1 else actors[0],
+        )
+        social = next(
+            (a for a in actors if "social" in a.role), actors[2] if len(actors) > 2 else actors[0]
+        )
 
         await _agent_post(
-            app, str(director.id), channel_id,
+            app,
+            str(director.id),
+            channel_id,
             "Alright team, 3 weeks and $50K. Let's think big but lean. "
             "The audience is developers -- they hate being marketed to. "
             "What if we lead with utility, not hype? Ideas?",
@@ -995,7 +1035,9 @@ class TestBrainstormScenario:
         )
 
         await _agent_post(
-            app, str(copywriter.id), channel_id,
+            app,
+            str(copywriter.id),
+            channel_id,
             "What about an interactive CLI demo on the landing page? "
             "Developers can try the tool before signing up. "
             "Tagline idea: 'Your terminal, upgraded.' Costs almost nothing.",
@@ -1003,7 +1045,9 @@ class TestBrainstormScenario:
         )
 
         await _agent_post(
-            app, str(social.id), channel_id,
+            app,
+            str(social.id),
+            channel_id,
             "I'd go heavy on Reddit r/programming and Hacker News. "
             "A genuine Show HN post plus Twitter thread from the founder. "
             "Budget $20K on targeted Reddit ads, save rest for retargeting.",
@@ -1157,19 +1201,29 @@ class TestRecommendationScenario:
 
         actors = result["actors"]
         lead = next((a for a in actors if "support-lead" in a.role or "lead" in a.role), actors[0])
-        senior = next((a for a in actors if "senior" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        junior = next((a for a in actors if "junior" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        senior = next(
+            (a for a in actors if "senior" in a.role), actors[1] if len(actors) > 1 else actors[0]
+        )
+        junior = next(
+            (a for a in actors if "junior" in a.role), actors[2] if len(actors) > 2 else actors[0]
+        )
 
         # Lead: list tickets first
         r_list = await app.handle_action(
-            str(lead.id), "tickets", "tickets.list", {}, tick=1,
+            str(lead.id),
+            "tickets",
+            "tickets.list",
+            {},
+            tick=1,
         )
         ticket_count = len(r_list.get("tickets", []))
         print(f"  Lead listed tickets: {ticket_count} found")
 
         # Lead posts summary to chat
         await _agent_post(
-            app, str(lead.id), channel_id,
+            app,
+            str(lead.id),
+            channel_id,
             f"Team, we have {ticket_count} open tickets. Key issues: "
             "VIP billing wait (7 days), 3 past-SLA tickets, and a new login bug. "
             "I need your input on priority order before I finalize.",
@@ -1177,7 +1231,9 @@ class TestRecommendationScenario:
         )
 
         await _agent_post(
-            app, str(senior.id), channel_id,
+            app,
+            str(senior.id),
+            channel_id,
             "The login bug is a P0 -- it affects ALL users right now. "
             "SLA breaches are contractual obligations. "
             "My ranking: 1) Login bug 2) SLA tickets 3) VIP billing.",
@@ -1185,7 +1241,9 @@ class TestRecommendationScenario:
         )
 
         await _agent_post(
-            app, str(junior.id), channel_id,
+            app,
+            str(junior.id),
+            channel_id,
             "Question: should the VIP ticket be higher since they've waited 7 days? "
             "Also, do we know if the login bug is related to the billing issue?",
             tick=4,
@@ -1342,11 +1400,18 @@ class TestAssessmentScenario:
 
         actors = result["actors"]
         sec_lead = next((a for a in actors if "security" in a.role and "lead" in a.role), actors[0])
-        net_eng = next((a for a in actors if "network" in a.role), actors[1] if len(actors) > 1 else actors[0])
-        compliance = next((a for a in actors if "compliance" in a.role), actors[2] if len(actors) > 2 else actors[0])
+        net_eng = next(
+            (a for a in actors if "network" in a.role), actors[1] if len(actors) > 1 else actors[0]
+        )
+        compliance = next(
+            (a for a in actors if "compliance" in a.role),
+            actors[2] if len(actors) > 2 else actors[0],
+        )
 
         await _agent_post(
-            app, str(sec_lead.id), channel_id,
+            app,
+            str(sec_lead.id),
+            channel_id,
             "Team, starting our security posture assessment. "
             "I need each of you to report your domain's top 3 risks. "
             "@network-engineer infrastructure status? "
@@ -1355,7 +1420,9 @@ class TestAssessmentScenario:
         )
 
         await _agent_post(
-            app, str(net_eng.id), channel_id,
+            app,
+            str(net_eng.id),
+            channel_id,
             "Three critical items from infrastructure: "
             "1) SSL certs expired on prod-web-01, prod-web-02, prod-api-01 -- "
             "browsers showing warnings. "
@@ -1365,7 +1432,9 @@ class TestAssessmentScenario:
         )
 
         await _agent_post(
-            app, str(compliance.id), channel_id,
+            app,
+            str(compliance.id),
+            channel_id,
             "Compliance gaps are serious: "
             "1) No MFA on 5 admin accounts violates our SOC2 controls. "
             "2) Last audit had 12 findings -- only 7 remediated. "
@@ -1376,7 +1445,9 @@ class TestAssessmentScenario:
 
         # Lead summarizes
         await _agent_post(
-            app, str(sec_lead.id), channel_id,
+            app,
+            str(sec_lead.id),
+            channel_id,
             "Summary: We have immediate risks (SSL, MFA) and systemic gaps "
             "(segmentation, IR testing). I'm rating SSL and MFA as CRITICAL, "
             "network segmentation as HIGH, and audit remediation as MEDIUM. "

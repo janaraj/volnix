@@ -1,4 +1,5 @@
 """Tests for TierPromoter -- fidelity tier promotion evaluation and execution."""
+
 from __future__ import annotations
 
 from volnix.engines.feedback.promotion import TierPromoter
@@ -57,8 +58,10 @@ async def test_evaluate_not_eligible_few_operations(
     captured = make_captured_surface(
         operations=[
             ObservedOperation(
-                name="twilio_send", call_count=1,
-                parameter_keys=[], response_keys=[],
+                name="twilio_send",
+                call_count=1,
+                parameter_keys=[],
+                response_keys=[],
             ),
         ]
     )
@@ -100,9 +103,7 @@ async def test_promote_updates_fidelity(
     assert reloaded.version == "1.0.0"
 
 
-async def test_get_promotion_candidates(
-    annotation_store, mock_profile_registry, make_profile
-):
+async def test_get_promotion_candidates(annotation_store, mock_profile_registry, make_profile):
     """Lists bootstrapped services as promotion candidates."""
     # Register a bootstrapped profile
     profile = make_profile(service_name="twilio", fidelity_source="bootstrapped")
@@ -128,7 +129,9 @@ async def test_get_promotion_candidates(
 
 
 async def test_evaluate_high_error_rate(
-    annotation_store, mock_profile_registry, feedback_config,
+    annotation_store,
+    mock_profile_registry,
+    feedback_config,
     make_captured_surface,
 ):
     """M7: Service with high error rate is NOT eligible."""
@@ -139,18 +142,24 @@ async def test_evaluate_high_error_rate(
     captured = make_captured_surface(
         operations=[
             ObservedOperation(
-                name="twilio_send", call_count=10,
-                parameter_keys=["to"], response_keys=["sid"],
+                name="twilio_send",
+                call_count=10,
+                parameter_keys=["to"],
+                response_keys=["sid"],
                 error_count=8,  # 8/10 = 80% error rate on this op
             ),
             ObservedOperation(
-                name="twilio_list", call_count=5,
-                parameter_keys=[], response_keys=["msgs"],
+                name="twilio_list",
+                call_count=5,
+                parameter_keys=[],
+                response_keys=["msgs"],
                 error_count=3,  # total: 11/20 = 55% > 30%
             ),
             ObservedOperation(
-                name="twilio_get", call_count=5,
-                parameter_keys=["sid"], response_keys=["body"],
+                name="twilio_get",
+                call_count=5,
+                parameter_keys=["sid"],
+                response_keys=["body"],
             ),
         ]
     )

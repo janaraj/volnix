@@ -41,7 +41,6 @@ def _make_generator() -> tuple:
 
 
 class TestGovernanceReport:
-
     @pytest.mark.asyncio
     async def test_report_has_required_sections(self):
         """Report must have: type, summary, scorecard, capability_gaps,
@@ -94,12 +93,15 @@ class TestGovernanceReportHarness:
 
     def test_governance_report_in_artifact_types(self):
         from volnix.runs.artifacts import _ALLOWED_ARTIFACT_TYPES
+
         assert "governance_report" in _ALLOWED_ARTIFACT_TYPES
 
     def test_reporter_has_governance_method(self):
         from volnix.engines.reporter.engine import ReportGeneratorEngine
+
         assert hasattr(ReportGeneratorEngine, "generate_governance_report")
 
     def test_governance_generator_exists(self):
         from volnix.engines.reporter.governance_report import GovernanceReportGenerator
+
         assert GovernanceReportGenerator is not None

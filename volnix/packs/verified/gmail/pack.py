@@ -19,15 +19,15 @@ from volnix.core.types import ToolName
 from volnix.packs.base import ActionHandler, ServicePack
 from volnix.packs.verified.gmail.handlers import (
     handle_drafts_create,
-    handle_messages_delete,
     handle_email_list,
     handle_email_mark_read,
     handle_email_read,
     handle_email_reply,
     handle_email_search,
     handle_email_send,
-    handle_messages_get,
     handle_labels_list,
+    handle_messages_delete,
+    handle_messages_get,
     handle_messages_modify,
     handle_messages_search,
     handle_messages_send,

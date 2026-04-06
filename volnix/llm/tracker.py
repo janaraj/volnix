@@ -61,9 +61,7 @@ class UsageTracker:
                 self._update_aggregate(self._by_actor, str(actor_id), response.usage)
             self._total = self._merge_usage(self._total, response.usage)
 
-    def _update_aggregate(
-        self, store: dict[str, LLMUsage], key: str, usage: LLMUsage
-    ) -> None:
+    def _update_aggregate(self, store: dict[str, LLMUsage], key: str, usage: LLMUsage) -> None:
         """Merge *usage* into the aggregate stored at *key*.
 
         Args:

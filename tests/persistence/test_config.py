@@ -1,5 +1,7 @@
 """Tests for volnix.persistence.config — persistence configuration model."""
+
 import pytest
+
 from volnix.persistence.config import PersistenceConfig
 
 

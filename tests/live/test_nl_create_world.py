@@ -18,12 +18,10 @@ This test:
 Run with:
     source .env && pytest tests/live/test_nl_create_world.py -v -s
 """
+
 from __future__ import annotations
 
-import json
-
 import pytest
-import yaml
 
 from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
 
@@ -109,7 +107,9 @@ class TestNLCreateWorld:
         print(f"\n✅ LLM created world: {plan.name}")
         print(f"   Services: {plan.get_service_names()}")
         print(f"   Actors: {len(plan.actor_specs)}")
-        print(f"   Reality preset: hostile → friction.uncooperative={plan.conditions.friction.uncooperative}")
+        print(
+            f"   Reality preset: hostile → friction.uncooperative={plan.conditions.friction.uncooperative}"
+        )
 
         assert plan.name
         assert plan.actor_specs

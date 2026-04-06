@@ -1,4 +1,5 @@
 """Tests for SDK error handling — failure cases and edge cases."""
+
 from __future__ import annotations
 
 import pytest
@@ -48,18 +49,14 @@ async def test_execute_tool_connection_refused():
 
 async def test_client_connection_refused():
     """Client raises VolnixConnectionError on server down."""
-    async with VolnixClient(
-        url="http://localhost:1", timeout=1
-    ) as terra:
+    async with VolnixClient(url="http://localhost:1", timeout=1) as terra:
         with pytest.raises(VolnixConnectionError):
             await terra.tools()
 
 
 async def test_client_call_invalid_host():
     """Client raises VolnixConnectionError for unreachable host."""
-    async with VolnixClient(
-        url="http://invalid-host-xyz:9999", timeout=2
-    ) as terra:
+    async with VolnixClient(url="http://invalid-host-xyz:9999", timeout=2) as terra:
         with pytest.raises(VolnixConnectionError):
             await terra.call("any_tool")
 

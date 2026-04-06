@@ -3,6 +3,7 @@
 Provides reusable database connections, stores, factories, and
 mock objects that all feedback test files depend on.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -70,7 +71,8 @@ def make_captured_surface():
             "service_name": service_name,
             "run_id": run_id,
             "captured_at": datetime.now(UTC).isoformat(),
-            "operations_observed": operations or [
+            "operations_observed": operations
+            or [
                 ObservedOperation(
                     name=f"{service_name}_send_message",
                     call_count=5,
@@ -90,7 +92,8 @@ def make_captured_surface():
                     response_keys=["sid", "body", "status"],
                 ),
             ],
-            "entity_mutations": mutations or [
+            "entity_mutations": mutations
+            or [
                 ObservedMutation(entity_type="message", operation="create", count=5),
             ],
             "error_patterns": errors or [],

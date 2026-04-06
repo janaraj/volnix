@@ -169,7 +169,9 @@ class TestToDict:
     """to_dict() serializes dimension to a plain dict."""
 
     def test_to_dict(self) -> None:
-        dim = InformationQualityDimension(staleness=10, incompleteness=20, inconsistency=5, noise=15)
+        dim = InformationQualityDimension(
+            staleness=10, incompleteness=20, inconsistency=5, noise=15
+        )
         d = dim.to_dict()
         assert isinstance(d, dict)
         assert d["staleness"] == 10
@@ -178,7 +180,9 @@ class TestToDict:
         assert d["noise"] == 15
 
         # Friction should include sophistication
-        fric = SocialFrictionDimension(uncooperative=30, deceptive=15, hostile=8, sophistication="medium")
+        fric = SocialFrictionDimension(
+            uncooperative=30, deceptive=15, hostile=8, sophistication="medium"
+        )
         fd = fric.to_dict()
         assert fd["sophistication"] == "medium"
         assert fd["uncooperative"] == 30

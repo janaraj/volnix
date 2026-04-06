@@ -1,10 +1,11 @@
 """Tests for volnix.registry.wiring."""
+
 import pytest
-from unittest.mock import AsyncMock
-from volnix.registry.registry import EngineRegistry
-from volnix.registry.wiring import wire_engines, inject_dependencies, shutdown_engines
+
+from tests.registry.conftest import make_mock_bus, make_mock_engine
 from volnix.config.schema import VolnixConfig
-from tests.registry.conftest import make_mock_engine, make_mock_bus
+from volnix.registry.registry import EngineRegistry
+from volnix.registry.wiring import inject_dependencies, shutdown_engines, wire_engines
 
 
 @pytest.mark.asyncio
@@ -30,15 +31,19 @@ async def test_wire_respects_order():
     policy = make_mock_engine("policy", deps=["state"])
 
     orig_init_state = state.initialize
+
     async def track_state(config, bus):
         init_order.append("state")
         await orig_init_state(config, bus)
+
     state.initialize = track_state
 
     orig_init_policy = policy.initialize
+
     async def track_policy(config, bus):
         init_order.append("policy")
         await orig_init_policy(config, bus)
+
     policy.initialize = track_policy
 
     reg.register(state)

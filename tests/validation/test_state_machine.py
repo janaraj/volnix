@@ -5,7 +5,6 @@ import pytest
 from volnix.core.types import ValidationType
 from volnix.validation.state_machine import StateMachineValidator
 
-
 SM: dict = {
     "transitions": {
         "open": ["in_progress", "closed"],

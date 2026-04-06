@@ -11,8 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from volnix.core.types import ActorId, ActorType
 from volnix.actors.personality import FrictionProfile, Personality
+from volnix.core.types import ActorId, ActorType
 
 
 class ActorDefinition(BaseModel, frozen=True):

@@ -1,11 +1,12 @@
 """Tests for the PermissionEngine — real permission checks."""
+
 import pytest
 
-from volnix.core.context import ActionContext
-from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from volnix.core.events import PermissionDeniedEvent
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.registry import ActorRegistry
+from volnix.core.context import ActionContext
+from volnix.core.events import PermissionDeniedEvent
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
 from volnix.engines.permission.engine import PermissionEngine
 
 
@@ -72,7 +73,9 @@ class TestWriteAccess:
     @pytest.mark.asyncio
     async def test_write_access_denied(self, engine):
         reg = _make_registry(
-            _make_agent(permissions={"write": ["gmail", "slack"], "read": ["gmail", "slack", "stripe"]})
+            _make_agent(
+                permissions={"write": ["gmail", "slack"], "read": ["gmail", "slack", "stripe"]}
+            )
         )
         engine._actor_registry = reg
         ctx = _make_ctx(action="stripe_refunds_create", service_id="stripe")
@@ -84,9 +87,7 @@ class TestWriteAccess:
 
     @pytest.mark.asyncio
     async def test_write_all_access(self, engine):
-        reg = _make_registry(
-            _make_agent(permissions={"write": "all", "read": "all"})
-        )
+        reg = _make_registry(_make_agent(permissions={"write": "all", "read": "all"}))
         engine._actor_registry = reg
         ctx = _make_ctx(action="anything", service_id="any_service")
         result = await engine.execute(ctx)
@@ -94,9 +95,7 @@ class TestWriteAccess:
 
     @pytest.mark.asyncio
     async def test_empty_write_list_denies(self, engine):
-        reg = _make_registry(
-            _make_agent(permissions={"write": [], "read": ["gmail"]})
-        )
+        reg = _make_registry(_make_agent(permissions={"write": [], "read": ["gmail"]}))
         engine._actor_registry = reg
         ctx = _make_ctx(action="email_send", service_id="gmail")
         result = await engine.execute(ctx)
@@ -201,7 +200,9 @@ class TestReadAccess:
     async def test_read_access_allowed(self, engine):
         """Actor with read access to service → ALLOW."""
         actor = ActorDefinition(
-            id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
+            id=ActorId("agent-1"),
+            type=ActorType.AGENT,
+            role="agent",
             permissions={"read": ["gmail", "stripe"], "write": ["gmail"]},
         )
         engine._actor_registry = _make_registry(actor)
@@ -212,7 +213,9 @@ class TestReadAccess:
     async def test_read_access_denied(self, engine):
         """Actor without read access to service calling a read action → DENY."""
         actor = ActorDefinition(
-            id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
+            id=ActorId("agent-1"),
+            type=ActorType.AGENT,
+            role="agent",
             permissions={"read": ["gmail"], "write": ["gmail"]},
         )
         engine._actor_registry = _make_registry(actor)
@@ -227,7 +230,9 @@ class TestReadAccess:
     async def test_read_all_access(self, engine):
         """Actor with read='all' + write='all' → ALLOW for any service."""
         actor = ActorDefinition(
-            id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
+            id=ActorId("agent-1"),
+            type=ActorType.AGENT,
+            role="agent",
             permissions={"read": "all", "write": "all"},
         )
         engine._actor_registry = _make_registry(actor)
@@ -238,7 +243,9 @@ class TestReadAccess:
     async def test_invalid_string_access_denied(self, engine):
         """Non-'all' string in write_access → DENY (not a valid config)."""
         actor = ActorDefinition(
-            id=ActorId("agent-1"), type=ActorType.AGENT, role="agent",
+            id=ActorId("agent-1"),
+            type=ActorType.AGENT,
+            role="agent",
             permissions={"write": "supervisor", "read": "all"},
         )
         engine._actor_registry = _make_registry(actor)
@@ -253,9 +260,7 @@ class TestUngovernedMode:
     @pytest.mark.asyncio
     async def test_ungoverned_denied_but_allowed(self, engine):
         engine._world_mode = "ungoverned"
-        reg = _make_registry(
-            _make_agent(permissions={"write": ["gmail"], "read": ["gmail"]})
-        )
+        reg = _make_registry(_make_agent(permissions={"write": ["gmail"], "read": ["gmail"]}))
         engine._actor_registry = reg
         ctx = _make_ctx(action="stripe_refunds_create", service_id="stripe")
         result = await engine.execute(ctx)

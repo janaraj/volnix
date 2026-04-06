@@ -1,4 +1,5 @@
 """Tests for WebhookRegistry — subscription storage and matching."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,17 +7,13 @@ import pytest
 
 def test_register_returns_id(registry):
     """Register returns a subscription ID."""
-    sub_id = registry.register(
-        url="http://agent:3000/hook", events=["world.*"]
-    )
+    sub_id = registry.register(url="http://agent:3000/hook", events=["world.*"])
     assert sub_id.startswith("wh_")
 
 
 def test_unregister_removes(registry):
     """Unregister removes the subscription."""
-    sub_id = registry.register(
-        url="http://agent:3000/hook", events=["world.*"]
-    )
+    sub_id = registry.register(url="http://agent:3000/hook", events=["world.*"])
     assert registry.unregister(sub_id) is True
     assert registry.count() == 0
 
@@ -28,9 +25,7 @@ def test_unregister_nonexistent(registry):
 
 def test_match_exact(registry):
     """Exact event pattern matches."""
-    registry.register(
-        url="http://agent:3000/hook", events=["world.email_send"]
-    )
+    registry.register(url="http://agent:3000/hook", events=["world.email_send"])
     matches = registry.match("world.email_send")
     assert len(matches) == 1
     assert matches[0].url == "http://agent:3000/hook"
@@ -38,9 +33,7 @@ def test_match_exact(registry):
 
 def test_match_wildcard(registry):
     """Wildcard pattern matches multiple events."""
-    registry.register(
-        url="http://agent:3000/hook", events=["world.email_*"]
-    )
+    registry.register(url="http://agent:3000/hook", events=["world.email_*"])
     assert len(registry.match("world.email_send")) == 1
     assert len(registry.match("world.email_read")) == 1
     assert len(registry.match("world.chat_send")) == 0
@@ -65,9 +58,7 @@ def test_max_registrations(registry):
             events=["world.*"],
         )
     with pytest.raises(ValueError, match="Maximum"):
-        registry.register(
-            url="http://agent:3000/hook11", events=["world.*"]
-        )
+        registry.register(url="http://agent:3000/hook11", events=["world.*"])
 
 
 def test_empty_url_rejected(registry):
@@ -89,17 +80,13 @@ def test_list_all(registry):
 def test_private_ip_rejected(registry):
     """C1: Private IP URLs rejected."""
     with pytest.raises(ValueError, match="private"):
-        registry.register(
-            url="http://10.0.0.1:8080/hook", events=["world.*"]
-        )
+        registry.register(url="http://10.0.0.1:8080/hook", events=["world.*"])
 
 
 def test_loopback_rejected(registry):
     """C1: Loopback URLs rejected."""
     with pytest.raises(ValueError, match="loopback"):
-        registry.register(
-            url="http://127.0.0.1/hook", events=["world.*"]
-        )
+        registry.register(url="http://127.0.0.1/hook", events=["world.*"])
 
 
 def test_metadata_url_rejected(registry):
@@ -114,17 +101,13 @@ def test_metadata_url_rejected(registry):
 def test_localhost_rejected(registry):
     """C1: localhost hostname rejected."""
     with pytest.raises(ValueError, match="Blocked"):
-        registry.register(
-            url="http://localhost:6379/", events=["world.*"]
-        )
+        registry.register(url="http://localhost:6379/", events=["world.*"])
 
 
 def test_file_scheme_rejected(registry):
     """C1: file:// scheme rejected."""
     with pytest.raises(ValueError, match="scheme"):
-        registry.register(
-            url="file:///etc/passwd", events=["world.*"]
-        )
+        registry.register(url="file:///etc/passwd", events=["world.*"])
 
 
 def test_internal_domain_rejected(registry):

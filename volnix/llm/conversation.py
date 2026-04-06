@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
+from volnix.llm.types import LLMRequest, LLMResponse
 
 
 @dataclass
@@ -144,13 +144,11 @@ class ConversationManager:
         # Record turn
         session.history.append(ConversationTurn(role="user", content=user_content))
         if response.error is None:
-            session.history.append(
-                ConversationTurn(role="assistant", content=response.content)
-            )
+            session.history.append(ConversationTurn(role="assistant", content=response.content))
 
         # Trim history to prevent unbounded growth (O(N^2) prompt size)
         if len(session.history) > self._max_history:
-            session.history = session.history[-self._max_history:]
+            session.history = session.history[-self._max_history :]
 
         return response
 

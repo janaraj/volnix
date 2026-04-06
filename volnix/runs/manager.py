@@ -115,7 +115,9 @@ class RunManager:
         return self._runs.get(rid)
 
     async def list_runs(
-        self, limit: int = 50, world_id: str | None = None,
+        self,
+        limit: int = 50,
+        world_id: str | None = None,
     ) -> list[dict]:
         """List recent runs, newest first. Optionally filter by world_id."""
         runs = sorted(
@@ -162,9 +164,7 @@ class RunManager:
         run_dir = self._data_dir / str(run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
         meta_path = run_dir / "metadata.json"
-        meta_path.write_text(
-            json.dumps(self._runs[str(run_id)], indent=2, default=str)
-        )
+        meta_path.write_text(json.dumps(self._runs[str(run_id)], indent=2, default=str))
 
     def _load_existing_runs(self) -> None:
         """Reload previously persisted runs from disk.
@@ -183,9 +183,7 @@ class RunManager:
                     data["status"] = "stopped"
                     data["completed_at"] = datetime.now(UTC).isoformat()
                     data["stopped_reason"] = "server_restart"
-                    meta_path.write_text(
-                        json.dumps(data, indent=2, default=str)
-                    )
+                    meta_path.write_text(json.dumps(data, indent=2, default=str))
                 self._runs[rid] = data
                 if data.get("tag"):
                     self._tags[data["tag"]] = rid

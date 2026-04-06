@@ -11,7 +11,6 @@ Requires: codex-acp with device auth
 
 from __future__ import annotations
 
-import json
 import shutil
 
 import pytest
@@ -25,7 +24,7 @@ from volnix.core.types import (
 )
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
-from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from volnix.simulation.runner import SimulationRunner, SimulationStatus
 
 
 @pytest.fixture
@@ -41,13 +40,15 @@ async def live_app_with_codex(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -97,21 +98,37 @@ class TestFullAgencyLoop:
             mode="governed",
             services={
                 "gmail": ServiceResolution(
-                    service_name="gmail", spec_reference="verified/gmail",
-                    surface=email_surface, resolution_source="tier1_pack",
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
+                    surface=email_surface,
+                    resolution_source="tier1_pack",
                 ),
                 "zendesk": ServiceResolution(
-                    service_name="zendesk", spec_reference="verified/zendesk",
-                    surface=tickets_surface, resolution_source="tier1_pack",
+                    service_name="zendesk",
+                    spec_reference="verified/zendesk",
+                    surface=tickets_surface,
+                    resolution_source="tier1_pack",
                 ),
             },
             actor_specs=[
-                {"role": "support-agent", "type": "external", "count": 1,
-                 "personality": "Efficient"},
-                {"role": "customer", "type": "internal", "count": 1,
-                 "personality": "Frustrated customer waiting for refund"},
-                {"role": "supervisor", "type": "internal", "count": 1,
-                 "personality": "Reviews escalations"},
+                {
+                    "role": "support-agent",
+                    "type": "external",
+                    "count": 1,
+                    "personality": "Efficient",
+                },
+                {
+                    "role": "customer",
+                    "type": "internal",
+                    "count": 1,
+                    "personality": "Frustrated customer waiting for refund",
+                },
+                {
+                    "role": "supervisor",
+                    "type": "internal",
+                    "count": 1,
+                    "personality": "Reviews escalations",
+                },
             ],
             conditions=load_preset("messy"),
             reality_prompt_context={},
@@ -129,7 +146,7 @@ class TestFullAgencyLoop:
 
         agency = app.registry.get("agency")
         animator = app.registry.get("animator")
-        internal_count = len(agency._actor_states) if hasattr(agency, '_actor_states') else 0
+        internal_count = len(agency._actor_states) if hasattr(agency, "_actor_states") else 0
         print(f"  Internal actors: {internal_count}")
 
         # ────────────────────────────────────────────────────
@@ -143,9 +160,10 @@ class TestFullAgencyLoop:
 
         # Pipeline executor: converts ActionEnvelope → pipeline execution → WorldEvent
         async def pipeline_executor(envelope: ActionEnvelope):
+            from datetime import UTC, datetime
+
             from volnix.core.events import WorldEvent
             from volnix.core.types import EntityId, Timestamp
-            from datetime import UTC, datetime
 
             now = datetime.now(UTC)
 
@@ -172,7 +190,8 @@ class TestFullAgencyLoop:
             event = WorldEvent(
                 event_type=f"world.{envelope.action_type}",
                 timestamp=Timestamp(
-                    world_time=now, wall_time=now,
+                    world_time=now,
+                    wall_time=now,
                     tick=int(event_queue.current_time),
                 ),
                 actor_id=envelope.actor_id,
@@ -185,7 +204,7 @@ class TestFullAgencyLoop:
             return event
 
         config = SimulationRunnerConfig(
-            max_total_events=10,        # Process at most 10 events
+            max_total_events=10,  # Process at most 10 events
             max_logical_time=100.0,
             stop_on_empty_queue=True,
             max_envelopes_per_event=5,
@@ -207,7 +226,7 @@ class TestFullAgencyLoop:
         )
         agent_id = str(agent_actor.id)
         runner.connect_agent(ActorId(agent_id))
-        print(f"  Runner configured: max_events=10, loop_breaker=8")
+        print("  Runner configured: max_events=10, loop_breaker=8")
         print(f"  External agent connected: {agent_id}")
 
         # ────────────────────────────────────────────────────

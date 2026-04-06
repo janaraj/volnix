@@ -1,6 +1,6 @@
 """Tests for world compiler service bootstrapper."""
+
 import pytest
-import pytest_asyncio
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,8 @@
 """Tests for volnix.bus.persistence — durable event storage."""
+
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from volnix.bus.persistence import BusPersistence
 from volnix.core.events import Event
@@ -13,8 +15,8 @@ def _make_event(event_type: str = "test.event", event_id: str | None = None) -> 
     return Event(
         event_type=event_type,
         timestamp=Timestamp(
-            world_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2025, 1, 1, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
         **({"event_id": EventId(event_id)} if event_id else {}),

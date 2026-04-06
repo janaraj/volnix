@@ -133,9 +133,7 @@ class PolicyEngine(BaseEngine):
         """Alias for execute — evaluate policies against the context."""
         return await self.execute(ctx)
 
-    async def get_active_policies(
-        self, service_id: ServiceId | None = None
-    ) -> list[PolicyId]:
+    async def get_active_policies(self, service_id: ServiceId | None = None) -> list[PolicyId]:
         """Return identifiers of currently active policies.
 
         Args:
@@ -144,14 +142,11 @@ class PolicyEngine(BaseEngine):
         policies = self._policies
         if service_id is not None:
             policies = [
-                p for p in policies
-                if str(service_id) in str(p.get("services", ""))
-                or not p.get("services")
+                p
+                for p in policies
+                if str(service_id) in str(p.get("services", "")) or not p.get("services")
             ]
-        return [
-            PolicyId(p.get("id", p.get("name", f"policy-{i}")))
-            for i, p in enumerate(policies)
-        ]
+        return [PolicyId(p.get("id", p.get("name", f"policy-{i}"))) for i, p in enumerate(policies)]
 
     async def resolve_hold(
         self,
@@ -164,7 +159,10 @@ class PolicyEngine(BaseEngine):
         now = datetime.now(UTC)
         logger.info(
             "Hold %s resolved: approved=%s by %s reason=%s",
-            hold_id, approved, approver, reason,
+            hold_id,
+            approved,
+            approver,
+            reason,
         )
         return PolicyFlagEvent(
             event_type="policy.hold_resolved",
@@ -177,17 +175,16 @@ class PolicyEngine(BaseEngine):
 
     async def add_policy(self, policy_def: dict[str, Any]) -> PolicyId:
         """Add a new policy to the active set."""
-        pid = PolicyId(policy_def.get("id", policy_def.get("name", f"policy-{len(self._policies)}")))
+        pid = PolicyId(
+            policy_def.get("id", policy_def.get("name", f"policy-{len(self._policies)}"))
+        )
         policy_def.setdefault("id", pid)
         self._policies.append(policy_def)
         return pid
 
     async def remove_policy(self, policy_id: PolicyId) -> None:
         """Remove a policy from the active set."""
-        self._policies = [
-            p for p in self._policies
-            if p.get("id", p.get("name")) != policy_id
-        ]
+        self._policies = [p for p in self._policies if p.get("id", p.get("name")) != policy_id]
 
     # -- Internal helpers ------------------------------------------------------
 

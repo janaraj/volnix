@@ -1,25 +1,25 @@
 """Tests for volnix.pipeline.dag -- DAG-based pipeline execution and short-circuiting."""
 
 import asyncio
+from datetime import UTC
 
 import pytest
-import pytest_asyncio
 
-from volnix.core.context import ActionContext, StepResult
-from volnix.core.types import ActorId, ServiceId, StepVerdict
-from volnix.pipeline.dag import PipelineDAG
 from volnix.bus.bus import EventBus
 from volnix.bus.config import BusConfig
-from volnix.ledger.ledger import Ledger
+from volnix.core.context import ActionContext, StepResult
+from volnix.core.types import ActorId, ServiceId, StepVerdict
 from volnix.ledger.config import LedgerConfig
 from volnix.ledger.entries import PipelineStepEntry
+from volnix.ledger.ledger import Ledger
 from volnix.ledger.query import LedgerQuery
 from volnix.persistence.sqlite import SQLiteDatabase
-
+from volnix.pipeline.dag import PipelineDAG
 
 # ---------------------------------------------------------------------------
 # MockStep helper
 # ---------------------------------------------------------------------------
+
 
 class MockStep:
     """Configurable mock pipeline step for testing."""
@@ -68,6 +68,7 @@ def _make_ctx(**kwargs):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_execute_all_allow():
@@ -221,14 +222,15 @@ async def test_ledger_recording(tmp_path):
 @pytest.mark.asyncio
 async def test_event_publishing(tmp_path):
     """Use real EventBus, verify events published via _publish_step_event."""
+    import asyncio
+    from datetime import datetime
+
     from volnix.core.events import Event
     from volnix.core.types import Timestamp
-    from datetime import datetime, timezone
-    import asyncio
 
     ts = Timestamp(
-        world_time=datetime.now(timezone.utc),
-        wall_time=datetime.now(timezone.utc),
+        world_time=datetime.now(UTC),
+        wall_time=datetime.now(UTC),
         tick=1,
     )
     test_event = Event(event_type="test_event", timestamp=ts)

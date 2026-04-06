@@ -3,6 +3,7 @@
 Given a DriftReport, produces a ProfileUpdateProposal with specific
 changes that can be reviewed and applied to update the profile.
 """
+
 from __future__ import annotations
 
 import logging
@@ -67,8 +68,7 @@ class ProfileUpdateProposer:
                     change_type="update_version",
                     target="version",
                     description=(
-                        f"Update version from {profile.version} "
-                        f"to {drift.external_version}"
+                        f"Update version from {profile.version} to {drift.external_version}"
                     ),
                     new_value={"version": drift.external_version},
                 )
@@ -91,18 +91,12 @@ class ProfileUpdateProposer:
                 ProposedChange(
                     change_type="remove_operation",
                     target=op_name,
-                    description=(
-                        f"Remove operation '{op_name}' "
-                        f"(no longer in {drift.source})"
-                    ),
+                    description=(f"Remove operation '{op_name}' (no longer in {drift.source})"),
                 )
             )
 
         # Auto-applicable if only version change or removals
-        auto = all(
-            c.change_type in ("update_version", "remove_operation")
-            for c in changes
-        )
+        auto = all(c.change_type in ("update_version", "remove_operation") for c in changes)
 
         return ProfileUpdateProposal(
             service_name=profile.service_name,
@@ -127,14 +121,10 @@ class ProfileUpdateProposer:
 
         for change in proposal.proposed_changes:
             if change.change_type == "update_version" and change.new_value:
-                updates["version"] = change.new_value.get(
-                    "version", profile.version
-                )
+                updates["version"] = change.new_value.get("version", profile.version)
 
             elif change.change_type == "remove_operation":
-                operations = [
-                    op for op in operations if op.name != change.target
-                ]
+                operations = [op for op in operations if op.name != change.target]
 
             elif change.change_type == "add_operation" and change.new_value:
                 # Add a minimal operation stub

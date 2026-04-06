@@ -1,11 +1,13 @@
 """Tests for volnix.engines.adapter.engine -- AdapterEngine capability checks."""
-import pytest
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from volnix.engines.adapter.engine import AgentAdapterEngine
+import pytest
+
 from volnix.core.context import ActionContext
 from volnix.core.types import ActorId, ServiceId, StepVerdict
+from volnix.engines.adapter.engine import AgentAdapterEngine
 
 
 def _make_engine(pack_registry=None):
@@ -20,7 +22,7 @@ def _make_engine(pack_registry=None):
 
 def _make_ctx(action="email_send"):
     """Create a minimal ActionContext for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return ActionContext(
         request_id="req-test-001",
         actor_id=ActorId("actor-test"),
@@ -93,7 +95,7 @@ async def test_adapter_handle_event():
     from volnix.core.events import Event
     from volnix.core.types import Timestamp
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = Event(
         event_type="test.event",
         timestamp=Timestamp(world_time=now, wall_time=now, tick=0),

@@ -1,4 +1,5 @@
 """Webhook delivery — async HTTP POST with retry and HMAC signing."""
+
 from __future__ import annotations
 
 import asyncio
@@ -62,16 +63,10 @@ class WebhookDelivery:
                     "User-Agent": "Volnix-Webhook/1.0",
                 }
                 if secret:
-                    headers["X-Volnix-Signature"] = self._sign(
-                        payload, secret
-                    )
+                    headers["X-Volnix-Signature"] = self._sign(payload, secret)
 
-                async with httpx.AsyncClient(
-                    timeout=self._timeout
-                ) as client:
-                    resp = await client.post(
-                        url, json=payload, headers=headers
-                    )
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
 
                 if resp.status_code < 400:
                     return DeliveryResult(
@@ -93,14 +88,19 @@ class WebhookDelivery:
                 last_status = resp.status_code
                 logger.debug(
                     "Webhook delivery to %s returned %d (attempt %d/%d)",
-                    url, resp.status_code,
-                    attempt + 1, self._max_retries + 1,
+                    url,
+                    resp.status_code,
+                    attempt + 1,
+                    self._max_retries + 1,
                 )
 
             except httpx.ConnectError as exc:
                 logger.debug(
                     "Webhook connect error to %s: %s (attempt %d/%d)",
-                    url, exc, attempt + 1, self._max_retries + 1,
+                    url,
+                    exc,
+                    attempt + 1,
+                    self._max_retries + 1,
                 )
                 if attempt == self._max_retries:
                     return DeliveryResult(
@@ -112,7 +112,9 @@ class WebhookDelivery:
             except httpx.TimeoutException as exc:
                 logger.debug(
                     "Webhook timeout to %s (attempt %d/%d)",
-                    url, attempt + 1, self._max_retries + 1,
+                    url,
+                    attempt + 1,
+                    self._max_retries + 1,
                 )
                 if attempt == self._max_retries:
                     return DeliveryResult(
@@ -147,6 +149,4 @@ class WebhookDelivery:
     def _sign(payload: dict[str, Any], secret: str) -> str:
         """HMAC-SHA256 signature for webhook verification."""
         body = json.dumps(payload, sort_keys=True).encode()
-        return hmac.new(
-            secret.encode(), body, hashlib.sha256
-        ).hexdigest()
+        return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()

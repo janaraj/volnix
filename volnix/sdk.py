@@ -19,6 +19,7 @@ Standalone functions::
     result = await execute_tool(url="http://localhost:8080",
                                 tool="email_send", args={"to": "a@b.com"})
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -84,9 +85,7 @@ async def get_tool_manifest(
             resp.raise_for_status()
             return resp.json()
     except httpx.ConnectError:
-        raise VolnixConnectionError(
-            f"Cannot connect to Volnix server at {url}"
-        )
+        raise VolnixConnectionError(f"Cannot connect to Volnix server at {url}")
     except httpx.HTTPStatusError as exc:
         raise VolnixAPIError(
             f"Server error: {exc.response.status_code}",
@@ -126,9 +125,7 @@ async def execute_tool(
             resp.raise_for_status()
             return resp.json()
     except httpx.ConnectError:
-        raise VolnixConnectionError(
-            f"Cannot connect to Volnix server at {url}"
-        )
+        raise VolnixConnectionError(f"Cannot connect to Volnix server at {url}")
     except httpx.HTTPStatusError as exc:
         raise VolnixAPIError(
             f"Server error: {exc.response.status_code}",
@@ -177,15 +174,11 @@ class VolnixClient:
                  ``"mcp"`` (default), or ``"http"``.
         """
         try:
-            resp = await self._client.get(
-                "/api/v1/tools", params={"format": fmt}
-            )
+            resp = await self._client.get("/api/v1/tools", params={"format": fmt})
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectError:
-            raise VolnixConnectionError(
-                f"Cannot connect to Volnix server at {self._url}"
-            )
+            raise VolnixConnectionError(f"Cannot connect to Volnix server at {self._url}")
         except httpx.HTTPStatusError as exc:
             raise VolnixAPIError(
                 f"Server error: {exc.response.status_code}",
@@ -217,9 +210,7 @@ class VolnixClient:
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectError:
-            raise VolnixConnectionError(
-                f"Cannot connect to Volnix server at {self._url}"
-            )
+            raise VolnixConnectionError(f"Cannot connect to Volnix server at {self._url}")
         except httpx.HTTPStatusError as exc:
             raise VolnixAPIError(
                 f"Server error: {exc.response.status_code}",

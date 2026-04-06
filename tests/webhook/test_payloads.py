@@ -1,4 +1,5 @@
 """Tests for webhook payload formatters."""
+
 from __future__ import annotations
 
 import base64
@@ -24,9 +25,7 @@ def test_gmail_format(sample_event):
     assert "message" in payload
     assert "data" in payload["message"]
     # Data should be base64-encoded
-    decoded = json.loads(
-        base64.b64decode(payload["message"]["data"])
-    )
+    decoded = json.loads(base64.b64decode(payload["message"]["data"]))
     assert "event_type" in decoded
     assert payload["subscription"] == "volnix-simulated"
 

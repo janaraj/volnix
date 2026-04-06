@@ -6,7 +6,7 @@ Covers: budget enforcement, LLM failure handling, event parsing.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,7 +19,7 @@ from volnix.llm.types import LLMResponse
 
 
 def _utc():
-    return datetime(2026, 3, 22, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(2026, 3, 22, 12, 0, 0, tzinfo=UTC)
 
 
 def _make_context() -> AnimatorContext:
@@ -63,14 +63,23 @@ async def test_generate_respects_budget_limit():
     mock_router = AsyncMock()
     # LLM returns 5 events
     events = [
-        {"actor_id": f"npc{i}", "service_id": "world", "action": f"a{i}",
-         "input_data": {}, "sub_type": "organic"}
+        {
+            "actor_id": f"npc{i}",
+            "service_id": "world",
+            "action": f"a{i}",
+            "input_data": {},
+            "sub_type": "organic",
+        }
         for i in range(5)
     ]
-    mock_router.route = AsyncMock(return_value=LLMResponse(
-        content=json.dumps(events),
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_router.route = AsyncMock(
+        return_value=LLMResponse(
+            content=json.dumps(events),
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     gen = OrganicGenerator(
         llm_router=mock_router,
@@ -113,15 +122,29 @@ async def test_generate_parses_json_array():
     """Generator correctly parses a JSON array response from LLM."""
     mock_router = AsyncMock()
     events = [
-        {"actor_id": "npc1", "service_id": "gmail", "action": "send_msg",
-         "input_data": {"to": "agent@test.com"}, "sub_type": "organic"},
-        {"actor_id": "npc2", "service_id": "world", "action": "status_update",
-         "input_data": {}, "sub_type": "organic"},
+        {
+            "actor_id": "npc1",
+            "service_id": "gmail",
+            "action": "send_msg",
+            "input_data": {"to": "agent@test.com"},
+            "sub_type": "organic",
+        },
+        {
+            "actor_id": "npc2",
+            "service_id": "world",
+            "action": "status_update",
+            "input_data": {},
+            "sub_type": "organic",
+        },
     ]
-    mock_router.route = AsyncMock(return_value=LLMResponse(
-        content=json.dumps(events),
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_router.route = AsyncMock(
+        return_value=LLMResponse(
+            content=json.dumps(events),
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     gen = OrganicGenerator(
         llm_router=mock_router,
@@ -140,13 +163,20 @@ async def test_generate_handles_single_object_response():
     """Generator handles LLM returning a single object instead of array."""
     mock_router = AsyncMock()
     event = {
-        "actor_id": "npc1", "service_id": "world",
-        "action": "single_event", "input_data": {}, "sub_type": "organic",
+        "actor_id": "npc1",
+        "service_id": "world",
+        "action": "single_event",
+        "input_data": {},
+        "sub_type": "organic",
     }
-    mock_router.route = AsyncMock(return_value=LLMResponse(
-        content=json.dumps(event),
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_router.route = AsyncMock(
+        return_value=LLMResponse(
+            content=json.dumps(event),
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     gen = OrganicGenerator(
         llm_router=mock_router,
@@ -163,10 +193,14 @@ async def test_generate_handles_single_object_response():
 async def test_generate_with_recent_actions():
     """Generator passes recent_actions to the template."""
     mock_router = AsyncMock()
-    mock_router.route = AsyncMock(return_value=LLMResponse(
-        content='[]',
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_router.route = AsyncMock(
+        return_value=LLMResponse(
+            content="[]",
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     gen = OrganicGenerator(
         llm_router=mock_router,

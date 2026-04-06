@@ -409,11 +409,7 @@ class TestOrderLifecycle:
         assert body["status"] == "filled"
         assert body["side"] == "sell"
 
-        acct_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "alpaca_account"
-        ]
+        acct_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "alpaca_account"]
         assert len(acct_deltas) == 1
         # Cash should increase on sell
         assert acct_deltas[0].fields["cash"] > 100000.00
@@ -521,7 +517,7 @@ class TestOrderLifecycle:
                 "side": "buy",
                 "type": "stop_limit",
                 "time_in_force": "day",
-                "stop_price": 142.00,   # ask=142.55 >= 142 => triggers
+                "stop_price": 142.00,  # ask=142.55 >= 142 => triggers
                 "limit_price": 143.00,  # ask=142.55 <= 143 => fills
             },
             sample_state,
@@ -668,11 +664,7 @@ class TestAccountState:
         assert body["status"] == "filled"
         fill_price = body["filled_avg_price"]
 
-        acct_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "alpaca_account"
-        ]
+        acct_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "alpaca_account"]
         assert len(acct_deltas) == 1
         expected_bp = round(200000.00 - fill_price * 5.0, 2)
         assert acct_deltas[0].fields["buying_power"] == expected_bp
@@ -697,11 +689,7 @@ class TestPositions:
             },
             sample_state,
         )
-        pos_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "alpaca_position"
-        ]
+        pos_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "alpaca_position"]
         assert len(pos_deltas) == 1
         assert pos_deltas[0].operation == "create"
         assert pos_deltas[0].fields["symbol"] == "NVDA"
@@ -721,11 +709,7 @@ class TestPositions:
             },
             sample_state,
         )
-        pos_deltas = [
-            d
-            for d in result.proposed_state_deltas
-            if d.entity_type == "alpaca_position"
-        ]
+        pos_deltas = [d for d in result.proposed_state_deltas if d.entity_type == "alpaca_position"]
         assert len(pos_deltas) == 1
         assert pos_deltas[0].operation == "update"
         fill_price = result.response_body["filled_avg_price"]
@@ -1038,9 +1022,7 @@ class TestFillModel:
     def test_market_buy_slippage(self):
         """Market buy fill_price = ask * (1 + 0.001) exactly."""
         quote = {"ask_price": 100.00, "bid_price": 99.90}
-        fill_price, status = _compute_fill_price(
-            quote, "buy", "market", None, None
-        )
+        fill_price, status = _compute_fill_price(quote, "buy", "market", None, None)
         assert status == "filled"
         expected = round(100.00 * (1 + SLIPPAGE_BPS / 10000), 4)
         assert fill_price == expected
@@ -1049,9 +1031,7 @@ class TestFillModel:
     def test_market_sell_slippage(self):
         """Market sell fill_price = bid * (1 - 0.001) exactly."""
         quote = {"ask_price": 100.00, "bid_price": 99.90}
-        fill_price, status = _compute_fill_price(
-            quote, "sell", "market", None, None
-        )
+        fill_price, status = _compute_fill_price(quote, "sell", "market", None, None)
         assert status == "filled"
         expected = round(99.90 * (1 - SLIPPAGE_BPS / 10000), 4)
         assert fill_price == expected
@@ -1060,18 +1040,14 @@ class TestFillModel:
     def test_limit_fill_at_limit_not_ask(self):
         """When ask < limit, fill at min(ask, limit) = ask."""
         quote = {"ask_price": 95.00, "bid_price": 94.90}
-        fill_price, status = _compute_fill_price(
-            quote, "buy", "limit", 100.00, None
-        )
+        fill_price, status = _compute_fill_price(quote, "buy", "limit", 100.00, None)
         assert status == "filled"
         assert fill_price == 95.00  # min(ask=95, limit=100) = 95
 
     def test_compute_fill_price_unknown_type(self):
         """Unknown order type returns (None, 'rejected')."""
         quote = {"ask_price": 100.00, "bid_price": 99.90}
-        fill_price, status = _compute_fill_price(
-            quote, "buy", "foo", None, None
-        )
+        fill_price, status = _compute_fill_price(quote, "buy", "foo", None, None)
         assert fill_price is None
         assert status == "rejected"
 
@@ -1123,9 +1099,7 @@ class TestPackAutoDiscovery:
 class TestBugFixEquityAllPositions:
     """Bug 1: Equity must include ALL position market values, not just the new one."""
 
-    async def test_equity_includes_existing_positions(
-        self, pack, sample_state
-    ):
+    async def test_equity_includes_existing_positions(self, pack, sample_state):
         """Buy NVDA when AAPL position already exists. Equity must include both."""
         result = await pack.handle_action(
             ToolName("create_order"),
@@ -1187,9 +1161,7 @@ class TestBugFixCancelStateMachine:
 class TestBugFixClosePositionEquity:
     """Bug 4: close_position must update equity, portfolio_value, long_market_value."""
 
-    async def test_close_position_updates_equity(
-        self, pack, sample_state
-    ):
+    async def test_close_position_updates_equity(self, pack, sample_state):
         """Closing AAPL position must update equity to reflect no AAPL."""
         result = await pack.handle_action(
             ToolName("close_position"),
@@ -1213,9 +1185,7 @@ class TestBugFixClosePositionEquity:
 class TestBugFixZeroQtyPosition:
     """Bug 5: Selling exactly all shares via create_order deletes position."""
 
-    async def test_sell_all_shares_deletes_position(
-        self, pack, sample_state
-    ):
+    async def test_sell_all_shares_deletes_position(self, pack, sample_state):
         """Sell 100 AAPL (exact position qty) via create_order → position deleted."""
         result = await pack.handle_action(
             ToolName("create_order"),
@@ -1235,9 +1205,7 @@ class TestBugFixZeroQtyPosition:
                 pos_delta = d
                 break
         assert pos_delta is not None
-        assert pos_delta.operation == "delete", (
-            f"Expected delete, got {pos_delta.operation}"
-        )
+        assert pos_delta.operation == "delete", f"Expected delete, got {pos_delta.operation}"
 
 
 class TestBugFixInputValidation:
@@ -1272,9 +1240,7 @@ class TestBugFixInputValidation:
         )
         assert result.response_body.get("code") == 422
 
-    async def test_negative_limit_price_rejected(
-        self, pack, sample_state
-    ):
+    async def test_negative_limit_price_rejected(self, pack, sample_state):
         result = await pack.handle_action(
             ToolName("create_order"),
             {
@@ -1290,9 +1256,7 @@ class TestBugFixInputValidation:
         assert result.response_body.get("code") == 422
         assert "limit_price" in result.response_body.get("message", "")
 
-    async def test_negative_stop_price_rejected(
-        self, pack, sample_state
-    ):
+    async def test_negative_stop_price_rejected(self, pack, sample_state):
         result = await pack.handle_action(
             ToolName("create_order"),
             {
@@ -1312,9 +1276,7 @@ class TestBugFixInputValidation:
 class TestBugFixStateConsistency:
     """Cross-cutting: verify state consistency after operations."""
 
-    async def test_equity_equals_cash_plus_positions(
-        self, pack, sample_state
-    ):
+    async def test_equity_equals_cash_plus_positions(self, pack, sample_state):
         """After a buy, equity must exactly equal cash + sum(position market values)."""
         result = await pack.handle_action(
             ToolName("create_order"),

@@ -27,9 +27,7 @@ class PlanReviewer:
         lines.append(f"Services ({len(plan.services)}):")
         for name, res in plan.services.items():
             conf = res.surface.confidence
-            lines.append(
-                f"  {name}: {res.resolution_source} (confidence={conf:.1f})"
-            )
+            lines.append(f"  {name}: {res.resolution_source} (confidence={conf:.1f})")
             entity_types = list(res.surface.entity_schemas.keys())
             if entity_types:
                 lines.append(f"    entity types: {', '.join(entity_types)}")
@@ -52,27 +50,15 @@ class PlanReviewer:
         info = plan.conditions.information
         lines.append("\nReality:")
         lines.append(
-            f"  information: staleness={info.staleness}, "
-            f"incompleteness={info.incompleteness}"
+            f"  information: staleness={info.staleness}, incompleteness={info.incompleteness}"
         )
-        lines.append(
-            f"  reliability: failures={plan.conditions.reliability.failures}"
-        )
-        lines.append(
-            f"  friction: uncooperative={plan.conditions.friction.uncooperative}"
-        )
-        lines.append(
-            f"  complexity: ambiguity={plan.conditions.complexity.ambiguity}"
-        )
-        lines.append(
-            f"  boundaries: access_limits={plan.conditions.boundaries.access_limits}"
-        )
+        lines.append(f"  reliability: failures={plan.conditions.reliability.failures}")
+        lines.append(f"  friction: uncooperative={plan.conditions.friction.uncooperative}")
+        lines.append(f"  complexity: ambiguity={plan.conditions.complexity.ambiguity}")
+        lines.append(f"  boundaries: access_limits={plan.conditions.boundaries.access_limits}")
 
         # Runtime
-        lines.append(
-            f"\nBehavior: {plan.behavior}, Mode: {plan.mode}, "
-            f"Fidelity: {plan.fidelity}"
-        )
+        lines.append(f"\nBehavior: {plan.behavior}, Mode: {plan.mode}, Fidelity: {plan.fidelity}")
         lines.append(f"Seed: {plan.seed}")
         lines.append(f"Seeds: {len(plan.seeds)}, Policies: {len(plan.policies)}")
 
@@ -142,9 +128,7 @@ class PlanReviewer:
         # Actors
         actors = generation_result.get("actors", [])
         lines.append(f"\nACTORS: {len(actors)} registered")
-        friction_count = sum(
-            1 for a in actors if getattr(a, "friction_profile", None)
-        )
+        friction_count = sum(1 for a in actors if getattr(a, "friction_profile", None))
         lines.append(f"  with friction profiles: {friction_count}")
 
         # Validation
@@ -158,9 +142,7 @@ class PlanReviewer:
         validation_report = generation_result.get("validation_report", {})
         final_world = validation_report.get("final_world", {})
         if final_world:
-            lines.append(
-                f"\nFINAL VALIDATION: {'PASS' if final_world.get('valid') else 'FAIL'}"
-            )
+            lines.append(f"\nFINAL VALIDATION: {'PASS' if final_world.get('valid') else 'FAIL'}")
             if final_world.get("errors"):
                 for err in final_world["errors"][:5]:
                     lines.append(f"  - {err}")
@@ -182,11 +164,7 @@ class PlanReviewer:
 
         lines.append("")
         lines.append("=" * 60)
-        status = (
-            "SUCCESS"
-            if not warnings
-            else f"SUCCESS with {len(warnings)} warnings"
-        )
+        status = "SUCCESS" if not warnings else f"SUCCESS with {len(warnings)} warnings"
         lines.append(f"STATUS: {status}")
         lines.append("=" * 60)
 

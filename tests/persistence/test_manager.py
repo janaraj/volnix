@@ -1,5 +1,7 @@
 """Tests for volnix.persistence.manager — database connection management."""
+
 import pytest
+
 from volnix.persistence.config import PersistenceConfig
 from volnix.persistence.manager import ConnectionManager
 
@@ -57,7 +59,7 @@ async def test_connection_manager_shutdown_closes_all(tmp_path):
     mgr = ConnectionManager(config)
     await mgr.initialize()
     db1 = await mgr.get_connection("db1")
-    db2 = await mgr.get_connection("db2")
+    await mgr.get_connection("db2")
     await mgr.shutdown()
     # After shutdown, the internal dict should be empty
     assert len(mgr._connections) == 0

@@ -4,9 +4,9 @@ These tests verify that external agent frameworks can connect to
 Volnix via HTTP and MCP transports, discover tools, and execute
 actions through the full 7-step governance pipeline.
 """
+
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 

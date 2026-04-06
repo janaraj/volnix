@@ -1,9 +1,11 @@
 """Tests for volnix.gateway.gateway -- request handling and tool discovery."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from volnix.gateway.gateway import Gateway
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from volnix.gateway.config import GatewayConfig
+from volnix.gateway.gateway import Gateway
 
 
 def _make_mock_app(tools=None, handle_result=None):
@@ -18,10 +20,20 @@ def _make_mock_app(tools=None, handle_result=None):
     # Mock pack registry on responder
     pack_registry = MagicMock()
     tool_list = tools or [
-        {"name": "email_send", "pack_name": "gmail", "category": "communication",
-         "description": "Send an email", "parameters": {}},
-        {"name": "email_read", "pack_name": "gmail", "category": "communication",
-         "description": "Read an email", "parameters": {}},
+        {
+            "name": "email_send",
+            "pack_name": "gmail",
+            "category": "communication",
+            "description": "Send an email",
+            "parameters": {},
+        },
+        {
+            "name": "email_read",
+            "pack_name": "gmail",
+            "category": "communication",
+            "description": "Read an email",
+            "parameters": {},
+        },
     ]
     pack_registry.list_tools.return_value = tool_list
 
@@ -31,16 +43,27 @@ def _make_mock_app(tools=None, handle_result=None):
     mock_pack.category = "communication"
     mock_pack.fidelity_tier = 1
     mock_pack.get_tools.return_value = [
-        {"name": "email_send", "description": "Send an email",
-         "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "email_read", "description": "Read an email",
-         "parameters": {"type": "object", "properties": {}, "required": []}},
+        {
+            "name": "email_send",
+            "description": "Send an email",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "email_read",
+            "description": "Read an email",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
     ]
     mock_pack.get_entity_schemas.return_value = {}
     mock_pack.get_state_machines.return_value = {}
 
     pack_registry.list_packs.return_value = [
-        {"pack_name": "gmail", "category": "communication", "fidelity_tier": 1, "tools": ["email_send", "email_read"]},
+        {
+            "pack_name": "gmail",
+            "category": "communication",
+            "fidelity_tier": 1,
+            "tools": ["email_send", "email_read"],
+        },
     ]
     pack_registry.get_pack.return_value = mock_pack
 
@@ -86,11 +109,14 @@ async def test_gateway_handle_request_success():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="email_send",
-        input_data={"from_addr": "a@b.com", "to_addr": "c@d.com",
-                    "subject": "test", "body": "hello"},
+        input_data={
+            "from_addr": "a@b.com",
+            "to_addr": "c@d.com",
+            "subject": "test",
+            "body": "hello",
+        },
     )
 
     assert result == expected
@@ -109,7 +135,6 @@ async def test_gateway_handle_request_capability_gap():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
         input_data={},
@@ -151,7 +176,6 @@ async def test_gateway_records_capability_gap_to_ledger():
     await gw.initialize()
 
     await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
         input_data={},
@@ -200,7 +224,6 @@ async def test_gateway_handle_request_records_error():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="email_send",
         input_data={},
@@ -221,7 +244,6 @@ async def test_gateway_no_ledger():
 
     # Should not raise
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="email_send",
         input_data={},
@@ -270,10 +292,16 @@ async def test_new_pack_tools_appear_in_manifest_dynamically():
 
     # 2. Register a NEW calendar pack in the PackRegistry
     calendar_tools = [
-        {"name": "calendar_create", "description": "Create a calendar event",
-         "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "calendar_list", "description": "List calendar events",
-         "parameters": {"type": "object", "properties": {}, "required": []}},
+        {
+            "name": "calendar_create",
+            "description": "Create a calendar event",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "calendar_list",
+            "description": "List calendar events",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
     ]
     calendar_pack = _make_mock_pack("calendar", "productivity", calendar_tools)
 
@@ -284,13 +312,23 @@ async def test_new_pack_tools_appear_in_manifest_dynamically():
     pack_registry._packs["calendar"] = calendar_pack
     # Update list_packs to return both
     pack_registry.list_packs.return_value = [
-        {"pack_name": "gmail", "category": "communication", "fidelity_tier": 1,
-         "tools": ["email_send", "email_read"]},
-        {"pack_name": "calendar", "category": "productivity", "fidelity_tier": 1,
-         "tools": ["calendar_create", "calendar_list"]},
+        {
+            "pack_name": "gmail",
+            "category": "communication",
+            "fidelity_tier": 1,
+            "tools": ["email_send", "email_read"],
+        },
+        {
+            "pack_name": "calendar",
+            "category": "productivity",
+            "fidelity_tier": 1,
+            "tools": ["calendar_create", "calendar_list"],
+        },
     ]
     pack_registry.get_pack.side_effect = lambda name: (
-        calendar_pack if name == "calendar" else app.registry.get("responder")._pack_registry.get_pack.return_value
+        calendar_pack
+        if name == "calendar"
+        else app.registry.get("responder")._pack_registry.get_pack.return_value
     )
 
     # 3. get_tool_manifest() should show new pack's tools WITHOUT re-init
@@ -322,8 +360,13 @@ async def test_new_pack_tools_not_routable_until_tool_map_refreshed():
     pack_registry = responder._pack_registry
     original_tools = pack_registry.list_tools.return_value
     pack_registry.list_tools.return_value = original_tools + [
-        {"name": "calendar_create", "pack_name": "calendar",
-         "category": "productivity", "description": "Create event", "parameters": {}},
+        {
+            "name": "calendar_create",
+            "pack_name": "calendar",
+            "category": "productivity",
+            "description": "Create event",
+            "parameters": {},
+        },
     ]
 
     # The new tool is NOT in _tool_map (cached from initialize)
@@ -331,7 +374,6 @@ async def test_new_pack_tools_not_routable_until_tool_map_refreshed():
 
     # handle_request returns capability_gap for the new tool
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="calendar_create",
         input_data={},
@@ -355,7 +397,6 @@ async def test_gateway_handle_request_empty_arguments():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="email_send",
         input_data={},
@@ -375,7 +416,6 @@ async def test_gateway_handle_request_pipeline_error_dict():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="email_send",
         input_data={"from_addr": "a@b.com"},
@@ -397,7 +437,6 @@ async def test_gateway_handle_request_missing_tool_fields():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="",
         tool_name="email_send",
         input_data={},
@@ -417,7 +456,6 @@ async def test_gateway_capability_gap_lists_available_tools():
     await gw.initialize()
 
     result = await gw.handle_request(
-        
         actor_id="agent-1",
         tool_name="nonexistent_tool",
         input_data={},

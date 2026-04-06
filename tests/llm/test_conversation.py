@@ -3,8 +3,8 @@
 import pytest
 
 from volnix.llm.conversation import ConversationManager, ConversationTurn, Session
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
 from volnix.llm.providers.mock import MockLLMProvider
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
 
 
 class MockRouter:
@@ -16,7 +16,9 @@ class MockRouter:
     def get_provider_for(self, engine_name: str, use_case: str = "default"):
         return self._provider
 
-    async def route(self, request: LLMRequest, engine_name: str, use_case: str = "default") -> LLMResponse:
+    async def route(
+        self, request: LLMRequest, engine_name: str, use_case: str = "default"
+    ) -> LLMResponse:
         return await self._provider.generate(request)
 
 
@@ -29,9 +31,7 @@ def test_create_session():
 
 def test_create_session_with_metadata():
     conv = ConversationManager()
-    session_id = conv.create_session(
-        system_prompt="test", metadata={"engine": "world_compiler"}
-    )
+    session_id = conv.create_session(system_prompt="test", metadata={"engine": "world_compiler"})
     session = conv.get_session(session_id)
     assert session is not None
     assert session.metadata["engine"] == "world_compiler"
@@ -53,7 +53,7 @@ def test_end_nonexistent_session():
 def test_list_sessions():
     conv = ConversationManager()
     s1 = conv.create_session()
-    s2 = conv.create_session()
+    conv.create_session()
     assert len(conv.list_sessions()) == 2
     conv.end_session(s1)
     assert len(conv.list_sessions()) == 1
@@ -226,6 +226,7 @@ async def test_assistant_response_in_history():
 
     class EchoProvider(MockLLMProvider):
         """Returns the user content as the response."""
+
         async def generate(self, request: LLMRequest) -> LLMResponse:
             captured.append(request)
             return LLMResponse(
@@ -239,8 +240,8 @@ async def test_assistant_response_in_history():
     router = MockRouter(provider=EchoProvider())
     sid = conv.create_session()
 
-    resp1 = await conv.generate(sid, router, "Hello")
-    resp2 = await conv.generate(sid, router, "What did you say?")
+    await conv.generate(sid, router, "Hello")
+    await conv.generate(sid, router, "What did you say?")
 
     # Second turn should see the assistant's first response in context
     assert "I processed:" in captured[1].user_content
@@ -303,6 +304,7 @@ async def test_provider_routing_uses_correct_strategy():
 
     class AnthropicMock(MockLLMProvider):
         provider_name = "anthropic"
+
         async def generate(self, request: LLMRequest) -> LLMResponse:
             captured.append(request)
             return await super().generate(request)
@@ -341,8 +343,8 @@ async def test_five_turn_conversation():
     sid = conv.create_session(system_prompt="Multi-turn test")
 
     for i in range(5):
-        resp = await conv.generate(sid, router, f"Question {i+1}")
-        assert resp.content == f"Response #{i+1}"
+        resp = await conv.generate(sid, router, f"Question {i + 1}")
+        assert resp.content == f"Response #{i + 1}"
 
     # Final history should have 10 turns (5 user + 5 assistant)
     history = conv.get_history(sid)
@@ -389,16 +391,22 @@ async def _real_context_retention_test(router, engine_name: str):
 
     # Turn 1: tell it a secret
     resp1 = await conv.generate(
-        sid, router, "Remember this code: VOLNIX42. Just confirm you remember it.",
-        engine_name=engine_name, max_tokens=100,
+        sid,
+        router,
+        "Remember this code: VOLNIX42. Just confirm you remember it.",
+        engine_name=engine_name,
+        max_tokens=100,
     )
     assert resp1.error is None, f"Turn 1 failed: {resp1.error}"
     assert resp1.content, "Turn 1 returned empty content"
 
     # Turn 2: ask to recall
     resp2 = await conv.generate(
-        sid, router, "What was the code I asked you to remember? Reply with just the code.",
-        engine_name=engine_name, max_tokens=100,
+        sid,
+        router,
+        "What was the code I asked you to remember? Reply with just the code.",
+        engine_name=engine_name,
+        max_tokens=100,
     )
     assert resp2.error is None, f"Turn 2 failed: {resp2.error}"
     assert "VOLNIX42" in resp2.content.upper(), (
@@ -417,18 +425,27 @@ async def _real_context_retention_test(router, engine_name: str):
 @pytest.mark.asyncio
 async def test_real_openai_context_retention():
     """Real OpenAI: verify multi-turn context is retained."""
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
     from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
     from volnix.llm.registry import ProviderRegistry
     from volnix.llm.router import LLMRouter
-    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
-    registry.register("openai", OpenAICompatibleProvider(
-        api_key=OPENAI_KEY, base_url="https://api.openai.com/v1", default_model="gpt-5.4-mini",
-    ))
+    registry.register(
+        "openai",
+        OpenAICompatibleProvider(
+            api_key=OPENAI_KEY,
+            base_url="https://api.openai.com/v1",
+            default_model="gpt-5.4-mini",
+        ),
+    )
     config = LLMConfig(
         defaults=LLMProviderEntry(type="openai_compatible", default_model="gpt-5.4-mini"),
-        providers={"openai": LLMProviderEntry(type="openai_compatible", base_url="https://api.openai.com/v1")},
+        providers={
+            "openai": LLMProviderEntry(
+                type="openai_compatible", base_url="https://api.openai.com/v1"
+            )
+        },
         routing={"test": LLMRoutingEntry(provider="openai", model="gpt-5.4-mini")},
     )
     router = LLMRouter(config=config, registry=registry)
@@ -439,15 +456,19 @@ async def test_real_openai_context_retention():
 @pytest.mark.asyncio
 async def test_real_anthropic_context_retention():
     """Real Anthropic: verify multi-turn context is retained via prompt caching."""
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
     from volnix.llm.providers.anthropic import AnthropicProvider
     from volnix.llm.registry import ProviderRegistry
     from volnix.llm.router import LLMRouter
-    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
-    registry.register("anthropic", AnthropicProvider(
-        api_key=ANTHROPIC_KEY, default_model="claude-sonnet-4-6",
-    ))
+    registry.register(
+        "anthropic",
+        AnthropicProvider(
+            api_key=ANTHROPIC_KEY,
+            default_model="claude-sonnet-4-6",
+        ),
+    )
     config = LLMConfig(
         defaults=LLMProviderEntry(type="anthropic", default_model="claude-sonnet-4-6"),
         providers={"anthropic": LLMProviderEntry(type="anthropic")},
@@ -461,15 +482,19 @@ async def test_real_anthropic_context_retention():
 @pytest.mark.asyncio
 async def test_real_google_context_retention():
     """Real Google Gemini: verify multi-turn context is retained."""
+    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
     from volnix.llm.providers.google import GoogleNativeProvider
     from volnix.llm.registry import ProviderRegistry
     from volnix.llm.router import LLMRouter
-    from volnix.llm.config import LLMConfig, LLMProviderEntry, LLMRoutingEntry
 
     registry = ProviderRegistry()
-    registry.register("google", GoogleNativeProvider(
-        api_key=GOOGLE_KEY, default_model="gemini-3-flash-preview",
-    ))
+    registry.register(
+        "google",
+        GoogleNativeProvider(
+            api_key=GOOGLE_KEY,
+            default_model="gemini-3-flash-preview",
+        ),
+    )
     config = LLMConfig(
         defaults=LLMProviderEntry(type="google", default_model="gemini-3-flash-preview"),
         providers={"google": LLMProviderEntry(type="google")},

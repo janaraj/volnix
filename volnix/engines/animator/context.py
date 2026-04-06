@@ -13,7 +13,6 @@ import json
 from typing import Any
 
 from volnix.engines.world_compiler.generation_context import (
-    BEHAVIOR_DESCRIPTIONS,
     WorldGenerationContext,
 )
 from volnix.engines.world_compiler.plan import WorldPlan
@@ -29,7 +28,9 @@ class AnimatorContext:
     Built ONCE when animator is configured, updated each tick.
     """
 
-    def __init__(self, plan: WorldPlan, available_tools: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, plan: WorldPlan, available_tools: list[dict[str, Any]] | None = None
+    ) -> None:
         # REUSE the SAME context builder as D4b
         self._base = WorldGenerationContext(plan)
 
@@ -82,12 +83,14 @@ class AnimatorContext:
                 for k, v in params.get("properties", {}).items()
                 if k in required
             }
-            tool_info.append({
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "service": t.get("pack_name", ""),
-                "required_params": properties,
-            })
+            tool_info.append(
+                {
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "service": t.get("pack_name", ""),
+                    "required_params": properties,
+                }
+            )
         return {
             "reality_summary": self.reality_summary,
             "reality_dimensions": json.dumps(self.dimensions, indent=2),

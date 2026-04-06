@@ -1,16 +1,17 @@
 """Tests for the PolicyEngine — real policy evaluation."""
+
 import pytest
 
-from volnix.core.context import ActionContext
-from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
-from volnix.core.events import (
-    PolicyBlockEvent,
-    PolicyFlagEvent,
-    PolicyHoldEvent,
-    PolicyEscalateEvent,
-)
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.registry import ActorRegistry
+from volnix.core.context import ActionContext
+from volnix.core.events import (
+    PolicyBlockEvent,
+    PolicyEscalateEvent,
+    PolicyFlagEvent,
+    PolicyHoldEvent,
+)
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
 from volnix.engines.policy.engine import PolicyEngine
 
 

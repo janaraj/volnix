@@ -188,9 +188,7 @@ def _make_profile(
     )
 
 
-def _make_ctx(
-    action: str = "testpro_create_item", **kwargs
-) -> ActionContext:
+def _make_ctx(action: str = "testpro_create_item", **kwargs) -> ActionContext:
     now = datetime.now(UTC)
     defaults = {
         "request_id": "req-test-001",
@@ -639,9 +637,7 @@ def test_new_profile_yaml_structure_validated():
                     errors.append(f"{rel}: operations[{i}] missing 'name'")
                 if not op.get("http_method"):
                     op_name = op.get("name", "?")
-                    errors.append(
-                        f"{rel}: operations[{i}] ({op_name}) missing 'http_method'"
-                    )
+                    errors.append(f"{rel}: operations[{i}] ({op_name}) missing 'http_method'")
                 if not op.get("response_schema"):
                     errors.append(
                         f"{rel}: operations[{i}] ({op.get('name', '?')}) missing 'response_schema'"
@@ -661,8 +657,7 @@ def test_new_profile_yaml_structure_validated():
                 fields = ent.get("fields", {})
                 if not isinstance(fields, dict) or len(fields) == 0:
                     errors.append(
-                        f"{rel}: entities[{i}] ({ent.get('name', '?')}) "
-                        f"must have at least 1 field"
+                        f"{rel}: entities[{i}] ({ent.get('name', '?')}) must have at least 1 field"
                     )
 
         # --- State machines ---
@@ -698,6 +693,4 @@ def test_new_profile_yaml_structure_validated():
 
     if errors:
         error_report = "\n".join(f"  - {e}" for e in errors)
-        pytest.fail(
-            f"Profile structure validation found {len(errors)} issue(s):\n{error_report}"
-        )
+        pytest.fail(f"Profile structure validation found {len(errors)} issue(s):\n{error_report}")

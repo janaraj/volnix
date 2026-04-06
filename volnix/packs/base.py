@@ -8,7 +8,8 @@ tools, entity schemas, and state machines.  :class:`ServiceProfile`
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, ClassVar
+from collections.abc import Awaitable, Callable
+from typing import Any, ClassVar
 
 from volnix.core.context import ResponseProposal
 from volnix.core.errors import PackNotFoundError
@@ -104,8 +105,7 @@ class ServicePack(ABC):
         if handler is None:
             known = sorted(self._handlers.keys())
             raise PackNotFoundError(
-                f"Pack '{self.pack_name}' has no handler for action '{action}'. "
-                f"Available: {known}"
+                f"Pack '{self.pack_name}' has no handler for action '{action}'. Available: {known}"
             )
         return await handler(input_data, state)
 

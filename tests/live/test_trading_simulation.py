@@ -20,8 +20,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from volnix.core.types import RunId
-
 
 @pytest.fixture
 async def trading_app(tmp_path):
@@ -36,13 +34,15 @@ async def trading_app(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -112,8 +112,7 @@ class TestTradingSimulation:
                     "type": "internal",
                     "count": 1,
                     "personality": (
-                        "Provides liquidity. Adjusts quotes based on "
-                        "order flow and news."
+                        "Provides liquidity. Adjusts quotes based on order flow and news."
                     ),
                 },
             ],
@@ -122,9 +121,7 @@ class TestTradingSimulation:
             policies=[
                 {
                     "name": "Position concentration limit",
-                    "description": (
-                        "No single position may exceed 30% of portfolio value"
-                    ),
+                    "description": ("No single position may exceed 30% of portfolio value"),
                     "trigger": "position exceeds concentration threshold",
                     "enforcement": "log",
                 },
@@ -144,10 +141,7 @@ class TestTradingSimulation:
                     "Unverified social media rumor: AAPL will miss next "
                     "quarter's earnings. Sentiment turning negative."
                 ),
-                (
-                    "TSLA announced a new product line. Stock is volatile "
-                    "with high trading volume."
-                ),
+                ("TSLA announced a new product line. Stock is volatile with high trading volume."),
             ],
             mission=(
                 "Manage the portfolio to maximize risk-adjusted returns. "
@@ -171,9 +165,7 @@ class TestTradingSimulation:
 
         result = await compiler.generate_world(plan)
 
-        entity_summary = {
-            etype: len(elist) for etype, elist in result["entities"].items()
-        }
+        entity_summary = {etype: len(elist) for etype, elist in result["entities"].items()}
         total_entities = sum(entity_summary.values())
         print(f"  Generated entities: {json.dumps(entity_summary, indent=4)}")
         print(f"  Total: {total_entities} entities")
@@ -223,14 +215,20 @@ class TestTradingSimulation:
         # 4a: Check account
         print("\n  4a. Checking account...")
         r_account = await app.handle_action(
-            agent_id, "alpaca", "get_account", {},
+            agent_id,
+            "alpaca",
+            "get_account",
+            {},
         )
         print(f"      Account: {json.dumps(r_account, default=str)[:300]}")
 
         # 4b: List available assets
         print("\n  4b. Listing assets...")
         r_assets = await app.handle_action(
-            agent_id, "alpaca", "list_assets", {},
+            agent_id,
+            "alpaca",
+            "list_assets",
+            {},
         )
         assets_data = r_assets.get("assets", r_assets)
         asset_count = len(assets_data) if isinstance(assets_data, list) else 0
@@ -242,7 +240,9 @@ class TestTradingSimulation:
             first_symbol = quotes[0].get("symbol", "AAPL")
             print(f"\n  4c. Getting latest quote for {first_symbol}...")
             r_quote = await app.handle_action(
-                agent_id, "alpaca", "get_latest_quote",
+                agent_id,
+                "alpaca",
+                "get_latest_quote",
                 {"symbol": first_symbol},
             )
             print(f"      Quote: {json.dumps(r_quote, default=str)[:200]}")
@@ -251,7 +251,9 @@ class TestTradingSimulation:
         if quotes:
             print(f"\n  4d. Getting bars for {first_symbol}...")
             r_bars = await app.handle_action(
-                agent_id, "alpaca", "get_bars",
+                agent_id,
+                "alpaca",
+                "get_bars",
                 {"symbol": first_symbol, "limit": 5},
             )
             bar_count = len(r_bars.get("bars", []))
@@ -261,7 +263,9 @@ class TestTradingSimulation:
         if quotes:
             print(f"\n  4e. Placing market buy for {first_symbol}...")
             r_order = await app.handle_action(
-                agent_id, "alpaca", "create_order",
+                agent_id,
+                "alpaca",
+                "create_order",
                 {
                     "symbol": first_symbol,
                     "qty": "10",
@@ -277,7 +281,10 @@ class TestTradingSimulation:
         # 4f: Check positions
         print("\n  4f. Checking positions...")
         r_positions = await app.handle_action(
-            agent_id, "alpaca", "list_positions", {},
+            agent_id,
+            "alpaca",
+            "list_positions",
+            {},
         )
         positions_data = r_positions.get("positions", r_positions)
         pos_count = len(positions_data) if isinstance(positions_data, list) else 0
@@ -293,14 +300,20 @@ class TestTradingSimulation:
         # 4g: Get market clock
         print("\n  4g. Market clock...")
         r_clock = await app.handle_action(
-            agent_id, "alpaca", "get_clock", {},
+            agent_id,
+            "alpaca",
+            "get_clock",
+            {},
         )
         print(f"      Clock: {json.dumps(r_clock, default=str)[:150]}")
 
         # 4h: Read news
         print("\n  4h. Reading news...")
         r_news = await app.handle_action(
-            agent_id, "alpaca", "get_news", {"limit": 3},
+            agent_id,
+            "alpaca",
+            "get_news",
+            {"limit": 3},
         )
         news_items = r_news.get("news", [])
         print(f"      News articles: {len(news_items)}")
@@ -315,7 +328,9 @@ class TestTradingSimulation:
         if sentiments:
             sym = sentiments[0].get("symbol", "NVDA")
             r_sent = await app.handle_action(
-                agent_id, "alpaca", "social_get_sentiment",
+                agent_id,
+                "alpaca",
+                "social_get_sentiment",
                 {"symbol": sym},
             )
             print(f"      {sym} sentiment: {r_sent.get('score', 'N/A')}")
@@ -323,7 +338,10 @@ class TestTradingSimulation:
         # 4j: Check trending
         print("\n  4j. Trending symbols...")
         r_trending = await app.handle_action(
-            agent_id, "alpaca", "social_get_trending", {"limit": 5},
+            agent_id,
+            "alpaca",
+            "social_get_trending",
+            {"limit": 5},
         )
         trending = r_trending.get("trending", [])
         print(f"      Trending: {[t.get('symbol') for t in trending[:5]]}")
@@ -357,7 +375,9 @@ class TestTradingSimulation:
             close_symbol = positions[0].get("symbol", "")
             print(f"  Closing position: {close_symbol}...")
             r_close = await app.handle_action(
-                agent_id, "alpaca", "close_position",
+                agent_id,
+                "alpaca",
+                "close_position",
                 {"symbol": close_symbol},
             )
             close_status = r_close.get("status", "unknown")
@@ -372,9 +392,15 @@ class TestTradingSimulation:
         print("=" * 70)
 
         for etype in [
-            "alpaca_account", "alpaca_order", "alpaca_position",
-            "alpaca_asset", "alpaca_bar", "alpaca_quote",
-            "alpaca_clock", "alpaca_news", "alpaca_activity",
+            "alpaca_account",
+            "alpaca_order",
+            "alpaca_position",
+            "alpaca_asset",
+            "alpaca_bar",
+            "alpaca_quote",
+            "alpaca_clock",
+            "alpaca_news",
+            "alpaca_activity",
             "social_sentiment",
         ]:
             entities = await state_engine.query_entities(etype)
@@ -394,10 +420,7 @@ class TestTradingSimulation:
                     await state_engine.get_event_log(),
                     plan,
                 )
-                print(
-                    f"  Scorecard: "
-                    f"{json.dumps(scorecard, indent=4, default=str)[:500]}"
-                )
+                print(f"  Scorecard: {json.dumps(scorecard, indent=4, default=str)[:500]}")
             except (AttributeError, Exception) as exc:
                 print(f"  Scorecard: skipped ({exc})")
 

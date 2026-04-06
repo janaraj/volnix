@@ -8,8 +8,8 @@ fetching results, managing transactions, and introspecting schema.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 
@@ -44,7 +44,9 @@ class Database(ABC):
         ...
 
     @abstractmethod
-    async def fetchone(self, sql: str, params: tuple[Any, ...] | None = None) -> dict[str, Any] | None:
+    async def fetchone(
+        self, sql: str, params: tuple[Any, ...] | None = None
+    ) -> dict[str, Any] | None:
         """Execute a query and return the first result row.
 
         Args:
@@ -57,7 +59,9 @@ class Database(ABC):
         ...
 
     @abstractmethod
-    async def fetchall(self, sql: str, params: tuple[Any, ...] | None = None) -> list[dict[str, Any]]:
+    async def fetchall(
+        self, sql: str, params: tuple[Any, ...] | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return all result rows.
 
         Args:

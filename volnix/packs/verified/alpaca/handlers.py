@@ -7,6 +7,7 @@ Simulates the Alpaca Markets API surface. 22 handlers:
 - 8 broker, 4 market data, 2 reference, 1 news, 3 social sentiment
 - 4 Animator tools (update_quote, create_bar, create_news, update_sentiment)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -22,6 +23,7 @@ SLIPPAGE_BPS = 10  # 0.1% = 10 basis points, deterministic
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
@@ -156,16 +158,12 @@ def _build_position_delta(
             "cost_basis": cost_basis,
             "unrealized_pl": round(market_value - cost_basis, 2),
             "unrealized_plpc": (
-                round((market_value - cost_basis) / cost_basis, 6)
-                if cost_basis
-                else 0
+                round((market_value - cost_basis) / cost_basis, 6) if cost_basis else 0
             ),
             "current_price": current_price,
             "lastday_price": lastday_price,
             "change_today": (
-                round((current_price - lastday_price) / lastday_price, 6)
-                if lastday_price
-                else 0
+                round((current_price - lastday_price) / lastday_price, 6) if lastday_price else 0
             ),
         }
         return (
@@ -183,17 +181,13 @@ def _build_position_delta(
         old_avg = float(existing_pos.get("avg_entry_price", 0))
         if side == "buy" and existing_pos.get("side") == "long":
             new_qty = old_qty + fill_qty
-            new_avg = round(
-                (old_avg * old_qty + fill_price * fill_qty) / new_qty, 4
-            )
+            new_avg = round((old_avg * old_qty + fill_price * fill_qty) / new_qty, 4)
         elif side == "sell" and existing_pos.get("side") == "long":
             new_qty = old_qty - fill_qty
             new_avg = old_avg  # avg doesn't change on partial close
         else:
             new_qty = old_qty + fill_qty
-            new_avg = round(
-                (old_avg * old_qty + fill_price * fill_qty) / new_qty, 4
-            )
+            new_avg = round((old_avg * old_qty + fill_price * fill_qty) / new_qty, 4)
 
         # If qty reaches zero, DELETE the position instead of updating
         if new_qty <= 0:
@@ -217,9 +211,7 @@ def _build_position_delta(
             "cost_basis": cost_basis,
             "unrealized_pl": round(market_value - cost_basis, 2),
             "unrealized_plpc": (
-                round((market_value - cost_basis) / cost_basis, 6)
-                if cost_basis
-                else 0
+                round((market_value - cost_basis) / cost_basis, 6) if cost_basis else 0
             ),
             "current_price": current_price,
         }
@@ -242,6 +234,7 @@ def _build_position_delta(
 # Handler 1: GET /v2/account (READ)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_account(
     input_data: dict[str, Any],
     state: dict[str, Any],
@@ -257,6 +250,7 @@ async def handle_get_account(
 # ---------------------------------------------------------------------------
 # Handler 2: POST /v2/orders (MUTATING -- up to 4 deltas)
 # ---------------------------------------------------------------------------
+
 
 async def handle_create_order(
     input_data: dict[str, Any],
@@ -290,9 +284,7 @@ async def handle_create_order(
     asset = _find_by_symbol(state.get("alpaca_assets", []), symbol)
     if asset is None or not asset.get("tradable", False):
         return ResponseProposal(
-            response_body=_alpaca_error(
-                422, f"Asset '{symbol}' not tradable"
-            ),
+            response_body=_alpaca_error(422, f"Asset '{symbol}' not tradable"),
         )
 
     # Validate account
@@ -367,9 +359,7 @@ async def handle_create_order(
 
     if new_status == "filled" and fill_price is not None:
         # Position delta
-        existing_pos = _find_by_symbol(
-            state.get("alpaca_positions", []), symbol
-        )
+        existing_pos = _find_by_symbol(state.get("alpaca_positions", []), symbol)
         pos_delta, pos_fields = _build_position_delta(
             existing_pos, symbol, asset["id"], fill_price, qty, side, quote
         )
@@ -434,14 +424,13 @@ async def handle_create_order(
             ),
         )
 
-    return ResponseProposal(
-        response_body=order_fields, proposed_state_deltas=deltas
-    )
+    return ResponseProposal(response_body=order_fields, proposed_state_deltas=deltas)
 
 
 # ---------------------------------------------------------------------------
 # Handler 3: GET /v2/orders (READ with filters)
 # ---------------------------------------------------------------------------
+
 
 async def handle_list_orders(
     input_data: dict[str, Any],
@@ -452,21 +441,16 @@ async def handle_list_orders(
     if status_filter:
         if status_filter == "open":
             orders = [
-                o
-                for o in orders
-                if o.get("status") in ("new", "accepted", "partially_filled")
+                o for o in orders if o.get("status") in ("new", "accepted", "partially_filled")
             ]
         elif status_filter == "closed":
             orders = [
                 o
                 for o in orders
-                if o.get("status")
-                in ("filled", "cancelled", "expired", "rejected")
+                if o.get("status") in ("filled", "cancelled", "expired", "rejected")
             ]
         else:
-            orders = [
-                o for o in orders if o.get("status") == status_filter
-            ]
+            orders = [o for o in orders if o.get("status") == status_filter]
     direction = input_data.get("direction", "desc")
     orders.sort(
         key=lambda o: o.get("created_at", ""),
@@ -479,6 +463,7 @@ async def handle_list_orders(
 # ---------------------------------------------------------------------------
 # Handler 4: GET /v2/orders/{id} (READ)
 # ---------------------------------------------------------------------------
+
 
 async def handle_get_order(
     input_data: dict[str, Any],
@@ -495,6 +480,7 @@ async def handle_get_order(
 # ---------------------------------------------------------------------------
 # Handler 5: DELETE /v2/orders/{id} (MUTATING)
 # ---------------------------------------------------------------------------
+
 
 async def handle_cancel_order(
     input_data: dict[str, Any],
@@ -521,14 +507,13 @@ async def handle_cancel_order(
         fields={"status": "cancelled", "canceled_at": _now_iso()},
         previous_fields={"status": order.get("status")},
     )
-    return ResponseProposal(
-        response_body={}, proposed_state_deltas=[delta]
-    )
+    return ResponseProposal(response_body={}, proposed_state_deltas=[delta])
 
 
 # ---------------------------------------------------------------------------
 # Handler 6: GET /v2/positions (READ -- enriches with live P&L from quotes)
 # ---------------------------------------------------------------------------
+
 
 async def handle_list_positions(
     input_data: dict[str, Any],
@@ -561,13 +546,12 @@ async def handle_list_positions(
 # Handler 7: GET /v2/positions/{symbol} (READ -- enriches with live P&L)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_position(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    pos = _find_by_symbol(
-        state.get("alpaca_positions", []), input_data["symbol"]
-    )
+    pos = _find_by_symbol(state.get("alpaca_positions", []), input_data["symbol"])
     if pos is None:
         return ResponseProposal(
             response_body=_alpaca_error(
@@ -576,9 +560,7 @@ async def handle_get_position(
             ),
         )
     # Enrich with live quote (same as list_positions)
-    q = _find_by_symbol(
-        state.get("alpaca_quotes", []), pos.get("symbol", "")
-    )
+    q = _find_by_symbol(state.get("alpaca_quotes", []), pos.get("symbol", ""))
     if q:
         cp = float(q.get("ask_price", 0))
         qty = float(pos.get("qty", 0))
@@ -599,6 +581,7 @@ async def handle_get_position(
 # ---------------------------------------------------------------------------
 # Handler 8: DELETE /v2/positions/{symbol} (MUTATING)
 # ---------------------------------------------------------------------------
+
 
 async def handle_close_position(
     input_data: dict[str, Any],
@@ -624,9 +607,7 @@ async def handle_close_position(
     qty = float(pos.get("qty", 0))
     close_side = "sell" if pos.get("side") == "long" else "buy"
     # Market fill
-    fill_price, _ = _compute_fill_price(
-        quote, close_side, "market", None, None
-    )
+    fill_price, _ = _compute_fill_price(quote, close_side, "market", None, None)
     now = _now_iso()
     deltas: list[StateDelta] = []
 
@@ -671,9 +652,7 @@ async def handle_close_position(
     proceeds = round(fill_price * qty, 2) if fill_price else 0.0
     old_cash = float(account.get("cash", 0))
     new_cash = (
-        round(old_cash + proceeds, 2)
-        if close_side == "sell"
-        else round(old_cash - proceeds, 2)
+        round(old_cash + proceeds, 2) if close_side == "sell" else round(old_cash - proceeds, 2)
     )
     # Remaining positions' value (excluding the one being closed)
     remaining_pos_value = _compute_total_position_value(
@@ -717,25 +696,20 @@ async def handle_close_position(
         ),
     )
 
-    return ResponseProposal(
-        response_body=order_fields, proposed_state_deltas=deltas
-    )
+    return ResponseProposal(response_body=order_fields, proposed_state_deltas=deltas)
 
 
 # ---------------------------------------------------------------------------
 # Handler 9: GET /v2/stocks/{symbol}/bars (READ with pagination)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_bars(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     symbol = input_data["symbol"]
-    bars = [
-        b
-        for b in state.get("alpaca_bars", [])
-        if b.get("symbol") == symbol
-    ]
+    bars = [b for b in state.get("alpaca_bars", []) if b.get("symbol") == symbol]
     timeframe = input_data.get("timeframe")
     if timeframe:
         bars = [b for b in bars if b.get("timeframe") == timeframe]
@@ -776,18 +750,15 @@ async def handle_get_bars(
 # Handler 10: GET /v2/stocks/{symbol}/quotes/latest (READ)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_latest_quote(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    quote = _find_by_symbol(
-        state.get("alpaca_quotes", []), input_data["symbol"]
-    )
+    quote = _find_by_symbol(state.get("alpaca_quotes", []), input_data["symbol"])
     if quote is None:
         return ResponseProposal(
-            response_body=_alpaca_error(
-                404, f"No quote for '{input_data['symbol']}'"
-            ),
+            response_body=_alpaca_error(404, f"No quote for '{input_data['symbol']}'"),
         )
     formatted = {
         "t": quote.get("timestamp"),
@@ -811,22 +782,18 @@ async def handle_get_latest_quote(
 # Handler 11: GET /v2/stocks/{symbol}/trades/latest (READ)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_latest_trade(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
-    quote = _find_by_symbol(
-        state.get("alpaca_quotes", []), input_data["symbol"]
-    )
+    quote = _find_by_symbol(state.get("alpaca_quotes", []), input_data["symbol"])
     if quote is None:
         return ResponseProposal(
-            response_body=_alpaca_error(
-                404, f"No trade for '{input_data['symbol']}'"
-            ),
+            response_body=_alpaca_error(404, f"No trade for '{input_data['symbol']}'"),
         )
     mid = round(
-        (float(quote.get("bid_price", 0)) + float(quote.get("ask_price", 0)))
-        / 2,
+        (float(quote.get("bid_price", 0)) + float(quote.get("ask_price", 0))) / 2,
         4,
     )
     formatted = {
@@ -852,17 +819,14 @@ async def handle_get_latest_trade(
 # Handler 12: GET /v2/stocks/{symbol}/snapshot (READ)
 # ---------------------------------------------------------------------------
 
+
 async def handle_get_snapshot(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     symbol = input_data["symbol"]
     quote = _find_by_symbol(state.get("alpaca_quotes", []), symbol)
-    bars = [
-        b
-        for b in state.get("alpaca_bars", [])
-        if b.get("symbol") == symbol
-    ]
+    bars = [b for b in state.get("alpaca_bars", []) if b.get("symbol") == symbol]
     bars.sort(key=lambda b: b.get("timestamp", ""), reverse=True)
     latest_bar = bars[0] if bars else None
     prev_bar = bars[1] if len(bars) > 1 else None
@@ -880,6 +844,7 @@ async def handle_get_snapshot(
 # ---------------------------------------------------------------------------
 # Handler 13: GET /v2/clock (READ)
 # ---------------------------------------------------------------------------
+
 
 async def handle_get_clock(
     input_data: dict[str, Any],
@@ -902,6 +867,7 @@ async def handle_get_clock(
 # Handler 14: GET /v2/assets (READ with filters)
 # ---------------------------------------------------------------------------
 
+
 async def handle_list_assets(
     input_data: dict[str, Any],
     state: dict[str, Any],
@@ -912,9 +878,7 @@ async def handle_list_assets(
         assets = [a for a in assets if a.get("status") == status_filter]
     class_filter = input_data.get("asset_class")
     if class_filter:
-        assets = [
-            a for a in assets if a.get("asset_class") == class_filter
-        ]
+        assets = [a for a in assets if a.get("asset_class") == class_filter]
     return ResponseProposal(response_body={"assets": assets})
 
 
@@ -938,11 +902,7 @@ async def handle_get_news(
     symbols_filter = input_data.get("symbols")
     if symbols_filter:
         symbol_list = [s.strip() for s in symbols_filter.split(",")]
-        news = [
-            n
-            for n in news
-            if any(s in n.get("symbols", []) for s in symbol_list)
-        ]
+        news = [n for n in news if any(s in n.get("symbols", []) for s in symbol_list)]
     start = input_data.get("start")
     end = input_data.get("end")
     if start:
@@ -953,10 +913,7 @@ async def handle_get_news(
     limit = int(input_data.get("limit", 10))
     paginated = news[:limit]
     # Strip internal metadata -- agent never sees factual_accuracy etc.
-    sanitized = [
-        {k: v for k, v in n.items() if k not in INTERNAL_NEWS_FIELDS}
-        for n in paginated
-    ]
+    sanitized = [{k: v for k, v in n.items() if k not in INTERNAL_NEWS_FIELDS} for n in paginated]
     next_token = news[limit].get("id") if len(news) > limit else None
     return ResponseProposal(
         response_body={"news": sanitized, "next_page_token": next_token},
@@ -966,6 +923,7 @@ async def handle_get_news(
 # ---------------------------------------------------------------------------
 # Handler 16: GET /volnix/social/feed (READ)
 # ---------------------------------------------------------------------------
+
 
 async def handle_social_get_feed(
     input_data: dict[str, Any],
@@ -991,6 +949,7 @@ async def handle_social_get_feed(
 # ---------------------------------------------------------------------------
 # Handler 17: GET /volnix/social/sentiment (READ)
 # ---------------------------------------------------------------------------
+
 
 async def handle_social_get_sentiment(
     input_data: dict[str, Any],
@@ -1020,15 +979,14 @@ async def handle_social_get_sentiment(
 # Handler 18: GET /volnix/social/trending (READ)
 # ---------------------------------------------------------------------------
 
+
 async def handle_social_get_trending(
     input_data: dict[str, Any],
     state: dict[str, Any],
 ) -> ResponseProposal:
     sentiments = list(state.get("social_sentiments", []))
     # Sort by trending_rank (lower = more trending), filter nulls
-    ranked = [
-        s for s in sentiments if s.get("trending_rank") is not None
-    ]
+    ranked = [s for s in sentiments if s.get("trending_rank") is not None]
     ranked.sort(key=lambda s: s.get("trending_rank", 999))
     limit = int(input_data.get("limit", 10))
     return ResponseProposal(
@@ -1043,6 +1001,7 @@ async def handle_social_get_trending(
 # Handler 19: PUT /volnix/market/quote (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
 
+
 async def handle_update_quote(
     input_data: dict[str, Any],
     state: dict[str, Any],
@@ -1051,9 +1010,7 @@ async def handle_update_quote(
     quote = _find_by_symbol(state.get("alpaca_quotes", []), symbol)
     if quote is None:
         return ResponseProposal(
-            response_body=_alpaca_error(
-                404, f"No existing quote for '{symbol}'"
-            ),
+            response_body=_alpaca_error(404, f"No existing quote for '{symbol}'"),
         )
     now = _now_iso()
     update_fields: dict[str, Any] = {"timestamp": now}
@@ -1078,14 +1035,13 @@ async def handle_update_quote(
         previous_fields=previous_fields,
     )
     updated = {**quote, **update_fields}
-    return ResponseProposal(
-        response_body=updated, proposed_state_deltas=[delta]
-    )
+    return ResponseProposal(response_body=updated, proposed_state_deltas=[delta])
 
 
 # ---------------------------------------------------------------------------
 # Handler 20: POST /volnix/market/bar (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
+
 
 async def handle_create_bar(
     input_data: dict[str, Any],
@@ -1112,14 +1068,13 @@ async def handle_create_bar(
         operation="create",
         fields=bar_fields,
     )
-    return ResponseProposal(
-        response_body=bar_fields, proposed_state_deltas=[delta]
-    )
+    return ResponseProposal(response_body=bar_fields, proposed_state_deltas=[delta])
 
 
 # ---------------------------------------------------------------------------
 # Handler 21: POST /volnix/news (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
+
 
 async def handle_create_news(
     input_data: dict[str, Any],
@@ -1141,9 +1096,7 @@ async def handle_create_news(
         # Internal fields (stripped by handle_get_news before serving)
         "factual_accuracy": input_data.get("factual_accuracy", 1.0),
         "sentiment_bias": input_data.get("sentiment_bias", 0.0),
-        "market_impact_expected": input_data.get(
-            "market_impact_expected", "none"
-        ),
+        "market_impact_expected": input_data.get("market_impact_expected", "none"),
     }
     delta = StateDelta(
         entity_type="alpaca_news",
@@ -1151,14 +1104,13 @@ async def handle_create_news(
         operation="create",
         fields=news_fields,
     )
-    return ResponseProposal(
-        response_body=news_fields, proposed_state_deltas=[delta]
-    )
+    return ResponseProposal(response_body=news_fields, proposed_state_deltas=[delta])
 
 
 # ---------------------------------------------------------------------------
 # Handler 22: PUT /volnix/social/sentiment (MUTATING -- Animator tool)
 # ---------------------------------------------------------------------------
+
 
 async def handle_social_update_sentiment(
     input_data: dict[str, Any],
@@ -1196,9 +1148,7 @@ async def handle_social_update_sentiment(
             operation="create",
             fields=sent_fields,
         )
-        return ResponseProposal(
-            response_body=sent_fields, proposed_state_deltas=[delta]
-        )
+        return ResponseProposal(response_body=sent_fields, proposed_state_deltas=[delta])
     else:
         # Update existing sentiment
         update_fields: dict[str, Any] = {"computed_at": now}
@@ -1223,6 +1173,4 @@ async def handle_social_update_sentiment(
             previous_fields=previous_fields,
         )
         updated = {**existing, **update_fields}
-        return ResponseProposal(
-            response_body=updated, proposed_state_deltas=[delta]
-        )
+        return ResponseProposal(response_body=updated, proposed_state_deltas=[delta])

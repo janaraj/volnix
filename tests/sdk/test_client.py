@@ -1,4 +1,5 @@
 """Tests for VolnixClient."""
+
 from __future__ import annotations
 
 from volnix.sdk import VolnixClient
@@ -6,9 +7,7 @@ from volnix.sdk import VolnixClient
 
 async def test_client_list_tools(test_adapter, transport):
     """VolnixClient.tools() returns tool list."""
-    async with VolnixClient(
-        url="http://test", _transport=transport
-    ) as terra:
+    async with VolnixClient(url="http://test", _transport=transport) as terra:
         tools = await terra.tools()
 
     assert isinstance(tools, list)
@@ -17,12 +16,8 @@ async def test_client_list_tools(test_adapter, transport):
 
 async def test_client_call_tool(test_adapter, transport):
     """VolnixClient.call() returns action result."""
-    async with VolnixClient(
-        url="http://test", _transport=transport
-    ) as terra:
-        result = await terra.call(
-            "email_send", to="a@b.com", body="hello"
-        )
+    async with VolnixClient(url="http://test", _transport=transport) as terra:
+        result = await terra.call("email_send", to="a@b.com", body="hello")
 
     assert "email_id" in result
 

@@ -8,6 +8,7 @@ Usage::
     tools = await langgraph_tools(url="http://localhost:8080")
     agent = create_react_agent(model, tools)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -60,17 +61,17 @@ async def langgraph_tools(
         ) -> str:
             import json
 
-            result = await execute_tool(
-                url=_url, tool=_name, args=kwargs, actor_id=_actor
-            )
+            result = await execute_tool(url=_url, tool=_name, args=kwargs, actor_id=_actor)
             return json.dumps(result, default=str)
 
-        tools.append(StructuredTool(
-            name=name,
-            description=desc,
-            args_schema=args_model,
-            coroutine=_invoke,
-            func=lambda **kw: None,  # sync placeholder (required)
-        ))
+        tools.append(
+            StructuredTool(
+                name=name,
+                description=desc,
+                args_schema=args_model,
+                coroutine=_invoke,
+                func=lambda **kw: None,  # sync placeholder (required)
+            )
+        )
 
     return tools

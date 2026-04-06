@@ -1,8 +1,8 @@
 """Tests for volnix.registry.composition."""
-import pytest
+
+from volnix.core.protocols import PipelineStep
 from volnix.registry.composition import create_default_registry
 from volnix.registry.registry import EngineRegistry
-from volnix.core.protocols import PipelineStep, StateEngineProtocol
 
 
 def test_create_default_registry():
@@ -14,8 +14,16 @@ def test_create_default_registry():
 def test_all_engines_registered():
     reg = create_default_registry()
     expected = {
-        "state", "policy", "permission", "budget", "responder",
-        "adapter", "animator", "reporter", "feedback", "world_compiler",
+        "state",
+        "policy",
+        "permission",
+        "budget",
+        "responder",
+        "adapter",
+        "animator",
+        "reporter",
+        "feedback",
+        "world_compiler",
         "agency",
     }
     assert set(reg.list_engines()) == expected
@@ -32,8 +40,17 @@ def test_topo_sort_no_cycles():
     assert order.index("state") < order.index("agency")
     # Exact expected order (deterministic Kahn's with sorted queues)
     expected = [
-        "state", "agency", "animator", "budget", "feedback", "permission",
-        "adapter", "policy", "reporter", "responder", "world_compiler",
+        "state",
+        "agency",
+        "animator",
+        "budget",
+        "feedback",
+        "permission",
+        "adapter",
+        "policy",
+        "reporter",
+        "responder",
+        "world_compiler",
     ]
     assert order == expected
 

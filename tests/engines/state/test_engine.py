@@ -1,12 +1,15 @@
 """Tests for volnix.engines.state.engine -- StateEngine orchestrator."""
+
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
-from volnix.engines.state.engine import StateEngine
-from volnix.core.types import EntityId, ActorId, ServiceId, StepVerdict, StateDelta, Timestamp
-from volnix.core.context import ActionContext, StepResult, ResponseProposal
-from volnix.core.events import WorldEvent
+
+from volnix.core.context import ActionContext, ResponseProposal
 from volnix.core.errors import EntityNotFoundError
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, ServiceId, StateDelta, StepVerdict, Timestamp
+from volnix.engines.state.engine import StateEngine
 
 
 @pytest.fixture
@@ -35,8 +38,8 @@ def _make_ctx(action="create_user", deltas=None, **overrides):
         service_id=ServiceId("user-svc"),
         action=action,
         input_data={"name": "Alice"},
-        world_time=datetime(2026, 1, 15, tzinfo=timezone.utc),
-        wall_time=datetime.now(timezone.utc),
+        world_time=datetime(2026, 1, 15, tzinfo=UTC),
+        wall_time=datetime.now(UTC),
         tick=1,
     )
     for k, v in overrides.items():
@@ -211,11 +214,13 @@ async def test_query_entities(engine):
             operation="create",
             fields={"name": f"User {i}"},
         )
-        await engine.execute(_make_ctx(
-            deltas=[delta],
-            request_id=f"req-{i}",
-            tick=i + 1,
-        ))
+        await engine.execute(
+            _make_ctx(
+                deltas=[delta],
+                request_id=f"req-{i}",
+                tick=i + 1,
+            )
+        )
 
     users = await engine.query_entities("user")
     assert len(users) == 3
@@ -229,8 +234,8 @@ async def test_commit_event_persists(engine):
     event = WorldEvent(
         event_type="world.test",
         timestamp=Timestamp(
-            world_time=datetime(2026, 1, 15, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2026, 1, 15, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
         actor_id=ActorId("agent-1"),
@@ -250,8 +255,8 @@ async def test_get_causal_chain(engine):
     event1 = WorldEvent(
         event_type="world.create",
         timestamp=Timestamp(
-            world_time=datetime(2026, 1, 15, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2026, 1, 15, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
         actor_id=ActorId("agent-1"),
@@ -263,8 +268,8 @@ async def test_get_causal_chain(engine):
     event2 = WorldEvent(
         event_type="world.update",
         timestamp=Timestamp(
-            world_time=datetime(2026, 1, 16, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2026, 1, 16, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=2,
         ),
         actor_id=ActorId("agent-1"),
@@ -276,22 +281,22 @@ async def test_get_causal_chain(engine):
 
     chain = await engine.get_causal_chain(event2.event_id, "backward")
     # chain should contain at least event1
-    chain_ids = [str(e.event_id) if hasattr(e, "event_id") else str(e) for e in chain]
+    [str(e.event_id) if hasattr(e, "event_id") else str(e) for e in chain]
     assert len(chain) >= 1
 
 
 async def test_get_timeline(engine):
     """get_timeline returns events filtered by time range."""
-    t1 = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    t2 = datetime(2026, 1, 15, tzinfo=timezone.utc)
-    t3 = datetime(2026, 1, 20, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 10, tzinfo=UTC)
+    t2 = datetime(2026, 1, 15, tzinfo=UTC)
+    t3 = datetime(2026, 1, 20, tzinfo=UTC)
 
     for t, tick, action in [(t1, 1, "a1"), (t2, 2, "a2"), (t3, 3, "a3")]:
         event = WorldEvent(
             event_type=f"world.{action}",
             timestamp=Timestamp(
                 world_time=t,
-                wall_time=datetime.now(timezone.utc),
+                wall_time=datetime.now(UTC),
                 tick=tick,
             ),
             actor_id=ActorId("agent-1"),
@@ -301,8 +306,8 @@ async def test_get_timeline(engine):
         await engine.commit_event(event)
 
     timeline = await engine.get_timeline(
-        datetime(2026, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 18, tzinfo=timezone.utc),
+        datetime(2026, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 18, tzinfo=UTC),
     )
     assert len(timeline) == 1
     assert timeline[0].action == "a2"
@@ -335,22 +340,42 @@ async def test_execute_transaction_rollback(tmp_path):
 
     try:
         # First: create an entity successfully
-        ctx1 = _make_ctx(deltas=[
-            StateDelta(entity_type="user", entity_id=EntityId("u1"), operation="create", fields={"name": "Alice"}),
-        ])
+        ctx1 = _make_ctx(
+            deltas=[
+                StateDelta(
+                    entity_type="user",
+                    entity_id=EntityId("u1"),
+                    operation="create",
+                    fields={"name": "Alice"},
+                ),
+            ]
+        )
         result1 = await engine.execute(ctx1)
         assert result1.verdict == StepVerdict.ALLOW
 
         # Second: try to create a DUPLICATE (should fail inside transaction)
-        ctx2 = _make_ctx(deltas=[
-            StateDelta(entity_type="order", entity_id=EntityId("o1"), operation="create", fields={"total": 100}),
-            StateDelta(entity_type="user", entity_id=EntityId("u1"), operation="create", fields={"name": "Dupe"}),
-        ])
+        ctx2 = _make_ctx(
+            deltas=[
+                StateDelta(
+                    entity_type="order",
+                    entity_id=EntityId("o1"),
+                    operation="create",
+                    fields={"total": 100},
+                ),
+                StateDelta(
+                    entity_type="user",
+                    entity_id=EntityId("u1"),
+                    operation="create",
+                    fields={"name": "Dupe"},
+                ),
+            ]
+        )
         with pytest.raises(Exception):
             await engine.execute(ctx2)
 
         # The order entity should NOT exist (transaction rolled back)
         from volnix.core.errors import EntityNotFoundError
+
         with pytest.raises(EntityNotFoundError):
             await engine.get_entity("order", EntityId("o1"))
 
@@ -365,6 +390,7 @@ async def test_execute_transaction_rollback(tmp_path):
 async def test_fork_raises_not_implemented(engine):
     """fork() raises NotImplementedError (deferred to Phase F5)."""
     from volnix.core.types import SnapshotId
+
     with pytest.raises(NotImplementedError):
         await engine.fork(SnapshotId("snap_1"))
 
@@ -373,5 +399,6 @@ async def test_fork_raises_not_implemented(engine):
 async def test_diff_raises_not_implemented(engine):
     """diff() raises NotImplementedError (deferred to Phase F5)."""
     from volnix.core.types import SnapshotId
+
     with pytest.raises(NotImplementedError):
         await engine.diff(SnapshotId("snap_a"), SnapshotId("snap_b"))

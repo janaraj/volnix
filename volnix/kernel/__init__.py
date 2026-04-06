@@ -8,8 +8,15 @@ from volnix.kernel.resolver import ServiceResolver
 from volnix.kernel.surface import APIOperation, ServiceSurface
 
 __all__ = [
-    "CATEGORIES", "SemanticCategory", "SemanticPrimitive", "SemanticRegistry",
-    "APIOperation", "ServiceSurface", "ExternalSpecProvider",
-    "ContextHubProvider", "OpenAPIProvider", "ServiceResolver",
+    "CATEGORIES",
+    "SemanticCategory",
+    "SemanticPrimitive",
+    "SemanticRegistry",
+    "APIOperation",
+    "ServiceSurface",
+    "ExternalSpecProvider",
+    "ContextHubProvider",
+    "OpenAPIProvider",
+    "ServiceResolver",
     "get_primitives_for_category",
 ]

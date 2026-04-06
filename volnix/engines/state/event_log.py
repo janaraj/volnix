@@ -6,8 +6,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from volnix.core.types import ActorId, EntityId, EventId
 from volnix.core.events import Event, WorldEvent
+from volnix.core.types import ActorId, EntityId, EventId
 from volnix.persistence.database import Database
 
 logger = logging.getLogger(__name__)
@@ -99,9 +99,7 @@ class EventLog:
         rows = await self._db.fetchall(sql, tuple(params))
         return [self._deserialize(row["payload"]) for row in rows]
 
-    async def get_by_entity(
-        self, entity_type: str, entity_id: EntityId
-    ) -> list[Event]:
+    async def get_by_entity(self, entity_type: str, entity_id: EntityId) -> list[Event]:
         """Return all events that affected a specific entity.
 
         Note: entity_type is accepted for API consistency but filtering

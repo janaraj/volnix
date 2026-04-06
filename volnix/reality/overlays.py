@@ -13,7 +13,6 @@ from typing import Any, ClassVar
 
 from volnix.core.errors import RealityError
 
-
 # ---------------------------------------------------------------------------
 # Base overlay protocol
 # ---------------------------------------------------------------------------
@@ -65,8 +64,7 @@ class OverlayRegistry:
     def list_overlays(self) -> list[dict[str, str]]:
         """List all registered overlays with name and description."""
         return [
-            {"name": o.overlay_name, "description": o.description}
-            for o in self._overlays.values()
+            {"name": o.overlay_name, "description": o.description} for o in self._overlays.values()
         ]
 
     def compose(
@@ -95,7 +93,9 @@ class OverlayRegistry:
         for name in overlay_names:
             overlay = self._overlays.get(name)
             if overlay is None:
-                raise RealityError(f"Unknown overlay: '{name}'. Available: {sorted(self._overlays.keys())}")
+                raise RealityError(
+                    f"Unknown overlay: '{name}'. Available: {sorted(self._overlays.keys())}"
+                )
             overlay_values = values.get(name, {})
             result = overlay.apply(result, overlay_values)
         return result

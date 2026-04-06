@@ -1,6 +1,5 @@
 """Tests for volnix.kernel.primitives -- per-category primitive definitions."""
 
-import pytest
 from volnix.kernel.primitives import SemanticPrimitive, get_primitives_for_category
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -45,6 +45,7 @@ class SnapshotStore:
 
         # Sanitize label to prevent path traversal (Fix #2)
         import re
+
         safe_label = re.sub(r"[^a-zA-Z0-9_-]", "_", label)
         snapshot_id = SnapshotId(f"snap_{run_id}_{safe_label}_{uuid4().hex[:8]}")
         db_file = self._snapshots_dir / f"{snapshot_id}.db"
@@ -63,7 +64,7 @@ class SnapshotStore:
             "snapshot_id": snapshot_id,
             "run_id": run_id,
             "label": label,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "size_bytes": size,
         }
         await asyncio.to_thread(meta_file.write_text, json.dumps(metadata, indent=2))
@@ -99,9 +100,7 @@ class SnapshotStore:
         if not await asyncio.to_thread(self._snapshots_dir.exists):
             return []
 
-        meta_files = await asyncio.to_thread(
-            lambda: sorted(self._snapshots_dir.glob("*.json"))
-        )
+        meta_files = await asyncio.to_thread(lambda: sorted(self._snapshots_dir.glob("*.json")))
         results: list[dict] = []
         for meta_file in meta_files:
             text = await asyncio.to_thread(meta_file.read_text)

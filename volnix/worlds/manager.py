@@ -95,7 +95,9 @@ class WorldManager:
             self._save_metadata(world_id)
             logger.info(
                 "World %s generated: %d entities, %d actors",
-                world_id, entity_count, actor_count,
+                world_id,
+                entity_count,
+                actor_count,
             )
 
     async def mark_failed(self, world_id: WorldId, error: str = "") -> None:
@@ -138,6 +140,7 @@ class WorldManager:
             return None
         plan_data = json.loads(plan_path.read_text())
         from volnix.engines.world_compiler.plan import WorldPlan
+
         return WorldPlan.model_validate(plan_data)
 
     async def delete_world(self, world_id: WorldId) -> bool:
@@ -159,9 +162,7 @@ class WorldManager:
         world_dir = self._data_dir / str(world_id)
         world_dir.mkdir(parents=True, exist_ok=True)
         meta_path = world_dir / "metadata.json"
-        meta_path.write_text(
-            json.dumps(self._worlds[str(world_id)], indent=2, default=str)
-        )
+        meta_path.write_text(json.dumps(self._worlds[str(world_id)], indent=2, default=str))
 
     def _load_existing_worlds(self) -> None:
         """Reload previously persisted worlds from disk.
@@ -182,12 +183,11 @@ class WorldManager:
                     if (now - created).total_seconds() > 3600:
                         data["status"] = "failed"
                         data["error"] = "generation_timeout"
-                        meta_path.write_text(
-                            json.dumps(data, indent=2, default=str)
-                        )
+                        meta_path.write_text(json.dumps(data, indent=2, default=str))
                 self._worlds[wid] = data
             except (json.JSONDecodeError, KeyError, ValueError):
                 logger.warning(
-                    "Skipping corrupted world metadata: %s", meta_path,
+                    "Skipping corrupted world metadata: %s",
+                    meta_path,
                 )
                 continue

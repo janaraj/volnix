@@ -1,8 +1,12 @@
 """Tests for volnix.core.errors — custom exception hierarchy."""
-import pytest
+
 from volnix.core.errors import (
-    VolnixError, ConfigError, EngineError, EngineInitError,
-    EngineDependencyError, PipelineStepError, ValidationError,
+    ConfigError,
+    EngineDependencyError,
+    EngineError,
+    PipelineStepError,
+    ValidationError,
+    VolnixError,
 )
 
 

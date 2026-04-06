@@ -122,12 +122,14 @@ async def handle_messages_search(
     for msg in messages:
         # Query filter: substring match across subject + body + from + to
         if q:
-            searchable = " ".join([
-                msg.get("subject", ""),
-                msg.get("body", ""),
-                msg.get("from_addr", ""),
-                msg.get("to_addr", ""),
-            ]).lower()
+            searchable = " ".join(
+                [
+                    msg.get("subject", ""),
+                    msg.get("body", ""),
+                    msg.get("from_addr", ""),
+                    msg.get("to_addr", ""),
+                ]
+            ).lower()
             if q not in searchable:
                 continue
 
@@ -481,12 +483,14 @@ async def handle_email_search(
         if subject_filter and subject_filter.lower() not in e.get("subject", "").lower():
             continue
         if query:
-            searchable = " ".join([
-                e.get("subject", ""),
-                e.get("body", ""),
-                e.get("from_addr", ""),
-                e.get("to_addr", ""),
-            ]).lower()
+            searchable = " ".join(
+                [
+                    e.get("subject", ""),
+                    e.get("body", ""),
+                    e.get("from_addr", ""),
+                    e.get("to_addr", ""),
+                ]
+            ).lower()
             if query not in searchable:
                 continue
         results.append(e)
@@ -499,9 +503,7 @@ async def handle_email_search(
     )
 
 
-async def handle_email_reply(
-    input_data: dict[str, Any], state: dict[str, Any]
-) -> ResponseProposal:
+async def handle_email_reply(input_data: dict[str, Any], state: dict[str, Any]) -> ResponseProposal:
     """Handle the ``email_reply`` action.
 
     Finds original email, creates reply with in_reply_to and thread_id.

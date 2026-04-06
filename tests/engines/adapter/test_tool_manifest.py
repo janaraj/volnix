@@ -1,6 +1,8 @@
 """Tests for volnix.engines.adapter.tool_manifest -- manifest generation."""
-import pytest
+
 from unittest.mock import MagicMock
+
+import pytest
 
 from volnix.engines.adapter.tool_manifest import ToolManifestGenerator
 
@@ -14,14 +16,28 @@ def _make_pack_registry():
     mock_pack.category = "communication"
     mock_pack.fidelity_tier = 1
     mock_pack.get_tools.return_value = [
-        {"name": "email_send", "description": "Send an email",
-         "http_path": "/email/v1/messages/send", "http_method": "POST",
-         "parameters": {"type": "object", "properties": {
-             "to": {"type": "string"}}, "required": ["to"]}},
-        {"name": "email_read", "description": "Read an email",
-         "http_path": "/email/v1/messages/{id}", "http_method": "GET",
-         "parameters": {"type": "object", "properties": {
-             "email_id": {"type": "string"}}, "required": ["email_id"]}},
+        {
+            "name": "email_send",
+            "description": "Send an email",
+            "http_path": "/email/v1/messages/send",
+            "http_method": "POST",
+            "parameters": {
+                "type": "object",
+                "properties": {"to": {"type": "string"}},
+                "required": ["to"],
+            },
+        },
+        {
+            "name": "email_read",
+            "description": "Read an email",
+            "http_path": "/email/v1/messages/{id}",
+            "http_method": "GET",
+            "parameters": {
+                "type": "object",
+                "properties": {"email_id": {"type": "string"}},
+                "required": ["email_id"],
+            },
+        },
     ]
     mock_pack.get_entity_schemas.return_value = {}
     mock_pack.get_state_machines.return_value = {}

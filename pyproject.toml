@@ -22,11 +22,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-[project.urls]
-Homepage = "https://github.com/janaraj/volnix"
-Documentation = "https://github.com/janaraj/volnix/tree/main/docs"
-Repository = "https://github.com/janaraj/volnix"
-Issues = "https://github.com/janaraj/volnix/issues"
 dependencies = [
     "pydantic>=2.0",
     "aiosqlite>=0.19",
@@ -52,6 +47,12 @@ dev = [
     "mypy>=1.5",
 ]
 
+[project.urls]
+Homepage = "https://github.com/janaraj/volnix"
+Documentation = "https://github.com/janaraj/volnix/tree/main/docs"
+Repository = "https://github.com/janaraj/volnix"
+Issues = "https://github.com/janaraj/volnix/issues"
+
 [project.scripts]
 volnix = "volnix.cli:app"
 
@@ -59,11 +60,13 @@ volnix = "volnix.cli:app"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 xfail_strict = true
+addopts = "-m 'not live'"
 markers = [
     "architecture: source-level and dependency-boundary guardrails",
     "contract: protocol and data-contract conformance checks",
     "real_adapter: runtime-backed adapter tests using real app components",
     "staged_guardrail: staged fail-closed guardrail; becomes xfail unless guardrails strict mode is enabled",
+    "live: tests requiring a real LLM provider (run with pytest -m live)",
 ]
 
 [tool.ruff]

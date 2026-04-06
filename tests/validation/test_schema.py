@@ -1,10 +1,7 @@
 """Tests for volnix.validation.schema -- response schema validation."""
 
-import pytest
-
 from volnix.core.types import ValidationType
 from volnix.validation.schema import SchemaValidator, ValidationResult
-
 
 # ---------------------------------------------------------------------------
 # ValidationResult tests
@@ -66,9 +63,7 @@ SAMPLE_SCHEMA: dict = {
 
 def test_validate_response_valid():
     v = SchemaValidator()
-    result = v.validate_response(
-        {"id": "abc", "status": "pending", "amount": 100}, SAMPLE_SCHEMA
-    )
+    result = v.validate_response({"id": "abc", "status": "pending", "amount": 100}, SAMPLE_SCHEMA)
     assert result.valid is True
     assert result.errors == []
     assert result.validation_type == ValidationType.SCHEMA
@@ -83,36 +78,28 @@ def test_validate_response_missing_required():
 
 def test_validate_response_wrong_type():
     v = SchemaValidator()
-    result = v.validate_response(
-        {"id": 123, "status": "pending"}, SAMPLE_SCHEMA
-    )
+    result = v.validate_response({"id": 123, "status": "pending"}, SAMPLE_SCHEMA)
     assert result.valid is False
     assert any("type" in e.lower() for e in result.errors)
 
 
 def test_validate_response_invalid_enum():
     v = SchemaValidator()
-    result = v.validate_response(
-        {"id": "abc", "status": "cancelled"}, SAMPLE_SCHEMA
-    )
+    result = v.validate_response({"id": "abc", "status": "cancelled"}, SAMPLE_SCHEMA)
     assert result.valid is False
     assert any("cancelled" in e for e in result.errors)
 
 
 def test_validate_response_below_minimum():
     v = SchemaValidator()
-    result = v.validate_response(
-        {"id": "abc", "status": "pending", "amount": -5}, SAMPLE_SCHEMA
-    )
+    result = v.validate_response({"id": "abc", "status": "pending", "amount": -5}, SAMPLE_SCHEMA)
     assert result.valid is False
     assert any("minimum" in e.lower() for e in result.errors)
 
 
 def test_validate_response_above_maximum():
     v = SchemaValidator()
-    result = v.validate_response(
-        {"id": "abc", "status": "pending", "amount": 2000}, SAMPLE_SCHEMA
-    )
+    result = v.validate_response({"id": "abc", "status": "pending", "amount": 2000}, SAMPLE_SCHEMA)
     assert result.valid is False
     assert any("maximum" in e.lower() for e in result.errors)
 
@@ -120,9 +107,7 @@ def test_validate_response_above_maximum():
 def test_validate_entity_same_logic():
     """validate_entity uses the same logic as validate_response."""
     v = SchemaValidator()
-    result = v.validate_entity(
-        {"id": "e1", "status": "succeeded"}, SAMPLE_SCHEMA
-    )
+    result = v.validate_entity({"id": "e1", "status": "succeeded"}, SAMPLE_SCHEMA)
     assert result.valid is True
     assert result.validation_type == ValidationType.SCHEMA
 

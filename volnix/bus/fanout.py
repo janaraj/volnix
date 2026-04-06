@@ -4,12 +4,13 @@ TopicFanout manages the mapping from event type strings to subscriber
 entries and handles asynchronous delivery to all matching subscribers.
 Wildcard ``"*"`` subscriptions receive ALL events.
 """
+
 from __future__ import annotations
 
 import asyncio
 
-from volnix.core.events import Event
 from volnix.bus.types import Subscriber, Subscription
+from volnix.core.events import Event
 
 
 class TopicFanout:

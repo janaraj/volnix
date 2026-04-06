@@ -1,9 +1,11 @@
 """Tests for volnix.registry.registry — EngineRegistry."""
+
 import pytest
-from volnix.registry.registry import EngineRegistry
+
+from tests.registry.conftest import make_mock_engine
 from volnix.core.errors import EngineDependencyError
 from volnix.core.protocols import PipelineStep
-from tests.registry.conftest import make_mock_engine
+from volnix.registry.registry import EngineRegistry
 
 
 def test_register_engine():
@@ -66,14 +68,23 @@ def test_get_pipeline_steps():
     reg.register(make_mock_engine("permission", deps=["state"], step_name_val="permission"))
     reg.register(make_mock_engine("budget", deps=["state"], step_name_val="budget"))
     reg.register(make_mock_engine("responder", deps=["state"], step_name_val="responder"))
-    reg.register(make_mock_engine("adapter", deps=["state", "permission"], step_name_val="capability"))
+    reg.register(
+        make_mock_engine("adapter", deps=["state", "permission"], step_name_val="capability")
+    )
     reg.register(make_mock_engine("animator", deps=["state"]))
     reg.register(make_mock_engine("reporter", deps=["state"]))
     reg.register(make_mock_engine("feedback", deps=["state"]))
     reg.register(make_mock_engine("world_compiler", deps=["state"]))
     steps = reg.get_pipeline_steps()
     assert len(steps) == 6
-    assert set(steps.keys()) == {"commit", "policy", "permission", "budget", "responder", "capability"}
+    assert set(steps.keys()) == {
+        "commit",
+        "policy",
+        "permission",
+        "budget",
+        "responder",
+        "capability",
+    }
 
 
 def test_get_protocol_match():
@@ -228,7 +239,15 @@ def test_topological_sort_exact_full_graph_order():
     reg.register(make_mock_engine("world_compiler", deps=["state"]))
     order = reg.resolve_initialization_order()
     expected = [
-        "state", "animator", "budget", "feedback", "permission",
-        "adapter", "policy", "reporter", "responder", "world_compiler",
+        "state",
+        "animator",
+        "budget",
+        "feedback",
+        "permission",
+        "adapter",
+        "policy",
+        "reporter",
+        "responder",
+        "world_compiler",
     ]
     assert order == expected

@@ -116,9 +116,7 @@ class ActorRegistry:
         if "friction_category" in filters:
             cat = filters["friction_category"]
             results = [
-                a
-                for a in results
-                if a.friction_profile and a.friction_profile.category == cat
+                a for a in results if a.friction_profile and a.friction_profile.category == cat
             ]
 
         return results
@@ -175,11 +173,7 @@ class ActorRegistry:
 
     def get_actors_watching(self, entity_id: EntityId) -> list[ActorState]:
         """Return all actor states that are watching the given entity."""
-        return [
-            s
-            for s in self._actor_states.values()
-            if entity_id in s.watched_entities
-        ]
+        return [s for s in self._actor_states.values() if entity_id in s.watched_entities]
 
     def dump_states(self) -> list[dict[str, Any]]:
         """Serialize all actor states for snapshot persistence."""

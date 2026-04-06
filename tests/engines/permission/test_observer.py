@@ -31,8 +31,18 @@ def _make_observer_engine(actor_type: str = "observer") -> tuple:
     config_mock = MagicMock()
     config_mock.visibility_rule_entity_type = "visibility_rule"
     config_mock.observer_read_prefixes = [
-        "list", "get", "show", "search", "read", "query",
-        "about", "hot", "new", "top", "best", "popular",
+        "list",
+        "get",
+        "show",
+        "search",
+        "read",
+        "query",
+        "about",
+        "hot",
+        "new",
+        "top",
+        "best",
+        "popular",
     ]
     engine._typed_config = config_mock
     engine._world_mode = "governed"
@@ -50,7 +60,6 @@ def _make_ctx(action: str) -> MagicMock:
 
 
 class TestObserverPermissions:
-
     @pytest.mark.asyncio
     async def test_observer_can_read(self):
         """Observer can call list/get/search/read actions."""
@@ -69,9 +78,7 @@ class TestObserverPermissions:
         for action in ["create_ticket", "update_ticket", "delete_ticket", "submit_order"]:
             ctx = _make_ctx(action)
             result = await engine.execute(ctx)
-            assert result.verdict == StepVerdict.DENY, (
-                f"Observer should be denied '{action}'"
-            )
+            assert result.verdict == StepVerdict.DENY, f"Observer should be denied '{action}'"
 
     @pytest.mark.asyncio
     async def test_observer_denied_event_published(self):
@@ -104,6 +111,7 @@ class TestObserverHarness:
     def test_config_has_read_prefixes(self):
         """PermissionConfig must define observer_read_prefixes."""
         from volnix.engines.permission.config import PermissionConfig
+
         config = PermissionConfig()
         assert isinstance(config.observer_read_prefixes, list)
         assert len(config.observer_read_prefixes) > 0
@@ -111,6 +119,7 @@ class TestObserverHarness:
     def test_common_read_actions_in_prefixes(self):
         """Basic read prefixes must be present."""
         from volnix.engines.permission.config import PermissionConfig
+
         config = PermissionConfig()
         required = {"list", "get", "search", "read", "query"}
         actual = set(config.observer_read_prefixes)

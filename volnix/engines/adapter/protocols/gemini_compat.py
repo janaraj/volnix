@@ -11,7 +11,6 @@ Routes (mounted on the shared FastAPI app):
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, ClassVar
 
@@ -48,21 +47,23 @@ class GeminiCompatAdapter(ProtocolAdapter):
         app = http_adapter.fastapi_app
         gateway = self._gateway
         self._mount_routes(app, gateway)
-        logger.info(
-            "Gemini compat routes mounted: /gemini/v1/tools, /gemini/v1/tools/call"
-        )
+        logger.info("Gemini compat routes mounted: /gemini/v1/tools, /gemini/v1/tools/call")
 
     async def stop_server(self) -> None:
         """No-op — routes live on the shared FastAPI app."""
 
     async def translate_inbound(
-        self, tool_name: ToolName, raw_input: dict[str, Any],
+        self,
+        tool_name: ToolName,
+        raw_input: dict[str, Any],
     ) -> dict[str, Any]:
         """Gemini sends function call args directly — pass through."""
         return raw_input
 
     async def translate_outbound(
-        self, tool_name: ToolName, internal_response: dict[str, Any],
+        self,
+        tool_name: ToolName,
+        internal_response: dict[str, Any],
     ) -> dict[str, Any]:
         """Wrap response in Gemini function response format."""
         return {
@@ -88,7 +89,8 @@ class GeminiCompatAdapter(ProtocolAdapter):
         ):
             """List tools in Gemini function declaration format."""
             return await gateway.get_tool_manifest(
-                actor_id=actor_id, protocol="gemini",
+                actor_id=actor_id,
+                protocol="gemini",
             )
 
         @router.post("/tools/call")
@@ -129,7 +131,10 @@ class GeminiCompatAdapter(ProtocolAdapter):
 
             # Resolve actor identity (same pattern as all other adapters)
             actor_id = resolve_actor_id(
-                request, body, default="gemini-agent", gateway=gateway,
+                request,
+                body,
+                default="gemini-agent",
+                gateway=gateway,
             )
             if actor_id is None:
                 return JSONResponse(

@@ -6,6 +6,7 @@ also available at ``/stripe/v1/charges``.
 
 This runs once at startup, not per-request.
 """
+
 from __future__ import annotations
 
 import logging

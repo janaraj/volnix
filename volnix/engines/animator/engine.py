@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
-from volnix.core import ActionContext, BaseEngine, Event
+from volnix.core import BaseEngine, Event
 from volnix.core.events import AnimatorEvent
 from volnix.core.types import ActorId, Timestamp
 from volnix.engines.animator.config import AnimatorConfig
@@ -99,10 +99,9 @@ class WorldAnimatorEngine(BaseEngine):
 
         # Build typed config from plan's animator_settings
         settings = plan.animator_settings or {}
-        self._typed_config = AnimatorConfig(**{
-            k: v for k, v in settings.items()
-            if k in AnimatorConfig.model_fields
-        })
+        self._typed_config = AnimatorConfig(
+            **{k: v for k, v in settings.items() if k in AnimatorConfig.model_fields}
+        )
 
         # Build AnimatorContext (reuses WorldGenerationContext pattern)
         self._context = AnimatorContext(plan, available_tools=self._available_tools)
@@ -179,10 +178,14 @@ class WorldAnimatorEngine(BaseEngine):
             if budget > 0:
                 logger.info(
                     "Animator organic generation: budget=%d, behavior=%s, recent_actions=%d",
-                    budget, self._behavior, len(recent or []),
+                    budget,
+                    self._behavior,
+                    len(recent or []),
                 )
                 organic = await self._generator.generate(
-                    world_time, budget, recent,
+                    world_time,
+                    budget,
+                    recent,
                     recent_organic=self._recent_organic_events,
                 )
                 logger.info("Animator organic generated %d events", len(organic))
@@ -191,11 +194,13 @@ class WorldAnimatorEngine(BaseEngine):
                     results.append(result)
                     self._creativity_used_this_tick += 1
                     # Track for next tick's context (keep last 10)
-                    self._recent_organic_events.append({
-                        "actor": event_def.get("actor_id", "system"),
-                        "action": event_def.get("action", ""),
-                        "service": event_def.get("service_id", ""),
-                    })
+                    self._recent_organic_events.append(
+                        {
+                            "actor": event_def.get("actor_id", "system"),
+                            "action": event_def.get("action", ""),
+                            "service": event_def.get("service_id", ""),
+                        }
+                    )
                     self._recent_organic_events = self._recent_organic_events[-10:]
         elif not self._generator and self._behavior != "static":
             logger.warning("Animator: no organic generator available (LLM router missing?)")
@@ -236,7 +241,7 @@ class WorldAnimatorEngine(BaseEngine):
                 event_type=f"animator.{event_def.get('action', 'event')}",
                 timestamp=Timestamp(
                     world_time=world_time,
-                    wall_time=datetime.now(tz=timezone.utc),
+                    wall_time=datetime.now(tz=UTC),
                     tick=0,
                 ),
                 sub_type=event_def.get("sub_type", "organic"),
@@ -270,7 +275,8 @@ class WorldAnimatorEngine(BaseEngine):
 
         # Classify available tools by http_method for mapping
         write_tools = [
-            t for t in self._available_tools
+            t
+            for t in self._available_tools
             if t.get("http_method", "GET").upper() in ("POST", "PUT")
         ]
         if not write_tools:
@@ -284,25 +290,29 @@ class WorldAnimatorEngine(BaseEngine):
         failure_prob = context.get_probability("reliability", "failures")
         if rng.random() < failure_prob:
             tool = _pick_tool(write_tools)
-            events.append({
-                "actor_id": "system",
-                "service_id": tool.get("pack_name", "world"),
-                "action": tool["name"],
-                "input_data": {"_animator_reason": "service_reliability_event"},
-                "sub_type": "scheduled",
-            })
+            events.append(
+                {
+                    "actor_id": "system",
+                    "service_id": tool.get("pack_name", "world"),
+                    "action": tool["name"],
+                    "input_data": {"_animator_reason": "service_reliability_event"},
+                    "sub_type": "scheduled",
+                }
+            )
 
         # Complexity: volatility → create new data (news, price movement)
         volatility_prob = context.get_probability("complexity", "volatility")
         if rng.random() < volatility_prob:
             tool = _pick_tool(write_tools)
-            events.append({
-                "actor_id": "system",
-                "service_id": tool.get("pack_name", "world"),
-                "action": tool["name"],
-                "input_data": {"_animator_reason": "market_volatility_event"},
-                "sub_type": "scheduled",
-            })
+            events.append(
+                {
+                    "actor_id": "system",
+                    "service_id": tool.get("pack_name", "world"),
+                    "action": tool["name"],
+                    "input_data": {"_animator_reason": "market_volatility_event"},
+                    "sub_type": "scheduled",
+                }
+            )
 
         return events
 
@@ -366,11 +376,13 @@ class WorldAnimatorEngine(BaseEngine):
         """
         # Track for reactive mode
         if self._behavior == "reactive" and hasattr(committed_event, "action"):
-            self._recent_actions.append({
-                "action": getattr(committed_event, "action", ""),
-                "actor_id": str(getattr(committed_event, "actor_id", "")),
-                "event_type": getattr(committed_event, "event_type", ""),
-            })
+            self._recent_actions.append(
+                {
+                    "action": getattr(committed_event, "action", ""),
+                    "actor_id": str(getattr(committed_event, "actor_id", "")),
+                    "event_type": getattr(committed_event, "event_type", ""),
+                }
+            )
         return []
 
     def has_scheduled_events(self) -> bool:
@@ -412,8 +424,10 @@ class WorldAnimatorEngine(BaseEngine):
             event: An inbound event from the bus.
         """
         if self._behavior == "reactive" and hasattr(event, "action"):
-            self._recent_actions.append({
-                "action": getattr(event, "action", ""),
-                "actor_id": str(getattr(event, "actor_id", "")),
-                "event_type": event.event_type,
-            })
+            self._recent_actions.append(
+                {
+                    "action": getattr(event, "action", ""),
+                    "actor_id": str(getattr(event, "actor_id", "")),
+                    "event_type": event.event_type,
+                }
+            )

@@ -1,4 +1,5 @@
 """Webhook subscription registry — stores and matches registered webhooks."""
+
 from __future__ import annotations
 
 import fnmatch
@@ -13,11 +14,13 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # C1 fix: blocked hostnames for SSRF prevention
-_BLOCKED_HOSTS = frozenset({
-    "localhost",
-    "metadata.google.internal",
-    "metadata.internal",
-})
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "metadata.google.internal",
+        "metadata.internal",
+    }
+)
 
 
 def _validate_url(url: str) -> None:
@@ -38,9 +41,7 @@ def _validate_url(url: str) -> None:
 
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(
-            f"URL scheme must be http or https, got '{parsed.scheme}'"
-        )
+        raise ValueError(f"URL scheme must be http or https, got '{parsed.scheme}'")
 
     hostname = parsed.hostname or ""
     if not hostname:
@@ -56,9 +57,7 @@ def _validate_url(url: str) -> None:
     try:
         ip = ipaddress.ip_address(hostname)
         if ip.is_private or ip.is_loopback or ip.is_link_local:
-            raise ValueError(
-                f"Blocked private/loopback/link-local IP: {ip}"
-            )
+            raise ValueError(f"Blocked private/loopback/link-local IP: {ip}")
     except ValueError as exc:
         # Not an IP address — that's fine, it's a hostname
         if "Blocked" in str(exc):
@@ -104,9 +103,7 @@ class WebhookRegistry:
         """
         _validate_url(url)  # C1 fix: SSRF prevention
         if len(self._subscriptions) >= self._max:
-            raise ValueError(
-                f"Maximum webhook registrations ({self._max}) reached"
-            )
+            raise ValueError(f"Maximum webhook registrations ({self._max}) reached")
 
         sub_id = f"wh_{uuid4().hex[:12]}"
         sub = WebhookSubscription(
@@ -120,7 +117,9 @@ class WebhookRegistry:
         self._subscriptions[sub_id] = sub
         logger.info(
             "Registered webhook %s → %s (events=%s)",
-            sub_id, url, events,
+            sub_id,
+            url,
+            events,
         )
         return sub_id
 
@@ -132,9 +131,7 @@ class WebhookRegistry:
             return True
         return False
 
-    def match(
-        self, event_type: str, service_id: str = ""
-    ) -> list[WebhookSubscription]:
+    def match(self, event_type: str, service_id: str = "") -> list[WebhookSubscription]:
         """Find all subscriptions matching an event.
 
         Matches against event patterns (fnmatch glob) and
@@ -159,12 +156,8 @@ class WebhookRegistry:
 
     def list_all(self) -> list[WebhookSubscription]:
         """All active subscriptions."""
-        return [
-            s for s in self._subscriptions.values() if s.active
-        ]
+        return [s for s in self._subscriptions.values() if s.active]
 
     def count(self) -> int:
         """Number of active subscriptions (M2 fix: consistent with list_all)."""
-        return sum(
-            1 for s in self._subscriptions.values() if s.active
-        )
+        return sum(1 for s in self._subscriptions.values() if s.active)

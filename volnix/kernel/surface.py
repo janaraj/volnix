@@ -11,6 +11,7 @@ The agent sees whichever protocol it connects with:
 - OpenAI: operation.to_openai_function() -> {type:"function", function:{...}}
 Same underlying operation, multiple external representations.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -24,14 +25,15 @@ class APIOperation(BaseModel, frozen=True):
     Protocol-agnostic: captures the abstract operation.
     Protocol-specific views derived via to_mcp_tool(), to_http_route(), etc.
     """
+
     # Identity
-    name: str                                    # "stripe_refunds_create"
-    service: str                                 # "stripe"
-    description: str = ""                        # Human-readable
+    name: str  # "stripe_refunds_create"
+    service: str  # "stripe"
+    description: str = ""  # Human-readable
 
     # HTTP binding (how the real API exposes this)
-    http_method: str = "POST"                    # GET, POST, PUT, PATCH, DELETE
-    http_path: str = ""                          # "/v1/refunds"
+    http_method: str = "POST"  # GET, POST, PUT, PATCH, DELETE
+    http_path: str = ""  # "/v1/refunds"
 
     # Request schema
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -45,13 +47,13 @@ class APIOperation(BaseModel, frozen=True):
     )  # e.g. {200: "OK", 404: "Not Found"}
 
     # Auth & pagination
-    auth_type: str = ""                          # "bearer", "api_key", "oauth2"
-    pagination_style: str | None = None          # "cursor", "offset", "none"
+    auth_type: str = ""  # "bearer", "api_key", "oauth2"
+    pagination_style: str | None = None  # "cursor", "offset", "none"
 
     # Semantic metadata
     is_read_only: bool = False
-    creates_entity: str | None = None            # Entity type created
-    mutates_entity: str | None = None            # Entity type modified
+    creates_entity: str | None = None  # Entity type created
+    mutates_entity: str | None = None  # Entity type modified
     side_effects: list[str] = Field(default_factory=list)
 
     def to_mcp_tool(self) -> dict[str, Any]:
@@ -134,9 +136,10 @@ class ServiceSurface(BaseModel, frozen=True):
     Agent sees MCP tools or HTTP routes -- same underlying operations.
     Pipeline sees ActionContext derived from either protocol.
     """
+
     service_name: str
     category: str
-    source: str                                  # "tier1_pack", "context_hub", "openapi", etc.
+    source: str  # "tier1_pack", "context_hub", "openapi", etc.
     fidelity_tier: int
 
     operations: list[APIOperation] = Field(default_factory=list)
@@ -145,27 +148,29 @@ class ServiceSurface(BaseModel, frozen=True):
 
     # Metadata
     confidence: float = 1.0
-    auth_pattern: str = ""                       # "bearer", "api_key", "oauth2"
-    base_url: str = ""                           # Real API base URL for reference
-    raw_spec: str = ""                           # Original spec for audit
+    auth_pattern: str = ""  # "bearer", "api_key", "oauth2"
+    base_url: str = ""  # Real API base URL for reference
+    raw_spec: str = ""  # Original spec for audit
 
     @classmethod
     def from_pack(cls, pack: Any) -> ServiceSurface:
         """Convert a ServicePack to a ServiceSurface."""
         operations = []
-        for tool in (pack.get_tools() or []):
+        for tool in pack.get_tools() or []:
             params = tool.get("parameters", {}).get("properties", {})
             required = tool.get("parameters", {}).get("required", [])
-            operations.append(APIOperation(
-                name=tool["name"],
-                service=pack.pack_name,
-                description=tool.get("description", ""),
-                http_path=tool.get("http_path", ""),
-                http_method=tool.get("http_method", "POST"),
-                parameters=params,
-                required_params=required,
-                response_schema=tool.get("response_schema", {}),
-            ))
+            operations.append(
+                APIOperation(
+                    name=tool["name"],
+                    service=pack.pack_name,
+                    description=tool.get("description", ""),
+                    http_path=tool.get("http_path", ""),
+                    http_method=tool.get("http_method", "POST"),
+                    parameters=params,
+                    required_params=required,
+                    response_schema=tool.get("response_schema", {}),
+                )
+            )
         return cls(
             service_name=pack.pack_name,
             category=pack.category,

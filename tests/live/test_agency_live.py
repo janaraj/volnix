@@ -19,11 +19,7 @@ import shutil
 
 import pytest
 
-from volnix.core.envelope import ActionEnvelope
-from volnix.core.types import ActionSource, ActorId, EnvelopePriority, EventId, ServiceId
-from volnix.simulation.event_queue import EventQueue
-from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
-from volnix.simulation.config import SimulationRunnerConfig
+from volnix.core.types import ActionSource, ActorId, ServiceId
 
 
 @pytest.fixture
@@ -39,13 +35,15 @@ async def live_app_with_codex(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -100,16 +98,22 @@ class TestAgencyLiveSimulation:
             mode="governed",
             services={
                 "gmail": ServiceResolution(
-                    service_name="gmail", spec_reference="verified/gmail",
-                    surface=email_surface, resolution_source="tier1_pack",
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
+                    surface=email_surface,
+                    resolution_source="tier1_pack",
                 ),
                 "slack": ServiceResolution(
-                    service_name="slack", spec_reference="verified/slack",
-                    surface=chat_surface, resolution_source="tier1_pack",
+                    service_name="slack",
+                    spec_reference="verified/slack",
+                    surface=chat_surface,
+                    resolution_source="tier1_pack",
                 ),
                 "zendesk": ServiceResolution(
-                    service_name="zendesk", spec_reference="verified/zendesk",
-                    surface=tickets_surface, resolution_source="tier1_pack",
+                    service_name="zendesk",
+                    spec_reference="verified/zendesk",
+                    surface=tickets_surface,
+                    resolution_source="tier1_pack",
                 ),
             },
             actor_specs=[
@@ -184,18 +188,22 @@ class TestAgencyLiveSimulation:
         print("=" * 70)
 
         agency = app.registry.get("agency")
-        internal_actors = agency._actor_states if hasattr(agency, '_actor_states') else {}
+        internal_actors = agency._actor_states if hasattr(agency, "_actor_states") else {}
         print(f"  Internal actor states: {len(internal_actors)}")
         for actor_id, state in internal_actors.items():
-            print(f"    {actor_id}: role={state.role}, frustration={state.frustration:.1f}, "
-                  f"goal={state.current_goal or 'none'}")
+            print(
+                f"    {actor_id}: role={state.role}, frustration={state.frustration:.1f}, "
+                f"goal={state.current_goal or 'none'}"
+            )
             if state.watched_entities:
                 print(f"      watching: {state.watched_entities[:3]}...")
             if state.behavior_traits:
                 t = state.behavior_traits
-                print(f"      traits: cooperation={t.cooperation_level:.1f}, "
-                      f"authority={t.authority_level:.1f}, "
-                      f"stakes={t.stakes_level:.1f}")
+                print(
+                    f"      traits: cooperation={t.cooperation_level:.1f}, "
+                    f"authority={t.authority_level:.1f}, "
+                    f"stakes={t.stakes_level:.1f}"
+                )
 
         # Verify internal actors were created
         assert len(internal_actors) >= 1, "No internal actor states created"
@@ -215,13 +223,15 @@ class TestAgencyLiveSimulation:
 
         # Agent sends email to Margaret Chen
         action_result = await app.handle_action(
-            agent_id, "email", "email_send",
+            agent_id,
+            "email",
+            "email_send",
             {
                 "from_addr": "agent@acme.com",
                 "to_addr": "margaret.chen@customer.com",
                 "subject": "Re: Your refund request",
                 "body": "Dear Margaret, we are processing your $249 refund. "
-                        "It has been approved by the supervisor.",
+                "It has been approved by the supervisor.",
             },
         )
         print(f"  Action result: {json.dumps(action_result, default=str)[:200]}")
@@ -234,9 +244,10 @@ class TestAgencyLiveSimulation:
         print("=" * 70)
 
         # Simulate what notify() would do by checking activation
-        from volnix.core.events import WorldEvent
-        from volnix.core.types import Timestamp, EntityId
         from datetime import UTC, datetime
+
+        from volnix.core.events import WorldEvent
+        from volnix.core.types import EntityId, Timestamp
 
         # Find a watched entity from one of the internal actors
         watched_entity_id = None
@@ -262,15 +273,14 @@ class TestAgencyLiveSimulation:
         )
 
         # Check which actors would activate
-        if hasattr(agency, '_tier1_activation_check'):
+        if hasattr(agency, "_tier1_activation_check"):
             activated = agency._tier1_activation_check(test_event)
             print(f"  Tier 1 activation check: {len(activated)} actors would activate")
             for actor_id_str, reason in activated:
                 state = internal_actors.get(actor_id_str)
                 if state:
                     tier = agency._classify_tier(state, reason)
-                    print(f"    {actor_id_str} (role={state.role}): "
-                          f"reason={reason}, tier={tier}")
+                    print(f"    {actor_id_str} (role={state.role}): reason={reason}, tier={tier}")
 
         # ────────────────────────────────────────────────────
         # STEP 6: Final state

@@ -3,8 +3,6 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from volnix.kernel.context_hub import ContextHubProvider
 from volnix.kernel.external_spec import ExternalSpecProvider
 
@@ -48,9 +46,7 @@ client.messages.create(to="+1...", from_="+1...", body="Hello")
 def _mock_subprocess(stdout: str, returncode: int = 0):
     """Create a mock for asyncio.create_subprocess_exec."""
     proc = AsyncMock()
-    proc.communicate = AsyncMock(
-        return_value=(stdout.encode(), b"")
-    )
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), b""))
     proc.returncode = returncode
     return proc
 

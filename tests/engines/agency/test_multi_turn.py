@@ -12,7 +12,6 @@ Verifies that _activate_with_tool_loop correctly:
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -20,10 +19,8 @@ from volnix.actors.state import ActorState
 from volnix.core.events import WorldEvent
 from volnix.core.types import ActorId, EntityId, ServiceId, Timestamp
 from volnix.engines.agency.engine import AgencyEngine
-from volnix.engines.agency.prompt_builder import ActorPromptBuilder
-from volnix.llm.types import LLMResponse, ToolCall, ToolDefinition
+from volnix.llm.types import LLMResponse, ToolCall
 from volnix.simulation.world_context import WorldContextBundle
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,14 +33,34 @@ def _make_world_context() -> WorldContextBundle:
         reality_summary="Messy reality.",
         mission="Evaluate support quality.",
         available_services=[
-            {"name": "tickets_search", "service": "zendesk", "http_method": "GET",
-             "description": "Search tickets", "required_params": ["query"]},
-            {"name": "tickets_read", "service": "zendesk", "http_method": "GET",
-             "description": "Read ticket", "required_params": ["ticket_id"]},
-            {"name": "get_charge", "service": "stripe", "http_method": "GET",
-             "description": "Get charge", "required_params": ["charge_id"]},
-            {"name": "chat.postMessage", "service": "slack", "http_method": "POST",
-             "description": "Post message", "required_params": ["text"]},
+            {
+                "name": "tickets_search",
+                "service": "zendesk",
+                "http_method": "GET",
+                "description": "Search tickets",
+                "required_params": ["query"],
+            },
+            {
+                "name": "tickets_read",
+                "service": "zendesk",
+                "http_method": "GET",
+                "description": "Read ticket",
+                "required_params": ["ticket_id"],
+            },
+            {
+                "name": "get_charge",
+                "service": "stripe",
+                "http_method": "GET",
+                "description": "Get charge",
+                "required_params": ["charge_id"],
+            },
+            {
+                "name": "chat.postMessage",
+                "service": "slack",
+                "http_method": "POST",
+                "description": "Post message",
+                "required_params": ["text"],
+            },
         ],
     )
 
@@ -167,7 +184,9 @@ async def test_single_tool_then_text():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "subscription_immediate", trigger_event=None,
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
     )
 
     # 1 tool call envelope + 1 channel post envelope
@@ -193,7 +212,9 @@ async def test_multiple_tools_then_text():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "subscription_immediate", trigger_event=None,
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
     )
 
     # 3 tool calls + 1 channel post
@@ -204,7 +225,7 @@ async def test_multiple_tools_then_text():
 async def test_max_tool_calls_limit():
     """Loop stops at max_tool_calls_per_activation."""
     responses = [
-        _make_tool_response(f"tickets_search", {"query": f"q{i}", "reasoning": f"r{i}"})
+        _make_tool_response("tickets_search", {"query": f"q{i}", "reasoning": f"r{i}"})
         for i in range(20)
     ]
     router = _make_sequential_router(*responses)
@@ -215,7 +236,9 @@ async def test_max_tool_calls_limit():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "autonomous_continue", trigger_event=None,
+        actor,
+        "autonomous_continue",
+        trigger_event=None,
     )
 
     assert len(envelopes) == 5
@@ -234,7 +257,9 @@ async def test_text_on_first_call():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "subscription_immediate", trigger_event=None,
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
     )
 
     # Text response → auto-post to channel (1 envelope)
@@ -254,7 +279,9 @@ async def test_do_nothing_terminates():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "autonomous_continue", trigger_event=None,
+        actor,
+        "autonomous_continue",
+        trigger_event=None,
     )
 
     assert len(envelopes) == 0
@@ -264,7 +291,9 @@ async def test_do_nothing_terminates():
 async def test_messages_array_structure():
     """Verify messages passed to LLM on second call contain tool call + result."""
     router = _make_sequential_router(
-        _make_tool_response("tickets_search", {"query": "test", "reasoning": "look"}, tool_id="call_123"),
+        _make_tool_response(
+            "tickets_search", {"query": "test", "reasoning": "look"}, tool_id="call_123"
+        ),
         _make_text_response("Done"),
     )
     executor = _make_tool_executor()
@@ -274,7 +303,9 @@ async def test_messages_array_structure():
     actor = list(engine._actor_states.values())[0]
 
     await engine._activate_with_tool_loop(
-        actor, "subscription_immediate", trigger_event=None,
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
     )
 
     # Check the second LLM call's request
@@ -301,10 +332,7 @@ async def test_parallel_activations():
     router = AsyncMock()
     router.route = AsyncMock(side_effect=slow_route)
     executor = _make_tool_executor()
-    agents = [
-        _make_actor(actor_id=ActorId(f"agent-{i}"), role=f"role-{i}")
-        for i in range(3)
-    ]
+    agents = [_make_actor(actor_id=ActorId(f"agent-{i}"), role=f"role-{i}") for i in range(3)]
     engine = await _create_engine(actors=agents)
     engine._llm_router = router
     engine.set_tool_executor(executor)
@@ -329,7 +357,9 @@ async def test_pipeline_rejection_continues():
 
     router = _make_sequential_router(
         _make_tool_response("risky_action", {"reasoning": "try"}, tool_id="call_1"),
-        _make_tool_response("tickets_search", {"query": "safe", "reasoning": "retry"}, tool_id="call_2"),
+        _make_tool_response(
+            "tickets_search", {"query": "safe", "reasoning": "retry"}, tool_id="call_2"
+        ),
         _make_text_response("Adjusted approach after block"),
     )
     engine = await _create_engine()
@@ -338,7 +368,9 @@ async def test_pipeline_rejection_continues():
     actor = list(engine._actor_states.values())[0]
 
     envelopes = await engine._activate_with_tool_loop(
-        actor, "subscription_immediate", trigger_event=None,
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
     )
 
     # First blocked (0), second succeeded (1), text posted (1)
@@ -360,7 +392,9 @@ async def test_self_continuation_removed():
 
     # Create event from this actor's own action
     own_event = _make_world_event(
-        actor_id=str(actor.actor_id), action="tickets_search", tick=5,
+        actor_id=str(actor.actor_id),
+        action="tickets_search",
+        tick=5,
     )
 
     envelopes = await engine.notify(own_event)
@@ -495,8 +529,7 @@ async def test_reactivation_continues_conversation():
     assert len(second_request.messages) > msg_count_after_first
     # Should contain a re-activation context message
     reactivation_msgs = [
-        m for m in second_request.messages
-        if "Re-activation" in (m.get("content") or "")
+        m for m in second_request.messages if "Re-activation" in (m.get("content") or "")
     ]
     assert len(reactivation_msgs) >= 1
 
@@ -541,13 +574,14 @@ async def test_reactivation_includes_lead_instructions() -> None:
     call_args = router.route.call_args_list[0][0][0]
     # Find the message with re-activation content (last appended user message)
     reactivation_msg = next(
-        (m for m in reversed(call_args.messages)
-         if m.get("role") == "user" and "Re-activation" in (m.get("content") or "")),
+        (
+            m
+            for m in reversed(call_args.messages)
+            if m.get("role") == "user" and "Re-activation" in (m.get("content") or "")
+        ),
         None,
     )
-    assert reactivation_msg is not None, (
-        "Re-activation context should be present in messages"
-    )
+    assert reactivation_msg is not None, "Re-activation context should be present in messages"
     content = reactivation_msg["content"]
     assert "Active Monitoring" in content, (
         f"Re-activation message should include Phase 2 'Active Monitoring' for lead. Got: {content[:300]}"

@@ -1,8 +1,6 @@
 """Tests for volnix.kernel.openapi_provider -- OpenAPI spec parsing."""
 
-import pytest
 from volnix.kernel.openapi_provider import OpenAPIProvider
-
 
 SIMPLE_OPENAPI_YAML = """\
 openapi: "3.0.3"

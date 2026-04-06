@@ -1,14 +1,16 @@
 """Tests for volnix.bus.bus — EventBus publish/subscribe and metrics."""
+
 import asyncio
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from volnix.bus.bus import EventBus
 from volnix.bus.config import BusConfig
-from volnix.bus.middleware import LoggingMiddleware, MetricsMiddleware
+from volnix.bus.middleware import MetricsMiddleware
 from volnix.bus.types import BusMetrics
 from volnix.core.events import Event
-from volnix.core.types import EventId, Timestamp
+from volnix.core.types import Timestamp
 from volnix.persistence.sqlite import SQLiteDatabase
 
 
@@ -17,8 +19,8 @@ def _make_event(event_type: str = "test.event") -> Event:
     return Event(
         event_type=event_type,
         timestamp=Timestamp(
-            world_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=datetime(2025, 1, 1, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=1,
         ),
     )

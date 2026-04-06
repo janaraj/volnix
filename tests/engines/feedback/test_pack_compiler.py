@@ -1,4 +1,5 @@
 """Tests for PackCompiler -- generate Tier 1 pack scaffold from profile."""
+
 from __future__ import annotations
 
 from pathlib import Path

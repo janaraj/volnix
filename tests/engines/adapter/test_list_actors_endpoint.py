@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 
 def _make_gateway(run_data):
     """Build a mock gateway that returns the given run data."""

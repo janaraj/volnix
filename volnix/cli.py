@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dotenv import load_dotenv
+
 load_dotenv()  # Load .env before anything else so API keys are available
 
 import asyncio
 import json
 import shutil
 from pathlib import Path
-from typing import Annotated, Any, Any
+from typing import Annotated, Any
 
 import typer
 from rich.panel import Panel
@@ -313,7 +314,9 @@ def run(
     port: Annotated[int | None, typer.Option("--port", "-p", help="HTTP server bind port")] = None,
     agents: Annotated[
         str | None,
-        typer.Option("--agents", help="Path to agent profile YAML (external agent permissions/budgets)"),
+        typer.Option(
+            "--agents", help="Path to agent profile YAML (external agent permissions/budgets)"
+        ),
     ] = None,
     deliverable: Annotated[
         str | None,
@@ -332,7 +335,8 @@ def run(
     internal: Annotated[
         str | None,
         typer.Option(
-            "--internal", "-i",
+            "--internal",
+            "-i",
             help="Path to internal agent team YAML (autonomous agents working toward mission)",
         ),
     ] = None,
@@ -348,11 +352,25 @@ def run(
     if not world and not world_id:
         print_error("Provide a world (YAML, blueprint, NL) or --world <world_id>")
         raise typer.Exit(1)
-    asyncio.run(_run_impl(
-        world, settings, agent, actor, mode, tag, behavior, serve,
-        world_id, host, port, agents, deliverable=deliverable,
-        actor_roles=actor_roles, internal=internal,
-    ))
+    asyncio.run(
+        _run_impl(
+            world,
+            settings,
+            agent,
+            actor,
+            mode,
+            tag,
+            behavior,
+            serve,
+            world_id,
+            host,
+            port,
+            agents,
+            deliverable=deliverable,
+            actor_roles=actor_roles,
+            internal=internal,
+        )
+    )
 
 
 async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
@@ -363,11 +381,12 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
 
     Shared between ``serve`` and ``run --serve`` to avoid duplication.
     """
+    # Build kickstart — returns None if no internal actors or no comm service
+    import logging as _log
+
     from volnix.simulation.event_queue import EventQueue
     from volnix.simulation.runner import SimulationRunner
 
-    # Build kickstart — returns None if no internal actors or no comm service
-    import logging as _log
     _sim_log = _log.getLogger("volnix.simulation.setup")
     kickstart = await volnix.build_kickstart_envelope(compiled_plan)
     if kickstart is None:
@@ -388,9 +407,7 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
             # the simulation's actual tick (needed for tier1 scheduled checks)
             tick_interval = volnix.config.simulation_runner.tick_interval_seconds
             current_tick = (
-                int(event_queue.current_time / tick_interval)
-                if event_queue.current_time > 0
-                else 0
+                int(event_queue.current_time / tick_interval) if event_queue.current_time > 0 else 0
             )
             result = await volnix.handle_action(
                 actor_id=str(envelope.actor_id),
@@ -409,8 +426,7 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
     plan_actors = getattr(compiled_plan, "actor_specs", [])
     if not plan_actors:
         plan_data = (
-            compiled_plan.model_dump(mode="json")
-            if hasattr(compiled_plan, "model_dump") else {}
+            compiled_plan.model_dump(mode="json") if hasattr(compiled_plan, "model_dump") else {}
         )
         plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
 
@@ -462,6 +478,7 @@ async def _run_impl(
             # Step 1: Load plan — from existing world or compile fresh
             if world_id:
                 from volnix.core.types import WorldId as _WId
+
                 console.print("[bold]Step 1/4: Loading existing world...[/bold]")
                 compiled_plan = await volnix.world_manager.load_plan(_WId(world_id))
                 if compiled_plan is None:
@@ -502,6 +519,7 @@ async def _run_impl(
             # Apply --actors flag: override actor_specs with inline roles
             if actor_roles:
                 from typing import Any as _Any
+
                 roles = [r.strip() for r in actor_roles.split(",") if r.strip()]
                 if not roles:
                     print_error("--actors requires at least one role")
@@ -516,27 +534,28 @@ async def _run_impl(
                     if i == 0:
                         spec["lead"] = True
                     actor_specs.append(spec)
-                compiled_plan = compiled_plan.model_copy(
-                    update={"actor_specs": actor_specs}
-                )
-                console.print(
-                    f"  Actors: [cyan]{', '.join(roles)}[/cyan] "
-                    f"(lead: {roles[0]})"
-                )
+                compiled_plan = compiled_plan.model_copy(update={"actor_specs": actor_specs})
+                console.print(f"  Actors: [cyan]{', '.join(roles)}[/cyan] (lead: {roles[0]})")
 
             # Apply internal agents — compile_plan for world, sim_plan for simulation
-            compile_plan, sim_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
+            compile_plan, sim_plan, internal_profile = _apply_internal_agents(
+                compiled_plan, internal
+            )
 
             # Step 2: Create world + run (compile_plan excludes agent actor_specs)
             console.print("[bold]Step 2/4: Generating world and creating run...[/bold]")
             from volnix.core.types import WorldId as _WId
+
             run_id = await volnix.create_run(
-                compile_plan, mode=compile_plan.mode, tag=tag,
+                compile_plan,
+                mode=compile_plan.mode,
+                tag=tag,
                 world_id=_WId(world_id) if world_id else None,
-                agents_yaml=agents, internal_profile=internal_profile,
+                agents_yaml=agents,
+                internal_profile=internal_profile,
             )
             console.print(f"  Run ID: [cyan]{run_id}[/cyan]")
-            if hasattr(volnix, '_current_world_id'):
+            if hasattr(volnix, "_current_world_id"):
                 console.print(f"  World: [cyan]{volnix._current_world_id}[/cyan]")
 
             # Step 3: Optionally start servers
@@ -560,7 +579,8 @@ async def _run_impl(
                     console.print(f"  Simulation stopped: [yellow]{stop_reason}[/yellow]")
                     if runner.deliverable_produced and runner.deliverable_content:
                         await volnix.artifact_store.save_deliverable(
-                            run_id, runner.deliverable_content,
+                            run_id,
+                            runner.deliverable_content,
                         )
                         console.print("  [green]Deliverable saved[/green]")
                 else:
@@ -618,7 +638,9 @@ def serve(
     port: Annotated[int, typer.Option("--port", "-p", help="HTTP server bind port")] = 8080,
     agents: Annotated[
         str | None,
-        typer.Option("--agents", "-a", help="Path to agent profile YAML (external agent permissions/budgets)"),
+        typer.Option(
+            "--agents", "-a", help="Path to agent profile YAML (external agent permissions/budgets)"
+        ),
     ] = None,
     behavior: Annotated[
         str | None,
@@ -634,7 +656,8 @@ def serve(
     internal: Annotated[
         str | None,
         typer.Option(
-            "--internal", "-i",
+            "--internal",
+            "-i",
             help="Path to internal agent team YAML (autonomous agents working toward mission)",
         ),
     ] = None,
@@ -648,9 +671,15 @@ def serve(
       volnix serve --world world_id --internal team.yaml                  # existing world + team
     """
     if not world and not run and not world_id:
-        print_error("Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>")
+        print_error(
+            "Provide a world (blueprint name, YAML, or NL), --world <world_id>, or --run <run_id>"
+        )
         raise typer.Exit(1)
-    asyncio.run(_serve_impl(world, settings, run, world_id, host, port, agents, behavior, deliverable, internal))
+    asyncio.run(
+        _serve_impl(
+            world, settings, run, world_id, host, port, agents, behavior, deliverable, internal
+        )
+    )
 
 
 def _resolve_internal(internal: str | None) -> str | None:
@@ -658,6 +687,7 @@ def _resolve_internal(internal: str | None) -> str | None:
     if not internal:
         return None
     from volnix.paths import resolve_agent_profile
+
     resolved = resolve_agent_profile(internal)
     if resolved:
         console.print(f"  Internal agents: [cyan]{resolved}[/cyan]")
@@ -682,6 +712,7 @@ def _apply_internal_agents(plan: Any, internal: str | None) -> tuple[Any, Any, A
     if not internal:
         return plan, plan, None
     from volnix.actors.internal_profile import load_internal_profile
+
     profile = load_internal_profile(internal)
 
     # Compile plan: mission + deliverable only — agents stay OUT of compilation
@@ -690,19 +721,19 @@ def _apply_internal_agents(plan: Any, internal: str | None) -> tuple[Any, Any, A
         compile_updates["mission"] = profile.mission
     if profile.deliverable:
         from volnix.deliverable_presets import load_preset as _lp
+
         preset_data = _lp(profile.deliverable)
         compile_updates["deliverable_config"] = {"preset": profile.deliverable, **preset_data}
         console.print(f"  Deliverable: [cyan]{profile.deliverable}[/cyan]")
     compile_plan = plan.model_copy(update=compile_updates) if compile_updates else plan
 
     # Sim plan: agent specs added for SimulationRunner type detection
-    agent_specs = [
-        {"role": a.role, "type": "internal", "count": 1}
-        for a in profile.agents
-    ]
-    sim_plan = compile_plan.model_copy(update={
-        "actor_specs": list(compile_plan.actor_specs) + agent_specs,
-    })
+    agent_specs = [{"role": a.role, "type": "internal", "count": 1} for a in profile.agents]
+    sim_plan = compile_plan.model_copy(
+        update={
+            "actor_specs": list(compile_plan.actor_specs) + agent_specs,
+        }
+    )
 
     console.print(f"  Internal team: [cyan]{', '.join(a.role for a in profile.agents)}[/cyan]")
     return compile_plan, sim_plan, profile
@@ -716,17 +747,24 @@ def _apply_deliverable(plan: Any, deliverable: str | None) -> Any:
         deliverable_name = existing.get("preset") if existing else None
     if deliverable_name:
         from volnix.deliverable_presets import load_preset as _load_preset
+
         preset_data = _load_preset(deliverable_name)
-        plan = plan.model_copy(update={
-            "deliverable_config": {"preset": deliverable_name, **preset_data},
-        })
+        plan = plan.model_copy(
+            update={
+                "deliverable_config": {"preset": deliverable_name, **preset_data},
+            }
+        )
         console.print(f"  Deliverable: [cyan]{deliverable_name}[/cyan]")
     return plan
 
 
 async def _serve_impl(
-    world: str, settings: str | None, run_id: str | None,
-    world_id: str | None, host: str, port: int,
+    world: str,
+    settings: str | None,
+    run_id: str | None,
+    world_id: str | None,
+    host: str,
+    port: int,
     agents: str | None = None,
     behavior: str | None = None,
     deliverable: str | None = None,
@@ -750,6 +788,7 @@ async def _serve_impl(
             if run_id:
                 # Re-serve existing run — instant, no compilation
                 from volnix.core.types import RunId as _RId
+
                 console.print(f"  Loading run: [cyan]{run_id}[/cyan]")
                 run = await volnix.run_manager.get_run(_RId(run_id))
                 if run is None:
@@ -761,6 +800,7 @@ async def _serve_impl(
             elif world_id:
                 # New run on existing world — instant, no compilation
                 from volnix.core.types import WorldId as _WId
+
                 console.print(f"  Loading world: [cyan]{world_id}[/cyan]")
                 plan = await volnix.world_manager.load_plan(_WId(world_id))
                 if plan is None:
@@ -771,8 +811,11 @@ async def _serve_impl(
                 plan = _apply_deliverable(plan, deliverable)
                 compile_plan, sim_plan, internal_profile = _apply_internal_agents(plan, internal)
                 new_run_id = await volnix.create_run(
-                    compile_plan, mode=compile_plan.mode, world_id=_WId(world_id),
-                    agents_yaml=agents, internal_profile=internal_profile,
+                    compile_plan,
+                    mode=compile_plan.mode,
+                    world_id=_WId(world_id),
+                    agents_yaml=agents,
+                    internal_profile=internal_profile,
                 )
                 _active_run_id[0] = str(new_run_id)
                 console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
@@ -783,12 +826,14 @@ async def _serve_impl(
                 sim = await _setup_simulation(volnix, sim_plan)
                 if sim is not None:
                     runner, _, _ = sim
+
                     async def _run_sim() -> None:
                         stop = await runner.run()
                         console.print(f"  Simulation stopped: [yellow]{stop}[/yellow]")
                         # Save deliverable artifact if produced
                         if runner.deliverable_produced and runner.deliverable_content:
                             from volnix.core.types import RunId as _DRId
+
                             await volnix.artifact_store.save_deliverable(
                                 _DRId(_active_run_id[0]),
                                 runner.deliverable_content,
@@ -796,11 +841,13 @@ async def _serve_impl(
                             console.print("  [green]Deliverable saved[/green]")
                         # End run: generate report + scorecard
                         from volnix.core.types import RunId as _ERId
+
                         try:
                             await volnix.end_run(_ERId(_active_run_id[0]))
                             console.print("  [green]Report generated[/green]")
                         except Exception as exc:
                             console.print(f"  [red]Report generation failed: {exc}[/red]")
+
                     asyncio.create_task(_run_sim())
 
             else:
@@ -830,19 +877,20 @@ async def _serve_impl(
 
                             reviewer = PlanReviewer()
                             name = sanitize_filename(compiled_plan.name)
-                            saved = (
-                                user_blueprints_dir()
-                                / f"{name}_{compiled_plan.seed}.yaml"
-                            )
+                            saved = user_blueprints_dir() / f"{name}_{compiled_plan.seed}.yaml"
                             saved.write_text(reviewer.to_yaml(compiled_plan))
                             console.print(f"  Saved: [cyan]{saved}[/cyan]")
 
                         compiled_plan = _apply_deliverable(compiled_plan, deliverable)
-                        compile_plan, sim_plan, internal_profile = _apply_internal_agents(compiled_plan, internal)
+                        compile_plan, sim_plan, internal_profile = _apply_internal_agents(
+                            compiled_plan, internal
+                        )
                         console.print("  Generating world...")
                         new_run_id = await volnix.create_run(
-                            compile_plan, mode=compile_plan.mode,
-                            agents_yaml=agents, internal_profile=internal_profile,
+                            compile_plan,
+                            mode=compile_plan.mode,
+                            agents_yaml=agents,
+                            internal_profile=internal_profile,
                         )
                         _active_run_id[0] = str(new_run_id)
                         console.print(f"  Run ready: [cyan]{new_run_id}[/cyan]")
@@ -859,12 +907,14 @@ async def _serve_impl(
                             # Save deliverable + end run
                             if runner.deliverable_produced and runner.deliverable_content:
                                 from volnix.core.types import RunId as _DRId2
+
                                 await volnix.artifact_store.save_deliverable(
                                     _DRId2(_active_run_id[0]),
                                     runner.deliverable_content,
                                 )
                                 console.print("  [green]Deliverable saved[/green]")
                             from volnix.core.types import RunId as _ERId2
+
                             try:
                                 await volnix.end_run(_ERId2(_active_run_id[0]))
                                 console.print("  [green]Report generated[/green]")
@@ -886,10 +936,9 @@ async def _serve_impl(
                     if active:
                         try:
                             from volnix.core.types import RunId as _RId
+
                             await volnix.end_run(_RId(active))
-                            console.print(
-                                f"  Run completed: [cyan]{active}[/cyan]"
-                            )
+                            console.print(f"  Run completed: [cyan]{active}[/cyan]")
                         except Exception:
                             pass
     except KeyboardInterrupt:
@@ -1046,9 +1095,7 @@ async def _report_impl(run_id_str: str, fmt: str, output: Path | None) -> None:
 
             actual_run_id = RunId(run_record["run_id"])
             report_data = await volnix.artifact_store.load_artifact(actual_run_id, "report")
-            scorecard_data = await volnix.artifact_store.load_artifact(
-                actual_run_id, "scorecard"
-            )
+            scorecard_data = await volnix.artifact_store.load_artifact(actual_run_id, "scorecard")
 
             if report_data is None:
                 reporter = volnix.registry.get("reporter")
@@ -1588,7 +1635,8 @@ async def _replay_impl(run_id_str: str, tag: str | None) -> None:
 
             compiler = volnix.registry.get("world_compiler")
             reconstructed_plan = await compiler.compile_from_dicts(
-                world_def, source_run.get("config_snapshot", {}),
+                world_def,
+                source_run.get("config_snapshot", {}),
             )
 
             replay_tag = tag or f"replay-{run_id_str}"
@@ -1942,7 +1990,6 @@ async def _capture_impl(service: str, run_from: str) -> None:
             # Resolve "last" to the most recent run
             actual_run_id = run_from
             if run_from == "last":
-                from volnix.core.types import RunId
                 runs = await volnix.run_manager.list_runs()
                 if not runs:
                     print_error("No runs found")
@@ -1996,12 +2043,13 @@ async def _promote_impl(service: str, submit_pr: bool) -> None:
                 raise typer.Exit(1)
 
             # Build captured surface from profile data for evaluation
+            from datetime import UTC, datetime
+
             from volnix.engines.feedback.models import (
                 CapturedSurface,
                 ObservedMutation,
                 ObservedOperation,
             )
-            from datetime import UTC, datetime
 
             captured = CapturedSurface(
                 service_name=service,
@@ -2011,17 +2059,11 @@ async def _promote_impl(service: str, submit_pr: bool) -> None:
                     ObservedOperation(
                         name=op.name,
                         call_count=1,
-                        parameter_keys=(
-                            list(op.parameters.keys())
-                            if op.parameters else []
-                        ),
+                        parameter_keys=(list(op.parameters.keys()) if op.parameters else []),
                         response_keys=(
-                            list(
-                                op.response_schema.get(
-                                    "properties", {}
-                                ).keys()
-                            )
-                            if op.response_schema else []
+                            list(op.response_schema.get("properties", {}).keys())
+                            if op.response_schema
+                            else []
                         ),
                     )
                     for op in profile.operations
@@ -2042,7 +2084,9 @@ async def _promote_impl(service: str, submit_pr: bool) -> None:
 
             console.print(f"[bold]Promotion evaluation for '{service}'[/bold]")
             console.print(f"  Current: {evaluation.current_fidelity}")
-            console.print(f"  Eligible: {'[green]Yes[/green]' if evaluation.eligible else '[red]No[/red]'}")
+            console.print(
+                f"  Eligible: {'[green]Yes[/green]' if evaluation.eligible else '[red]No[/red]'}"
+            )
             for met in evaluation.criteria_met:
                 console.print(f"  [green]✓[/green] {met}")
             for missing in evaluation.criteria_missing:
@@ -2051,7 +2095,9 @@ async def _promote_impl(service: str, submit_pr: bool) -> None:
 
             if evaluation.eligible:
                 result = await feedback.promote_service(service, profile)
-                console.print(f"\n[green]Promoted '{service}' to {result.new_fidelity} (v{result.version})[/green]")
+                console.print(
+                    f"\n[green]Promoted '{service}' to {result.new_fidelity} (v{result.version})[/green]"
+                )
                 if result.profile_path:
                     console.print(f"  Saved: {result.profile_path}")
 
@@ -2106,9 +2152,7 @@ async def _compile_pack_impl(service: str, from_source: str) -> None:
         for f in result.files_generated:
             console.print(f"    - {Path(f).name}")
         console.print(f"  Handler stubs: {result.handler_stubs}")
-        console.print(
-            "\n[yellow]Next: implement deterministic handlers in handlers.py[/yellow]"
-        )
+        console.print("\n[yellow]Next: implement deterministic handlers in handlers.py[/yellow]")
 
     except (VolnixError, RuntimeError, OSError) as exc:
         print_error(str(exc))
@@ -2169,20 +2213,14 @@ def sync(
     service: Annotated[
         str | None, typer.Argument(help="Service name to check (omit for all)")
     ] = None,
-    check_all: Annotated[
-        bool, typer.Option("--all", help="Check all profiled services")
-    ] = False,
-    apply: Annotated[
-        bool, typer.Option("--apply", help="Apply proposed updates")
-    ] = False,
+    check_all: Annotated[bool, typer.Option("--all", help="Check all profiled services")] = False,
+    apply: Annotated[bool, typer.Option("--apply", help="Apply proposed updates")] = False,
 ) -> None:
     """Check external API drift for profiled services."""
     asyncio.run(_sync_impl(service, check_all, apply))
 
 
-async def _sync_impl(
-    service: str | None, check_all: bool, apply: bool
-) -> None:
+async def _sync_impl(service: str | None, check_all: bool, apply: bool) -> None:
     try:
         async with app_context() as volnix:
             feedback = volnix.registry.get("feedback")
@@ -2239,9 +2277,7 @@ def _print_drift_report(report: Any) -> None:
 
 @app.command()
 def signals(
-    fmt: Annotated[
-        str, typer.Option("--format", "-f", help="Output format")
-    ] = "table",
+    fmt: Annotated[str, typer.Option("--format", "-f", help="Output format")] = "table",
 ) -> None:
     """Display local signals from your run history."""
     asyncio.run(_signals_impl(fmt))
@@ -2255,6 +2291,7 @@ async def _signals_impl(fmt: str) -> None:
 
             if fmt == "json":
                 import json
+
                 console.print(json.dumps(result.model_dump(mode="json"), indent=2))
                 return
 
@@ -2267,9 +2304,7 @@ async def _signals_impl(fmt: str) -> None:
                     parts = [f"{k}={v}" for k, v in entry.items()]
                     console.print(f"    {', '.join(parts)}")
                 if len(signal.entries) > 5:
-                    console.print(
-                        f"    ... and {len(signal.entries) - 5} more"
-                    )
+                    console.print(f"    ... and {len(signal.entries) - 5} more")
                 console.print()
 
     except (VolnixError, RuntimeError) as exc:
@@ -2321,10 +2356,7 @@ def config_cmd(
             tools = get_tool_manifest(url=url, format=fmt)
         except Exception:
             tools = []
-            console.print(
-                f"[yellow]Could not fetch tools from {url} — "
-                f"using empty list[/yellow]"
-            )
+            console.print(f"[yellow]Could not fetch tools from {url} — using empty list[/yellow]")
     else:
         tools = []
 
@@ -2391,13 +2423,16 @@ def detach(
 @app.command()
 def dashboard(
     host: Annotated[
-        str, typer.Option("--host", help="API server bind host"),
+        str,
+        typer.Option("--host", help="API server bind host"),
     ] = "127.0.0.1",
     port: Annotated[
-        int, typer.Option("--port", "-p", help="API server bind port"),
+        int,
+        typer.Option("--port", "-p", help="API server bind port"),
     ] = 8200,
     env: Annotated[
-        str, typer.Option("--env", "-e", help="Config environment (maps to volnix.{env}.toml)"),
+        str,
+        typer.Option("--env", "-e", help="Config environment (maps to volnix.{env}.toml)"),
     ] = "development",
 ) -> None:
     """Start the dashboard API server for browsing historical runs.

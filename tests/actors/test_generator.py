@@ -1,7 +1,5 @@
 """Tests for volnix.actors.simple_generator -- SimpleActorGenerator."""
 
-import pytest
-
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.generator import ActorPersonalityGenerator
 from volnix.actors.personality import FrictionProfile, Personality

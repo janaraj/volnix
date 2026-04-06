@@ -4,16 +4,17 @@ Uses the LLM as a TRANSLATOR (Layer 1): NL → structured YAML dicts.
 This is different from Layer 2 (entity generation in D4b) which uses
 LLM as a CREATOR to generate content.
 """
+
 from __future__ import annotations
+
 import json
 import logging
 from typing import Any
 
 from volnix.core.errors import NLParseError
 from volnix.engines.world_compiler.prompt_templates import (
-    NL_TO_WORLD_DEF,
     NL_TO_COMPILER_SETTINGS,
-    PromptTemplate,
+    NL_TO_WORLD_DEF,
 )
 from volnix.llm.router import LLMRouter
 
@@ -67,13 +68,16 @@ class NLParser:
 
         return world_def, compiler_settings
 
-    async def _generate_world_def(self, description: str, categories: str, verified_packs: str) -> dict:
+    async def _generate_world_def(
+        self, description: str, categories: str, verified_packs: str
+    ) -> dict:
         """Use LLM to generate world definition from NL."""
         try:
             response = await NL_TO_WORLD_DEF.execute(
                 self._router,
                 description=description,
-                categories=categories or "communication, work_management, money_transactions, scheduling, code_devops, identity_auth, storage_documents, authority_approvals, monitoring_observability",
+                categories=categories
+                or "communication, work_management, money_transactions, scheduling, code_devops, identity_auth, storage_documents, authority_approvals, monitoring_observability",
                 verified_packs=verified_packs or "email, chat, tickets, payments, repos, calendar",
             )
             return NL_TO_WORLD_DEF.parse_json_response(response)

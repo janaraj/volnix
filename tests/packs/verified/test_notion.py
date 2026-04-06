@@ -503,9 +503,7 @@ class TestNotionPackActions:
                 "properties": {
                     "Name": {
                         "type": "title",
-                        "title": [
-                            {"type": "text", "text": {"content": "New Task"}}
-                        ],
+                        "title": [{"type": "text", "text": {"content": "New Task"}}],
                     },
                 },
             },
@@ -536,26 +534,20 @@ class TestNotionPackActions:
                 "properties": {
                     "title": {
                         "type": "title",
-                        "title": [
-                            {"type": "text", "text": {"content": "Sub Page"}}
-                        ],
+                        "title": [{"type": "text", "text": {"content": "Sub Page"}}],
                     },
                 },
                 "children": [
                     {
                         "type": "paragraph",
                         "paragraph": {
-                            "rich_text": [
-                                {"type": "text", "text": {"content": "Hello world"}}
-                            ]
+                            "rich_text": [{"type": "text", "text": {"content": "Hello world"}}]
                         },
                     },
                     {
                         "type": "heading_1",
                         "heading_1": {
-                            "rich_text": [
-                                {"type": "text", "text": {"content": "Section 1"}}
-                            ]
+                            "rich_text": [{"type": "text", "text": {"content": "Section 1"}}]
                         },
                     },
                 ],
@@ -688,9 +680,7 @@ class TestNotionPackActions:
             ToolName("databases.create"),
             {
                 "parent": {"type": "page_id", "page_id": "page-001"},
-                "title": [
-                    {"type": "text", "text": {"content": "Bug Tracker"}}
-                ],
+                "title": [{"type": "text", "text": {"content": "Bug Tracker"}}],
                 "properties": {
                     "Name": {"type": "title", "title": {}},
                     "Priority": {
@@ -903,9 +893,7 @@ class TestNotionPackActions:
                     {
                         "type": "paragraph",
                         "paragraph": {
-                            "rich_text": [
-                                {"type": "text", "text": {"content": "New paragraph"}}
-                            ]
+                            "rich_text": [{"type": "text", "text": {"content": "New paragraph"}}]
                         },
                     },
                 ],
@@ -936,9 +924,7 @@ class TestNotionPackActions:
                     {
                         "type": "paragraph",
                         "paragraph": {
-                            "rich_text": [
-                                {"type": "text", "text": {"content": "Nested"}}
-                            ]
+                            "rich_text": [{"type": "text", "text": {"content": "Nested"}}]
                         },
                     },
                 ],
@@ -1149,9 +1135,7 @@ class TestNotionPackActions:
             ToolName("comments.create"),
             {
                 "parent": {"page_id": "page-001"},
-                "rich_text": [
-                    {"type": "text", "text": {"content": "New comment here"}}
-                ],
+                "rich_text": [{"type": "text", "text": {"content": "New comment here"}}],
             },
             sample_state,
         )
@@ -1174,9 +1158,7 @@ class TestNotionPackActions:
             ToolName("comments.create"),
             {
                 "discussion_id": "disc-001",
-                "rich_text": [
-                    {"type": "text", "text": {"content": "Reply in thread"}}
-                ],
+                "rich_text": [{"type": "text", "text": {"content": "Reply in thread"}}],
             },
             sample_state,
         )
@@ -1190,9 +1172,7 @@ class TestNotionPackActions:
         proposal = await notion_pack.handle_action(
             ToolName("comments.create"),
             {
-                "rich_text": [
-                    {"type": "text", "text": {"content": "Orphan comment"}}
-                ],
+                "rich_text": [{"type": "text", "text": {"content": "Orphan comment"}}],
             },
             sample_state,
         )
@@ -1298,9 +1278,7 @@ class TestNotionPackValidation:
             "id": "comment-xyz",
             "object": "comment",
             "parent": {"type": "page_id", "page_id": "page-001"},
-            "rich_text": [
-                {"type": "text", "text": {"content": "Hello"}, "plain_text": "Hello"}
-            ],
+            "rich_text": [{"type": "text", "text": {"content": "Hello"}, "plain_text": "Hello"}],
             "created_time": "2026-01-01T00:00:00+00:00",
         }
         result = validator.validate_entity(valid_comment, schemas["comment"])

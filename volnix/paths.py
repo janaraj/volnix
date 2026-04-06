@@ -6,6 +6,7 @@ should hardcode directory paths.
 User home: ``~/.volnix/`` (override with ``VOLNIX_HOME`` env var)
 Package dirs: ``volnix/blueprints/``, ``volnix/presets/``
 """
+
 from __future__ import annotations
 
 import os
@@ -208,17 +209,17 @@ def list_blueprints() -> list[dict[str, Any]]:
             try:
                 data = yaml.safe_load(f.read_text()) or {}
                 world = data.get("world", data)
-                desc = str(
-                    world.get("description", world.get("name", ""))
-                )[:80]
+                desc = str(world.get("description", world.get("name", "")))[:80]
             except Exception:
                 pass
-            results.append({
-                "tier": tier,
-                "name": f.stem,
-                "description": desc.strip(),
-                "path": str(f),
-            })
+            results.append(
+                {
+                    "tier": tier,
+                    "name": f.stem,
+                    "description": desc.strip(),
+                    "path": str(f),
+                }
+            )
     return results
 
 

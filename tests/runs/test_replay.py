@@ -1,6 +1,8 @@
 """Tests for volnix.runs.replay — run replay engine."""
-import pytest
+
 from unittest.mock import AsyncMock
+
+import pytest
 
 from volnix.core.types import RunId
 from volnix.runs.config import RunConfig
@@ -16,7 +18,7 @@ def _make_replayer(tmp_path) -> RunReplayer:
 def _seed_event_log(tmp_path, run_id: str, events: list):
     """Write an event log artifact directly so the replayer can load it."""
     import json
-    from pathlib import Path
+
     run_dir = tmp_path / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "event_log.json").write_text(json.dumps(events))
@@ -51,7 +53,11 @@ async def test_pause_resume(tmp_path):
 @pytest.mark.asyncio
 async def test_seek_to_tick(tmp_path):
     replayer = _make_replayer(tmp_path)
-    events = [{"event_type": "a", "tick": 0}, {"event_type": "b", "tick": 5}, {"event_type": "c", "tick": 10}]
+    events = [
+        {"event_type": "a", "tick": 0},
+        {"event_type": "b", "tick": 5},
+        {"event_type": "c", "tick": 10},
+    ]
     _seed_event_log(tmp_path, "run_r3", events)
     await replayer.start_replay(RunId("run_r3"))
     await replayer.seek_to_tick(5)

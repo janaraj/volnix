@@ -147,9 +147,7 @@ class CompilerWorldValidator:
         warnings: list[str] = []
 
         if expected_count is not None and len(entities) != expected_count:
-            errors.append(
-                f"Expected {expected_count} entities, got {len(entities)}"
-            )
+            errors.append(f"Expected {expected_count} entities, got {len(entities)}")
             if not self._collect_all:
                 return SectionValidationResult(
                     section=section,
@@ -355,17 +353,11 @@ class CompilerWorldValidator:
                 if not matches:
                     errors.append(f"{prefix} selector did not match any entities")
             elif kind == "count":
-                errors.extend(
-                    self._validate_count_invariant(prefix, invariant, matches)
-                )
+                errors.extend(self._validate_count_invariant(prefix, invariant, matches))
             elif kind == "field_equals":
-                errors.extend(
-                    self._validate_field_equals_invariant(prefix, invariant, matches)
-                )
+                errors.extend(self._validate_field_equals_invariant(prefix, invariant, matches))
             elif kind == "temporal":
-                errors.extend(
-                    self._validate_temporal_invariant(prefix, invariant, matches)
-                )
+                errors.extend(self._validate_temporal_invariant(prefix, invariant, matches))
             elif kind == "references":
                 errors.extend(
                     self._validate_reference_invariant(
@@ -417,9 +409,7 @@ class CompilerWorldValidator:
         warnings: list[str] = []
         for section_name, result in sections.items():
             errors.extend(f"{section_name}: {error}" for error in result.errors)
-            warnings.extend(
-                f"{section_name}: {warning}" for warning in result.warnings
-            )
+            warnings.extend(f"{section_name}: {warning}" for warning in result.warnings)
         return WorldValidationResult(
             valid=len(errors) == 0,
             errors=errors,
@@ -511,9 +501,7 @@ class CompilerWorldValidator:
         if invariant.field is None:
             return [f"{prefix} field_equals invariant requires field"]
         if not any(entity.get(invariant.field) == invariant.value for entity in matches):
-            return [
-                f"{prefix} no selected entity has {invariant.field} == {invariant.value!r}"
-            ]
+            return [f"{prefix} no selected entity has {invariant.field} == {invariant.value!r}"]
         return []
 
     def _validate_reference_invariant(
@@ -543,6 +531,7 @@ class CompilerWorldValidator:
         }
         if not target_ids:
             return [f"{prefix} target selector did not match any identifiable entities"]
+
         def _field_matches_target(value: Any, targets: set) -> bool:
             """Check if a field value references any target ID. Handles lists."""
             if isinstance(value, list):
@@ -551,8 +540,8 @@ class CompilerWorldValidator:
                 return False  # unhashable types can't be in a set
             return value in targets
 
-        if not any(_field_matches_target(entity.get(invariant.field), target_ids) for entity in matches):
-            return [
-                f"{prefix} no selected entity references a target via {invariant.field}"
-            ]
+        if not any(
+            _field_matches_target(entity.get(invariant.field), target_ids) for entity in matches
+        ):
+            return [f"{prefix} no selected entity references a target via {invariant.field}"]
         return []

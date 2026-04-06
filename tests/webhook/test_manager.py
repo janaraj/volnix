@@ -1,4 +1,5 @@
 """Tests for WebhookManager — bus subscriber orchestrator."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,9 +9,7 @@ from unittest.mock import AsyncMock, patch
 async def test_start_subscribes_to_bus(webhook_manager, mock_bus):
     """start() subscribes to wildcard on the bus."""
     await webhook_manager.start(mock_bus)
-    mock_bus.subscribe.assert_awaited_once_with(
-        "*", webhook_manager._on_event
-    )
+    mock_bus.subscribe.assert_awaited_once_with("*", webhook_manager._on_event)
 
 
 async def test_start_disabled_does_nothing(mock_bus):
@@ -24,9 +23,7 @@ async def test_start_disabled_does_nothing(mock_bus):
     mock_bus.subscribe.assert_not_awaited()
 
 
-async def test_event_delivered_to_matching_webhook(
-    webhook_manager, mock_bus, sample_event
-):
+async def test_event_delivered_to_matching_webhook(webhook_manager, mock_bus, sample_event):
     """Matching world event is delivered to registered webhook."""
     await webhook_manager.start(mock_bus)
     webhook_manager.register(
@@ -42,9 +39,7 @@ async def test_event_delivered_to_matching_webhook(
     ) as mock_send:
         from volnix.webhook.delivery import DeliveryResult
 
-        mock_send.return_value = DeliveryResult(
-            success=True, attempts=1, status_code=200
-        )
+        mock_send.return_value = DeliveryResult(success=True, attempts=1, status_code=200)
         await webhook_manager._on_event(sample_event)
         # C2: delivery is async task — give it time to complete
         await asyncio.sleep(0.05)
@@ -61,9 +56,7 @@ async def test_no_match_skips(webhook_manager, mock_bus, sample_event):
         events=["world.chat_*"],
     )
 
-    with patch.object(
-        webhook_manager._delivery, "send", new_callable=AsyncMock
-    ) as mock_send:
+    with patch.object(webhook_manager._delivery, "send", new_callable=AsyncMock) as mock_send:
         await webhook_manager._on_event(sample_event)
         await asyncio.sleep(0.05)
 
@@ -118,9 +111,7 @@ async def test_internal_event_filtered(webhook_manager, mock_bus):
         event_type = "engine_lifecycle.init"
         service_id = ""
 
-    with patch.object(
-        webhook_manager._delivery, "send", new_callable=AsyncMock
-    ) as mock_send:
+    with patch.object(webhook_manager._delivery, "send", new_callable=AsyncMock) as mock_send:
         await webhook_manager._on_event(InternalEvent())
         await asyncio.sleep(0.05)
 
@@ -131,9 +122,7 @@ async def test_internal_event_filtered(webhook_manager, mock_bus):
 # -- H3: Exception handling ---
 
 
-async def test_delivery_exception_tracked(
-    webhook_manager, mock_bus, sample_event
-):
+async def test_delivery_exception_tracked(webhook_manager, mock_bus, sample_event):
     """H3: Exception in delivery increments errors stat."""
     await webhook_manager.start(mock_bus)
     webhook_manager.register(
@@ -156,9 +145,7 @@ async def test_delivery_exception_tracked(
 # -- Failure stats ---
 
 
-async def test_failed_delivery_tracked(
-    webhook_manager, mock_bus, sample_event
-):
+async def test_failed_delivery_tracked(webhook_manager, mock_bus, sample_event):
     """Failed delivery increments failed stat."""
     await webhook_manager.start(mock_bus)
     webhook_manager.register(
@@ -173,9 +160,7 @@ async def test_failed_delivery_tracked(
     ) as mock_send:
         from volnix.webhook.delivery import DeliveryResult
 
-        mock_send.return_value = DeliveryResult(
-            success=False, attempts=2, error="HTTP 500"
-        )
+        mock_send.return_value = DeliveryResult(success=False, attempts=2, error="HTTP 500")
         await webhook_manager._on_event(sample_event)
         await asyncio.sleep(0.05)
 

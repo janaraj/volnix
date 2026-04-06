@@ -72,8 +72,8 @@ def test_to_system_prompt_full():
     assert "VIP customer waiting 3 days" in prompt
     assert "## Available Tools" in prompt
     assert "### helpdesk" in prompt
-    assert "action_type: \"list_tickets\"" in prompt
-    assert "action_type: \"reply_ticket\"" in prompt
+    assert 'action_type: "list_tickets"' in prompt
+    assert 'action_type: "reply_ticket"' in prompt
 
 
 def test_to_system_prompt_minimal():
@@ -99,19 +99,34 @@ def test_to_system_prompt_multiple_services():
         reality_summary="Ideal",
         behavior_mode="dynamic",
         available_services=[
-            {"name": "email_send", "service": "email", "http_method": "POST", "required_params": ["to", "body"]},
-            {"name": "email_search", "service": "email", "http_method": "GET", "required_params": ["q"]},
-            {"name": "create_event", "service": "calendar", "http_method": "POST", "required_params": ["title"]},
+            {
+                "name": "email_send",
+                "service": "email",
+                "http_method": "POST",
+                "required_params": ["to", "body"],
+            },
+            {
+                "name": "email_search",
+                "service": "email",
+                "http_method": "GET",
+                "required_params": ["q"],
+            },
+            {
+                "name": "create_event",
+                "service": "calendar",
+                "http_method": "POST",
+                "required_params": ["title"],
+            },
         ],
     )
 
     prompt = ctx.to_system_prompt()
 
     assert "### email" in prompt
-    assert "action_type: \"email_search\"" in prompt
-    assert "action_type: \"email_send\"" in prompt
+    assert 'action_type: "email_search"' in prompt
+    assert 'action_type: "email_send"' in prompt
     assert "### calendar" in prompt
-    assert "action_type: \"create_event\"" in prompt
+    assert 'action_type: "create_event"' in prompt
 
 
 def test_world_context_equality():

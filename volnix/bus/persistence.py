@@ -7,6 +7,7 @@ Receives a :class:`Database` via dependency injection -- does NOT create
 its own ``SQLiteDatabase``.  The database lifecycle is managed externally
 by :class:`ConnectionManager`.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,13 +60,15 @@ class BusPersistence:
             The monotonically increasing sequence ID assigned to the event.
         """
         payload = event.model_dump_json()
-        return await self._log.append({
-            "event_id": str(event.event_id),
-            "event_type": event.event_type,
-            "run_id": getattr(event, "run_id", None),
-            "timestamp_json": event.timestamp.model_dump_json(),
-            "payload": payload,
-        })
+        return await self._log.append(
+            {
+                "event_id": str(event.event_id),
+                "event_type": event.event_type,
+                "run_id": getattr(event, "run_id", None),
+                "timestamp_json": event.timestamp.model_dump_json(),
+                "payload": payload,
+            }
+        )
 
     async def query(
         self,

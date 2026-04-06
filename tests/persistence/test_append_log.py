@@ -1,5 +1,7 @@
 """Tests for volnix.persistence.append_log — shared append-only log."""
+
 import pytest
+
 from volnix.persistence.append_log import AppendOnlyLog
 from volnix.persistence.sqlite import SQLiteDatabase
 
@@ -183,10 +185,12 @@ async def test_append_log_range_filter_combined(db):
     await log.append({"ts": "2026-06-15", "payload": "jun"})
     await log.append({"ts": "2026-12-31", "payload": "dec"})
 
-    rows = await log.query(range_filters=[
-        ("ts", ">=", "2026-03-01"),
-        ("ts", "<=", "2026-09-01"),
-    ])
+    rows = await log.query(
+        range_filters=[
+            ("ts", ">=", "2026-03-01"),
+            ("ts", "<=", "2026-09-01"),
+        ]
+    )
     assert len(rows) == 1
     assert rows[0]["payload"] == "jun"
 
@@ -214,11 +218,15 @@ async def test_append_log_query_with_offset(db):
 
 async def test_append_log_range_with_equality_filters(db):
     """Range filters and equality filters combine correctly."""
-    log = AppendOnlyLog(db, "combo_log", [
-        ("category", "TEXT NOT NULL"),
-        ("ts", "TEXT NOT NULL"),
-        ("payload", "TEXT"),
-    ])
+    log = AppendOnlyLog(
+        db,
+        "combo_log",
+        [
+            ("category", "TEXT NOT NULL"),
+            ("ts", "TEXT NOT NULL"),
+            ("payload", "TEXT"),
+        ],
+    )
     await log.initialize()
     await log.append({"category": "a", "ts": "2026-01-01", "payload": "a-jan"})
     await log.append({"category": "b", "ts": "2026-06-15", "payload": "b-jun"})

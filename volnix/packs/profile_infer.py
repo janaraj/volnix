@@ -87,9 +87,7 @@ class ProfileInferrer:
                 "Inferred profile for '%s' has empty responder_prompt",
                 service_name,
             )
-            raise ValueError(
-                f"Inferred profile for '{service_name}' has empty responder_prompt"
-            )
+            raise ValueError(f"Inferred profile for '{service_name}' has empty responder_prompt")
 
         return profile
 
@@ -388,9 +386,7 @@ class ProfileInferrer:
                     behavioral_notes.append(note)
                 elif isinstance(note, dict):
                     # LLM sometimes returns {"key": "value"} — flatten to string
-                    behavioral_notes.append(
-                        "; ".join(f"{k}: {v}" for k, v in note.items())
-                    )
+                    behavioral_notes.append("; ".join(f"{k}: {v}" for k, v in note.items()))
 
         # Parse examples
         examples: list[ProfileExample] = []

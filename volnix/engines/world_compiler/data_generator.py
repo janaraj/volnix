@@ -38,8 +38,7 @@ def _strip_custom_extensions(schema: dict[str, Any]) -> dict[str, Any]:
             cleaned[k] = _strip_custom_extensions(v)
         elif isinstance(v, list):
             cleaned[k] = [
-                _strip_custom_extensions(item) if isinstance(item, dict) else item
-                for item in v
+                _strip_custom_extensions(item) if isinstance(item, dict) else item for item in v
             ]
         else:
             cleaned[k] = v
@@ -61,7 +60,9 @@ class WorldDataGenerator:
     DEFAULT_ENTITY_COUNT = 10
 
     def __init__(
-        self, llm_router: LLMRouter | None = None, seed: int = 42,
+        self,
+        llm_router: LLMRouter | None = None,
+        seed: int = 42,
         default_entity_count: int | None = None,
     ) -> None:
         self._router = llm_router
@@ -88,7 +89,9 @@ class WorldDataGenerator:
         for spec in ordered:
             ref_context = self._build_ref_context(spec.entity_schema, all_entities)
             all_entities[spec.entity_type] = await self.generate_section(
-                spec, ctx, ref_context=ref_context,
+                spec,
+                ctx,
+                ref_context=ref_context,
             )
             logger.info(
                 "Generated %d %s entities (refs: %s)",
@@ -117,7 +120,8 @@ class WorldDataGenerator:
         return specs
 
     def _sort_by_dependency(
-        self, specs: list[EntityGenerationSpec],
+        self,
+        specs: list[EntityGenerationSpec],
     ) -> list[EntityGenerationSpec]:
         """Sort specs so referenced entity types are generated before dependents.
 
@@ -190,12 +194,24 @@ class WorldDataGenerator:
             if not isinstance(ref_target, str) or ref_target not in all_entities:
                 continue
             entities = all_entities[ref_target]
-            ids = [e.get("id") or e.get("_entity_id", "") for e in entities if e.get("id") or e.get("_entity_id")]
+            ids = [
+                e.get("id") or e.get("_entity_id", "")
+                for e in entities
+                if e.get("id") or e.get("_entity_id")
+            ]
             # Include a few sample entities for richer context (name, role, etc.)
             samples = []
             for e in entities[:5]:
                 sample = {"id": e.get("id", "")}
-                for key in ("name", "username", "display_name", "role", "title", "symbol", "status"):
+                for key in (
+                    "name",
+                    "username",
+                    "display_name",
+                    "role",
+                    "title",
+                    "symbol",
+                    "status",
+                ):
                     if key in e:
                         sample[key] = e[key]
                 samples.append(sample)
@@ -282,10 +298,7 @@ class WorldDataGenerator:
         else:
             items = []
 
-        return [
-            item for item in items[:count]
-            if isinstance(item, dict)
-        ]
+        return [item for item in items[:count] if isinstance(item, dict)]
 
     def _determine_count(self, entity_type: str, plan: WorldPlan) -> int:
         """Read count from actor_specs YAML config."""

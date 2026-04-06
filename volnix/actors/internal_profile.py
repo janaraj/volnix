@@ -107,15 +107,17 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
         if is_lead:
             metadata["lead"] = True
 
-        definitions.append(ActorDefinition(
-            id=actor_id,
-            type=ActorType.HUMAN,
-            role=role,
-            permissions=entry.get("permissions", {}),
-            budget=entry.get("budget"),
-            personality_hint=entry.get("personality", ""),
-            metadata=metadata,
-        ))
+        definitions.append(
+            ActorDefinition(
+                id=actor_id,
+                type=ActorType.HUMAN,
+                role=role,
+                permissions=entry.get("permissions", {}),
+                budget=entry.get("budget"),
+                personality_hint=entry.get("personality", ""),
+                metadata=metadata,
+            )
+        )
 
     # Default: first agent is lead if none explicitly marked
     if lead_id is None and definitions:
@@ -126,7 +128,10 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
 
     logger.info(
         "Loaded internal agent profile: %d agents, lead=%s, mission=%s, deliverable=%s",
-        len(definitions), lead_id, bool(mission), deliverable,
+        len(definitions),
+        lead_id,
+        bool(mission),
+        deliverable,
     )
 
     return InternalAgentProfile(

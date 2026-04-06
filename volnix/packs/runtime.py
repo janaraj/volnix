@@ -7,13 +7,14 @@ and state machines using existing validators.
 Enforcement: This is the ONLY sanctioned execution path. Calling
 pack.handle_action() directly bypasses validation and fidelity tagging.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 from volnix.core.context import ResponseProposal
-from volnix.core.errors import PackNotFoundError, ValidationError
+from volnix.core.errors import ValidationError
 from volnix.core.types import (
     FidelityMetadata,
     FidelitySource,
@@ -96,7 +97,9 @@ class PackRuntime:
         # 3. Validate input against tool parameter schema
         tool_def = self._find_tool_def(pack, action)
         if tool_def and "parameters" in tool_def:
-            input_result = self._schema_validator.validate_entity(input_data, tool_def["parameters"])
+            input_result = self._schema_validator.validate_entity(
+                input_data, tool_def["parameters"]
+            )
             if not input_result.valid:
                 raise ValidationError(
                     message=f"Input validation failed for '{action}': {input_result.errors}",
@@ -111,11 +114,15 @@ class PackRuntime:
         if self._behavior == "dynamic" and self._llm_router and self._state_engine:
             if tool_def and tool_def.get("http_method", "GET").upper() == "GET":
                 proposal = await self._dynamic_enrich(
-                    pack, action, input_data, state, proposal,
+                    pack,
+                    action,
+                    input_data,
+                    state,
+                    proposal,
                 )
 
         # 5. Validate output: entity deltas against schemas
-        for delta in (proposal.proposed_state_deltas or []):
+        for delta in proposal.proposed_state_deltas or []:
             schema = entity_schemas.get(delta.entity_type)
             if schema and delta.operation == "create":
                 # Full validation for creates (all required fields must be present)
@@ -129,7 +136,14 @@ class PackRuntime:
                 # Partial validation for updates: type-check provided fields only
                 # (updates are partial — don't enforce required fields)
                 props = schema.get("properties", {})
-                _TYPE_MAP = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict}
+                _TYPE_MAP = {
+                    "string": str,
+                    "integer": int,
+                    "number": (int, float),
+                    "boolean": bool,
+                    "array": list,
+                    "object": dict,
+                }
                 for field_name, value in delta.fields.items():
                     field_schema = props.get(field_name)
                     if not field_schema:
@@ -141,10 +155,9 @@ class PackRuntime:
                             if "null" in field_type and value is None:
                                 continue
                             non_null = [t for t in field_type if t != "null"]
-                            expected = tuple(
-                                _TYPE_MAP[t] for t in non_null
-                                if t in _TYPE_MAP
-                            ) or None
+                            expected = (
+                                tuple(_TYPE_MAP[t] for t in non_null if t in _TYPE_MAP) or None
+                            )
                         else:
                             expected = _TYPE_MAP.get(field_type)
                         if expected and not isinstance(value, expected):
@@ -159,20 +172,28 @@ class PackRuntime:
                             validation_type="schema",
                         )
                     # Minimum constraint validation
-                    if "minimum" in field_schema and isinstance(value, (int, float)) and value < field_schema["minimum"]:
+                    if (
+                        "minimum" in field_schema
+                        and isinstance(value, (int, float))
+                        and value < field_schema["minimum"]
+                    ):
                         raise ValidationError(
                             message=f"Update field '{field_name}' value {value} below minimum {field_schema['minimum']} for {delta.entity_type}",
                             validation_type="schema",
                         )
                     # Maximum constraint validation
-                    if "maximum" in field_schema and isinstance(value, (int, float)) and value > field_schema["maximum"]:
+                    if (
+                        "maximum" in field_schema
+                        and isinstance(value, (int, float))
+                        and value > field_schema["maximum"]
+                    ):
                         raise ValidationError(
                             message=f"Update field '{field_name}' value {value} above maximum {field_schema['maximum']} for {delta.entity_type}",
                             validation_type="schema",
                         )
 
         # 5. Validate output: state transitions
-        for delta in (proposal.proposed_state_deltas or []):
+        for delta in proposal.proposed_state_deltas or []:
             sm = state_machines.get(delta.entity_type)
             if sm and "status" in delta.fields:
                 new_status = delta.fields["status"]
@@ -243,14 +264,26 @@ class PackRuntime:
         pack handler with enriched state.
         """
         import json
+
         from volnix.engines.world_compiler.data_generator import WorldDataGenerator
         from volnix.engines.world_compiler.prompt_templates import ENTITY_GENERATION
 
         # Check if response has a sparse results list
         body = proposal.response_body
         results_key = None
-        for key in ("results", "items", "tweets", "posts", "messages",
-                     "entities", "data", "news", "bars", "orders", "tickets"):
+        for key in (
+            "results",
+            "items",
+            "tweets",
+            "posts",
+            "messages",
+            "entities",
+            "data",
+            "news",
+            "bars",
+            "orders",
+            "tickets",
+        ):
             if key in body and isinstance(body[key], list):
                 results_key = key
                 break
@@ -324,7 +357,9 @@ class PackRuntime:
             await self._state_engine.populate_entities({target_type: entities})
             logger.info(
                 "Dynamic enrichment: +%d %s for '%s'",
-                len(entities), target_type, str(query)[:50],
+                len(entities),
+                target_type,
+                str(query)[:50],
             )
         except Exception as exc:
             logger.warning("Dynamic insert failed: %s", exc)

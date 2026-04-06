@@ -30,9 +30,7 @@ class ServiceBootstrapper:
         self._resolver = resolver
         self._llm_router = llm_router
 
-    async def bootstrap(
-        self, service_name: str, category: str
-    ) -> ServiceSurface | None:
+    async def bootstrap(self, service_name: str, category: str) -> ServiceSurface | None:
         """Bootstrap a service surface from name + category.
 
         Delegates to ServiceResolver.resolve() which runs the full
@@ -78,9 +76,7 @@ class ServiceBootstrapper:
         """
         if self._resolver and hasattr(self._resolver, "resolve_from_spec"):
             try:
-                return await self._resolver.resolve_from_spec(
-                    service_name, spec_source
-                )
+                return await self._resolver.resolve_from_spec(service_name, spec_source)
             except Exception as exc:
                 logger.warning(
                     "External spec bootstrap failed for %s from %s: %s",
@@ -98,9 +94,7 @@ class ServiceBootstrapper:
 
         return None
 
-    async def capture_surface(
-        self, service_name: str, run_id: str
-    ) -> ServiceSurface:
+    async def capture_surface(self, service_name: str, run_id: str) -> ServiceSurface:
         """Capture a bootstrapped surface from a completed run for reuse.
 
         Phase G4 — promotion pipeline: capture -> compile-pack -> verify -> promote.
@@ -112,9 +106,7 @@ class ServiceBootstrapper:
             "for promotion to a verified pack."
         )
 
-    async def compile_to_pack(
-        self, surface: ServiceSurface, output_dir: str
-    ) -> str:
+    async def compile_to_pack(self, surface: ServiceSurface, output_dir: str) -> str:
         """Compile a ServiceSurface into a Tier 1 verified pack.
 
         Phase G4 — promotion pipeline: capture -> compile-pack -> verify -> promote.

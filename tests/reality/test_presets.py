@@ -110,13 +110,15 @@ class TestCustomYamlPath:
     def test_custom_yaml_path(self, tmp_path) -> None:
         custom_yaml = tmp_path / "custom.yaml"
         custom_yaml.write_text(
-            yaml.dump({
-                "information": "mostly_clean",
-                "reliability": "rock_solid",
-                "friction": "everyone_helpful",
-                "complexity": "mostly_clear",
-                "boundaries": "well_controlled",
-            })
+            yaml.dump(
+                {
+                    "information": "mostly_clean",
+                    "reliability": "rock_solid",
+                    "friction": "everyone_helpful",
+                    "complexity": "mostly_clear",
+                    "boundaries": "well_controlled",
+                }
+            )
         )
         wc = load_from_yaml(str(custom_yaml))
         assert isinstance(wc, WorldConditions)

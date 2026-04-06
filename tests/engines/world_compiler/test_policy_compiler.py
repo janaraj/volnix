@@ -1,7 +1,5 @@
 """Tests for NL policy trigger compilation during world compilation."""
-import json
 
-import pytest
 from unittest.mock import AsyncMock
 
 from volnix.engines.world_compiler.engine import WorldCompilerEngine
@@ -10,14 +8,9 @@ from volnix.kernel.surface import APIOperation, ServiceSurface
 from volnix.llm.types import LLMResponse
 
 
-def _make_surface(
-    svc_name: str, *operations: tuple[str, str, str]
-) -> ServiceSurface:
+def _make_surface(svc_name: str, *operations: tuple[str, str, str]) -> ServiceSurface:
     """Build a ServiceSurface from service name and (name, service, desc) tuples."""
-    ops = [
-        APIOperation(name=name, service=svc, description=desc)
-        for name, svc, desc in operations
-    ]
+    ops = [APIOperation(name=name, service=svc, description=desc) for name, svc, desc in operations]
     return ServiceSurface(
         service_name=svc_name,
         category="general",
@@ -90,22 +83,26 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_nl_trigger_basic(self):
         """Single NL trigger compiled to one dict trigger."""
-        plan = _make_plan([
-            {
-                "name": "Archive approval",
-                "trigger": "archiving a database or more than 5 pages",
-                "enforcement": "hold",
-                "hold_config": {"approver_role": "admin"},
-            }
-        ])
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "Archive approval",
-                "triggers": [
-                    {"action": "pages.update", "condition": "input.archived == true"},
-                ],
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Archive approval",
+                    "trigger": "archiving a database or more than 5 pages",
+                    "enforcement": "hold",
+                    "hold_config": {"approver_role": "admin"},
+                }
+            ]
+        )
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "Archive approval",
+                    "triggers": [
+                        {"action": "pages.update", "condition": "input.archived == true"},
+                    ],
+                }
+            ]
+        )
 
         result = await _compile(plan, llm_resp)
 
@@ -119,22 +116,26 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_nl_trigger_multi_action(self):
         """NL trigger that maps to multiple actions creates cloned policies."""
-        plan = _make_plan([
-            {
-                "name": "Block list operations",
-                "trigger": "block all list operations on sensitive data",
-                "enforcement": "block",
-            }
-        ])
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "Block list operations",
-                "triggers": [
-                    {"action": "channels.list"},
-                    {"action": "databases.query"},
-                ],
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Block list operations",
+                    "trigger": "block all list operations on sensitive data",
+                    "enforcement": "block",
+                }
+            ]
+        )
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "Block list operations",
+                    "triggers": [
+                        {"action": "channels.list"},
+                        {"action": "databases.query"},
+                    ],
+                }
+            ]
+        )
 
         result = await _compile(plan, llm_resp)
 
@@ -149,13 +150,15 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_preserves_dict_triggers(self):
         """Dict triggers pass through — no LLM call made."""
-        plan = _make_plan([
-            {
-                "name": "Archive approval",
-                "trigger": {"action": "pages.update", "condition": "input.archived == true"},
-                "enforcement": "hold",
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Archive approval",
+                    "trigger": {"action": "pages.update", "condition": "input.archived == true"},
+                    "enforcement": "hold",
+                }
+            ]
+        )
 
         engine = WorldCompilerEngine()
         engine._llm_router = AsyncMock()
@@ -169,24 +172,28 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_mixed_triggers(self):
         """Only NL triggers compiled; dict triggers untouched."""
-        plan = _make_plan([
-            {
-                "name": "Dict policy",
-                "trigger": {"action": "pages.update"},
-                "enforcement": "hold",
-            },
-            {
-                "name": "NL policy",
-                "trigger": "refund amount exceeds limit",
-                "enforcement": "block",
-            },
-        ])
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "NL policy",
-                "triggers": [{"action": "pages.create"}],
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Dict policy",
+                    "trigger": {"action": "pages.update"},
+                    "enforcement": "hold",
+                },
+                {
+                    "name": "NL policy",
+                    "trigger": "refund amount exceeds limit",
+                    "enforcement": "block",
+                },
+            ]
+        )
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "NL policy",
+                    "triggers": [{"action": "pages.create"}],
+                }
+            ]
+        )
 
         result = await _compile(plan, llm_resp)
 
@@ -200,21 +207,25 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_unresolvable_trigger(self):
         """Unresolvable trigger adds warning and preserves original."""
-        plan = _make_plan([
-            {
-                "name": "Conceptual policy",
-                "trigger": "conclusion stated without supporting data",
-                "enforcement": "escalate",
-            }
-        ])
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "Conceptual policy",
-                "triggers": [],
-                "unresolvable": True,
-                "reason": "describes a semantic situation, not an API operation",
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Conceptual policy",
+                    "trigger": "conclusion stated without supporting data",
+                    "enforcement": "escalate",
+                }
+            ]
+        )
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "Conceptual policy",
+                    "triggers": [],
+                    "unresolvable": True,
+                    "reason": "describes a semantic situation, not an API operation",
+                }
+            ]
+        )
 
         result = await _compile(plan, llm_resp)
 
@@ -248,20 +259,24 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_preserves_metadata(self):
         """Enforcement, hold_config, and other metadata preserved after compilation."""
-        plan = _make_plan([
-            {
-                "name": "Refund approval",
-                "trigger": "refund amount exceeds agent authority",
-                "enforcement": "hold",
-                "hold_config": {"approver_role": "supervisor", "timeout": "30m"},
-            }
-        ])
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "Refund approval",
-                "triggers": [{"action": "pages.update", "condition": "input.amount > 5000"}],
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "Refund approval",
+                    "trigger": "refund amount exceeds agent authority",
+                    "enforcement": "hold",
+                    "hold_config": {"approver_role": "supervisor", "timeout": "30m"},
+                }
+            ]
+        )
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "Refund approval",
+                    "triggers": [{"action": "pages.update", "condition": "input.amount > 5000"}],
+                }
+            ]
+        )
 
         result = await _compile(plan, llm_resp)
 
@@ -273,21 +288,25 @@ class TestCompilePolicyTriggers:
 
     async def test_compile_seed_passed(self):
         """Seed is forwarded to LLM router for reproducibility."""
-        plan = _make_plan([
-            {
-                "name": "NL policy",
-                "trigger": "some trigger",
-                "enforcement": "log",
-            }
-        ])
+        plan = _make_plan(
+            [
+                {
+                    "name": "NL policy",
+                    "trigger": "some trigger",
+                    "enforcement": "log",
+                }
+            ]
+        )
         plan = plan.model_copy(update={"seed": 12345})
 
-        llm_resp = _make_llm_response([
-            {
-                "policy_name": "NL policy",
-                "triggers": [{"action": "pages.update"}],
-            }
-        ])
+        llm_resp = _make_llm_response(
+            [
+                {
+                    "policy_name": "NL policy",
+                    "triggers": [{"action": "pages.update"}],
+                }
+            ]
+        )
 
         engine = WorldCompilerEngine()
         engine._llm_router = AsyncMock()

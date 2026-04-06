@@ -1,4 +1,5 @@
 """Tests for ExternalSyncChecker -- orchestrated drift + proposals."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -50,14 +51,16 @@ async def test_check_all(make_profile):
     # Only twilio has drift
     async def mock_check(profile):
         if profile.service_name == "twilio":
-            return [DriftReport(
-                service_name="twilio",
-                checked_at="now",
-                source="openapi",
-                has_drift=True,
-                profile_version="0.1.0",
-                operations_added=["new_op"],
-            )]
+            return [
+                DriftReport(
+                    service_name="twilio",
+                    checked_at="now",
+                    source="openapi",
+                    has_drift=True,
+                    profile_version="0.1.0",
+                    operations_added=["new_op"],
+                )
+            ]
         return []
 
     detector = AsyncMock()

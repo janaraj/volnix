@@ -2,7 +2,9 @@
 
 Bridges PackRegistry (Tier 1/2) with ServiceResolver (external specs + kernel).
 """
+
 from __future__ import annotations
+
 import logging
 from typing import Any
 
@@ -71,7 +73,13 @@ class CompilerServiceResolver:
                     resolutions[svc_name] = resolution
                 else:
                     warnings.append(f"Could not resolve service '{svc_name}'")
-            except (PackNotFoundError, ServiceResolutionError, KernelError, KeyError, ValueError) as exc:
+            except (
+                PackNotFoundError,
+                ServiceResolutionError,
+                KernelError,
+                KeyError,
+                ValueError,
+            ) as exc:
                 warnings.append(f"Error resolving '{svc_name}': {exc}")
 
         return resolutions, warnings
@@ -91,7 +99,9 @@ class CompilerServiceResolver:
                 pack = self._packs.get_pack(name)
                 surface = ServiceSurface.from_pack(pack)
                 await self._record_resolution(
-                    service_name, "tier1_pack", 1.0,
+                    service_name,
+                    "tier1_pack",
+                    1.0,
                     len(surface.operations),
                     len(surface.entity_schemas),
                 )
@@ -145,7 +155,8 @@ class CompilerServiceResolver:
 
                 surface = profile_to_surface(profile)
                 await self._record_resolution(
-                    service_name, "tier2_yaml_profile",
+                    service_name,
+                    "tier2_yaml_profile",
                     surface.confidence,
                     len(surface.operations),
                     len(surface.entity_schemas),
@@ -163,7 +174,11 @@ class CompilerServiceResolver:
             if surface:
                 # Check fidelity threshold in strict mode
                 if fidelity_mode == "strict" and surface.confidence < 0.5:
-                    logger.warning("Skipping '%s' in strict mode (confidence=%.1f)", service_name, surface.confidence)
+                    logger.warning(
+                        "Skipping '%s' in strict mode (confidence=%.1f)",
+                        service_name,
+                        surface.confidence,
+                    )
                     return None
                 return ServiceResolution(
                     service_name=service_name,
@@ -197,26 +212,19 @@ class CompilerServiceResolver:
                             await self._ledger.append(
                                 ProfileInferenceEntry(
                                     service_name=name,
-                                    sources_used=list(
-                                        profile.source_chain or []
-                                    ),
+                                    sources_used=list(profile.source_chain or []),
                                     confidence=profile.confidence,
-                                    operations_count=len(
-                                        profile.operations
-                                    ),
-                                    entities_count=len(
-                                        profile.entities
-                                    ),
-                                    fidelity_source=(
-                                        profile.fidelity_source
-                                    ),
+                                    operations_count=len(profile.operations),
+                                    entities_count=len(profile.entities),
+                                    fidelity_source=(profile.fidelity_source),
                                 )
                             )
                         except Exception:
                             pass
 
                     await self._record_resolution(
-                        service_name, "tier2_inferred",
+                        service_name,
+                        "tier2_inferred",
                         surface.confidence,
                         len(surface.operations),
                         len(surface.entity_schemas),
@@ -264,36 +272,43 @@ class CompilerServiceResolver:
             from volnix.ledger.entries import ServiceResolutionEntry
 
             try:
-                await self._ledger.append(ServiceResolutionEntry(
-                    service_name=service_name,
-                    resolution_source=resolution_source,
-                    confidence=confidence,
-                    operations_count=operations_count,
-                    entities_count=entities_count,
-                ))
+                await self._ledger.append(
+                    ServiceResolutionEntry(
+                        service_name=service_name,
+                        resolution_source=resolution_source,
+                        confidence=confidence,
+                        operations_count=operations_count,
+                        entities_count=entities_count,
+                    )
+                )
             except Exception:
                 pass
 
         if self._bus:
+            from datetime import UTC, datetime
+
             from volnix.core.events import WorldEvent
             from volnix.core.types import ActorId, ServiceId, Timestamp
-            from datetime import UTC, datetime
 
             now = datetime.now(UTC)
             try:
-                await self._bus.publish(WorldEvent(
-                    event_type="world.service_resolved",
-                    timestamp=Timestamp(
-                        world_time=now, wall_time=now, tick=0,
-                    ),
-                    actor_id=ActorId("world_compiler"),
-                    service_id=ServiceId(service_name),
-                    action="resolve_service",
-                    input_data={
-                        "resolution_source": resolution_source,
-                        "confidence": confidence,
-                        "operations": operations_count,
-                    },
-                ))
+                await self._bus.publish(
+                    WorldEvent(
+                        event_type="world.service_resolved",
+                        timestamp=Timestamp(
+                            world_time=now,
+                            wall_time=now,
+                            tick=0,
+                        ),
+                        actor_id=ActorId("world_compiler"),
+                        service_id=ServiceId(service_name),
+                        action="resolve_service",
+                        input_data={
+                            "resolution_source": resolution_source,
+                            "confidence": confidence,
+                            "operations": operations_count,
+                        },
+                    )
+                )
             except Exception:
                 pass

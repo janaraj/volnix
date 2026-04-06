@@ -1,4 +1,5 @@
 """Tests for volnix.runs.comparison — run-to-run comparison and scoring."""
+
 import pytest
 
 from volnix.core.types import RunId
@@ -13,12 +14,16 @@ def _make_comparator(tmp_path) -> tuple[RunComparator, ArtifactStore]:
 
 
 async def _seed_run(
-    store: ArtifactStore, run_id: str, scorecard: dict,
-    events: list, report: dict | None = None,
+    store: ArtifactStore,
+    run_id: str,
+    scorecard: dict,
+    events: list,
+    report: dict | None = None,
 ):
     """Save artifacts for a run so comparator can load them."""
     import json
     from pathlib import Path
+
     rid = RunId(run_id)
     # Save metadata so labels resolve
     run_dir = Path(store._data_dir) / run_id
@@ -112,6 +117,7 @@ async def test_compare_missing_scorecard_handled(tmp_path):
     # Only seed metadata, no scorecard
     import json
     from pathlib import Path
+
     for rid in ["run_m", "run_n"]:
         run_dir = Path(store._data_dir) / rid
         run_dir.mkdir(parents=True, exist_ok=True)

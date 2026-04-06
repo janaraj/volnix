@@ -6,7 +6,8 @@ with optional LLM-assisted retry for correctable validation failures.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from volnix.core.context import ResponseProposal
 from volnix.core.protocols import StateEngineProtocol
@@ -77,11 +78,7 @@ class ValidationPipeline:
                 # If the delta has a "status" field and previous "status",
                 # validate the transition
                 new_status = delta.fields.get("status")
-                prev_status = (
-                    delta.previous_fields.get("status")
-                    if delta.previous_fields
-                    else None
-                )
+                prev_status = delta.previous_fields.get("status") if delta.previous_fields else None
                 if new_status is not None and prev_status is not None:
                     sm_result = self._state_machine_validator.validate_transition(
                         prev_status, new_status, sm
@@ -93,11 +90,15 @@ class ValidationPipeline:
                     for targets in sm.get("transitions", {}).values():
                         all_states.update(targets)
                     if all_states and new_status not in all_states:
-                        result = result.merge(ValidationResult(
-                            valid=False,
-                            errors=[f"Initial state '{new_status}' is not defined in the state machine"],
-                            validation_type=ValidationType.STATE_MACHINE,
-                        ))
+                        result = result.merge(
+                            ValidationResult(
+                                valid=False,
+                                errors=[
+                                    f"Initial state '{new_status}' is not defined in the state machine"
+                                ],
+                                validation_type=ValidationType.STATE_MACHINE,
+                            )
+                        )
 
         # 3. Consistency validation on deltas
         if entity_schemas is not None:
@@ -123,9 +124,7 @@ class ValidationPipeline:
             refund = delta.fields.get("refund_amount")
             charge = delta.fields.get("charge_amount")
             if refund is not None and charge is not None:
-                ref_result = self._amount_validator.validate_refund_amount(
-                    refund, charge
-                )
+                ref_result = self._amount_validator.validate_refund_amount(refund, charge)
                 result = result.merge(ref_result)
 
         return result
@@ -161,7 +160,11 @@ class ValidationPipeline:
             A tuple of the (possibly corrected) proposal and its validation result.
         """
         hard_cap = 10
-        effective_retries = min(max_retries, hard_cap) if max_retries is not None else min(self._config.max_retries, hard_cap)
+        effective_retries = (
+            min(max_retries, hard_cap)
+            if max_retries is not None
+            else min(self._config.max_retries, hard_cap)
+        )
         current_proposal = proposal
 
         result = await self.validate_response_proposal(

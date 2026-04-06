@@ -1,4 +1,5 @@
 """Tests for volnix.sdk public entry points."""
+
 from __future__ import annotations
 
 import httpx
@@ -6,9 +7,7 @@ import httpx
 
 async def test_get_tools_default_format(test_adapter, transport):
     """GET /api/v1/tools returns tool list."""
-    async with httpx.AsyncClient(
-        transport=transport, base_url="http://test"
-    ) as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/v1/tools")
 
     assert resp.status_code == 200
@@ -20,12 +19,8 @@ async def test_get_tools_default_format(test_adapter, transport):
 async def test_get_tools_openai_format(test_adapter, mock_gateway):
     """GET /api/v1/tools?format=openai calls gateway with openai protocol."""
     transport = httpx.ASGITransport(app=test_adapter.fastapi_app)
-    async with httpx.AsyncClient(
-        transport=transport, base_url="http://test"
-    ) as client:
-        resp = await client.get(
-            "/api/v1/tools", params={"format": "openai"}
-        )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/v1/tools", params={"format": "openai"})
 
     assert resp.status_code == 200
     # Verify gateway was called with the right protocol
@@ -34,9 +29,7 @@ async def test_get_tools_openai_format(test_adapter, mock_gateway):
 
 async def test_execute_tool_via_http(test_adapter, transport):
     """POST /api/v1/actions/{tool} executes tool."""
-    async with httpx.AsyncClient(
-        transport=transport, base_url="http://test"
-    ) as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/v1/actions/email_send",
             json={

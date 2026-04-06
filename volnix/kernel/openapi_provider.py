@@ -4,6 +4,7 @@ Parses OpenAPI 3.x specs (YAML or JSON) into structured service information.
 Accepts file paths or URLs. OpenAPI 3.x only. Swagger 2.x is not currently
 supported.
 """
+
 import json
 import logging
 from pathlib import Path
@@ -86,17 +87,21 @@ class OpenAPIProvider:
                     op_id = details.get("operationId", f"{method}_{path_str}")
                     merged_params = path_params + details.get("parameters", [])
                     params, required = self._extract_parameters(
-                        spec, details, merged_params,
+                        spec,
+                        details,
+                        merged_params,
                     )
-                    operations.append({
-                        "name": op_id,
-                        "description": details.get("summary", ""),
-                        "http_method": method.upper(),
-                        "http_path": path_str,
-                        "parameters": params,
-                        "required_params": required,
-                        "response_schema": self._extract_response(spec, details),
-                    })
+                    operations.append(
+                        {
+                            "name": op_id,
+                            "description": details.get("summary", ""),
+                            "http_method": method.upper(),
+                            "http_path": path_str,
+                            "parameters": params,
+                            "required_params": required,
+                            "response_schema": self._extract_response(spec, details),
+                        }
+                    )
 
         return {
             "source": "openapi",

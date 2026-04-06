@@ -74,6 +74,7 @@ class FileResolver:
     async def async_resolve(self, ref: str) -> str | None:
         """Async version of resolve that doesn't block the event loop."""
         import asyncio
+
         return await asyncio.to_thread(self.resolve, ref)
 
 
@@ -105,4 +106,5 @@ class ChainResolver:
     async def async_resolve(self, ref: str) -> str | None:
         """Async version of resolve that doesn't block the event loop."""
         import asyncio
+
         return await asyncio.to_thread(self.resolve, ref)

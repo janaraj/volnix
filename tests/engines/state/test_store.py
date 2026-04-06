@@ -1,8 +1,9 @@
 """Tests for volnix.engines.state.store -- EntityStore CRUD operations."""
+
 import pytest
+
+from volnix.core.errors import EntityNotFoundError, StateError
 from volnix.core.types import EntityId
-from volnix.core.errors import StateError, EntityNotFoundError
-from volnix.engines.state.store import EntityStore
 
 
 async def test_create_and_read(store):

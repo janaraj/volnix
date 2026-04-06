@@ -7,6 +7,7 @@ To add a new agent target:
 1. Add a function here matching the target name
 2. Register it in EXPORT_REGISTRY at the bottom
 """
+
 from __future__ import annotations
 
 import json
@@ -15,36 +16,45 @@ from typing import Any
 
 def claude_desktop(url: str, tools: list[dict[str, Any]]) -> str:
     """Claude Desktop MCP server config (claude_desktop_config.json)."""
-    return json.dumps({
-        "mcpServers": {
-            "volnix": {
-                "url": f"{url}/mcp",
-                "transport": "streamable-http",
+    return json.dumps(
+        {
+            "mcpServers": {
+                "volnix": {
+                    "url": f"{url}/mcp",
+                    "transport": "streamable-http",
+                }
             }
-        }
-    }, indent=2)
+        },
+        indent=2,
+    )
 
 
 def cursor(url: str, tools: list[dict[str, Any]]) -> str:
     """Cursor MCP server config (.cursor/mcp.json)."""
-    return json.dumps({
-        "mcpServers": {
-            "volnix": {
-                "url": f"{url}/mcp",
+    return json.dumps(
+        {
+            "mcpServers": {
+                "volnix": {
+                    "url": f"{url}/mcp",
+                }
             }
-        }
-    }, indent=2)
+        },
+        indent=2,
+    )
 
 
 def windsurf(url: str, tools: list[dict[str, Any]]) -> str:
     """Windsurf MCP server config."""
-    return json.dumps({
-        "mcpServers": {
-            "volnix": {
-                "serverUrl": f"{url}/mcp",
+    return json.dumps(
+        {
+            "mcpServers": {
+                "volnix": {
+                    "serverUrl": f"{url}/mcp",
+                }
             }
-        }
-    }, indent=2)
+        },
+        indent=2,
+    )
 
 
 def openai_tools(url: str, tools: list[dict[str, Any]]) -> str:
@@ -59,11 +69,14 @@ def anthropic_tools(url: str, tools: list[dict[str, Any]]) -> str:
 
 def mcp_raw(url: str, tools: list[dict[str, Any]]) -> str:
     """Raw MCP server connection info."""
-    return json.dumps({
-        "url": f"{url}/mcp",
-        "transport": "streamable-http",
-        "tools": len(tools),
-    }, indent=2)
+    return json.dumps(
+        {
+            "url": f"{url}/mcp",
+            "transport": "streamable-http",
+            "tools": len(tools),
+        },
+        indent=2,
+    )
 
 
 def env_vars(url: str, tools: list[dict[str, Any]]) -> str:
@@ -72,10 +85,7 @@ def env_vars(url: str, tools: list[dict[str, Any]]) -> str:
     M4 fix: only outputs VOLNIX_URL and MCP URL.
     Per-service API URLs (SLACK_API_URL etc.) are Phase 2 (Path 1A).
     """
-    return (
-        f"export VOLNIX_URL={url}\n"
-        f"export VOLNIX_MCP_URL={url}/mcp"
-    )
+    return f"export VOLNIX_URL={url}\nexport VOLNIX_MCP_URL={url}/mcp"
 
 
 def python_sdk(url: str, tools: list[dict[str, Any]]) -> str:

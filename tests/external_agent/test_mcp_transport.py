@@ -9,10 +9,10 @@ MCP server:
 No LLM required — uses mock gateway with realistic responses.
 Tests run in-process (no subprocess) for speed and reliability.
 """
+
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

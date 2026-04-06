@@ -1,4 +1,5 @@
 """Tests for FeedbackEngine -- integration of all feedback components."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -9,9 +10,7 @@ from volnix.core.types import ActorId, Timestamp, ToolName
 from volnix.engines.feedback.engine import FeedbackEngine
 
 
-def _make_gap_event(
-    actor: str = "agent-1", tool: str = "jira_create_issue"
-) -> CapabilityGapEvent:
+def _make_gap_event(actor: str = "agent-1", tool: str = "jira_create_issue") -> CapabilityGapEvent:
     now = datetime.now(UTC)
     return CapabilityGapEvent(
         event_type="capability.gap",
@@ -21,9 +20,7 @@ def _make_gap_event(
     )
 
 
-async def test_engine_initializes(
-    annotation_db, mock_event_bus, mock_ledger
-):
+async def test_engine_initializes(annotation_db, mock_event_bus, mock_ledger):
     """FeedbackEngine lazy-initializes when deps are in _config."""
     engine = FeedbackEngine()
 
@@ -51,9 +48,7 @@ async def test_engine_initializes(
     assert engine._promoter is not None
 
 
-async def test_auto_annotate_capability_gap(
-    annotation_db, mock_event_bus, mock_ledger
-):
+async def test_auto_annotate_capability_gap(annotation_db, mock_event_bus, mock_ledger):
     """Capability gap events are auto-annotated when configured."""
     engine = FeedbackEngine()
 
@@ -89,9 +84,7 @@ async def test_auto_annotate_capability_gap(
     assert "jira_create_issue" in annotations[0]["text"]
 
 
-async def test_add_annotation_records_ledger(
-    annotation_db, mock_event_bus, mock_ledger
-):
+async def test_add_annotation_records_ledger(annotation_db, mock_event_bus, mock_ledger):
     """Adding an annotation records a typed ledger entry."""
     engine = FeedbackEngine()
 
@@ -112,9 +105,7 @@ async def test_add_annotation_records_ledger(
     await engine.initialize(config, mock_event_bus)
     engine._ledger = mock_ledger
 
-    seq = await engine.add_annotation(
-        "stripe", "Refunds >180 days fail", "user"
-    )
+    seq = await engine.add_annotation("stripe", "Refunds >180 days fail", "user")
     assert seq >= 1
 
     # C2 fix: typed entry, not generic LedgerEntry

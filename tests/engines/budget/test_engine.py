@@ -1,15 +1,16 @@
 """Tests for the BudgetEngine — real budget tracking and enforcement."""
+
 import pytest
 
+from volnix.actors.definition import ActorDefinition
+from volnix.actors.registry import ActorRegistry
 from volnix.core.context import ActionContext
-from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
 from volnix.core.events import (
     BudgetDeductionEvent,
     BudgetExhaustedEvent,
     BudgetWarningEvent,
 )
-from volnix.actors.definition import ActorDefinition
-from volnix.actors.registry import ActorRegistry
+from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
 from volnix.engines.budget.engine import BudgetEngine
 
 
@@ -354,7 +355,8 @@ class TestSpendUsdBudget:
         assert result.verdict == StepVerdict.ALLOW
 
         spend_events = [
-            e for e in result.events
+            e
+            for e in result.events
             if isinstance(e, BudgetDeductionEvent) and e.budget_type == "spend_usd"
         ]
         assert len(spend_events) == 1

@@ -8,7 +8,7 @@ from the actor's YAML-defined permissions — no hardcoded conditions.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from volnix.core import (
@@ -17,7 +17,6 @@ from volnix.core import (
     BaseEngine,
     EntityId,
     Event,
-    PipelineStep,
     StepResult,
     StepVerdict,
     WorldMode,
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def _now_timestamp() -> Timestamp:
     """Create a Timestamp for the current moment."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -50,6 +49,7 @@ class PermissionEngine(BaseEngine):
         self._pack_registry: Any = None
         self._world_mode: str = "governed"
         from volnix.engines.permission.config import PermissionConfig
+
         self._typed_config: PermissionConfig = PermissionConfig()
 
     # -- PipelineStep interface ------------------------------------------------
@@ -72,7 +72,8 @@ class PermissionEngine(BaseEngine):
         actor = self._get_actor(ctx.actor_id)
         logger.debug(
             "Permission check: actor_id=%s, found=%s",
-            ctx.actor_id, actor is not None,
+            ctx.actor_id,
+            actor is not None,
         )
         if actor is None:
             if self._is_ungoverned() or self._actor_registry is None:
@@ -236,7 +237,9 @@ class PermissionEngine(BaseEngine):
         return await self.execute(ctx)
 
     async def get_visible_entities(
-        self, actor_id: ActorId, entity_type: str,
+        self,
+        actor_id: ActorId,
+        entity_type: str,
     ) -> list[EntityId]:
         """Return entity IDs visible to the given actor.
 
@@ -257,7 +260,8 @@ class PermissionEngine(BaseEngine):
         rule_entity_type = self._typed_config.visibility_rule_entity_type
         try:
             rules = await state_engine.query_entities(
-                rule_entity_type, {"actor_role": actor.role},
+                rule_entity_type,
+                {"actor_role": actor.role},
             )
         except Exception:
             return []
@@ -265,10 +269,7 @@ class PermissionEngine(BaseEngine):
         if not rules:
             return []
 
-        applicable = [
-            r for r in rules
-            if r.get("target_entity_type") in (entity_type, "*")
-        ]
+        applicable = [r for r in rules if r.get("target_entity_type") in (entity_type, "*")]
         if not applicable:
             return []
 
@@ -281,17 +282,14 @@ class PermissionEngine(BaseEngine):
             if filter_field is None:
                 # No filter = see all entities of this type
                 entities = await state_engine.query_entities(entity_type)
-                visible_ids.extend(
-                    EntityId(e.get("id", "")) for e in entities if e.get("id")
-                )
+                visible_ids.extend(EntityId(e.get("id", "")) for e in entities if e.get("id"))
             else:
                 resolved = self._resolve_self_ref(filter_value, actor_id)
                 entities = await state_engine.query_entities(
-                    entity_type, {filter_field: resolved},
+                    entity_type,
+                    {filter_field: resolved},
                 )
-                visible_ids.extend(
-                    EntityId(e.get("id", "")) for e in entities if e.get("id")
-                )
+                visible_ids.extend(EntityId(e.get("id", "")) for e in entities if e.get("id"))
 
                 if include_unmatched:
                     all_ents = await state_engine.query_entities(entity_type)
@@ -304,7 +302,9 @@ class PermissionEngine(BaseEngine):
         return visible_ids
 
     async def has_visibility_rules(
-        self, actor_id: ActorId, entity_type: str,
+        self,
+        actor_id: ActorId,
+        entity_type: str,
     ) -> bool:
         """Check if visibility rules exist for this actor and entity type."""
         state_engine = self._dependencies.get("state")
@@ -317,15 +317,13 @@ class PermissionEngine(BaseEngine):
         rule_entity_type = self._typed_config.visibility_rule_entity_type
         try:
             rules = await state_engine.query_entities(
-                rule_entity_type, {"actor_role": actor.role},
+                rule_entity_type,
+                {"actor_role": actor.role},
             )
         except Exception:
             return False
 
-        return any(
-            r.get("target_entity_type") in (entity_type, "*")
-            for r in rules
-        )
+        return any(r.get("target_entity_type") in (entity_type, "*") for r in rules)
 
     @staticmethod
     def _resolve_self_ref(value: str | None, actor_id: ActorId) -> str:
@@ -351,10 +349,7 @@ class PermissionEngine(BaseEngine):
 
     def _is_ungoverned(self) -> bool:
         """Check if the world is in ungoverned mode."""
-        return (
-            self._world_mode == WorldMode.UNGOVERNED
-            or self._world_mode == "ungoverned"
-        )
+        return self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned"
 
     def _is_write_action(self, action: str) -> bool:
         """Determine if an action is a write operation from pack tool metadata.

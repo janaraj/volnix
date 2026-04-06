@@ -4,6 +4,7 @@ Each agent type has a known config file path. ``patch_config`` backs
 up the original, merges the Volnix config snippet, and writes it
 atomically. ``restore_config`` restores from backup.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,9 +25,7 @@ _BACKUP_SUFFIX = ".volnix-backup"
 # ---------------------------------------------------------------------------
 
 
-def _get_config_path(
-    agent: str, workspace: Path | None = None
-) -> Path | None:
+def _get_config_path(agent: str, workspace: Path | None = None) -> Path | None:
     """Return the known config file path for an agent type."""
     system = platform.system()
     ws = workspace or Path.cwd()
@@ -41,19 +40,8 @@ def _get_config_path(
                 / "claude_desktop_config.json"
             )
         if system == "Linux":
-            return (
-                Path.home()
-                / ".config"
-                / "claude"
-                / "claude_desktop_config.json"
-            )
-        return (
-            Path.home()
-            / "AppData"
-            / "Roaming"
-            / "Claude"
-            / "claude_desktop_config.json"
-        )
+            return Path.home() / ".config" / "claude" / "claude_desktop_config.json"
+        return Path.home() / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
 
     if agent == "cursor":
         return ws / ".cursor" / "mcp.json"
@@ -92,20 +80,14 @@ def patch_config(
         existing = {}
 
     # H5 fix: always backup current state
-    backup_path = config_path.with_suffix(
-        config_path.suffix + _BACKUP_SUFFIX
-    )
+    backup_path = config_path.with_suffix(config_path.suffix + _BACKUP_SUFFIX)
     if config_path.exists():
         shutil.copy2(config_path, backup_path)
         logger.info("Backed up %s to %s", config_path, backup_path)
 
     # Deep merge (one level)
     for key, value in patch.items():
-        if (
-            key in existing
-            and isinstance(existing[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in existing and isinstance(existing[key], dict) and isinstance(value, dict):
             existing[key].update(value)
         else:
             existing[key] = value
@@ -114,9 +96,7 @@ def patch_config(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps(existing, indent=2) + "\n"
     try:
-        fd, temp_path = tempfile.mkstemp(
-            dir=config_path.parent, suffix=".tmp"
-        )
+        fd, temp_path = tempfile.mkstemp(dir=config_path.parent, suffix=".tmp")
         with open(fd, "w") as f:
             f.write(content)
         Path(temp_path).rename(config_path)
@@ -128,9 +108,7 @@ def patch_config(
 
 def restore_config(config_path: Path) -> bool:
     """Restore config from backup. Returns True if restored."""
-    backup_path = config_path.with_suffix(
-        config_path.suffix + _BACKUP_SUFFIX
-    )
+    backup_path = config_path.with_suffix(config_path.suffix + _BACKUP_SUFFIX)
     if not backup_path.exists():
         return False
 

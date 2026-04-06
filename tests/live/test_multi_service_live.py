@@ -10,11 +10,8 @@ Requires: codex-acp binary available (uses volnix.toml routing)
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
-
-from volnix.core.types import RunId
 
 
 @pytest.fixture
@@ -22,6 +19,7 @@ async def live_app_with_codex(tmp_path):
     """VolnixApp with REAL codex-acp LLM — uses volnix.toml config."""
     # Check codex-acp is available
     import shutil
+
     if not shutil.which("codex-acp"):
         pytest.skip("codex-acp not found — skipping live test")
 
@@ -32,13 +30,15 @@ async def live_app_with_codex(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -171,9 +171,7 @@ class TestMultiServiceLiveWorld:
 
         result = await compiler.generate_world(plan)
 
-        entity_summary = {
-            etype: len(elist) for etype, elist in result["entities"].items()
-        }
+        entity_summary = {etype: len(elist) for etype, elist in result["entities"].items()}
         total_entities = sum(entity_summary.values())
         print(f"  Generated entities: {json.dumps(entity_summary, indent=4)}")
         print(f"  Total: {total_entities} entities")
@@ -191,7 +189,9 @@ class TestMultiServiceLiveWorld:
             if elist:
                 sample = elist[0]
                 fields = list(sample.keys())[:5]
-                print(f"\n  Sample {etype}: {json.dumps({k: sample.get(k) for k in fields}, default=str)}")
+                print(
+                    f"\n  Sample {etype}: {json.dumps({k: sample.get(k) for k in fields}, default=str)}"
+                )
 
         # ────────────────────────────────────────────────────
         # STEP 3: Configure governance + animator
@@ -214,9 +214,7 @@ class TestMultiServiceLiveWorld:
 
         # Use compiled actor IDs (not raw role strings)
         actors = result["actors"]
-        agent_actor = next(
-            (a for a in actors if a.role == "support-agent"), actors[0]
-        )
+        agent_actor = next((a for a in actors if a.role == "support-agent"), actors[0])
         agent_id = str(agent_actor.id)
         print(f"  Using actor: {agent_id} (role={agent_actor.role})")
 
@@ -282,7 +280,9 @@ class TestMultiServiceLiveWorld:
                     "assignee_id": "support-agent",
                 },
             )
-            print(f"  Action 4 (tickets.update): {json.dumps(action4, indent=4, default=str)[:200]}")
+            print(
+                f"  Action 4 (tickets.update): {json.dumps(action4, indent=4, default=str)[:200]}"
+            )
 
         # ────────────────────────────────────────────────────
         # STEP 5: Tick the animator (dynamic mode events)
@@ -294,6 +294,7 @@ class TestMultiServiceLiveWorld:
         animator = app.registry.get("animator")
         try:
             from datetime import UTC, datetime
+
             events = await animator.tick(datetime.now(UTC))
             print(f"  Animator generated {len(events) if events else 0} events")
             if events:
@@ -337,7 +338,7 @@ class TestMultiServiceLiveWorld:
         print(f"  Report keys: {list(report.keys()) if isinstance(report, dict) else 'N/A'}")
         if isinstance(scorecard, dict):
             collective = scorecard.get("collective", {})
-            print(f"  Scorecard (collective):")
+            print("  Scorecard (collective):")
             for metric, value in collective.items():
                 print(f"    {metric}: {value}")
 

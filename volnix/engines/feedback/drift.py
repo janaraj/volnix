@@ -8,6 +8,7 @@ To add a new source (e.g., MCP manifest):
 1. Create a class implementing ``DriftSource``
 2. Register it in ``DRIFT_SOURCE_REGISTRY``
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,9 +54,7 @@ class DriftSource(Protocol):
 
     source_name: str
 
-    async def check(
-        self, profile: ServiceProfileData
-    ) -> DriftReport | None:
+    async def check(self, profile: ServiceProfileData) -> DriftReport | None:
         """Check for drift. Return report if found, None if in sync."""
         ...
 
@@ -71,9 +70,7 @@ class ContextHubDriftSource:
     def __init__(self, provider: Any) -> None:
         self._provider = provider
 
-    async def check(
-        self, profile: ServiceProfileData
-    ) -> DriftReport | None:
+    async def check(self, profile: ServiceProfileData) -> DriftReport | None:
         """Fetch latest Context Hub docs and compare operations."""
         if self._provider is None:
             return None
@@ -127,9 +124,7 @@ class OpenAPIDriftSource:
     def __init__(self, provider: Any) -> None:
         self._provider = provider
 
-    async def check(
-        self, profile: ServiceProfileData
-    ) -> DriftReport | None:
+    async def check(self, profile: ServiceProfileData) -> DriftReport | None:
         """Fetch OpenAPI spec and compare version + operations."""
         if self._provider is None:
             return None
@@ -141,18 +136,11 @@ class OpenAPIDriftSource:
             return None
 
         external_version = spec.get("version", "")
-        external_op_names = {
-            op.get("name", "") for op in spec.get("operations", [])
-        }
+        external_op_names = {op.get("name", "") for op in spec.get("operations", [])}
         profile_op_names = {op.name for op in profile.operations}
 
-        added, removed = _diff_operations(
-            profile_op_names, external_op_names
-        )
-        version_changed = (
-            bool(external_version)
-            and external_version != profile.version
-        )
+        added, removed = _diff_operations(profile_op_names, external_op_names)
+        version_changed = bool(external_version) and external_version != profile.version
 
         has_drift = bool(added or removed or version_changed)
         if not has_drift:
@@ -160,9 +148,7 @@ class OpenAPIDriftSource:
 
         summary_parts = []
         if version_changed:
-            summary_parts.append(
-                f"version {profile.version} → {external_version}"
-            )
+            summary_parts.append(f"version {profile.version} → {external_version}")
         if added:
             summary_parts.append(f"{len(added)} new ops")
         if removed:
@@ -217,9 +203,7 @@ class DriftDetector:
             if provider is not None:
                 self._sources.append(source_cls(provider))
 
-    async def check(
-        self, profile: ServiceProfileData
-    ) -> list[DriftReport]:
+    async def check(self, profile: ServiceProfileData) -> list[DriftReport]:
         """Check profile against ALL registered sources.
 
         Returns list of DriftReports (one per source that found drift).
@@ -263,9 +247,7 @@ def _extract_operations_from_markdown(content: str) -> set[str]:
     return ops
 
 
-def _diff_operations(
-    profile_ops: set[str], external_ops: set[str]
-) -> tuple[list[str], list[str]]:
+def _diff_operations(profile_ops: set[str], external_ops: set[str]) -> tuple[list[str], list[str]]:
     """Return (added, removed) operation names.
 
     added = in external but not in profile

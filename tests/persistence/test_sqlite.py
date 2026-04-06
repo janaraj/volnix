@@ -1,5 +1,7 @@
 """Tests for volnix.persistence.sqlite — SQLite adapter operations."""
+
 import pytest
+
 from volnix.persistence.sqlite import SQLiteDatabase
 
 

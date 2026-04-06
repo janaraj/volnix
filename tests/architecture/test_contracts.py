@@ -22,7 +22,6 @@ from volnix.packs.runtime import PackRuntime
 from volnix.persistence.config import PersistenceConfig
 from volnix.persistence.snapshot import SnapshotStore
 from volnix.persistence.sqlite import SQLiteDatabase
-from tests.helpers.guardrails import staged_guardrail
 
 pytestmark = [pytest.mark.architecture, pytest.mark.contract]
 

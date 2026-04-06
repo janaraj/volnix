@@ -6,21 +6,18 @@ Covers: one-shot events, recurring events, trigger events,
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from volnix.scheduling.scheduler import (
     WorldScheduler,
-    ScheduledEvent,
-    RecurringEvent,
-    TriggerEvent,
 )
 
 
 def _utc(year=2026, month=3, day=22, hour=12, minute=0, second=0):
     """Create a UTC datetime for testing."""
-    return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+    return datetime(year, month, day, hour, minute, second, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +190,7 @@ async def test_trigger_fires_when_condition_met():
 
     # With a mock state_engine (triggers need state_engine to evaluate)
     from unittest.mock import AsyncMock
+
     state_engine = AsyncMock()
 
     due = await scheduler.get_due_events(t, state_engine=state_engine)

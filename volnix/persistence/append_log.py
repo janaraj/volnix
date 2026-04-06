@@ -1,4 +1,5 @@
 """Append-only log backed by SQLite. Shared by bus event log and ledger audit log."""
+
 from __future__ import annotations
 
 import re
@@ -170,7 +171,5 @@ class AppendOnlyLog:
         Returns:
             The maximum sequence ID, or ``0`` when the table is empty.
         """
-        row = await self._db.fetchone(
-            f"SELECT MAX(sequence_id) as seq FROM {self._table}"
-        )
+        row = await self._db.fetchone(f"SELECT MAX(sequence_id) as seq FROM {self._table}")
         return row["seq"] if row and row["seq"] is not None else 0

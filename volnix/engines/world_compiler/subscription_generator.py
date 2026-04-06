@@ -162,11 +162,13 @@ class SubscriptionGenerator:
         Returns a list of Subscription objects validated against known services.
         """
         context_vars = self._build_context_vars(world_plan)
-        context_vars.update({
-            "actor_role": actor_spec.get("role", "unknown"),
-            "actor_persona": str(actor_spec.get("personality", "")),
-            "actor_type": actor_spec.get("type", "internal"),
-        })
+        context_vars.update(
+            {
+                "actor_role": actor_spec.get("role", "unknown"),
+                "actor_persona": str(actor_spec.get("personality", "")),
+                "actor_type": actor_spec.get("type", "internal"),
+            }
+        )
 
         response = await SUBSCRIPTION_GENERATION.execute(
             self._router,
@@ -187,12 +189,14 @@ class SubscriptionGenerator:
         """
         context_vars = self._build_context_vars(world_plan)
         is_lead = actor_spec.get("lead", False) or actor_spec.get("is_lead", False)
-        context_vars.update({
-            "actor_role": actor_spec.get("role", "unknown"),
-            "actor_persona": str(actor_spec.get("personality", "")),
-            "actor_type": actor_spec.get("type", "internal"),
-            "is_lead": str(is_lead),
-        })
+        context_vars.update(
+            {
+                "actor_role": actor_spec.get("role", "unknown"),
+                "actor_persona": str(actor_spec.get("personality", "")),
+                "actor_type": actor_spec.get("type", "internal"),
+                "is_lead": str(is_lead),
+            }
+        )
 
         response = await PERIODIC_CHECK_GENERATION.execute(
             self._router,
@@ -267,8 +271,7 @@ class SubscriptionGenerator:
             # Validate service_id exists in the plan
             if service_id not in known_services:
                 logger.warning(
-                    "Skipping subscription for unknown service '%s' "
-                    "(known: %s)",
+                    "Skipping subscription for unknown service '%s' (known: %s)",
                     service_id,
                     known_services,
                 )

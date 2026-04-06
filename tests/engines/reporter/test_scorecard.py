@@ -1,7 +1,7 @@
 """Tests for ScorecardComputer -- per-actor and aggregate metrics."""
+
 import pytest
 
-from volnix.engines.reporter.scorecard import ScorecardComputer
 from tests.engines.reporter.conftest import (
     make_budget_exhausted,
     make_budget_warning,
@@ -10,8 +10,8 @@ from tests.engines.reporter.conftest import (
     make_policy_escalate,
     make_policy_hold,
     make_world_event,
-    make_animator_event,
 )
+from volnix.engines.reporter.scorecard import ScorecardComputer
 
 
 @pytest.fixture
@@ -81,9 +81,7 @@ async def test_per_actor_has_correct_metrics(computer, actors):
     }
     for actor_id, scores in result["per_actor"].items():
         flat_keys = {k for k in scores.keys() if k != "scores"}
-        assert flat_keys == expected_metrics, (
-            f"Actor {actor_id} has wrong metrics: {flat_keys}"
-        )
+        assert flat_keys == expected_metrics, f"Actor {actor_id} has wrong metrics: {flat_keys}"
         # Structured scores list should also be present
         assert "scores" in scores
         assert len(scores["scores"]) == len(expected_metrics)

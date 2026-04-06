@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.architecture.helpers import assert_method_signature_matches_protocol
 from volnix.core.protocols import (
     AdapterProtocol,
     BudgetEngineProtocol,
@@ -19,8 +20,6 @@ from volnix.engines.policy.engine import PolicyEngine
 from volnix.engines.state.engine import StateEngine
 from volnix.gateway.gateway import Gateway
 from volnix.validation.consistency import ConsistencyValidator
-from tests.architecture.helpers import assert_method_signature_matches_protocol
-from tests.helpers.guardrails import staged_guardrail
 
 pytestmark = [pytest.mark.architecture, pytest.mark.contract]
 

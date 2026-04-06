@@ -18,6 +18,7 @@ This test:
 Run with:
     source .env && pytest tests/live/test_full_simulation.py -v -s
 """
+
 from __future__ import annotations
 
 import json
@@ -86,29 +87,44 @@ class TestFullSimulation:
         actions = []
 
         # Action 1: Send email
-        r1 = await live_app.handle_action("agent-1", "email", "email_send", {
-            "from_addr": "agent@acme.com",
-            "to_addr": "customer1@acme.com",
-            "subject": "Re: Your support ticket #1234",
-            "body": "Hi, we've looked into your issue and found a solution. "
-                    "Please try clearing your cache and restarting the app.",
-        })
+        r1 = await live_app.handle_action(
+            "agent-1",
+            "email",
+            "email_send",
+            {
+                "from_addr": "agent@acme.com",
+                "to_addr": "customer1@acme.com",
+                "subject": "Re: Your support ticket #1234",
+                "body": "Hi, we've looked into your issue and found a solution. "
+                "Please try clearing your cache and restarting the app.",
+            },
+        )
         actions.append(("email_send", r1))
         print(f"  Action 1 - email_send: {json.dumps(r1, indent=4, default=str)[:200]}")
 
         # Action 2: Read email
         email_id = r1.get("email_id", "")
         if email_id:
-            r2 = await live_app.handle_action("agent-1", "email", "email_read", {
-                "email_id": email_id,
-            })
+            r2 = await live_app.handle_action(
+                "agent-1",
+                "email",
+                "email_read",
+                {
+                    "email_id": email_id,
+                },
+            )
             actions.append(("email_read", r2))
             print(f"\n  Action 2 - email_read: {json.dumps(r2, indent=4, default=str)[:200]}")
 
         # Action 3: List inbox
-        r3 = await live_app.handle_action("agent-1", "email", "email_list", {
-            "mailbox_id": "inbox",
-        })
+        r3 = await live_app.handle_action(
+            "agent-1",
+            "email",
+            "email_list",
+            {
+                "mailbox_id": "inbox",
+            },
+        )
         actions.append(("email_list", r3))
         email_count = len(r3.get("emails", []))
         print(f"\n  Action 3 - email_list: {email_count} emails in inbox")
@@ -127,7 +143,7 @@ class TestFullSimulation:
         emails = await state.query_entities("email")
         sent_emails = [e for e in emails if e.get("subject", "").startswith("Re: Your support")]
         if sent_emails:
-            print(f"\n  Our sent email found in state:")
+            print("\n  Our sent email found in state:")
             print(f"    {json.dumps(sent_emails[0], indent=4, default=str)[:300]}")
 
         # ── PHASE 5: REPORT ──────────────────────────────────────

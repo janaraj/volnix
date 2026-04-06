@@ -5,6 +5,7 @@ SQLite-backed persistence to verify end-to-end pipeline behaviour.
 """
 
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,15 +21,11 @@ from volnix.core.types import (
     Timestamp,
 )
 from volnix.ledger.config import LedgerConfig
-from volnix.ledger.entries import PipelineStepEntry
 from volnix.ledger.ledger import Ledger
 from volnix.ledger.query import LedgerQuery
 from volnix.persistence.sqlite import SQLiteDatabase
 from volnix.pipeline.dag import PipelineDAG
 from volnix.pipeline.side_effects import SideEffectProcessor
-
-from datetime import datetime, timezone
-
 
 # ---------------------------------------------------------------------------
 # Mock helpers
@@ -91,7 +88,7 @@ def _make_ctx(**kwargs):
 
 
 def _make_timestamp():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=1)
 
 

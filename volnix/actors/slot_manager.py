@@ -90,13 +90,15 @@ class SlotManager:
             if budget and hasattr(budget, "model_dump"):
                 budget = budget.model_dump()
 
-            slots.append(SlotInfo(
-                actor_id=str(actor.id),
-                role=getattr(actor, "role", ""),
-                permissions=perms if isinstance(perms, dict) else {},
-                budget=budget if isinstance(budget, dict) else None,
-                status="claimed" if self._binding.is_slot_claimed(actor.id) else "available",
-            ))
+            slots.append(
+                SlotInfo(
+                    actor_id=str(actor.id),
+                    role=getattr(actor, "role", ""),
+                    permissions=perms if isinstance(perms, dict) else {},
+                    budget=budget if isinstance(budget, dict) else None,
+                    status="claimed" if self._binding.is_slot_claimed(actor.id) else "available",
+                )
+            )
         return slots
 
     def register(
@@ -139,7 +141,9 @@ class SlotManager:
 
         logger.info(
             "Agent '%s' registered as %s (token: %s...)",
-            agent_name, actor_id, token[:12],
+            agent_name,
+            actor_id,
+            token[:12],
         )
 
         return RegistrationResult(
@@ -207,7 +211,8 @@ class SlotManager:
         return "http-agent"
 
     def register_from_profile(
-        self, definitions: list[ActorDefinition],
+        self,
+        definitions: list[ActorDefinition],
     ) -> int:
         """Register external agent definitions from a loaded profile.
 
@@ -226,7 +231,8 @@ class SlotManager:
                 count += 1
                 logger.info(
                     "Registered agent profile: %s (role=%s)",
-                    actor_def.id, actor_def.role,
+                    actor_def.id,
+                    actor_def.role,
                 )
         return count
 
@@ -246,6 +252,7 @@ class SlotManager:
             return None
 
         from volnix.actors.profile import make_default_agent
+
         actor_def = make_default_agent(
             agent_name=agent_name,
             default_permissions=self._config.default_permissions,

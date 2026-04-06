@@ -125,8 +125,6 @@ class ConsistencyValidator:
         except (EntityNotFoundError, KeyError):
             return ValidationResult(
                 valid=False,
-                errors=[
-                    f"Entity '{entity_id}' of type '{entity_type}' not found"
-                ],
+                errors=[f"Entity '{entity_id}' of type '{entity_type}' not found"],
                 validation_type=ValidationType.CONSISTENCY,
             )

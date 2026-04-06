@@ -1,6 +1,8 @@
 """Tests for volnix.runs.manager — run lifecycle management."""
-import pytest
+
 from unittest.mock import AsyncMock
+
+import pytest
 
 from volnix.core.types import RunId
 from volnix.runs.config import RunConfig
@@ -24,7 +26,9 @@ async def test_create_run_returns_run_id(tmp_path):
 async def test_create_run_with_tag(tmp_path):
     mgr = _make_manager(tmp_path)
     run_id = await mgr.create_run(
-        world_def={}, config_snapshot={}, tag="gov",
+        world_def={},
+        config_snapshot={},
+        tag="gov",
     )
     run = await mgr.get_run(RunId("gov"))
     assert run is not None

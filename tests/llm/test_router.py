@@ -10,7 +10,7 @@ from volnix.llm.providers.mock import MockLLMProvider
 from volnix.llm.registry import ProviderRegistry
 from volnix.llm.router import LLMRouter
 from volnix.llm.tracker import UsageTracker
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.types import LLMRequest, LLMResponse, ProviderInfo
 
 
 def _make_router(

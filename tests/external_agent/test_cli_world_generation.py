@@ -8,10 +8,8 @@ Tests three NL-to-world entry points:
 These tests require an LLM provider configured. They are skipped
 automatically if no provider is available.
 """
-from __future__ import annotations
 
-import shutil
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 from typer.testing import CliRunner
@@ -22,6 +20,7 @@ runner = CliRunner()
 def _has_llm_provider() -> bool:
     """Check if live API tests are explicitly enabled."""
     import os
+
     return os.environ.get("VOLNIX_RUN_REAL_API_TESTS", "").lower() in ("1", "true", "yes")
 
 
@@ -45,8 +44,10 @@ class TestCreateAndServe:
             [
                 "create",
                 "Support team with email and ticket management for 5 customers",
-                "--reality", "messy",
-                "--output", str(output_path),
+                "--reality",
+                "messy",
+                "--output",
+                str(output_path),
             ],
         )
 
@@ -74,7 +75,8 @@ class TestCreateAndServe:
             [
                 "create",
                 "Email service with 3 customer support agents",
-                "--output", str(output_path),
+                "--output",
+                str(output_path),
             ],
         )
 
@@ -109,8 +111,10 @@ class TestRunWithServe:
             # Plan should have resolved services
             assert len(plan.services) >= 2
             service_names = set(plan.services.keys())
-            assert "gmail" in service_names or "email" in service_names or any(
-                "mail" in s for s in service_names
+            assert (
+                "gmail" in service_names
+                or "email" in service_names
+                or any("mail" in s for s in service_names)
             )
 
 

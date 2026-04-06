@@ -30,10 +30,7 @@ class AmountValidator:
         if refund_amount > charge_amount:
             return ValidationResult(
                 valid=False,
-                errors=[
-                    f"Refund amount {refund_amount} exceeds "
-                    f"charge amount {charge_amount}"
-                ],
+                errors=[f"Refund amount {refund_amount} exceeds charge amount {charge_amount}"],
                 validation_type=ValidationType.AMOUNT,
             )
         return ValidationResult(
@@ -58,10 +55,7 @@ class AmountValidator:
         if deduction > remaining + 1e-9:  # epsilon tolerance for float precision
             return ValidationResult(
                 valid=False,
-                errors=[
-                    f"Deduction {deduction} exceeds "
-                    f"remaining budget {remaining}"
-                ],
+                errors=[f"Deduction {deduction} exceeds remaining budget {remaining}"],
                 validation_type=ValidationType.AMOUNT,
             )
         return ValidationResult(
@@ -86,9 +80,7 @@ class AmountValidator:
         if value < 0:
             return ValidationResult(
                 valid=False,
-                errors=[
-                    f"Field '{field_name}' has negative value: {value}"
-                ],
+                errors=[f"Field '{field_name}' has negative value: {value}"],
                 validation_type=ValidationType.AMOUNT,
             )
         return ValidationResult(

@@ -16,7 +16,6 @@ from volnix.packs.verified.browser.state_machines import (
     WEB_SESSION_TRANSITIONS,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

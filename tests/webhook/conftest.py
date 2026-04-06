@@ -1,4 +1,5 @@
 """Test harness for webhook module."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

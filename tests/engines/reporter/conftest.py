@@ -3,37 +3,32 @@
 Provides factory functions for creating test events without needing
 a real state engine or event bus.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
-import pytest
-
-from volnix.core.types import (
-    ActorId,
-    EntityId,
-    EventId,
-    PolicyId,
-    ServiceId,
-    Timestamp,
-    ToolName,
-)
 from volnix.core.events import (
     AnimatorEvent,
     BudgetExhaustedEvent,
     BudgetWarningEvent,
     CapabilityGapEvent,
-    Event,
     PermissionDeniedEvent,
     PolicyBlockEvent,
     PolicyEscalateEvent,
     PolicyHoldEvent,
     WorldEvent,
 )
+from volnix.core.types import (
+    ActorId,
+    EntityId,
+    PolicyId,
+    ServiceId,
+    Timestamp,
+    ToolName,
+)
 
-
-_now = datetime(2026, 3, 23, 12, 0, 0, tzinfo=timezone.utc)
+_now = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)
 
 
 def make_ts(tick: int = 0) -> Timestamp:

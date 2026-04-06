@@ -11,11 +11,8 @@ Flow tested:
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
-
-import pytest
 
 from volnix.actors.state import ActorBehaviorTraits, ActorState, WaitingFor
 from volnix.core.envelope import ActionEnvelope
@@ -23,8 +20,8 @@ from volnix.core.events import WorldEvent
 from volnix.core.types import (
     ActionSource,
     ActorId,
-    EnvelopePriority,
     EntityId,
+    EnvelopePriority,
     EventId,
     ServiceId,
     Timestamp,
@@ -33,9 +30,8 @@ from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.engine import AgencyEngine
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
-from volnix.simulation.runner import SimulationRunner, SimulationStatus, StopReason
+from volnix.simulation.runner import SimulationRunner, StopReason
 from volnix.simulation.world_context import WorldContextBundle
-
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -116,7 +112,9 @@ def _mock_llm_router(response_json: dict | list | None = None):
         tool_args = {**data.get("payload", {}), "reasoning": data.get("reasoning", "")}
         return LLMResponse(
             content="",
-            provider="mock", model="mock", latency_ms=5.0,
+            provider="mock",
+            model="mock",
+            latency_ms=5.0,
             tool_calls=[ToolCall(name=tool_name, arguments=tool_args)],
         )
 
@@ -194,8 +192,10 @@ class TestFullLoopWithMockLLM:
     async def test_supervisor_activates_as_tier3(self):
         """Supervisor (high authority) should be Tier 3 individual LLM call."""
         supervisor = _make_actor_state(
-            "supervisor-001", role="supervisor",
-            watched=["tck_001"], authority=0.8,
+            "supervisor-001",
+            role="supervisor",
+            watched=["tck_001"],
+            authority=0.8,
         )
         engine = await _create_agency_engine([supervisor])
 
@@ -220,7 +220,9 @@ class TestFullLoopWithMockLLM:
         """2 customers (Tier 2) + 1 supervisor (Tier 3) all watch same entity."""
         customer1 = _make_actor_state("cust-001", watched=["tck_001"])
         customer2 = _make_actor_state("cust-002", watched=["tck_001"])
-        supervisor = _make_actor_state("sup-001", role="supervisor", watched=["tck_001"], authority=0.8)
+        supervisor = _make_actor_state(
+            "sup-001", role="supervisor", watched=["tck_001"], authority=0.8
+        )
 
         # Multi-turn loop: each actor that makes a tool call consumes 2+ LLM
         # calls (action + follow-up do_nothing). Use per-actor responses keyed
@@ -252,39 +254,55 @@ class TestFullLoopWithMockLLM:
             if actor_id == "sup-001" and call_idx == 0:
                 return LLMResponse(
                     content="",
-                    provider="mock", model="mock", latency_ms=5.0,
-                    tool_calls=[ToolCall(
-                        name="tickets_update",
-                        arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
-                    )],
+                    provider="mock",
+                    model="mock",
+                    latency_ms=5.0,
+                    tool_calls=[
+                        ToolCall(
+                            name="tickets_update",
+                            arguments={"id": "tck_001", "status": "open", "reasoning": "Reviewing"},
+                        )
+                    ],
                 )
             elif actor_id == "cust-001" and call_idx == 0:
                 return LLMResponse(
                     content="",
-                    provider="mock", model="mock", latency_ms=5.0,
-                    tool_calls=[ToolCall(
-                        name="email_send",
-                        arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
-                    )],
+                    provider="mock",
+                    model="mock",
+                    latency_ms=5.0,
+                    tool_calls=[
+                        ToolCall(
+                            name="email_send",
+                            arguments={"to": "agent@acme.com", "reasoning": "Checking status"},
+                        )
+                    ],
                 )
             elif actor_id == "cust-002" and call_idx == 0:
                 return LLMResponse(
                     content="",
-                    provider="mock", model="mock", latency_ms=5.0,
-                    tool_calls=[ToolCall(
-                        name="do_nothing",
-                        arguments={"reasoning": "Will wait"},
-                    )],
+                    provider="mock",
+                    model="mock",
+                    latency_ms=5.0,
+                    tool_calls=[
+                        ToolCall(
+                            name="do_nothing",
+                            arguments={"reasoning": "Will wait"},
+                        )
+                    ],
                 )
             else:
                 # Follow-up calls: terminate the loop
                 return LLMResponse(
                     content="",
-                    provider="mock", model="mock", latency_ms=5.0,
-                    tool_calls=[ToolCall(
-                        name="do_nothing",
-                        arguments={"reasoning": "Done"},
-                    )],
+                    provider="mock",
+                    model="mock",
+                    latency_ms=5.0,
+                    tool_calls=[
+                        ToolCall(
+                            name="do_nothing",
+                            arguments={"reasoning": "Done"},
+                        )
+                    ],
                 )
 
         router = AsyncMock()
@@ -386,15 +404,17 @@ class TestSimulationRunnerLoop:
             call_count[0] += 1
             if call_count[0] == 1:
                 # First notify → internal actor reacts
-                return [ActionEnvelope(
-                    actor_id=ActorId("cust-001"),
-                    source=ActionSource.INTERNAL,
-                    action_type="email_send",
-                    target_service=ServiceId("email"),
-                    payload={"to": "agent@acme.com"},
-                    logical_time=2.0,
-                    priority=EnvelopePriority.INTERNAL,
-                )]
+                return [
+                    ActionEnvelope(
+                        actor_id=ActorId("cust-001"),
+                        source=ActionSource.INTERNAL,
+                        action_type="email_send",
+                        target_service=ServiceId("email"),
+                        payload={"to": "agent@acme.com"},
+                        logical_time=2.0,
+                        priority=EnvelopePriority.INTERNAL,
+                    )
+                ]
             return []  # No more reactions
 
         mock_agency.notify = mock_notify
@@ -416,15 +436,17 @@ class TestSimulationRunnerLoop:
         )
 
         # Submit external action
-        event_queue.submit(ActionEnvelope(
-            actor_id=ActorId("agent-001"),
-            source=ActionSource.EXTERNAL,
-            action_type="tickets.update",
-            target_service=ServiceId("zendesk"),
-            payload={"id": "tck_001"},
-            logical_time=1.0,
-            priority=EnvelopePriority.EXTERNAL,
-        ))
+        event_queue.submit(
+            ActionEnvelope(
+                actor_id=ActorId("agent-001"),
+                source=ActionSource.EXTERNAL,
+                action_type="tickets.update",
+                target_service=ServiceId("zendesk"),
+                payload={"id": "tck_001"},
+                logical_time=1.0,
+                priority=EnvelopePriority.EXTERNAL,
+            )
+        )
         runner.connect_agent(ActorId("agent-001"))
 
         # Run
@@ -447,15 +469,17 @@ class TestSimulationRunnerLoop:
 
         mock_agency = AsyncMock()
         # Agency keeps producing events (would be infinite without limit)
-        mock_agency.notify = AsyncMock(return_value=[
-            ActionEnvelope(
-                actor_id=ActorId("cust-001"),
-                source=ActionSource.INTERNAL,
-                action_type="email_send",
-                logical_time=0.0,
-                priority=EnvelopePriority.INTERNAL,
-            )
-        ])
+        mock_agency.notify = AsyncMock(
+            return_value=[
+                ActionEnvelope(
+                    actor_id=ActorId("cust-001"),
+                    source=ActionSource.INTERNAL,
+                    action_type="email_send",
+                    logical_time=0.0,
+                    priority=EnvelopePriority.INTERNAL,
+                )
+            ]
+        )
         mock_agency.check_scheduled_actions = AsyncMock(return_value=[])
         mock_agency.has_scheduled_actions = lambda: False
         mock_agency.update_states_for_event = AsyncMock()
@@ -469,12 +493,14 @@ class TestSimulationRunnerLoop:
             config=config,
         )
 
-        event_queue.submit(ActionEnvelope(
-            actor_id=ActorId("agent-001"),
-            source=ActionSource.EXTERNAL,
-            action_type="test",
-            logical_time=0.0,
-        ))
+        event_queue.submit(
+            ActionEnvelope(
+                actor_id=ActorId("agent-001"),
+                source=ActionSource.EXTERNAL,
+                action_type="test",
+                logical_time=0.0,
+            )
+        )
         runner.connect_agent(ActorId("agent-001"))
 
         stop_reason = await runner.run()
@@ -490,15 +516,17 @@ class TestSimulationRunnerLoop:
             return _make_world_event()
 
         mock_agency = AsyncMock()
-        mock_agency.notify = AsyncMock(return_value=[
-            ActionEnvelope(
-                actor_id=ActorId("cust-001"),
-                source=ActionSource.INTERNAL,
-                action_type="email_send",
-                logical_time=0.0,
-                priority=EnvelopePriority.INTERNAL,
-            )
-        ])
+        mock_agency.notify = AsyncMock(
+            return_value=[
+                ActionEnvelope(
+                    actor_id=ActorId("cust-001"),
+                    source=ActionSource.INTERNAL,
+                    action_type="email_send",
+                    logical_time=0.0,
+                    priority=EnvelopePriority.INTERNAL,
+                )
+            ]
+        )
         mock_agency.check_scheduled_actions = AsyncMock(return_value=[])
         mock_agency.has_scheduled_actions = lambda: False
         mock_agency.update_states_for_event = AsyncMock()
@@ -515,12 +543,14 @@ class TestSimulationRunnerLoop:
             config=config,
         )
 
-        event_queue.submit(ActionEnvelope(
-            actor_id=ActorId("agent-001"),
-            source=ActionSource.EXTERNAL,
-            action_type="test",
-            logical_time=0.0,
-        ))
+        event_queue.submit(
+            ActionEnvelope(
+                actor_id=ActorId("agent-001"),
+                source=ActionSource.EXTERNAL,
+                action_type="test",
+                logical_time=0.0,
+            )
+        )
         runner.connect_agent(ActorId("agent-001"))
 
         stop_reason = await runner.run()
@@ -542,13 +572,15 @@ class TestSimulationRunnerLoop:
         async def mock_check_scheduled(current_time):
             call_count[0] += 1
             if call_count[0] == 1:
-                return [ActionEnvelope(
-                    actor_id=ActorId("environment"),
-                    source=ActionSource.ENVIRONMENT,
-                    action_type="service_degradation",
-                    logical_time=0.5,
-                    priority=EnvelopePriority.ENVIRONMENT,
-                )]
+                return [
+                    ActionEnvelope(
+                        actor_id=ActorId("environment"),
+                        source=ActionSource.ENVIRONMENT,
+                        action_type="service_degradation",
+                        logical_time=0.5,
+                        priority=EnvelopePriority.ENVIRONMENT,
+                    )
+                ]
             return []
 
         mock_animator.check_scheduled_events = mock_check_scheduled
@@ -568,14 +600,16 @@ class TestSimulationRunnerLoop:
         )
 
         # Submit one external event to start the loop
-        event_queue.submit(ActionEnvelope(
-            actor_id=ActorId("agent-001"),
-            source=ActionSource.EXTERNAL,
-            action_type="test",
-            logical_time=1.0,
-        ))
+        event_queue.submit(
+            ActionEnvelope(
+                actor_id=ActorId("agent-001"),
+                source=ActionSource.EXTERNAL,
+                action_type="test",
+                logical_time=1.0,
+            )
+        )
 
-        stop_reason = await runner.run()
+        await runner.run()
 
         # Should have processed environment event (from animator) + external event
         assert len(events) >= 2

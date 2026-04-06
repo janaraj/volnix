@@ -27,6 +27,7 @@ class ToolManifestGenerator:
         Uses ServiceSurface.to_mcp_tool() / to_http_route() etc.
         """
         from volnix.kernel.surface import ServiceSurface
+
         tools: list[dict[str, Any]] = []
         for pack_meta in self._pack_registry.list_packs():
             pack = self._pack_registry.get_pack(pack_meta["pack_name"])

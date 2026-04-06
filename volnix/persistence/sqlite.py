@@ -7,10 +7,9 @@ database backend for Volnix.
 
 from __future__ import annotations
 
-import asyncio
 import sqlite3
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import aiosqlite
@@ -77,7 +76,9 @@ class SQLiteDatabase(Database):
         if self._transaction_depth == 0:
             await self._conn.commit()
 
-    async def fetchone(self, sql: str, params: tuple[Any, ...] | None = None) -> dict[str, Any] | None:
+    async def fetchone(
+        self, sql: str, params: tuple[Any, ...] | None = None
+    ) -> dict[str, Any] | None:
         """Execute a query and return the first result row.
 
         Args:
@@ -93,7 +94,9 @@ class SQLiteDatabase(Database):
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-    async def fetchall(self, sql: str, params: tuple[Any, ...] | None = None) -> list[dict[str, Any]]:
+    async def fetchall(
+        self, sql: str, params: tuple[Any, ...] | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return all result rows.
 
         Args:

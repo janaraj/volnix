@@ -14,10 +14,18 @@ from typing import Any
 from volnix.core.types import RunId
 from volnix.runs.config import RunConfig
 
-_ALLOWED_ARTIFACT_TYPES = frozenset({
-    "report", "scorecard", "event_log", "config", "metadata",
-    "captured_surface", "deliverable", "governance_report",
-})
+_ALLOWED_ARTIFACT_TYPES = frozenset(
+    {
+        "report",
+        "scorecard",
+        "event_log",
+        "config",
+        "metadata",
+        "captured_surface",
+        "deliverable",
+        "governance_report",
+    }
+)
 
 
 def _sanitize_name(name: str) -> str:

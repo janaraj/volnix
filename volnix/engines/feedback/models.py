@@ -3,6 +3,7 @@
 All models are frozen (immutable) per project convention.
 Domain identifiers use typed wrappers from ``core.types``.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -46,9 +47,7 @@ class CapturedSurface(BaseModel, frozen=True):
     service_name: str
     run_id: str
     captured_at: str  # ISO timestamp
-    operations_observed: list[ObservedOperation] = Field(
-        default_factory=list
-    )
+    operations_observed: list[ObservedOperation] = Field(default_factory=list)
     entity_mutations: list[ObservedMutation] = Field(default_factory=list)
     error_patterns: list[ObservedError] = Field(default_factory=list)
     annotations: list[dict[str, Any]] = Field(default_factory=list)

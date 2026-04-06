@@ -12,7 +12,12 @@ Re-exports the primary public API surface so downstream code can do::
 from volnix.bus.bus import EventBus
 from volnix.bus.config import BusConfig
 from volnix.bus.fanout import TopicFanout
-from volnix.bus.middleware import BusMiddleware, LoggingMiddleware, MetricsMiddleware, MiddlewareChain
+from volnix.bus.middleware import (
+    BusMiddleware,
+    LoggingMiddleware,
+    MetricsMiddleware,
+    MiddlewareChain,
+)
 from volnix.bus.persistence import BusPersistence
 from volnix.bus.replay import ReplayEngine
 from volnix.bus.types import BusMetrics, Subscriber, Subscription

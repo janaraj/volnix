@@ -1,19 +1,27 @@
 """Tests for volnix.core.events — event dataclasses and serialization."""
-import pytest
+
+from datetime import UTC, datetime
+
 from volnix.core.events import (
-    Event, WorldEvent,
-    PermissionDeniedEvent, PolicyBlockEvent, PolicyHoldEvent,
-    BudgetExhaustedEvent, BudgetDeductionEvent, CapabilityGapEvent,
-    EngineLifecycleEvent,
+    BudgetExhaustedEvent,
+    CapabilityGapEvent,
+    Event,
+    PermissionDeniedEvent,
+    PolicyBlockEvent,
+    PolicyHoldEvent,
+    WorldEvent,
 )
 from volnix.core.types import (
-    Timestamp, ActorId, ServiceId, PolicyId, ToolName, EventId,
+    ActorId,
+    PolicyId,
+    ServiceId,
+    Timestamp,
+    ToolName,
 )
-from datetime import datetime, timezone
 
 
 def _ts():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=1)
 
 

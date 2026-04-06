@@ -71,7 +71,8 @@ class RunReplayer:
     async def get_replay_state(self) -> dict:
         """Return the current replay state."""
         events_at_tick = [
-            e for e in self._events
+            e
+            for e in self._events
             if (e.get("tick", 0) if isinstance(e, dict) else 0) <= self._current_tick
         ]
         if self._active_run_id is None:

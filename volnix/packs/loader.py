@@ -5,6 +5,7 @@ and importing pack.py / profile.py modules via importlib.
 
 This is the ONLY module that performs dynamic imports of packs.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -89,11 +90,7 @@ def _find_subclasses(module: object, base_class: type) -> list[type]:
     """Find all classes in module that are concrete subclasses of base_class."""
     found: list[type] = []
     for _, obj in inspect.getmembers(module, inspect.isclass):
-        if (
-            issubclass(obj, base_class)
-            and obj is not base_class
-            and not inspect.isabstract(obj)
-        ):
+        if issubclass(obj, base_class) and obj is not base_class and not inspect.isabstract(obj):
             found.append(obj)
     return found
 

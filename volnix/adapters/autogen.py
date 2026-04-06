@@ -8,6 +8,7 @@ Usage::
     tools = await autogen_tools(url="http://localhost:8080")
     agent = AssistantAgent("analyst", model_client=client, tools=tools)
 """
+
 from __future__ import annotations
 
 import json
@@ -28,9 +29,7 @@ async def autogen_tools(
 
     Each tool call is independent (no leaked connections).
     """
-    from autogen_core import CancellationToken
     from autogen_core.tools import BaseTool
-    from pydantic import BaseModel
 
     tool_defs = await get_tool_manifest(url=url, fmt="mcp")
 
@@ -50,7 +49,11 @@ async def autogen_tools(
             (BaseTool,),
             {
                 "__init__": lambda self, *, _n=name, _d=desc, _m=args_model: BaseTool.__init__(
-                    self, args_type=_m, return_type=str, name=_n, description=_d,
+                    self,
+                    args_type=_m,
+                    return_type=str,
+                    name=_n,
+                    description=_d,
                 ),
                 "run": _make_run(url, name, actor_id),
             },
@@ -67,7 +70,10 @@ def _make_run(bound_url: str, bound_name: str, bound_actor: str):
         # args is a Pydantic model — dump to dict, skip None values
         args_dict = args.model_dump(exclude_none=True)
         result = await execute_tool(
-            url=bound_url, tool=bound_name, args=args_dict, actor_id=bound_actor,
+            url=bound_url,
+            tool=bound_name,
+            args=args_dict,
+            actor_id=bound_actor,
         )
         return json.dumps(result, default=str)
 

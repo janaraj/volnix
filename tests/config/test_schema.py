@@ -1,11 +1,8 @@
 """Tests for volnix.config.schema — config dataclass defaults and validation."""
-import pytest
+
 from volnix.config.schema import (
-    VolnixConfig,
     SimulationConfig,
-    PipelineConfig,
-    DashboardConfig,
-    FidelityConfig,
+    VolnixConfig,
 )
 
 
@@ -46,10 +43,27 @@ def test_all_sections_present():
     """All expected sections exist on VolnixConfig."""
     config = VolnixConfig()
     expected_sections = [
-        "simulation", "pipeline", "bus", "ledger", "persistence",
-        "state", "policy", "permission", "budget", "responder",
-        "animator", "adapter", "reporter", "feedback", "dashboard",
-        "gateway", "runs", "llm", "actors", "templates", "world_compiler",
+        "simulation",
+        "pipeline",
+        "bus",
+        "ledger",
+        "persistence",
+        "state",
+        "policy",
+        "permission",
+        "budget",
+        "responder",
+        "animator",
+        "adapter",
+        "reporter",
+        "feedback",
+        "dashboard",
+        "gateway",
+        "runs",
+        "llm",
+        "actors",
+        "templates",
+        "world_compiler",
     ]
     for section in expected_sections:
         assert hasattr(config, section), f"Missing section: {section}"

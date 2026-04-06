@@ -4,6 +4,7 @@ ReplayEngine coordinates with the persistence layer and the topic fanout
 dispatcher to replay events by sequence range, time range, or to a
 specific callback.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

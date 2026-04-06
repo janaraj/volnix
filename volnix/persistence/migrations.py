@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 from volnix.persistence.database import Database
 
-
 # ---------------------------------------------------------------------------
 # Migration model
 # ---------------------------------------------------------------------------
@@ -124,8 +123,11 @@ class MigrationRunner:
         """
         await self._ensure_migrations_table()
         current = await self.get_current_version()
-        to_revert = [m for m in reversed(self._migrations)
-                     if m.version > target_version and m.version <= current]
+        to_revert = [
+            m
+            for m in reversed(self._migrations)
+            if m.version > target_version and m.version <= current
+        ]
 
         if not to_revert:
             return 0

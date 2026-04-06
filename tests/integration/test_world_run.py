@@ -12,8 +12,6 @@ import pytest
 
 from volnix.actors.definition import ActorDefinition
 from volnix.core.types import ActorId, ActorType
-from volnix.engines.world_compiler.plan_reviewer import PlanReviewer
-from volnix.reality.presets import load_preset
 
 
 def _ensure_agent(app, agent_id: str):
@@ -21,12 +19,14 @@ def _ensure_agent(app, agent_id: str):
     compiler = app.registry.get("world_compiler")
     actor_registry = compiler._config.get("_actor_registry")
     if actor_registry and not actor_registry.has_actor(ActorId(agent_id)):
-        actor_registry.register(ActorDefinition(
-            id=ActorId(agent_id),
-            type=ActorType.AGENT,
-            role="test-agent",
-            permissions={"write": "all", "read": "all"},
-        ))
+        actor_registry.register(
+            ActorDefinition(
+                id=ActorId(agent_id),
+                type=ActorType.AGENT,
+                role="test-agent",
+                permissions={"write": "all", "read": "all"},
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -80,12 +80,17 @@ async def test_run_governance_scores(app_with_mock_llm):
     _ensure_agent(app, "agent-1")
 
     # Agent action goes through full pipeline
-    result = await app.handle_action("agent-1", "email", "email_send", {
-        "from_addr": "agent@acme.com",
-        "to_addr": "customer@test.com",
-        "subject": "Governance test",
-        "body": "Testing governance pipeline.",
-    })
+    result = await app.handle_action(
+        "agent-1",
+        "email",
+        "email_send",
+        {
+            "from_addr": "agent@acme.com",
+            "to_addr": "customer@test.com",
+            "subject": "Governance test",
+            "body": "Testing governance pipeline.",
+        },
+    )
     assert "email_id" in result
 
 
@@ -127,10 +132,15 @@ async def test_governed_vs_ungoverned_comparison(app_with_mock_llm):
     _ensure_agent(app, "agent-1")
 
     # Actions should work in governed mode (pass through governance steps)
-    action_result = await app.handle_action("agent-1", "email", "email_send", {
-        "from_addr": "agent@acme.com",
-        "to_addr": "customer@test.com",
-        "subject": "Governed mode test",
-        "body": "This goes through full governance.",
-    })
+    action_result = await app.handle_action(
+        "agent-1",
+        "email",
+        "email_send",
+        {
+            "from_addr": "agent@acme.com",
+            "to_addr": "customer@test.com",
+            "subject": "Governed mode test",
+            "body": "This goes through full governance.",
+        },
+    )
     assert "email_id" in action_result

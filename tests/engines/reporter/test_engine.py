@@ -1,14 +1,16 @@
 """Tests for ReportGeneratorEngine -- orchestrator."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 
-from volnix.core.types import EventId
-from volnix.engines.reporter.engine import ReportGeneratorEngine
+from unittest.mock import AsyncMock
+
+import pytest
+
 from tests.engines.reporter.conftest import (
     make_capability_gap,
     make_permission_denied,
     make_world_event,
 )
+from volnix.core.types import EventId
+from volnix.engines.reporter.engine import ReportGeneratorEngine
 
 
 @pytest.fixture

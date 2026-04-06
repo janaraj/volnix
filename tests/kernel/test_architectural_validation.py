@@ -5,7 +5,6 @@ completeness, ensuring every promoted service has both MCP and HTTP
 representations, response schemas, and entity definitions.
 """
 
-import pytest
 from volnix.kernel.surface import APIOperation, ServiceSurface
 
 

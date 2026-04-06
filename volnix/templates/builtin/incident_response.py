@@ -25,8 +25,7 @@ class IncidentResponseTemplate(BaseTemplate):
     template_id: ClassVar[str] = "incident_response"
     template_name: ClassVar[str] = "Incident Response"
     description: ClassVar[str] = (
-        "An on-call incident response world with monitoring, chat, "
-        "and code deployment services."
+        "An on-call incident response world with monitoring, chat, and code deployment services."
     )
 
     async def generate(self, parameters: dict | None = None) -> dict:

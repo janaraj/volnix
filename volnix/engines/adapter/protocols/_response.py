@@ -3,6 +3,7 @@
 Used by HTTP REST and MCP adapters to normalize pack responses
 for external tool transports.
 """
+
 from __future__ import annotations
 
 from typing import Any

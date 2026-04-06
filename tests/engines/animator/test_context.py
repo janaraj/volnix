@@ -25,18 +25,14 @@ def _messy_conditions() -> WorldConditions:
         information=InformationQualityDimension(
             staleness=30, incompleteness=35, inconsistency=20, noise=30
         ),
-        reliability=ReliabilityDimension(
-            failures=20, timeouts=15, degradation=10
-        ),
+        reliability=ReliabilityDimension(failures=20, timeouts=15, degradation=10),
         friction=SocialFrictionDimension(
             uncooperative=30, deceptive=15, hostile=8, sophistication="medium"
         ),
         complexity=ComplexityDimension(
             ambiguity=35, edge_cases=25, contradictions=15, urgency=20, volatility=15
         ),
-        boundaries=BoundaryDimension(
-            access_limits=25, rule_clarity=30, boundary_gaps=12
-        ),
+        boundaries=BoundaryDimension(access_limits=25, rule_clarity=30, boundary_gaps=12),
     )
 
 
@@ -145,6 +141,7 @@ def test_reuses_world_generation_context():
     ctx = AnimatorContext(_make_plan(_messy_conditions()))
     # _base should be a WorldGenerationContext
     from volnix.engines.world_compiler.generation_context import WorldGenerationContext
+
     assert isinstance(ctx._base, WorldGenerationContext)
 
 

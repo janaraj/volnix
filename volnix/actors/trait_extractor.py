@@ -93,7 +93,12 @@ def extract_behavior_traits(actor_def: ActorDefinition) -> ActorBehaviorTraits:
 
     # -- Role-based authority heuristic (domain-agnostic) --
     _authority_roles = {
-        "supervisor", "manager", "admin", "moderator", "lead", "director",
+        "supervisor",
+        "manager",
+        "admin",
+        "moderator",
+        "lead",
+        "director",
     }
     role_lower = actor_def.role.lower()
     for _auth_role in _authority_roles:

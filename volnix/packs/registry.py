@@ -7,6 +7,7 @@ Maintains three indices built from pack ABC methods:
 
 Contains ZERO pack-specific logic. All indexing derived from ServicePack ABC.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,7 @@ class PackRegistry:
 
     def __init__(self) -> None:
         self._packs: dict[str, ServicePack] = {}
-        self._tool_index: dict[str, str] = {}          # tool_name -> pack_name
+        self._tool_index: dict[str, str] = {}  # tool_name -> pack_name
         self._category_index: dict[str, list[str]] = {}  # category -> [pack_name]
         self._profiles: dict[str, ServiceProfile] = {}
         self._profile_pack_index: dict[str, list[str]] = {}  # pack_name -> [profile_name]
@@ -47,8 +48,11 @@ class PackRegistry:
         # Build tool index from pack.get_tools()
         tools = pack.get_tools()
         if not isinstance(tools, list):
-            logger.warning("Pack '%s' get_tools() returned %s instead of list — skipping tool indexing",
-                           pack.pack_name, type(tools).__name__)
+            logger.warning(
+                "Pack '%s' get_tools() returned %s instead of list — skipping tool indexing",
+                pack.pack_name,
+                type(tools).__name__,
+            )
             tools = []
         for tool_def in tools:
             tool_name = tool_def.get("name", "") if isinstance(tool_def, dict) else ""
@@ -56,14 +60,20 @@ class PackRegistry:
                 if tool_name in self._tool_index:
                     logger.warning(
                         "Tool '%s' already registered by pack '%s', overwriting with '%s'",
-                        tool_name, self._tool_index[tool_name], pack.pack_name,
+                        tool_name,
+                        self._tool_index[tool_name],
+                        pack.pack_name,
                     )
                 self._tool_index[tool_name] = pack.pack_name
 
         # Build category index
         self._category_index.setdefault(pack.category, []).append(pack.pack_name)
-        logger.info("Registered pack '%s' (category=%s, tools=%d)",
-                     pack.pack_name, pack.category, len(tools))
+        logger.info(
+            "Registered pack '%s' (category=%s, tools=%d)",
+            pack.pack_name,
+            pack.category,
+            len(tools),
+        )
 
     def register_profile(self, profile: ServiceProfile) -> None:
         """Register a service profile. Validates extends_pack and uniqueness."""
@@ -90,8 +100,11 @@ class PackRegistry:
                     try:
                         self.register_profile(profile)
                     except PackNotFoundError:
-                        logger.warning("Profile '%s' extends unregistered pack '%s'",
-                                       profile.profile_name, profile.extends_pack)
+                        logger.warning(
+                            "Profile '%s' extends unregistered pack '%s'",
+                            profile.profile_name,
+                            profile.extends_pack,
+                        )
 
     def get_pack(self, pack_name: str) -> ServicePack:
         """Retrieve pack by name. Raises PackNotFoundError."""

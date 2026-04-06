@@ -1,11 +1,11 @@
 """Tests for YAMLParser — world definition + compiler settings parsing."""
+
 import pytest
 import yaml
 
 from volnix.core.errors import YAMLParseError
 from volnix.engines.world_compiler.yaml_parser import YAMLParser
 from volnix.reality.dimensions import WorldConditions
-
 
 # ---------------------------------------------------------------------------
 # File-based parsing
@@ -19,14 +19,18 @@ class TestYAMLParserFromFile:
     async def test_parse_minimal_file(self, tmp_path, condition_expander):
         """Parse a minimal world YAML file."""
         world_file = tmp_path / "world.yaml"
-        world_file.write_text(yaml.dump({
-            "world": {
-                "name": "File World",
-                "description": "From file",
-                "services": {"gmail": "verified/gmail"},
-                "actors": [{"role": "agent", "type": "external", "count": 1}],
-            }
-        }))
+        world_file.write_text(
+            yaml.dump(
+                {
+                    "world": {
+                        "name": "File World",
+                        "description": "From file",
+                        "services": {"gmail": "verified/gmail"},
+                        "actors": [{"role": "agent", "type": "external", "count": 1}],
+                    }
+                }
+            )
+        )
         parser = YAMLParser(condition_expander)
         plan, specs = await parser.parse(str(world_file))
 
@@ -39,23 +43,31 @@ class TestYAMLParserFromFile:
     async def test_parse_with_compiler_settings(self, tmp_path, condition_expander):
         """Parse world + compiler settings from separate files."""
         world_file = tmp_path / "world.yaml"
-        world_file.write_text(yaml.dump({
-            "world": {
-                "name": "Dual File",
-                "services": {"gmail": "verified/gmail"},
-                "actors": [],
-            }
-        }))
+        world_file.write_text(
+            yaml.dump(
+                {
+                    "world": {
+                        "name": "Dual File",
+                        "services": {"gmail": "verified/gmail"},
+                        "actors": [],
+                    }
+                }
+            )
+        )
         settings_file = tmp_path / "settings.yaml"
-        settings_file.write_text(yaml.dump({
-            "compiler": {
-                "seed": 99,
-                "behavior": "static",
-                "fidelity": "strict",
-                "mode": "governed",
-                "reality": {"preset": "ideal"},
-            }
-        }))
+        settings_file.write_text(
+            yaml.dump(
+                {
+                    "compiler": {
+                        "seed": 99,
+                        "behavior": "static",
+                        "fidelity": "strict",
+                        "mode": "governed",
+                        "reality": {"preset": "ideal"},
+                    }
+                }
+            )
+        )
         parser = YAMLParser(condition_expander)
         plan, specs = await parser.parse(str(world_file), str(settings_file))
 
@@ -89,7 +101,9 @@ class TestYAMLParserFromDicts:
     """Parse from pre-loaded dicts (e.g. from NL parser output)."""
 
     @pytest.mark.asyncio
-    async def test_parse_from_dicts(self, condition_expander, sample_world_def, sample_compiler_settings):
+    async def test_parse_from_dicts(
+        self, condition_expander, sample_world_def, sample_compiler_settings
+    ):
         """Basic dict parsing produces correct WorldPlan fields."""
         parser = YAMLParser(condition_expander)
         plan, specs = await parser.parse_from_dicts(sample_world_def, sample_compiler_settings)

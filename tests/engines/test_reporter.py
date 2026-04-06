@@ -1,14 +1,15 @@
 """Tests for volnix.engines.reporter — scorecards, gap logs, causal traces, diffs."""
-import pytest
+
 from unittest.mock import AsyncMock
 
-from volnix.core.types import EventId
-from volnix.engines.reporter.engine import ReportGeneratorEngine
+import pytest
+
 from tests.engines.reporter.conftest import (
     make_capability_gap,
-    make_permission_denied,
     make_world_event,
 )
+from volnix.core.types import EventId
+from volnix.engines.reporter.engine import ReportGeneratorEngine
 
 
 async def _make_engine(events=None):

@@ -12,6 +12,7 @@ Usage::
     from volnix.adapters.crewai import crewai_register_agent
     token, tools = await crewai_register_agent(url="http://localhost:8080", agent_name="analyst")
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -31,6 +32,7 @@ def _make_tool_class(
 ) -> Any:
     """Create a CrewAI BaseTool subclass for a single Volnix tool."""
     from crewai.tools import BaseTool as CrewAIBaseTool
+
     from volnix.adapters._schema import json_schema_to_pydantic
 
     _url = url
@@ -82,15 +84,15 @@ async def crewai_tools(
     try:
         from crewai.tools import BaseTool as _  # noqa: F401
     except ImportError:
-        raise ImportError(
-            "crewai is required for CrewAI adapter. "
-            "Install with: pip install crewai"
-        )
+        raise ImportError("crewai is required for CrewAI adapter. Install with: pip install crewai")
 
     tool_defs = await get_tool_manifest(url=url, fmt="mcp")
     return [
         _make_tool_class(
-            td["name"], td.get("description", ""), url, actor_id,
+            td["name"],
+            td.get("description", ""),
+            url,
+            actor_id,
             input_schema=td.get("inputSchema"),
         )
         for td in tool_defs
@@ -125,10 +127,7 @@ async def crewai_register_agent(
     try:
         from crewai.tools import BaseTool as _  # noqa: F401
     except ImportError:
-        raise ImportError(
-            "crewai is required for CrewAI adapter. "
-            "Install with: pip install crewai"
-        )
+        raise ImportError("crewai is required for CrewAI adapter. Install with: pip install crewai")
 
     # Register with Volnix
     body: dict[str, Any] = {"agent_name": agent_name}
@@ -141,9 +140,7 @@ async def crewai_register_agent(
         resp = await client.post("/api/v1/agents/register", json=body)
 
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"Registration failed: {resp.json().get('error', resp.text)}"
-        )
+        raise RuntimeError(f"Registration failed: {resp.json().get('error', resp.text)}")
 
     reg = resp.json()
     token = reg["agent_token"]
@@ -153,8 +150,11 @@ async def crewai_register_agent(
     tool_defs = await get_tool_manifest(url=url, fmt="mcp")
     tools = [
         _make_tool_class(
-            td["name"], td.get("description", ""), url,
-            resolved_actor_id, agent_token=token,
+            td["name"],
+            td.get("description", ""),
+            url,
+            resolved_actor_id,
+            agent_token=token,
             input_schema=td.get("inputSchema"),
         )
         for td in tool_defs

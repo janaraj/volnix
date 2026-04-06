@@ -44,6 +44,7 @@ class OpenAICompatibleProvider(LLMProvider):
         # For local endpoints (Ollama, vLLM) that don't need auth,
         # we use a placeholder that satisfies the SDK's validation.
         import httpx
+
         self._client = AsyncOpenAI(
             api_key=api_key if api_key else "local-no-auth-needed",
             base_url=base_url,
@@ -83,6 +84,7 @@ class OpenAICompatibleProvider(LLMProvider):
             # so they share cache hits. Different worlds get different keys.
             if request.cache_system_prompt and request.system_prompt:
                 import hashlib
+
                 kwargs["prompt_cache_key"] = hashlib.sha256(
                     request.system_prompt.encode()
                 ).hexdigest()[:16]
@@ -161,7 +163,9 @@ class OpenAICompatibleProvider(LLMProvider):
             parsed_tool_calls = None
             if message and message.tool_calls is not None and len(message.tool_calls) > 0:
                 import json as _json
+
                 from volnix.llm.types import ToolCall
+
                 parsed_tool_calls = []
                 for tc in message.tool_calls:
                     try:
@@ -186,7 +190,10 @@ class OpenAICompatibleProvider(LLMProvider):
                     "OpenAI response empty despite %d completion tokens: "
                     "finish_reason=%s, refusal=%s, raw_tool_calls=%s, "
                     "content=%r",
-                    comp_tokens, finish, refusal, raw_tc,
+                    comp_tokens,
+                    finish,
+                    refusal,
+                    raw_tc,
                     message.content,
                 )
 
@@ -208,7 +215,8 @@ class OpenAICompatibleProvider(LLMProvider):
             if cached_tokens > 0:
                 logger.info(
                     "OpenAI cache hit: %d/%d prompt tokens cached",
-                    cached_tokens, usage.prompt_tokens,
+                    cached_tokens,
+                    usage.prompt_tokens,
                 )
 
             # Parse structured output when schema was requested
@@ -220,9 +228,13 @@ class OpenAICompatibleProvider(LLMProvider):
                     if _unwrap_array and isinstance(parsed_structured, dict):
                         parsed_structured = parsed_structured.get("items", parsed_structured)
                     items = len(parsed_structured) if isinstance(parsed_structured, list) else 1
-                    logger.info("OpenAI structured output parsed: %d items, %d chars", items, len(content))
+                    logger.info(
+                        "OpenAI structured output parsed: %d items, %d chars", items, len(content)
+                    )
                 except json.JSONDecodeError:
-                    logger.warning("OpenAI structured output was not valid JSON (%d chars)", len(content))
+                    logger.warning(
+                        "OpenAI structured output was not valid JSON (%d chars)", len(content)
+                    )
 
             return LLMResponse(
                 content=content or "",

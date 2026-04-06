@@ -3,7 +3,7 @@
 import pytest
 
 from volnix.llm.provider import LLMProvider
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.types import LLMRequest, LLMResponse, ProviderInfo
 
 
 def test_llm_provider_abc():

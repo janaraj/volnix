@@ -4,6 +4,7 @@ Runs structural and semantic checks against a pack directory to
 determine whether it meets the requirements for a verified pack.
 All checks use AST analysis — no runtime imports (avoids side effects).
 """
+
 from __future__ import annotations
 
 import ast
@@ -131,9 +132,7 @@ class PackVerifier:
     @staticmethod
     def _check_structure(pack_path: Path) -> VerificationCheck:
         """Check that all required files exist."""
-        missing = [
-            f for f in _REQUIRED_FILES if not (pack_path / f).exists()
-        ]
+        missing = [f for f in _REQUIRED_FILES if not (pack_path / f).exists()]
         if missing:
             return VerificationCheck(
                 name="structure",
@@ -152,11 +151,7 @@ class PackVerifier:
         pack_py = pack_path / "pack.py"
         try:
             tree = ast.parse(pack_py.read_text())
-            classes = [
-                node.name
-                for node in ast.walk(tree)
-                if isinstance(node, ast.ClassDef)
-            ]
+            classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
             if not classes:
                 return VerificationCheck(
                     name="importable",
@@ -192,10 +187,7 @@ class PackVerifier:
         try:
             tree = ast.parse(schemas_py.read_text())
             assignments = _get_all_assignments(tree)
-            tool_vars = [
-                a for a in assignments
-                if "TOOL_DEFINITION" in a.upper()
-            ]
+            tool_vars = [a for a in assignments if "TOOL_DEFINITION" in a.upper()]
             if not tool_vars:
                 return VerificationCheck(
                     name="tools",
@@ -227,9 +219,7 @@ class PackVerifier:
         try:
             tree = ast.parse(schemas_py.read_text())
             all_names = _get_all_assignments(tree)
-            schema_vars = [
-                a for a in all_names if a.endswith("_ENTITY_SCHEMA")
-            ]
+            schema_vars = [a for a in all_names if a.endswith("_ENTITY_SCHEMA")]
             if not schema_vars:
                 return VerificationCheck(
                     name="entities",
@@ -239,10 +229,7 @@ class PackVerifier:
             return VerificationCheck(
                 name="entities",
                 passed=True,
-                message=(
-                    f"{len(schema_vars)} entity schema(s): "
-                    f"{', '.join(schema_vars[:5])}"
-                ),
+                message=(f"{len(schema_vars)} entity schema(s): {', '.join(schema_vars[:5])}"),
             )
         except SyntaxError as exc:
             return VerificationCheck(
@@ -266,9 +253,7 @@ class PackVerifier:
             handler_funcs = [
                 node.name
                 for node in ast.walk(tree)
-                if isinstance(
-                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
-                )
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and node.name.startswith("handle_")
             ]
             if not handler_funcs:
@@ -280,10 +265,7 @@ class PackVerifier:
             return VerificationCheck(
                 name="handlers",
                 passed=True,
-                message=(
-                    f"{len(handler_funcs)} handler(s): "
-                    f"{', '.join(handler_funcs[:5])}"
-                ),
+                message=(f"{len(handler_funcs)} handler(s): {', '.join(handler_funcs[:5])}"),
             )
         except SyntaxError as exc:
             return VerificationCheck(
@@ -309,9 +291,7 @@ class PackVerifier:
         try:
             tree = ast.parse(sm_py.read_text())
             all_names = _get_all_assignments(tree)
-            sm_vars = [
-                a for a in all_names if "TRANSITION" in a.upper()
-            ]
+            sm_vars = [a for a in all_names if "TRANSITION" in a.upper()]
             if not sm_vars:
                 return VerificationCheck(
                     name="state_machines",
@@ -362,15 +342,10 @@ class PackVerifier:
             if isinstance(node, ast.Raise) and node.exc is not None:
                 if isinstance(node.exc, ast.Call):
                     func = node.exc.func
-                    if (
-                        isinstance(func, ast.Name)
-                        and func.id == "NotImplementedError"
-                    ):
+                    if isinstance(func, ast.Name) and func.id == "NotImplementedError":
                         not_impl_count += 1
             # Bare ellipsis (... as function body)
-            if isinstance(node, ast.Expr) and isinstance(
-                node.value, ast.Constant
-            ):
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
                 if node.value.value is ...:
                     ellipsis_count += 1
 
@@ -378,10 +353,7 @@ class PackVerifier:
             return VerificationCheck(
                 name="no_stubs",
                 passed=False,
-                message=(
-                    f"{not_impl_count} NotImplementedError + "
-                    f"{ellipsis_count} ellipsis stubs"
-                ),
+                message=(f"{not_impl_count} NotImplementedError + {ellipsis_count} ellipsis stubs"),
             )
         return VerificationCheck(
             name="no_stubs",

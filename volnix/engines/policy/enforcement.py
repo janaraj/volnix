@@ -8,7 +8,7 @@ an appropriate ``StepResult`` with the corresponding governance event.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from volnix.core.context import ActionContext, StepResult
@@ -19,7 +19,6 @@ from volnix.core.events import (
     PolicyHoldEvent,
 )
 from volnix.core.types import (
-    ActorId,
     EnforcementMode,
     PolicyId,
     StepVerdict,
@@ -29,7 +28,7 @@ from volnix.core.types import (
 
 def _now_timestamp() -> Timestamp:
     """Create a Timestamp for the current moment."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
@@ -45,9 +44,7 @@ class EnforcementHandler:
     def _run_id(ctx: ActionContext) -> str | None:
         return str(ctx.run_id) if ctx.run_id else None
 
-    async def handle_block(
-        self, ctx: ActionContext, policy: dict[str, Any]
-    ) -> StepResult:
+    async def handle_block(self, ctx: ActionContext, policy: dict[str, Any]) -> StepResult:
         """Block the action outright."""
         reason = policy.get("reason", f"Blocked by policy '{policy.get('name', 'unknown')}'")
         event = PolicyBlockEvent(
@@ -115,9 +112,7 @@ class EnforcementHandler:
             message=f"Action escalated to '{target_role}' by policy '{policy.get('name', 'unknown')}'",
         )
 
-    async def handle_log(
-        self, ctx: ActionContext, policy: dict[str, Any]
-    ) -> StepResult:
+    async def handle_log(self, ctx: ActionContext, policy: dict[str, Any]) -> StepResult:
         """Log the policy match without enforcement."""
         event = PolicyFlagEvent(
             event_type="policy.flag",

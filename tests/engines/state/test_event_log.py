@@ -1,19 +1,26 @@
 """Tests for volnix.engines.state.event_log -- EventLog append/query."""
-import pytest
-from datetime import datetime, timezone, timedelta
-from volnix.core.types import ActorId, ServiceId, EntityId, EventId, Timestamp
-from volnix.core.events import WorldEvent, Event
-from volnix.engines.state.event_log import EventLog
+
+from datetime import UTC, datetime
+
+from volnix.core.events import WorldEvent
+from volnix.core.types import ActorId, EntityId, EventId, ServiceId, Timestamp
 
 
-def _make_event(action="test_action", actor="agent-1", service="svc-1",
-                tick=1, world_time=None, target_entity=None, **kwargs):
+def _make_event(
+    action="test_action",
+    actor="agent-1",
+    service="svc-1",
+    tick=1,
+    world_time=None,
+    target_entity=None,
+    **kwargs,
+):
     """Helper to build a WorldEvent with sensible defaults."""
     return WorldEvent(
         event_type=f"world.{action}",
         timestamp=Timestamp(
-            world_time=world_time or datetime(2026, 1, 15, tzinfo=timezone.utc),
-            wall_time=datetime.now(timezone.utc),
+            world_time=world_time or datetime(2026, 1, 15, tzinfo=UTC),
+            wall_time=datetime.now(UTC),
             tick=tick,
         ),
         actor_id=ActorId(actor),
@@ -47,17 +54,17 @@ async def test_get_missing_none(event_log):
 
 async def test_query_time_range(event_log):
     """Query with start/end filters returns only events in the time range."""
-    t1 = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    t2 = datetime(2026, 1, 15, tzinfo=timezone.utc)
-    t3 = datetime(2026, 1, 20, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 10, tzinfo=UTC)
+    t2 = datetime(2026, 1, 15, tzinfo=UTC)
+    t3 = datetime(2026, 1, 20, tzinfo=UTC)
 
     await event_log.append(_make_event(action="a1", tick=1, world_time=t1))
     await event_log.append(_make_event(action="a2", tick=2, world_time=t2))
     await event_log.append(_make_event(action="a3", tick=3, world_time=t3))
 
     results = await event_log.query(
-        start=datetime(2026, 1, 12, tzinfo=timezone.utc),
-        end=datetime(2026, 1, 18, tzinfo=timezone.utc),
+        start=datetime(2026, 1, 12, tzinfo=UTC),
+        end=datetime(2026, 1, 18, tzinfo=UTC),
     )
     assert len(results) == 1
     assert results[0].action == "a2"
@@ -112,8 +119,8 @@ async def test_query_empty(event_log):
 
 async def test_get_by_entity(event_log):
     """get_by_entity returns events targeting a specific entity in time order."""
-    t1 = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    t2 = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 10, tzinfo=UTC)
+    t2 = datetime(2026, 1, 15, tzinfo=UTC)
 
     await event_log.append(_make_event(action="a1", target_entity="ent-1", tick=1, world_time=t1))
     await event_log.append(_make_event(action="a2", target_entity="ent-2", tick=2, world_time=t2))
@@ -127,9 +134,9 @@ async def test_get_by_entity(event_log):
 
 async def test_events_ordered(event_log):
     """Verify query results are ordered by timestamp ASC."""
-    t3 = datetime(2026, 1, 20, tzinfo=timezone.utc)
-    t1 = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    t2 = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    t3 = datetime(2026, 1, 20, tzinfo=UTC)
+    t1 = datetime(2026, 1, 10, tzinfo=UTC)
+    t2 = datetime(2026, 1, 15, tzinfo=UTC)
 
     # Insert out of order
     await event_log.append(_make_event(action="third", tick=3, world_time=t3))

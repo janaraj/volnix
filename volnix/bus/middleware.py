@@ -4,6 +4,7 @@ Provides a protocol for event bus middleware, a chain that applies
 middleware in order, and two built-in implementations: logging and
 metrics collection.
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,7 +13,6 @@ from typing import Protocol, runtime_checkable
 logger = logging.getLogger(__name__)
 
 from volnix.core.events import Event
-
 
 # ---------------------------------------------------------------------------
 # Protocol

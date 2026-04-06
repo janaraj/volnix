@@ -3,6 +3,7 @@
 Provides reusable fixtures for testing the Volnix SDK layer
 against mocked HTTP servers.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -55,11 +56,13 @@ def mock_gateway():
     mock_app = MagicMock()
     mock_app.bus = MagicMock()
     mock_app.bus.subscribe = AsyncMock()
-    mock_app.read_entities = AsyncMock(return_value={
-        "entity_type": "email",
-        "count": 0,
-        "entities": [],
-    })
+    mock_app.read_entities = AsyncMock(
+        return_value={
+            "entity_type": "email",
+            "count": 0,
+            "entities": [],
+        }
+    )
     gw._app = mock_app
     return gw
 

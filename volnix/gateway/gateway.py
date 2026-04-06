@@ -101,7 +101,8 @@ class Gateway:
             }
             logger.info(
                 "Gateway: filtered to %d tools from services %s",
-                len(self._tool_map), self._world_services,
+                len(self._tool_map),
+                self._world_services,
             )
 
     async def handle_request(
@@ -131,7 +132,11 @@ class Gateway:
         resolution = self._tool_map.get(tool)
         if resolution is None:
             await self._record_request(
-                protocol, str(actor_id), tool, "capability_gap", 0,
+                protocol,
+                str(actor_id),
+                tool,
+                "capability_gap",
+                0,
             )
             return {
                 "status": "capability_not_available",
@@ -152,7 +157,11 @@ class Gateway:
         latency_ms = (time.monotonic() - start) * 1000
         status = "error" if "error" in result else "success"
         await self._record_request(
-            protocol, str(actor_id), tool, status, latency_ms,
+            protocol,
+            str(actor_id),
+            tool,
+            status,
+            latency_ms,
         )
 
         return result
@@ -165,7 +174,8 @@ class Gateway:
         """Push an observation event to an actor."""
         logger.debug(
             "Gateway: deliver_observation to %s: %s",
-            actor_id, list(observation.keys()),
+            actor_id,
+            list(observation.keys()),
         )
 
     @staticmethod
@@ -183,7 +193,9 @@ class Gateway:
         return "unknown"
 
     async def get_tool_manifest(
-        self, actor_id: str | None = None, protocol: str = "mcp",
+        self,
+        actor_id: str | None = None,
+        protocol: str = "mcp",
     ) -> list[dict[str, Any]]:
         """Return tools available in the requested protocol format.
 
@@ -204,6 +216,7 @@ class Gateway:
                 continue
             pack = pack_registry.get_pack(pack_name)
             from volnix.kernel.surface import ServiceSurface
+
             surface = ServiceSurface.from_pack(pack)
 
             if protocol == "mcp":
@@ -220,14 +233,19 @@ class Gateway:
         return tools
 
     async def _record_request(
-        self, protocol: str, actor_id: str, tool_name: str,
-        status: str, latency_ms: float,
+        self,
+        protocol: str,
+        actor_id: str,
+        tool_name: str,
+        status: str,
+        latency_ms: float,
     ) -> None:
         """Record gateway request to ledger."""
         ledger = self._app.ledger
         if ledger is None:
             return
         from volnix.ledger.entries import GatewayRequestEntry
+
         entry = GatewayRequestEntry(
             protocol=protocol,
             actor_id=ActorId(actor_id),
@@ -248,4 +266,3 @@ class Gateway:
         for name, adapter in self._adapters.items():
             await adapter.stop_server()
         self._started = False
-

@@ -133,7 +133,8 @@ async def handle_pages_create(
     if not isinstance(parent, dict) or not (parent.get("database_id") or parent.get("page_id")):
         return ResponseProposal(
             response_body=_notion_error(
-                400, "validation_error",
+                400,
+                "validation_error",
                 "parent must contain database_id or page_id.",
             ),
         )
@@ -311,7 +312,8 @@ async def handle_databases_create(
     if not isinstance(parent, dict) or not parent.get("page_id"):
         return ResponseProposal(
             response_body=_notion_error(
-                400, "validation_error",
+                400,
+                "validation_error",
                 "parent must contain page_id. Databases are created under pages.",
             ),
         )

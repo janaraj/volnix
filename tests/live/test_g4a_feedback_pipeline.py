@@ -5,11 +5,11 @@ Tests the complete feedback loop a real user would experience:
 
 Requires: codex-acp with device auth, npx for Context Hub (optional)
 """
+
 from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
 
 import pytest
 
@@ -28,13 +28,15 @@ async def live_app_with_codex(tmp_path):
     loader = ConfigLoader()
     config = loader.load()
 
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -102,6 +104,7 @@ class TestFeedbackPipelineE2E:
 
         # Save to the app's profile loader so capture can find it
         from volnix.packs.profile_loader import ProfileLoader
+
         profiles_dir = tmp_path / "profiles"
         loader = ProfileLoader(profiles_dir)
         loader.save(profile)
@@ -158,8 +161,6 @@ class TestFeedbackPipelineE2E:
         # ── Step 4: Create run + execute agent action ─────────────
         print("\n  Step 4: Create run + agent action...")
 
-        from volnix.core.types import RunId
-
         run_id = await app.run_manager.create_run(
             world_def={"name": plan.name, "services": ["email", "twilio"]},
             config_snapshot={"seed": 42},
@@ -182,7 +183,9 @@ class TestFeedbackPipelineE2E:
             send_op = profile.operations[0]
 
         action_result = await app.handle_action(
-            agent_id, "twilio", send_op.name,
+            agent_id,
+            "twilio",
+            send_op.name,
             {
                 "to": "+15551234567",
                 "from_": "+15559876543",
@@ -288,9 +291,7 @@ class TestFeedbackPipelineE2E:
         from volnix.engines.feedback.pack_compiler import PackCompiler
 
         pack_compiler = PackCompiler()
-        pack_result = await pack_compiler.compile(
-            reloaded, output_dir=tmp_path / "packs"
-        )
+        pack_result = await pack_compiler.compile(reloaded, output_dir=tmp_path / "packs")
         print(f"    Output: {pack_result.output_dir}")
         print(f"    Files: {len(pack_result.files_generated)}")
         print(f"    Handler stubs: {pack_result.handler_stubs}")
@@ -313,12 +314,8 @@ class TestFeedbackPipelineE2E:
 
         # Structure, importable, handlers, tools, entities should pass
         # Stubs are expected (warning, not error)
-        structure_ok = any(
-            c.name == "structure" and c.passed for c in verification.checks
-        )
-        handlers_ok = any(
-            c.name == "handlers" and c.passed for c in verification.checks
-        )
+        structure_ok = any(c.name == "structure" and c.passed for c in verification.checks)
+        handlers_ok = any(c.name == "handlers" and c.passed for c in verification.checks)
         assert structure_ok, "Pack structure check failed"
         assert handlers_ok, "Pack handlers check failed"
 

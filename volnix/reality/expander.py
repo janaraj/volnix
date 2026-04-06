@@ -12,9 +12,8 @@ from typing import Any
 from volnix.core.errors import InvalidLabelError
 from volnix.reality.dimensions import WorldConditions
 from volnix.reality.labels import (
-    LABEL_SCALES,
     DIMENSION_DEFAULTS,
-    is_valid_label,
+    LABEL_SCALES,
     resolve_dimension,
 )
 from volnix.reality.presets import load_preset
@@ -282,7 +281,7 @@ class ConditionExpander:
         parts: list[str] = []
         for dim_name in ["information", "reliability", "friction", "complexity", "boundaries"]:
             dim_data = dimensions.get(dim_name, {})
-            level = dim_data.get("level", "unknown")
+            dim_data.get("level", "unknown")
             desc = dim_data.get("description", "")
             if desc:
                 parts.append(desc)

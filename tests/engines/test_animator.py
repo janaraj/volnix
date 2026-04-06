@@ -3,10 +3,10 @@
 Full test suites are in tests/engines/animator/ — this file contains
 basic smoke tests for backwards compatibility.
 """
-import pytest
-from volnix.engines.animator.engine import WorldAnimatorEngine
+
 from volnix.engines.animator.config import AnimatorConfig
 from volnix.engines.animator.context import AnimatorContext
+from volnix.engines.animator.engine import WorldAnimatorEngine
 from volnix.engines.animator.generator import OrganicGenerator
 from volnix.scheduling.scheduler import WorldScheduler
 

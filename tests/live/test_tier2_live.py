@@ -10,9 +10,7 @@ Requires: codex-acp with device auth
 
 from __future__ import annotations
 
-import json
 import shutil
-from pathlib import Path
 
 import pytest
 
@@ -30,13 +28,15 @@ async def live_app_with_codex(tmp_path):
 
     loader = ConfigLoader()
     config = loader.load()
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -85,6 +85,7 @@ class TestTier2ProfileRuntime:
 
             # Convert to surface
             from volnix.packs.profile_surface import profile_to_surface
+
             surface = profile_to_surface(jira_profile)
             print(f"  Surface operations: {len(surface.operations)}")
             print(f"  Surface entity_schemas: {list(surface.entity_schemas.keys())}")
@@ -138,7 +139,7 @@ class TestTier2InferLive:
             pytest.skip(f"LLM inference failed: {exc}")
             return
 
-        print(f"  Profile inferred successfully!")
+        print("  Profile inferred successfully!")
         print(f"  Service: {profile.service_name}")
         print(f"  Category: {profile.category}")
         print(f"  Confidence: {profile.confidence}")
@@ -158,13 +159,18 @@ class TestTier2InferLive:
         print(f"  Responder prompt: {profile.responder_prompt[:100]}...")
 
         # Verify minimum viability
-        assert len(profile.operations) >= 3, f"Expected at least 3 ops, got {len(profile.operations)}"
-        assert len(profile.entities) >= 1, f"Expected at least 1 entity, got {len(profile.entities)}"
+        assert len(profile.operations) >= 3, (
+            f"Expected at least 3 ops, got {len(profile.operations)}"
+        )
+        assert len(profile.entities) >= 1, (
+            f"Expected at least 1 entity, got {len(profile.entities)}"
+        )
         assert profile.responder_prompt, "Responder prompt should not be empty"
         assert profile.confidence >= 0.2, f"Confidence too low: {profile.confidence}"
 
         # Save to temp directory
         from volnix.packs.profile_loader import ProfileLoader
+
         loader = ProfileLoader(tmp_path / "profiles")
         saved_path = loader.save(profile)
         print(f"\n  Saved to: {saved_path}")
@@ -178,6 +184,7 @@ class TestTier2InferLive:
 
         # Convert to surface
         from volnix.packs.profile_surface import profile_to_surface
+
         surface = profile_to_surface(profile)
         print(f"  Surface: {len(surface.operations)} operations, tier={surface.fidelity_tier}")
 

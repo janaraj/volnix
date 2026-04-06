@@ -16,7 +16,6 @@ import yaml
 
 from volnix.actors.state import ActorState, InteractionRecord, Subscription
 from volnix.engines.adapter.protocols.http_rest import COMMUNICATION_ACTIONS
-from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
 from volnix.ledger.entries import (
     ENTRY_REGISTRY,
@@ -24,7 +23,6 @@ from volnix.ledger.entries import (
     SubscriptionMatchEntry,
 )
 from volnix.simulation.world_context import WorldContextBundle
-
 
 # ---------------------------------------------------------------------------
 # 1. All communication packs represented in COMMUNICATION_ACTIONS
@@ -107,9 +105,10 @@ class TestInteractionRecordFieldsRenderedInPrompt:
             recent_interactions=[record],
         )
 
+        from datetime import UTC, datetime
+
         from volnix.core.events import WorldEvent
         from volnix.core.types import ActorId, ServiceId, Timestamp
-        from datetime import UTC, datetime
 
         now = datetime.now(UTC)
         event = WorldEvent(
@@ -159,19 +158,13 @@ class TestDeliverablePresetsAllValid:
             with open(yaml_file) as f:
                 data = yaml.safe_load(f)
 
-            assert isinstance(data, dict), (
-                f"{yaml_file.name}: YAML root is not a dict"
-            )
+            assert isinstance(data, dict), f"{yaml_file.name}: YAML root is not a dict"
 
             missing = required_keys - set(data.keys())
-            assert not missing, (
-                f"{yaml_file.name}: Missing required keys: {missing}"
-            )
+            assert not missing, f"{yaml_file.name}: Missing required keys: {missing}"
 
             # Schema must be a dict with 'type'
-            assert isinstance(data["schema"], dict), (
-                f"{yaml_file.name}: 'schema' is not a dict"
-            )
+            assert isinstance(data["schema"], dict), f"{yaml_file.name}: 'schema' is not a dict"
 
 
 # ---------------------------------------------------------------------------
@@ -182,16 +175,19 @@ class TestDeliverablePresetsAllValid:
 class TestSubscriptionSensitivityLevelsAllHandled:
     """Every Literal value in Subscription.sensitivity must have handler code in notify()."""
 
-    @pytest.mark.skip(reason="V2: batch/passive sensitivity disabled for MVP — all subscriptions activate immediately")
+    @pytest.mark.skip(
+        reason="V2: batch/passive sensitivity disabled for MVP — all subscriptions activate immediately"
+    )
     def test_subscription_sensitivity_levels_all_handled(self):
         """Check that the engine notify() handles every sensitivity level."""
         # Get the Literal values from the Subscription model
-        hints = get_type_hints(Subscription, include_extras=True)
+        get_type_hints(Subscription, include_extras=True)
         # Pydantic fields with Literal -- the allowed values are "immediate", "batch", "passive"
         expected_levels = {"immediate", "batch", "passive"}
 
         # Read the source of notify() and check that each level is referenced
         from volnix.engines.agency.engine import AgencyEngine
+
         source = inspect.getsource(AgencyEngine.notify)
 
         for level in expected_levels:

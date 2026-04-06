@@ -1,10 +1,12 @@
 """Shared fixtures and helpers for registry tests."""
+
 from __future__ import annotations
-from typing import Any, ClassVar
+
+from typing import Any
 from unittest.mock import AsyncMock
 
-from volnix.core.engine import BaseEngine
 from volnix.core.context import ActionContext, StepResult
+from volnix.core.engine import BaseEngine
 from volnix.core.types import StepVerdict
 
 

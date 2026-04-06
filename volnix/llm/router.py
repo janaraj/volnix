@@ -51,12 +51,8 @@ class LLMRouter:
         Returns:
             The matched routing entry, or ``None`` for fallback to defaults.
         """
-        routing_key = (
-            f"{engine_name}_{use_case}" if use_case != "default" else engine_name
-        )
-        return self._config.routing.get(routing_key) or self._config.routing.get(
-            engine_name
-        )
+        routing_key = f"{engine_name}_{use_case}" if use_case != "default" else engine_name
+        return self._config.routing.get(routing_key) or self._config.routing.get(engine_name)
 
     async def route(
         self,
@@ -96,9 +92,7 @@ class LLMRouter:
         try:
             provider = self._registry.get(provider_name)
         except KeyError:
-            routing_key = (
-                f"{engine_name}_{use_case}" if use_case != "default" else engine_name
-            )
+            routing_key = f"{engine_name}_{use_case}" if use_case != "default" else engine_name
             raise KeyError(
                 f"No provider '{provider_name}' registered. "
                 f"Routing: {routing_key} -> {'matched' if routing else 'fell through to defaults'}. "
@@ -125,7 +119,7 @@ class LLMRouter:
                         provider.generate(request),
                         timeout=timeout,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     response = LLMResponse(
                         content="",
                         provider=provider_name,
@@ -143,18 +137,22 @@ class LLMRouter:
             if response.error and not is_retryable:
                 logger.warning(
                     "LLM call failed (non-retryable): %s/%s — %s",
-                    engine_name, use_case, response.error,
+                    engine_name,
+                    use_case,
+                    response.error,
                 )
 
             if not is_retryable or attempt >= max_retries:
                 break
 
-            delay = backoff_base * (2 ** attempt)
+            delay = backoff_base * (2**attempt)
             logger.warning(
-                "LLM call returned retryable result (attempt %d/%d), "
-                "retrying in %.1fs: %s/%s — %s",
-                attempt + 1, max_retries, delay,
-                engine_name, use_case,
+                "LLM call returned retryable result (attempt %d/%d), retrying in %.1fs: %s/%s — %s",
+                attempt + 1,
+                max_retries,
+                delay,
+                engine_name,
+                use_case,
                 response.error or "empty response",
             )
             await asyncio.sleep(delay)
@@ -169,8 +167,15 @@ class LLMRouter:
         return response
 
     _TRANSIENT_PATTERNS = (
-        "timeout", "timed out", "rate limit", "429",
-        "500", "502", "503", "504", "overloaded",
+        "timeout",
+        "timed out",
+        "rate limit",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "overloaded",
     )
 
     def _is_transient_error(self, error: str) -> bool:
@@ -178,9 +183,7 @@ class LLMRouter:
         error_lower = error.lower()
         return any(p in error_lower for p in self._TRANSIENT_PATTERNS)
 
-    def get_provider_for(
-        self, engine_name: str, use_case: str = "default"
-    ) -> LLMProvider:
+    def get_provider_for(self, engine_name: str, use_case: str = "default") -> LLMProvider:
         """Resolve the provider for a given engine and use-case.
 
         Args:
@@ -269,8 +272,6 @@ class LLMRouter:
                 "response_content": response.content,
                 "response_tool_calls": tool_calls_data,
             }
-            (self._LLM_DEBUG_DIR / filename).write_text(
-                json.dumps(payload, indent=2, default=str)
-            )
+            (self._LLM_DEBUG_DIR / filename).write_text(json.dumps(payload, indent=2, default=str))
         except Exception:
             logger.debug("Failed to write LLM debug file", exc_info=True)

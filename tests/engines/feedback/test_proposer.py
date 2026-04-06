@@ -1,4 +1,5 @@
 """Tests for ProfileUpdateProposer -- generate update proposals from drift."""
+
 from __future__ import annotations
 
 from volnix.engines.feedback.drift import DriftReport

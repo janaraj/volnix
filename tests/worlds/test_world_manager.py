@@ -21,13 +21,17 @@ class TestWorldManagerCreate:
 
     async def test_create_world_returns_world_id(self, world_mgr):
         wid = await world_mgr.create_world(
-            name="Test World", plan_data={"name": "Test World"}, seed=42,
+            name="Test World",
+            plan_data={"name": "Test World"},
+            seed=42,
         )
         assert str(wid).startswith("world_")
 
     async def test_create_world_writes_metadata(self, world_mgr):
         wid = await world_mgr.create_world(
-            name="Test", plan_data={}, seed=1,
+            name="Test",
+            plan_data={},
+            seed=1,
         )
         meta_path = world_mgr.get_world_dir(wid) / "metadata.json"
         assert meta_path.exists()
@@ -40,7 +44,9 @@ class TestWorldManagerCreate:
     async def test_create_world_writes_plan(self, world_mgr):
         plan = {"name": "My World", "services": {"email": {}}}
         wid = await world_mgr.create_world(
-            name="My World", plan_data=plan, seed=42,
+            name="My World",
+            plan_data=plan,
+            seed=42,
         )
         plan_path = world_mgr.get_world_dir(wid) / "plan.json"
         assert plan_path.exists()
@@ -49,7 +55,10 @@ class TestWorldManagerCreate:
 
     async def test_create_world_records_services(self, world_mgr):
         wid = await world_mgr.create_world(
-            name="Svc", plan_data={}, seed=42, services=["email", "chat"],
+            name="Svc",
+            plan_data={},
+            seed=42,
+            services=["email", "chat"],
         )
         world = await world_mgr.get_world(wid)
         assert world["services"] == ["email", "chat"]

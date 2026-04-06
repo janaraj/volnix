@@ -6,20 +6,19 @@ Covers: static mode, dynamic mode, reactive mode, event execution,
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
-from volnix.engines.animator.config import AnimatorConfig
 from volnix.engines.animator.context import AnimatorContext
 from volnix.engines.animator.engine import WorldAnimatorEngine, _parse_duration
 from volnix.engines.world_compiler.plan import WorldPlan
 from volnix.reality.dimensions import (
-    WorldConditions,
-    ReliabilityDimension,
-    ComplexityDimension,
     BoundaryDimension,
+    ComplexityDimension,
+    ReliabilityDimension,
+    WorldConditions,
 )
 from volnix.scheduling.scheduler import WorldScheduler
 
@@ -27,7 +26,7 @@ from volnix.scheduling.scheduler import WorldScheduler
 def _utc(**kwargs):
     defaults = {"year": 2026, "month": 3, "day": 22, "hour": 12, "minute": 0, "second": 0}
     defaults.update(kwargs)
-    return datetime(**defaults, tzinfo=timezone.utc)
+    return datetime(**defaults, tzinfo=UTC)
 
 
 def _make_plan(
@@ -111,12 +110,16 @@ async def test_dynamic_mode_scheduled_events():
 
     # Register a one-shot event due now
     t = _utc()
-    scheduler.register_event(t, {
-        "actor_id": "npc1",
-        "service_id": "gmail",
-        "action": "send_email",
-        "input_data": {"subject": "test"},
-    }, source="test")
+    scheduler.register_event(
+        t,
+        {
+            "actor_id": "npc1",
+            "service_id": "gmail",
+            "action": "send_email",
+            "input_data": {"subject": "test"},
+        },
+        source="test",
+    )
 
     results = await engine.tick(t)
     assert len(results) >= 1
@@ -131,10 +134,14 @@ async def test_dynamic_mode_organic_events():
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
     mock_llm = AsyncMock()
-    mock_llm.route = AsyncMock(return_value=LLMResponse(
-        content='[{"actor_id": "npc1", "service_id": "world", "action": "npc_action", "input_data": {}, "sub_type": "organic"}]',
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_llm.route = AsyncMock(
+        return_value=LLMResponse(
+            content='[{"actor_id": "npc1", "service_id": "world", "action": "npc_action", "input_data": {}, "sub_type": "organic"}]',
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     engine, scheduler = await _setup_engine(
         behavior="dynamic",
@@ -174,17 +181,21 @@ async def test_reactive_mode_no_events_without_actions():
 @pytest.mark.asyncio
 async def test_reactive_mode_events_with_actions():
     """Reactive mode: events only when recent_actions exist."""
-    from volnix.llm.types import LLMResponse
     from volnix.core.events import WorldEvent
-    from volnix.core.types import Timestamp, ActorId, ServiceId
+    from volnix.core.types import ActorId, ServiceId, Timestamp
+    from volnix.llm.types import LLMResponse
 
     mock_app = AsyncMock()
     mock_app.handle_action = AsyncMock(return_value={"status": "ok"})
     mock_llm = AsyncMock()
-    mock_llm.route = AsyncMock(return_value=LLMResponse(
-        content='[{"actor_id": "npc1", "service_id": "world", "action": "react", "input_data": {}, "sub_type": "organic"}]',
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    mock_llm.route = AsyncMock(
+        return_value=LLMResponse(
+            content='[{"actor_id": "npc1", "service_id": "world", "action": "react", "input_data": {}, "sub_type": "organic"}]',
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     engine, scheduler = await _setup_engine(
         behavior="reactive",
@@ -258,6 +269,7 @@ async def test_execute_event_publishes_animator_event():
     engine._bus.publish.assert_called()
     published = engine._bus.publish.call_args[0][0]
     from volnix.core.events import AnimatorEvent
+
     assert isinstance(published, AnimatorEvent)
     assert published.sub_type == "scheduled"
 
@@ -277,14 +289,24 @@ async def test_creativity_budget_respected():
     mock_llm = AsyncMock()
 
     # LLM returns 5 events, but budget is 2
-    events_json = '[' + ','.join([
-        f'{{"actor_id":"npc{i}","service_id":"world","action":"a{i}","input_data":{{}},"sub_type":"organic"}}'
-        for i in range(5)
-    ]) + ']'
-    mock_llm.route = AsyncMock(return_value=LLMResponse(
-        content=events_json,
-        provider="mock", model="mock", latency_ms=0,
-    ))
+    events_json = (
+        "["
+        + ",".join(
+            [
+                f'{{"actor_id":"npc{i}","service_id":"world","action":"a{i}","input_data":{{}},"sub_type":"organic"}}'
+                for i in range(5)
+            ]
+        )
+        + "]"
+    )
+    mock_llm.route = AsyncMock(
+        return_value=LLMResponse(
+            content=events_json,
+            provider="mock",
+            model="mock",
+            latency_ms=0,
+        )
+    )
 
     engine, scheduler = await _setup_engine(
         behavior="dynamic",
@@ -294,7 +316,7 @@ async def test_creativity_budget_respected():
         conditions=WorldConditions(),
     )
 
-    results = await engine.tick(_utc())
+    await engine.tick(_utc())
     # Count organic events (should be at most 2)
     # handle_action is called for each organic event
     organic_calls = mock_app.handle_action.call_count

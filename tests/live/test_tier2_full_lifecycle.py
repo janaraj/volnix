@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
 
 import pytest
 
@@ -36,13 +35,15 @@ async def live_app_with_codex(tmp_path):
     profiles_dir = tmp_path / "profiles"
     profiles_dir.mkdir()
 
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -68,78 +69,89 @@ class TestOpenAPISource:
 
         # Download petstore spec
         import httpx
+
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get("https://petstore3.swagger.io/api/v3/openapi.json")
                 spec_content = resp.text
         except Exception:
             # Fallback: use a minimal spec
-            spec_content = json.dumps({
-                "openapi": "3.0.0",
-                "info": {"title": "Petstore", "version": "1.0.0"},
-                "paths": {
-                    "/pet": {
-                        "post": {
-                            "operationId": "addPet",
-                            "summary": "Add a new pet",
-                            "requestBody": {
-                                "content": {
-                                    "application/json": {
-                                        "schema": {
-                                            "type": "object",
-                                            "properties": {
-                                                "name": {"type": "string"},
-                                                "status": {"type": "string", "enum": ["available", "pending", "sold"]},
-                                            },
-                                            "required": ["name"],
-                                        }
-                                    }
-                                }
-                            },
-                            "responses": {
-                                "200": {
+            spec_content = json.dumps(
+                {
+                    "openapi": "3.0.0",
+                    "info": {"title": "Petstore", "version": "1.0.0"},
+                    "paths": {
+                        "/pet": {
+                            "post": {
+                                "operationId": "addPet",
+                                "summary": "Add a new pet",
+                                "requestBody": {
                                     "content": {
                                         "application/json": {
                                             "schema": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "id": {"type": "integer"},
                                                     "name": {"type": "string"},
-                                                    "status": {"type": "string"},
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": ["available", "pending", "sold"],
+                                                    },
                                                 },
+                                                "required": ["name"],
                                             }
                                         }
                                     }
-                                }
-                            },
-                        }
-                    },
-                    "/pet/{petId}": {
-                        "get": {
-                            "operationId": "getPetById",
-                            "summary": "Find pet by ID",
-                            "parameters": [
-                                {"name": "petId", "in": "path", "required": True, "schema": {"type": "integer"}},
-                            ],
-                            "responses": {
-                                "200": {
-                                    "content": {
-                                        "application/json": {
-                                            "schema": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {"type": "integer"},
-                                                    "name": {"type": "string"},
-                                                },
+                                },
+                                "responses": {
+                                    "200": {
+                                        "content": {
+                                            "application/json": {
+                                                "schema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {"type": "integer"},
+                                                        "name": {"type": "string"},
+                                                        "status": {"type": "string"},
+                                                    },
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            },
-                        }
+                                },
+                            }
+                        },
+                        "/pet/{petId}": {
+                            "get": {
+                                "operationId": "getPetById",
+                                "summary": "Find pet by ID",
+                                "parameters": [
+                                    {
+                                        "name": "petId",
+                                        "in": "path",
+                                        "required": True,
+                                        "schema": {"type": "integer"},
+                                    },
+                                ],
+                                "responses": {
+                                    "200": {
+                                        "content": {
+                                            "application/json": {
+                                                "schema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {"type": "integer"},
+                                                        "name": {"type": "string"},
+                                                    },
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            }
+                        },
                     },
-                },
-            })
+                }
+            )
 
         (spec_dir / "petstore.json").write_text(spec_content)
         print(f"  Spec saved: {spec_dir / 'petstore.json'} ({len(spec_content)} bytes)")
@@ -238,6 +250,7 @@ class TestFullLifecycle:
 
         # Step 2: Build a world plan with Jira as Tier 2 service
         from volnix.packs.profile_surface import profile_to_surface
+
         jira_surface = profile_to_surface(jira)
 
         from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
@@ -255,12 +268,16 @@ class TestFullLifecycle:
             mode="governed",
             services={
                 "gmail": ServiceResolution(
-                    service_name="gmail", spec_reference="verified/gmail",
-                    surface=email_surface, resolution_source="tier1_pack",
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
+                    surface=email_surface,
+                    resolution_source="tier1_pack",
                 ),
                 "jira": ServiceResolution(
-                    service_name="jira", spec_reference="profiled/jira",
-                    surface=jira_surface, resolution_source="tier2_yaml_profile",
+                    service_name="jira",
+                    spec_reference="profiled/jira",
+                    surface=jira_surface,
+                    resolution_source="tier2_yaml_profile",
                 ),
             },
             actor_specs=[
@@ -296,7 +313,9 @@ class TestFullLifecycle:
         print("  Calling jira_create_issue through pipeline...")
 
         action_result = await app.handle_action(
-            agent_id, "jira", "jira_create_issue",
+            agent_id,
+            "jira",
+            "jira_create_issue",
             {
                 "project_key": "SUPPORT",
                 "summary": "Bug in refund flow",
@@ -320,7 +339,7 @@ class TestFullLifecycle:
             else:
                 print(f"  Pipeline result: {error_msg}")
         else:
-            print(f"  Tier 2 response received!")
+            print("  Tier 2 response received!")
             assert "key" in action_result, f"Expected Jira issue key in response: {action_result}"
             print(f"  Issue key: {action_result['key']}")
 
@@ -387,8 +406,12 @@ class TestContextHubSource:
             print(f"    - {entity.name} (identity: {entity.identity_field})")
 
         assert profile.confidence == 0.7, f"Expected 0.7 (hub source), got {profile.confidence}"
-        assert "context_hub" in profile.source_chain, f"source_chain missing context_hub: {profile.source_chain}"
-        assert len(profile.operations) >= 3, f"Expected >= 3 operations, got {len(profile.operations)}"
+        assert "context_hub" in profile.source_chain, (
+            f"source_chain missing context_hub: {profile.source_chain}"
+        )
+        assert len(profile.operations) >= 3, (
+            f"Expected >= 3 operations, got {len(profile.operations)}"
+        )
         assert len(profile.entities) >= 1, f"Expected >= 1 entity, got {len(profile.entities)}"
 
         # Step 4: Save + verify persistence
@@ -436,12 +459,16 @@ class TestContextHubSource:
             mode="governed",
             services={
                 "gmail": ServiceResolution(
-                    service_name="gmail", spec_reference="verified/gmail",
-                    surface=email_surface, resolution_source="tier1_pack",
+                    service_name="gmail",
+                    spec_reference="verified/gmail",
+                    surface=email_surface,
+                    resolution_source="tier1_pack",
                 ),
                 "twilio": ServiceResolution(
-                    service_name="twilio", spec_reference="profiled/twilio",
-                    surface=twilio_surface, resolution_source="tier2_inferred",
+                    service_name="twilio",
+                    spec_reference="profiled/twilio",
+                    surface=twilio_surface,
+                    resolution_source="tier2_inferred",
                 ),
             },
             actor_specs=[
@@ -482,7 +509,9 @@ class TestContextHubSource:
         print(f"  Calling {send_op.name} through pipeline...")
 
         action_result = await app.handle_action(
-            agent_id, "twilio", send_op.name,
+            agent_id,
+            "twilio",
+            send_op.name,
             {
                 "to": "+15551234567",
                 "from_": "+15559876543",
@@ -504,6 +533,6 @@ class TestContextHubSource:
             else:
                 print(f"  Pipeline result: {error_msg}")
         else:
-            print(f"  Tier 2 response received!")
+            print("  Tier 2 response received!")
 
         print("\n  PASSED")

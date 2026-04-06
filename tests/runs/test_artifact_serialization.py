@@ -6,7 +6,7 @@ all round-trip correctly through ArtifactStore save/load.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -17,7 +17,7 @@ from volnix.runs.config import RunConfig
 
 
 def _ts(tick: int = 5) -> Timestamp:
-    now = datetime(2026, 3, 25, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 3, 25, 12, 0, 0, tzinfo=UTC)
     return Timestamp(world_time=now, wall_time=now, tick=tick)
 
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-from volnix.core.types import RunId
 from volnix.engines.world_compiler.plan import ServiceResolution, WorldPlan
 from volnix.kernel.surface import ServiceSurface
 from volnix.packs.verified.gmail.pack import EmailPack
@@ -122,15 +121,21 @@ async def test_diff_governed_ungoverned_produces_comparison(app_with_mock_llm):
         tag="gov-diff",
     )
     await app.run_manager.start_run(gov_id)
-    await store.save_scorecard(gov_id, {
-        "per_actor": {"agent-1": {"policy_compliance": 95.0}},
-        "collective": {"overall_score": 94.0, "policy_compliance": 95.0},
-    })
-    await store.save_event_log(gov_id, [
-        {"event_type": "world.email_send", "actor_id": "agent-1"},
-        {"event_type": "policy_block", "actor_id": "agent-1"},
-        {"event_type": "policy_hold", "actor_id": "agent-1"},
-    ])
+    await store.save_scorecard(
+        gov_id,
+        {
+            "per_actor": {"agent-1": {"policy_compliance": 95.0}},
+            "collective": {"overall_score": 94.0, "policy_compliance": 95.0},
+        },
+    )
+    await store.save_event_log(
+        gov_id,
+        [
+            {"event_type": "world.email_send", "actor_id": "agent-1"},
+            {"event_type": "policy_block", "actor_id": "agent-1"},
+            {"event_type": "policy_hold", "actor_id": "agent-1"},
+        ],
+    )
     await store.save_report(gov_id, {"entities": {"email": [{"id": "1"}]}})
     await app.run_manager.complete_run(gov_id)
 
@@ -142,16 +147,22 @@ async def test_diff_governed_ungoverned_produces_comparison(app_with_mock_llm):
         tag="ungov-diff",
     )
     await app.run_manager.start_run(ungov_id)
-    await store.save_scorecard(ungov_id, {
-        "per_actor": {"agent-1": {"policy_compliance": 70.0}},
-        "collective": {"overall_score": 78.0, "policy_compliance": 70.0},
-    })
-    await store.save_event_log(ungov_id, [
-        {"event_type": "world.email_send", "actor_id": "agent-1"},
-        {"event_type": "world.email_send", "actor_id": "agent-1"},
-        {"event_type": "permission_denied", "actor_id": "agent-1"},
-        {"event_type": "budget_exhausted", "actor_id": "agent-1"},
-    ])
+    await store.save_scorecard(
+        ungov_id,
+        {
+            "per_actor": {"agent-1": {"policy_compliance": 70.0}},
+            "collective": {"overall_score": 78.0, "policy_compliance": 70.0},
+        },
+    )
+    await store.save_event_log(
+        ungov_id,
+        [
+            {"event_type": "world.email_send", "actor_id": "agent-1"},
+            {"event_type": "world.email_send", "actor_id": "agent-1"},
+            {"event_type": "permission_denied", "actor_id": "agent-1"},
+            {"event_type": "budget_exhausted", "actor_id": "agent-1"},
+        ],
+    )
     await store.save_report(ungov_id, {"entities": {"email": [{"id": "1"}, {"id": "2"}]}})
     await app.run_manager.complete_run(ungov_id)
 

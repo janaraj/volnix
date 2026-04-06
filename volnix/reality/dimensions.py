@@ -15,7 +15,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Base dimension
 # ---------------------------------------------------------------------------
@@ -96,9 +95,7 @@ class WorldConditions(BaseModel, frozen=True):
     personality traits manifest in concrete entities and situations.
     """
 
-    information: InformationQualityDimension = Field(
-        default_factory=InformationQualityDimension
-    )
+    information: InformationQualityDimension = Field(default_factory=InformationQualityDimension)
     reliability: ReliabilityDimension = Field(default_factory=ReliabilityDimension)
     friction: SocialFrictionDimension = Field(default_factory=SocialFrictionDimension)
     complexity: ComplexityDimension = Field(default_factory=ComplexityDimension)

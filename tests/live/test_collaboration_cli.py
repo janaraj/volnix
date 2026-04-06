@@ -7,6 +7,7 @@ Results persist to data/runs/ for frontend viewing.
 Run with:
     uv run pytest tests/live/test_collaboration_cli.py -v -s --timeout=600
 """
+
 from __future__ import annotations
 
 import json
@@ -21,7 +22,9 @@ DASHBOARD_URL = "http://127.0.0.1:8200"
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "worlds" / "collaboration"
 
 
-def _run_world(yaml_name: str, tag: str, behavior: str = "dynamic", timeout: int = 300) -> subprocess.CompletedProcess:
+def _run_world(
+    yaml_name: str, tag: str, behavior: str = "dynamic", timeout: int = 300
+) -> subprocess.CompletedProcess:
     """Run a world YAML through the volnix CLI."""
     yaml_path = FIXTURES_DIR / yaml_name
     assert yaml_path.exists(), f"Fixture not found: {yaml_path}"
@@ -31,16 +34,18 @@ def _run_world(yaml_name: str, tag: str, behavior: str = "dynamic", timeout: int
             *VOLNIX_CMD,
             "run",
             str(yaml_path),
-            "--behavior", behavior,
-            "--tag", tag,
+            "--behavior",
+            behavior,
+            "--tag",
+            tag,
         ],
         capture_output=True,
         text=True,
         timeout=timeout,
     )
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"WORLD: {yaml_name}  |  TAG: {tag}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"STDOUT:\n{result.stdout}")
     if result.stderr:
         print(f"STDERR:\n{result.stderr}")
@@ -73,8 +78,10 @@ async def _check_dashboard(tag: str) -> None:
             msg_resp = await client.get(f"{DASHBOARD_URL}/api/v1/runs/{run_id}/messages")
             if msg_resp.status_code == 200:
                 messages = msg_resp.json()
-                print(f"Messages ({len(messages.get('messages', []))} total): "
-                      f"{json.dumps(messages, indent=2)[:500]}")
+                print(
+                    f"Messages ({len(messages.get('messages', []))} total): "
+                    f"{json.dumps(messages, indent=2)[:500]}"
+                )
 
             # Check deliverable
             del_resp = await client.get(f"{DASHBOARD_URL}/api/v1/runs/{run_id}/deliverable")
@@ -185,9 +192,9 @@ class TestAllCollaborationScenarios:
                 await _check_dashboard(tag)
 
         # Report summary
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("SUMMARY")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for yaml_name, code in results.items():
             status = "PASS" if code == 0 else "FAIL"
             print(f"  [{status}] {yaml_name}")

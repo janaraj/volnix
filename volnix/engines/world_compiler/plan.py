@@ -4,7 +4,9 @@ A WorldPlan is the COMPLETE plan for a world: resolved services,
 reality conditions, actor specs, policies, seeds. It contains
 everything D4b needs to generate entities and populate the StateEngine.
 """
+
 from __future__ import annotations
+
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -15,10 +17,13 @@ from volnix.reality.dimensions import WorldConditions
 
 class ServiceResolution(BaseModel, frozen=True):
     """Resolution metadata for a single service."""
+
     service_name: str
-    spec_reference: str          # "verified/gmail", "profiled/stripe", bare "stripe"
+    spec_reference: str  # "verified/gmail", "profiled/stripe", bare "stripe"
     surface: ServiceSurface
-    resolution_source: str       # "tier1_pack", "context_hub", "openapi", "llm_inference", "kernel_inference"
+    resolution_source: (
+        str  # "tier1_pack", "context_hub", "openapi", "llm_inference", "kernel_inference"
+    )
 
 
 class WorldPlan(BaseModel, frozen=True):
@@ -31,6 +36,7 @@ class WorldPlan(BaseModel, frozen=True):
     - Policies, seeds, mission (raw YAML, D4b processes)
     - Behavior + animator settings (for runtime, not compilation)
     """
+
     # ── Metadata ──
     name: str = ""
     description: str = ""
@@ -65,7 +71,7 @@ class WorldPlan(BaseModel, frozen=True):
     blueprint: str | None = None
 
     # ── Compilation metadata ──
-    source: str = ""                # "yaml" or "nl"
+    source: str = ""  # "yaml" or "nl"
     warnings: list[str] = Field(default_factory=list)
 
     def validate_plan(self) -> list[str]:
@@ -82,7 +88,9 @@ class WorldPlan(BaseModel, frozen=True):
         if self.fidelity == "strict":
             for svc_name, res in self.services.items():
                 if res.surface.confidence < 0.5:
-                    errors.append(f"Service '{svc_name}' below strict fidelity (confidence={res.surface.confidence})")
+                    errors.append(
+                        f"Service '{svc_name}' below strict fidelity (confidence={res.surface.confidence})"
+                    )
         return errors
 
     def get_service_names(self) -> list[str]:

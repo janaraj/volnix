@@ -7,7 +7,6 @@ Commands that are self-contained (help, deferred, check) are tested directly.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -266,9 +265,10 @@ class TestCreateCommand:
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
         # PlanReviewer is imported inside the async function, so patch at source
-        with _patch_app_context(volnix), patch(
-            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
-        ) as MockReviewer:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.engines.world_compiler.plan_reviewer.PlanReviewer") as MockReviewer,
+        ):
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="world:\n  name: test\n")
             reviewer_instance.format_plan = MagicMock(return_value="Test Plan")
@@ -290,9 +290,10 @@ class TestCreateCommand:
         mock_plan.warnings = []
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(volnix), patch(
-            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
-        ) as MockReviewer:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.engines.world_compiler.plan_reviewer.PlanReviewer") as MockReviewer,
+        ):
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="reality: hostile\n")
             reviewer_instance.format_plan = MagicMock(return_value="Hostile Plan")
@@ -324,9 +325,10 @@ class TestCreateCommand:
         mock_plan.warnings = []
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(volnix), patch(
-            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
-        ) as MockReviewer:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.engines.world_compiler.plan_reviewer.PlanReviewer") as MockReviewer,
+        ):
             reviewer_instance = MagicMock()
             reviewer_instance.to_yaml = MagicMock(return_value="custom: true\n")
             reviewer_instance.format_plan = MagicMock(return_value="Custom Plan")
@@ -489,9 +491,7 @@ class TestReportDiffCommands:
     def test_report_with_existing_run(self):
         """report shows report data when run exists."""
         volnix, engines = _make_mock_volnix()
-        volnix.run_manager.get_run = AsyncMock(
-            return_value={"run_id": "run-001", "tag": "test"}
-        )
+        volnix.run_manager.get_run = AsyncMock(return_value={"run_id": "run-001", "tag": "test"})
         volnix.artifact_store.load_artifact = AsyncMock(
             side_effect=lambda rid, atype: (
                 {"summary": "All clear"} if atype == "report" else {"score": 95}
@@ -523,9 +523,7 @@ class TestReportDiffCommands:
     def test_diff_with_two_runs(self):
         """diff with two run IDs calls diff_runs."""
         volnix, _ = _make_mock_volnix()
-        volnix.diff_runs = AsyncMock(
-            return_value={"differences": [], "summary": "No differences"}
-        )
+        volnix.diff_runs = AsyncMock(return_value={"differences": [], "summary": "No differences"})
 
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["diff", "run-001", "run-002"])
@@ -584,6 +582,7 @@ class TestInspectCommand:
         """inspect policies shows policy list."""
         volnix, engines = _make_mock_volnix()
         from volnix.core.types import PolicyId
+
         engines["policy"].get_active_policies = AsyncMock(
             return_value=[PolicyId("budget_check"), PolicyId("rate_limit")]
         )
@@ -770,9 +769,10 @@ class TestLedgerCommand:
         volnix, _ = _make_mock_volnix()
         volnix.ledger.query = AsyncMock(return_value=[])
 
-        with _patch_app_context(volnix), patch(
-            "volnix.ledger.query.LedgerQueryBuilder"
-        ) as MockBuilder:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.ledger.query.LedgerQueryBuilder") as MockBuilder,
+        ):
             builder_instance = MagicMock()
             builder_instance.limit = MagicMock(return_value=builder_instance)
             builder_instance.filter_type = MagicMock(return_value=builder_instance)
@@ -799,9 +799,10 @@ class TestLedgerCommand:
         ]
         volnix.ledger.query = AsyncMock(return_value=mock_entries)
 
-        with _patch_app_context(volnix), patch(
-            "volnix.ledger.query.LedgerQueryBuilder"
-        ) as MockBuilder:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.ledger.query.LedgerQueryBuilder") as MockBuilder,
+        ):
             builder_instance = MagicMock()
             builder_instance.limit = MagicMock(return_value=builder_instance)
             builder_instance.build = MagicMock(return_value="mock_query")
@@ -832,9 +833,10 @@ class TestInitCommand:
         mock_plan = MagicMock()
         engines["world_compiler"].compile_from_yaml = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(volnix), patch(
-            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
-        ) as MockReviewer:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.engines.world_compiler.plan_reviewer.PlanReviewer") as MockReviewer,
+        ):
             reviewer_instance = MagicMock()
             reviewer_instance.validate_plan = MagicMock(return_value=[])
             reviewer_instance.format_plan = MagicMock(return_value="Compiled Plan")
@@ -867,9 +869,10 @@ class TestPlanCommand:
         mock_plan.model_dump = MagicMock(return_value={"world": "test"})
         engines["world_compiler"].compile_from_nl = AsyncMock(return_value=mock_plan)
 
-        with _patch_app_context(volnix), patch(
-            "volnix.engines.world_compiler.plan_reviewer.PlanReviewer"
-        ) as MockReviewer:
+        with (
+            _patch_app_context(volnix),
+            patch("volnix.engines.world_compiler.plan_reviewer.PlanReviewer") as MockReviewer,
+        ):
             reviewer_instance = MagicMock()
             reviewer_instance.format_plan = MagicMock(return_value="World Plan Output")
             MockReviewer.return_value = reviewer_instance

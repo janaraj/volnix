@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # JSON-RPC message helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_response(msg: dict[str, Any]) -> bool:
     """Message is a response: has 'id', no 'method'."""
     return "id" in msg and "method" not in msg
@@ -53,6 +54,7 @@ def _is_request(msg: dict[str, Any]) -> bool:
 # Terminal tracking for terminal/* agent requests
 # ---------------------------------------------------------------------------
 
+
 class _TerminalEntry:
     """Tracks a running terminal command spawned by the agent."""
 
@@ -68,6 +70,7 @@ class _TerminalEntry:
 # ---------------------------------------------------------------------------
 # ACPClientProvider
 # ---------------------------------------------------------------------------
+
 
 class ACPClientProvider(LLMProvider):
     """Connects to local coding agents via ACP stdio JSON-RPC.
@@ -204,9 +207,7 @@ class ACPClientProvider(LLMProvider):
         self._sessions[external_id] = acp_session_id
         return external_id
 
-    async def generate_in_session(
-        self, session_id: str, request: LLMRequest
-    ) -> LLMResponse:
+    async def generate_in_session(self, session_id: str, request: LLMRequest) -> LLMResponse:
         """Generate within an existing ACP session.
 
         Warning: _collected_text is shared instance state cleared at the start
@@ -260,9 +261,12 @@ class ACPClientProvider(LLMProvider):
         acp_session_id = self._sessions.pop(session_id, None)
         if acp_session_id is not None:
             try:
-                await self._send_notification("session/cancel", {
-                    "sessionId": acp_session_id,
-                })
+                await self._send_notification(
+                    "session/cancel",
+                    {
+                        "sessionId": acp_session_id,
+                    },
+                )
             except Exception:
                 pass  # best-effort
 
@@ -336,9 +340,7 @@ class ACPClientProvider(LLMProvider):
 
         # Drain stderr in background
         if self._process.stderr is not None:
-            self._stderr_task = asyncio.create_task(
-                self._drain_stderr(self._process.stderr)
-            )
+            self._stderr_task = asyncio.create_task(self._drain_stderr(self._process.stderr))
 
     async def _ensure_running(self) -> None:
         """Ensure the subprocess is running and initialized."""
@@ -423,10 +425,8 @@ class ACPClientProvider(LLMProvider):
         """
         assert self._stdout is not None, "subprocess not spawned"
         try:
-            line = await asyncio.wait_for(
-                self._stdout.readline(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
+            line = await asyncio.wait_for(self._stdout.readline(), timeout=timeout)
+        except TimeoutError:
             raise TimeoutError(f"read timeout after {timeout}s")
 
         if not line:
@@ -542,10 +542,13 @@ class ACPClientProvider(LLMProvider):
     async def _set_mode(self, session_id: str, mode_id: str) -> None:
         """Switch the agent to a different operating mode."""
         try:
-            req_id = await self._send_request("session/set_mode", {
-                "sessionId": session_id,
-                "modeId": mode_id,
-            })
+            req_id = await self._send_request(
+                "session/set_mode",
+                {
+                    "sessionId": session_id,
+                    "modeId": mode_id,
+                },
+            )
             await self._read_response_by_id(req_id, timeout=min(self._timeout, 30.0))
             logger.info("ACP mode set: %s for session %s", mode_id, session_id)
         except Exception as e:
@@ -646,9 +649,7 @@ class ACPClientProvider(LLMProvider):
             logger.warning("unhandled agent request: %s", method)
             await self._send_error_response(msg_id, -32601, f"method not supported: {method}")
 
-    async def _handle_permission_request(
-        self, msg_id: int, params: dict[str, Any]
-    ) -> None:
+    async def _handle_permission_request(self, msg_id: int, params: dict[str, Any]) -> None:
         """Auto-approve permission requests by selecting an 'allow' option."""
         options = params.get("options", [])
 
@@ -675,12 +676,15 @@ class ACPClientProvider(LLMProvider):
             option_id,
         )
 
-        await self._send_response(msg_id, {
-            "outcome": {
-                "outcome": "selected",
-                "optionId": option_id,
+        await self._send_response(
+            msg_id,
+            {
+                "outcome": {
+                    "outcome": "selected",
+                    "optionId": option_id,
+                },
             },
-        })
+        )
 
     async def _handle_fs_read(self, msg_id: int, params: dict[str, Any]) -> None:
         """Handle fs/read_text_file: read a file and respond with its content."""
@@ -693,7 +697,9 @@ class ACPClientProvider(LLMProvider):
         resolved = Path(file_path).resolve()
         allowed = Path(self._cwd).resolve()
         if not resolved.is_relative_to(allowed):
-            await self._send_error_response(msg_id, -32602, f"Path {file_path} is outside working directory")
+            await self._send_error_response(
+                msg_id, -32602, f"Path {file_path} is outside working directory"
+            )
             return
 
         logger.debug("fs/read_text_file: %s", file_path)
@@ -734,7 +740,9 @@ class ACPClientProvider(LLMProvider):
         resolved = Path(file_path).resolve()
         allowed = Path(self._cwd).resolve()
         if not resolved.is_relative_to(allowed):
-            await self._send_error_response(msg_id, -32602, f"Path {file_path} is outside working directory")
+            await self._send_error_response(
+                msg_id, -32602, f"Path {file_path} is outside working directory"
+            )
             return
 
         logger.debug("fs/write_text_file: %s", file_path)
@@ -750,9 +758,7 @@ class ACPClientProvider(LLMProvider):
         # ACP spec: successful write returns null/None result
         await self._send_response(msg_id, None)
 
-    async def _handle_terminal(
-        self, method: str, msg_id: int, params: dict[str, Any]
-    ) -> None:
+    async def _handle_terminal(self, method: str, msg_id: int, params: dict[str, Any]) -> None:
         """Handle terminal/* agent requests."""
         if method == "terminal/create":
             command = params.get("command", "")
@@ -761,7 +767,8 @@ class ACPClientProvider(LLMProvider):
 
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    command, *args,
+                    command,
+                    *args,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                     cwd=cwd or None,
@@ -790,10 +797,13 @@ class ACPClientProvider(LLMProvider):
             if entry is None:
                 await self._send_response(msg_id, {"error": "unknown terminal"})
                 return
-            await self._send_response(msg_id, {
-                "output": entry.output,
-                "finished": entry.done,
-            })
+            await self._send_response(
+                msg_id,
+                {
+                    "output": entry.output,
+                    "finished": entry.done,
+                },
+            )
 
         elif method == "terminal/wait_for_exit":
             term_id = params.get("terminalId", "")
@@ -808,10 +818,13 @@ class ACPClientProvider(LLMProvider):
                     break
                 await asyncio.sleep(0.1)
 
-            await self._send_response(msg_id, {
-                "output": entry.output,
-                "exitCode": entry.exit_code,
-            })
+            await self._send_response(
+                msg_id,
+                {
+                    "output": entry.output,
+                    "exitCode": entry.exit_code,
+                },
+            )
 
         elif method == "terminal/release":
             term_id = params.get("terminalId", "")
@@ -829,9 +842,12 @@ class ACPClientProvider(LLMProvider):
             await self._send_response(msg_id, {"success": True})
 
         else:
-            await self._send_response(msg_id, {
-                "error": f"unknown terminal method: {method}",
-            })
+            await self._send_response(
+                msg_id,
+                {
+                    "error": f"unknown terminal method: {method}",
+                },
+            )
 
     async def _terminal_wait(self, term_id: str, entry: _TerminalEntry) -> None:
         """Background task: wait for a terminal process and collect output."""
@@ -860,6 +876,7 @@ class ACPClientProvider(LLMProvider):
 # ---------------------------------------------------------------------------
 # Token usage extraction
 # ---------------------------------------------------------------------------
+
 
 def _extract_token_usage_from_map(m: dict[str, Any]) -> LLMUsage | None:
     """Try to find token counts in a notification payload.

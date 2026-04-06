@@ -398,11 +398,13 @@ async def test_apply_state_updates_schedule():
 async def test_check_scheduled_actions_due():
     """Scheduled actions that are due produce envelopes."""
     actor = _make_actor(
-        scheduled_actions=[ScheduledAction(
-            logical_time=5.0,
-            action_type="send_reminder",
-            description="Remind about SLA",
-        )]
+        scheduled_actions=[
+            ScheduledAction(
+                logical_time=5.0,
+                action_type="send_reminder",
+                description="Remind about SLA",
+            )
+        ]
     )
     engine = await _create_engine([actor])
 
@@ -416,11 +418,13 @@ async def test_check_scheduled_actions_due():
 async def test_check_scheduled_actions_not_due():
     """Scheduled actions not yet due produce no envelopes."""
     actor = _make_actor(
-        scheduled_actions=[ScheduledAction(
-            logical_time=100.0,
-            action_type="send_reminder",
-            description="Remind later",
-        )]
+        scheduled_actions=[
+            ScheduledAction(
+                logical_time=100.0,
+                action_type="send_reminder",
+                description="Remind later",
+            )
+        ]
     )
     engine = await _create_engine([actor])
 
@@ -435,11 +439,13 @@ async def test_has_scheduled_actions():
     actor1 = _make_actor(actor_id="a1")
     actor2 = _make_actor(
         actor_id="a2",
-        scheduled_actions=[ScheduledAction(
-            logical_time=50.0,
-            action_type="check",
-            description="Check status",
-        )],
+        scheduled_actions=[
+            ScheduledAction(
+                logical_time=50.0,
+                action_type="check",
+                description="Check status",
+            )
+        ],
     )
     engine = await _create_engine([actor1, actor2])
 
@@ -540,17 +546,20 @@ async def test_notify_end_to_end_with_mock_llm():
 
     # Mock the LLM router — returns native tool_calls then text
     from volnix.llm.types import ToolCall
+
     mock_router = AsyncMock()
     mock_router.route = AsyncMock(
         return_value=LLMResponse(
             content="",
             provider="mock",
             model="mock-model",
-            tool_calls=[ToolCall(
-                name="reply_ticket",
-                arguments={"message": "On it!", "reasoning": "Ticket needs attention"},
-                id="call_1",
-            )],
+            tool_calls=[
+                ToolCall(
+                    name="reply_ticket",
+                    arguments={"message": "On it!", "reasoning": "Ticket needs attention"},
+                    id="call_1",
+                )
+            ],
         )
     )
     engine._llm_router = mock_router
@@ -603,8 +612,6 @@ async def test_get_all_states():
     result = engine.get_all_states()
 
     assert len(result) == 3
-
-
 
 
 # ============================================================================
@@ -815,6 +822,7 @@ class TestEdgeCases:
     async def test_notify_all_actors_tier3(self):
         """All actors with high frustration -> all classify as Tier 3 (individual LLM calls)."""
         from volnix.llm.types import ToolCall
+
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -832,7 +840,9 @@ class TestEdgeCases:
                 content="",
                 provider="mock",
                 model="mock-model",
-                tool_calls=[ToolCall(name="do_nothing", arguments={"reasoning": "No action needed"})],
+                tool_calls=[
+                    ToolCall(name="do_nothing", arguments={"reasoning": "No action needed"})
+                ],
             )
         )
         engine._llm_router = mock_router
@@ -853,6 +863,7 @@ class TestEdgeCases:
     async def test_notify_all_actors_tier2(self):
         """Low frustration actors -> all use multi-turn loop (same as Tier 3)."""
         from volnix.llm.types import ToolCall
+
         actors = [
             _make_actor(
                 actor_id=f"actor-{i}",
@@ -870,10 +881,12 @@ class TestEdgeCases:
                 content="",
                 provider="mock",
                 model="mock-model",
-                tool_calls=[ToolCall(
-                    name="do_nothing",
-                    arguments={"reasoning": "All quiet"},
-                )],
+                tool_calls=[
+                    ToolCall(
+                        name="do_nothing",
+                        arguments={"reasoning": "All quiet"},
+                    )
+                ],
             )
         )
         engine._llm_router = mock_router
@@ -969,10 +982,7 @@ class TestEdgeCases:
         # However the LLM call returns early when no router is set.
         # Let's just verify the capping works by simulating what notify does:
         # manually add one more and cap
-        notif = (
-            f"[t={event.timestamp.tick}]"
-            f" {event.event_type}: {event.action} by {event.actor_id}"
-        )
+        notif = f"[t={event.timestamp.tick}] {event.event_type}: {event.action} by {event.actor_id}"
         actor.pending_notifications.append(notif)
         max_notif = engine._typed_config.max_pending_notifications  # 50
         if len(actor.pending_notifications) > max_notif:
@@ -1099,11 +1109,13 @@ class TestStateConsistency:
     async def test_scheduled_action_idempotent(self) -> None:
         """Call check_scheduled_actions twice -> only first time produces envelope."""
         actor = _make_actor(
-            scheduled_actions=[ScheduledAction(
-                logical_time=5.0,
-                action_type="send_reminder",
-                description="Remind about SLA",
-            )]
+            scheduled_actions=[
+                ScheduledAction(
+                    logical_time=5.0,
+                    action_type="send_reminder",
+                    description="Remind about SLA",
+                )
+            ]
         )
         engine = await _create_engine([actor])
 
@@ -1226,12 +1238,21 @@ class TestBuildToolDefinitions:
         engine = AgencyEngine()
         await engine.initialize({}, bus=None)
         ctx = WorldContextBundle(
-            world_description="Test", reality_summary="Ideal",
+            world_description="Test",
+            reality_summary="Ideal",
         )
         actions = [
-            {"name": "search_recent", "service": "twitter", "description": "Search tweets",
-             "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-             "http_method": "GET"},
+            {
+                "name": "search_recent",
+                "service": "twitter",
+                "description": "Search tweets",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                "http_method": "GET",
+            },
         ]
         await engine.configure([actor], ctx, actions)
 
@@ -1251,15 +1272,24 @@ class TestBuildToolDefinitions:
         engine = AgencyEngine()
         await engine.initialize({}, bus=None)
         ctx = WorldContextBundle(
-            world_description="Test", reality_summary="Ideal",
+            world_description="Test",
+            reality_summary="Ideal",
         )
         actions = [
-            {"name": "list", "service": "twitter", "description": "List tweets",
-             "parameters": {"type": "object", "properties": {}, "required": []},
-             "http_method": "GET"},
-            {"name": "list", "service": "slack", "description": "List channels",
-             "parameters": {"type": "object", "properties": {}, "required": []},
-             "http_method": "GET"},
+            {
+                "name": "list",
+                "service": "twitter",
+                "description": "List tweets",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+                "http_method": "GET",
+            },
+            {
+                "name": "list",
+                "service": "slack",
+                "description": "List channels",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+                "http_method": "GET",
+            },
         ]
         await engine.configure([actor], ctx, actions)
 
@@ -1276,12 +1306,21 @@ class TestBuildToolDefinitions:
         engine = AgencyEngine()
         await engine.initialize({}, bus=None)
         ctx = WorldContextBundle(
-            world_description="Test", reality_summary="Ideal",
+            world_description="Test",
+            reality_summary="Ideal",
         )
         actions = [
-            {"name": "email_send", "service": "gmail", "description": "Send email",
-             "parameters": {"type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"]},
-             "http_method": "POST"},
+            {
+                "name": "email_send",
+                "service": "gmail",
+                "description": "Send email",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"to": {"type": "string"}},
+                    "required": ["to"],
+                },
+                "http_method": "POST",
+            },
         ]
         await engine.configure([actor], ctx, actions)
 
@@ -1299,7 +1338,8 @@ class TestBuildToolDefinitions:
         engine = AgencyEngine()
         await engine.initialize({}, bus=None)
         ctx = WorldContextBundle(
-            world_description="Test", reality_summary="Ideal",
+            world_description="Test",
+            reality_summary="Ideal",
         )
         original_params = {
             "type": "object",
@@ -1307,8 +1347,13 @@ class TestBuildToolDefinitions:
             "required": ["q"],
         }
         actions = [
-            {"name": "search", "service": "twitter", "description": "Search",
-             "parameters": original_params, "http_method": "GET"},
+            {
+                "name": "search",
+                "service": "twitter",
+                "description": "Search",
+                "parameters": original_params,
+                "http_method": "GET",
+            },
         ]
         await engine.configure([actor], ctx, actions)
 
@@ -1414,7 +1459,9 @@ class TestScheduledActionsList:
         actor = _make_actor()
         actor.scheduled_actions = [
             ScheduledAction(logical_time=1.0, action_type="continue_work", description="Work"),
-            ScheduledAction(logical_time=27.0, action_type="produce_deliverable", description="Deliver"),
+            ScheduledAction(
+                logical_time=27.0, action_type="produce_deliverable", description="Deliver"
+            ),
         ]
         assert len(actor.scheduled_actions) == 2
         assert actor.scheduled_actions[0].action_type == "continue_work"
@@ -1425,7 +1472,9 @@ class TestScheduledActionsList:
         actor = _make_actor(
             scheduled_actions=[
                 ScheduledAction(logical_time=5.0, action_type="send_reminder", description="Due"),
-                ScheduledAction(logical_time=100.0, action_type="produce_deliverable", description="Future"),
+                ScheduledAction(
+                    logical_time=100.0, action_type="produce_deliverable", description="Future"
+                ),
             ]
         )
         engine = await _create_engine([actor])

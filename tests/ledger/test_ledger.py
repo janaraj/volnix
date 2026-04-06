@@ -1,17 +1,15 @@
 """Tests for volnix.ledger.ledger -- append-only audit ledger."""
-import pytest
-from datetime import datetime, timedelta, timezone
 
-from volnix.core.types import ActorId, EntityId, SnapshotId, RunId
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from volnix.core.types import ActorId
 from volnix.ledger.config import LedgerConfig
 from volnix.ledger.entries import (
     EngineLifecycleEntry,
-    GatewayRequestEntry,
     LLMCallEntry,
     PipelineStepEntry,
-    SnapshotEntry,
-    StateMutationEntry,
-    ValidationEntry,
 )
 from volnix.ledger.ledger import Ledger
 from volnix.ledger.query import LedgerQuery
@@ -194,7 +192,7 @@ async def test_ledger_entry_type_filtering(db):
 
 async def test_ledger_query_by_time_range(ledger):
     """query() with start_time/end_time should filter by timestamp."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     past = now - timedelta(hours=2)
     future = now + timedelta(hours=2)
 
@@ -229,22 +227,28 @@ async def test_ledger_query_by_time_range(ledger):
     await ledger.append(entry_future)
 
     # Query with start_time only
-    results = await ledger.query(LedgerQuery(
-        start_time=now - timedelta(minutes=1),
-    ))
+    results = await ledger.query(
+        LedgerQuery(
+            start_time=now - timedelta(minutes=1),
+        )
+    )
     assert len(results) == 2  # entry_now and entry_future
 
     # Query with end_time only
-    results = await ledger.query(LedgerQuery(
-        end_time=now + timedelta(minutes=1),
-    ))
+    results = await ledger.query(
+        LedgerQuery(
+            end_time=now + timedelta(minutes=1),
+        )
+    )
     assert len(results) == 2  # entry_old and entry_now
 
     # Query with both
-    results = await ledger.query(LedgerQuery(
-        start_time=now - timedelta(minutes=1),
-        end_time=now + timedelta(minutes=1),
-    ))
+    results = await ledger.query(
+        LedgerQuery(
+            start_time=now - timedelta(minutes=1),
+            end_time=now + timedelta(minutes=1),
+        )
+    )
     assert len(results) == 1  # only entry_now
 
 

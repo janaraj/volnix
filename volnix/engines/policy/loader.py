@@ -12,8 +12,9 @@ class PolicyLoader:
 
     def load_from_yaml(self, yaml_path: str) -> list[dict[str, Any]]:
         """Load policy definitions from a YAML file."""
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         path = Path(yaml_path)
         if not path.exists():

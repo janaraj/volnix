@@ -77,7 +77,10 @@ class PipelineDAG:
             except Exception as exc:
                 elapsed_ms = (time.monotonic() - t0) * 1000.0
                 logger.error(
-                    "Pipeline step '%s' raised: %s", step.step_name, exc, exc_info=True,
+                    "Pipeline step '%s' raised: %s",
+                    step.step_name,
+                    exc,
+                    exc_info=True,
                 )
                 result = StepResult(
                     step_name=step.step_name,

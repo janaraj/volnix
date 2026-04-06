@@ -6,15 +6,13 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from starlette.testclient import TestClient
 
+from tests.helpers.runtime import start_http_adapter
 from volnix.app import VolnixApp
 from volnix.config.schema import VolnixConfig
 from volnix.engines.state.config import StateConfig
 from volnix.ledger.query import LedgerQuery
 from volnix.persistence.config import PersistenceConfig
-from tests.helpers.guardrails import staged_guardrail
-from tests.helpers.runtime import spawn_websocket_receiver, start_http_adapter
 
 pytestmark = [pytest.mark.real_adapter]
 
@@ -112,7 +110,7 @@ async def test_http_websocket_stream_receives_real_world_event(app):
     because TestClient creates a separate event loop that can't receive
     events published from the test's event loop.
     """
-    adapter = await start_http_adapter(app)
+    await start_http_adapter(app)
 
     # Verify the bus exists and can accept wildcard subscribers
     bus = app.bus
@@ -133,13 +131,12 @@ async def test_http_websocket_stream_receives_real_world_event(app):
 
     # Give the bus consumer task time to process
     import asyncio
+
     await asyncio.sleep(0.1)
 
     # The wildcard subscriber should have received the event
     assert len(received_events) > 0
-    event_types = [
-        getattr(e, "event_type", "") for e in received_events
-    ]
+    event_types = [getattr(e, "event_type", "") for e in received_events]
     assert any("email_send" in et for et in event_types), (
         f"Expected email_send event, got: {event_types}"
     )

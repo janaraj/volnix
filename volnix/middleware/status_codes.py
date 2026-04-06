@@ -9,6 +9,7 @@ HTTP status codes.
 Only processes ``application/json`` responses. Non-JSON, streaming, and
 non-200 responses pass through unchanged with all headers preserved.
 """
+
 from __future__ import annotations
 
 import json
@@ -62,9 +63,7 @@ class StatusCodeMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._enabled = config.status_codes_enabled
 
-    async def dispatch(
-        self, request: Request, call_next: Any
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         """Process response and reclassify errors."""
         if not self._enabled:
             return await call_next(request)
@@ -89,9 +88,7 @@ class StatusCodeMiddleware(BaseHTTPMiddleware):
                 body_bytes += chunk.encode()
             # M5 fix: skip large responses
             if len(body_bytes) > _MAX_BODY_SIZE:
-                return self._rebuild_response(
-                    response, body_bytes, 200
-                )
+                return self._rebuild_response(response, body_bytes, 200)
 
         # Try to parse as JSON
         try:
@@ -118,16 +115,12 @@ class StatusCodeMiddleware(BaseHTTPMiddleware):
         # Check pipeline short-circuit step
         step = body.get("step", "")
         if step and step in _STEP_STATUS_MAP:
-            return self._rebuild_response(
-                response, body_bytes, _STEP_STATUS_MAP[step]
-            )
+            return self._rebuild_response(response, body_bytes, _STEP_STATUS_MAP[step])
 
         # Check error message patterns
         for status_code, patterns in _ERROR_PATTERNS:
             if any(p in error_lower for p in patterns):
-                return self._rebuild_response(
-                    response, body_bytes, status_code
-                )
+                return self._rebuild_response(response, body_bytes, status_code)
 
         # Default: 400 for unmatched errors
         return self._rebuild_response(response, body_bytes, 400)
@@ -144,11 +137,7 @@ class StatusCodeMiddleware(BaseHTTPMiddleware):
         and preserves the original media type.
         """
         # Copy headers, excluding content-length (will be recalculated)
-        headers = {
-            k: v
-            for k, v in original.headers.items()
-            if k.lower() != "content-length"
-        }
+        headers = {k: v for k, v in original.headers.items() if k.lower() != "content-length"}
         return Response(
             content=body,
             status_code=status_code,

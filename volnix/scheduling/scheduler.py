@@ -12,8 +12,8 @@ Event types:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -128,7 +128,7 @@ class WorldScheduler:
             The unique event ID.
         """
         event_id = f"recur_{uuid4().hex[:8]}"
-        next_fire = start_time or datetime.now(tz=timezone.utc)
+        next_fire = start_time or datetime.now(tz=UTC)
         self._recurring.append(
             RecurringEvent(
                 id=event_id,

@@ -73,14 +73,16 @@ def load_agent_profile(path: str | Path) -> list[ActorDefinition]:
         role_hash = hashlib.md5(role.encode()).hexdigest()[:8]  # noqa: S324
         actor_id = entry.get("id", f"{role}-{role_hash}")
 
-        definitions.append(ActorDefinition(
-            id=ActorId(actor_id),
-            type=ActorType.AGENT,
-            role=role,
-            permissions=entry.get("permissions", {}),
-            budget=entry.get("budget"),
-            metadata=entry.get("metadata", {}),
-        ))
+        definitions.append(
+            ActorDefinition(
+                id=ActorId(actor_id),
+                type=ActorType.AGENT,
+                role=role,
+                permissions=entry.get("permissions", {}),
+                budget=entry.get("budget"),
+                metadata=entry.get("metadata", {}),
+            )
+        )
 
     logger.info("Loaded %d agent profiles from %s", len(definitions), path)
     return definitions

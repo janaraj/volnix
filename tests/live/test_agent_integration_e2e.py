@@ -7,12 +7,11 @@ Tests the complete agent integration flow:
 
 Requires: codex-acp with device auth
 """
+
 from __future__ import annotations
 
-import asyncio
 import json
 import shutil
-from pathlib import Path
 
 import httpx
 import pytest
@@ -32,13 +31,15 @@ async def live_app_with_codex(tmp_path):
     loader = ConfigLoader()
     config = loader.load()
 
-    config = config.model_copy(update={
-        "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
-        "state": StateConfig(
-            db_path=str(tmp_path / "state.db"),
-            snapshot_dir=str(tmp_path / "snapshots"),
-        ),
-    })
+    config = config.model_copy(
+        update={
+            "persistence": PersistenceConfig(base_dir=str(tmp_path / "data")),
+            "state": StateConfig(
+                db_path=str(tmp_path / "state.db"),
+                snapshot_dir=str(tmp_path / "snapshots"),
+            ),
+        }
+    )
 
     app = VolnixApp(config)
     await app.start()
@@ -50,9 +51,7 @@ class TestPhase1SDK:
     """Phase 1: SDK client connects, discovers tools, executes actions."""
 
     @pytest.mark.asyncio
-    async def test_sdk_tool_discovery_and_execution(
-        self, live_app_with_codex
-    ) -> None:
+    async def test_sdk_tool_discovery_and_execution(self, live_app_with_codex) -> None:
         """
         1. Start HTTP adapter
         2. SDK client connects
@@ -79,12 +78,8 @@ class TestPhase1SDK:
 
         # Step 1: Discover tools via MCP format
         print("\n  Step 1: Discover tools (MCP format)...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.get(
-                "/api/v1/tools", params={"format": "mcp"}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/v1/tools", params={"format": "mcp"})
         assert resp.status_code == 200
         mcp_tools = resp.json()
         print(f"    MCP tools: {len(mcp_tools)}")
@@ -94,12 +89,8 @@ class TestPhase1SDK:
 
         # Step 2: Discover tools in OpenAI format
         print("\n  Step 2: Discover tools (OpenAI format)...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.get(
-                "/api/v1/tools", params={"format": "openai"}
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/v1/tools", params={"format": "openai"})
         assert resp.status_code == 200
         openai_tools = resp.json()
         print(f"    OpenAI tools: {len(openai_tools)}")
@@ -109,9 +100,7 @@ class TestPhase1SDK:
 
         # Step 3: Execute an action via SDK
         print("\n  Step 3: Execute email_send via HTTP API...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/actions/email_send",
                 json={
@@ -134,9 +123,7 @@ class TestPhase1SDK:
         print("\n  Step 4: VolnixClient integration...")
         from volnix.sdk import VolnixClient
 
-        async with VolnixClient(
-            url="http://test", _transport=transport
-        ) as terra:
+        async with VolnixClient(url="http://test", _transport=transport) as terra:
             tools = await terra.tools(fmt="mcp")
             print(f"    Client tools: {len(tools)}")
             assert len(tools) > 0
@@ -145,11 +132,8 @@ class TestPhase1SDK:
         print("\n  Step 5: Config export templates...")
         from volnix.cli_exports.templates import EXPORT_REGISTRY
 
-        for target in ["claude-desktop", "openai-tools", "env-vars",
-                       "python-sdk"]:
-            output = EXPORT_REGISTRY[target](
-                url="http://localhost:8080", tools=mcp_tools
-            )
+        for target in ["claude-desktop", "openai-tools", "env-vars", "python-sdk"]:
+            output = EXPORT_REGISTRY[target](url="http://localhost:8080", tools=mcp_tools)
             assert len(output) > 0
             print(f"    {target}: {len(output)} chars")
 
@@ -160,9 +144,7 @@ class TestPhase2Middleware:
     """Phase 2: Auth middleware + status code mapping."""
 
     @pytest.mark.asyncio
-    async def test_middleware_auth_and_status_codes(
-        self, live_app_with_codex
-    ) -> None:
+    async def test_middleware_auth_and_status_codes(self, live_app_with_codex) -> None:
         """
         1. Verify status code middleware maps errors
         2. Verify auth middleware validates tokens
@@ -183,9 +165,7 @@ class TestPhase2Middleware:
 
         # Step 1: Status code middleware — error responses get proper codes
         print("\n  Step 1: Status code middleware...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Call a non-existent tool — should get an error
             resp = await client.post(
                 "/api/v1/actions/nonexistent_tool_xyz",
@@ -197,18 +177,14 @@ class TestPhase2Middleware:
 
         # Step 2: Verify internal API bypasses auth
         print("\n  Step 2: Internal API bypass...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/tools")
         assert resp.status_code == 200
         print(f"    /api/v1/tools: {resp.status_code}")
 
         # Step 3: Verify health endpoint works
         print("\n  Step 3: Health endpoint...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/health")
         assert resp.status_code == 200
         print(f"    /api/v1/health: {resp.status_code}")
@@ -220,9 +196,7 @@ class TestPhase3Webhooks:
     """Phase 3: Webhook registration and event delivery."""
 
     @pytest.mark.asyncio
-    async def test_webhook_registration_and_stats(
-        self, live_app_with_codex
-    ) -> None:
+    async def test_webhook_registration_and_stats(self, live_app_with_codex) -> None:
         """
         1. Register a webhook via API
         2. List webhooks
@@ -245,9 +219,7 @@ class TestPhase3Webhooks:
 
         # Step 1: Check webhook status (may be disabled)
         print("\n  Step 1: Check webhook status...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/webhooks")
         print(f"    Webhooks response: {resp.json()}")
 
@@ -256,9 +228,7 @@ class TestPhase3Webhooks:
             print("    Webhooks disabled (default) — testing disabled path")
 
             # Registration should return 503
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/webhooks",
                     json={
@@ -274,9 +244,7 @@ class TestPhase3Webhooks:
 
         # If enabled, test full flow
         print("\n  Step 2: Register webhook...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/webhooks",
                 json={
@@ -291,9 +259,7 @@ class TestPhase3Webhooks:
 
         # Step 3: List webhooks
         print("\n  Step 3: List webhooks...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/webhooks")
         hooks = resp.json().get("webhooks", [])
         print(f"    Registered webhooks: {len(hooks)}")
@@ -301,28 +267,20 @@ class TestPhase3Webhooks:
 
         # Step 4: Check stats
         print("\n  Step 4: Check stats...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/webhooks/stats")
         stats = resp.json()
         print(f"    Stats: {stats}")
 
         # Step 5: Unregister
         print("\n  Step 5: Unregister webhook...")
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
-            resp = await client.delete(
-                f"/api/v1/webhooks/{webhook_id}"
-            )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.delete(f"/api/v1/webhooks/{webhook_id}")
         assert resp.status_code == 200
         print(f"    Unregistered: {webhook_id}")
 
         # Verify empty
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/webhooks")
         assert len(resp.json().get("webhooks", [])) == 0
         print("    Verified: no webhooks remaining")

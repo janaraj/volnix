@@ -6,6 +6,7 @@ token refresh/expiry. Returns 401 for invalid token shapes.
 
 All rules come from TOML config — no hardcoded values.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,14 +51,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             try:
                 self._rules[service] = re.compile(pattern)
             except re.error as exc:
-                logger.warning(
-                    "Invalid auth rule for '%s': %s", service, exc
-                )
+                logger.warning("Invalid auth rule for '%s': %s", service, exc)
         self._prefixes = config.service_prefixes
 
-    async def dispatch(
-        self, request: Request, call_next: Any
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         """Check auth header if enabled and route matches a service."""
         if not self._enabled:
             return await call_next(request)
