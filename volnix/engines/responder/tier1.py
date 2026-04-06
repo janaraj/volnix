@@ -32,6 +32,7 @@ class Tier1Dispatcher:
             action=ctx.action,
             input_data=ctx.input_data or {},
             state=state,
+            service_id=str(ctx.service_id) if ctx.service_id else None,
         )
 
     def has_pack_for_tool(self, tool_name: str) -> bool:

@@ -47,10 +47,23 @@ class Gateway:
                 service = tool_info.get("pack_name", tool_info.get("service", ""))
                 self._tool_map[tool_name] = (service, tool_name)
 
+        pack_tool_count = len(self._tool_map)
+
+        # Tier 2 profile tools — only for services that have NO verified pack.
+        # Pack tools are registered first, so `not in self._tool_map` ensures
+        # pack tools always take precedence.
+        if hasattr(responder, "_profile_registry"):
+            for profile in responder._profile_registry.list_profiles():
+                for op in profile.operations:
+                    if op.name and op.name not in self._tool_map:
+                        self._tool_map[op.name] = (profile.service_name, op.name)
+
+        profile_tool_count = len(self._tool_map) - pack_tool_count
         logger.info(
-            "Gateway: discovered %d tools from %d packs",
+            "Gateway: discovered %d tools from %d packs + %d from profiles",
             len(self._tool_map),
-            len(set(s for s, _ in self._tool_map.values())),
+            len(set(s for s, _ in list(self._tool_map.values())[:pack_tool_count])),
+            profile_tool_count,
         )
 
         # Create protocol adapters

@@ -600,6 +600,16 @@ class WorldCompilerEngine(BaseEngine):
                 f"No normalized schema available for entity type '{spec.entity_type}'"
             )
 
+        # Enrich entity schema with enum constraints from state machine.
+        # Tier 1 packs already have these (e.g., zendesk status enum).
+        # Tier 2 profiles often don't — inject them so the LLM and
+        # structured output API enforce valid states during generation.
+        if state_machine:
+            enriched_schema = self._inject_state_machine_enums(
+                spec.entity_schema, state_machine
+            )
+            spec = spec.model_copy(update={"entity_schema": enriched_schema})
+
         entities = await data_gen.generate_section(spec, ctx, ref_context=ref_context)
         retries = 0
         result = validator.validate_entity_section(
@@ -651,6 +661,47 @@ class WorldCompilerEngine(BaseEngine):
             )
 
         return entities, {"retry_count": retries, "result": result}
+
+    @staticmethod
+    def _inject_state_machine_enums(
+        schema: dict[str, Any],
+        state_machine: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Add enum constraints to schema fields governed by a state machine.
+
+        If the state machine defines transitions for field 'lifecyclestage'
+        with states [subscriber, lead, ...], and the schema has that property
+        without an enum, inject the valid states as an enum constraint.
+
+        The structured output API then enforces valid values during generation.
+        Skips if the schema already has an enum (e.g., Tier 1 verified packs).
+        """
+        import copy
+
+        schema = copy.deepcopy(schema)
+        field_name = state_machine.get("field", "status")
+        transitions = state_machine.get("transitions", {})
+
+        if not transitions:
+            return schema
+
+        # Collect all valid states from transition keys + targets
+        all_states: set[str] = set(transitions.keys())
+        for targets in transitions.values():
+            if isinstance(targets, list):
+                all_states.update(targets)
+
+        if not all_states:
+            return schema
+
+        # Inject enum into the schema property if it exists and has no enum
+        props = schema.get("properties", {})
+        if field_name in props:
+            field_def = props[field_name]
+            if "enum" not in field_def:
+                field_def["enum"] = sorted(all_states)
+
+        return schema
 
     async def _generate_validated_role_batch(
         self,

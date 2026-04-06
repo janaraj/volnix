@@ -775,6 +775,27 @@ class VolnixApp:
                             "parameters": params,
                         }
                     )
+            # Tier 2 profile tools — only for services without a verified pack.
+            # Pack tools registered first; profile tools fill gaps.
+            if hasattr(responder, "_profile_registry"):
+                for profile in responder._profile_registry.list_profiles():
+                    if world_services and profile.service_name not in world_services:
+                        continue
+                    for op in profile.operations:
+                        available_actions.append(
+                            {
+                                "name": op.name,
+                                "description": getattr(op, "description", ""),
+                                "service": profile.service_name,
+                                "required_params": getattr(op, "required_params", []) or [],
+                                "http_method": getattr(op, "http_method", "POST") or "POST",
+                                "parameters": {
+                                    "type": "object",
+                                    "required": getattr(op, "required_params", []) or [],
+                                    "properties": getattr(op, "parameters", {}) or {},
+                                },
+                            }
+                        )
         except KeyError:
             logger.debug("Responder engine not registered — no available actions")
 
