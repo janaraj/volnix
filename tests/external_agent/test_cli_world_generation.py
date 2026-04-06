@@ -127,7 +127,10 @@ class TestMCPCommand:
 
         result = runner.invoke(cli_app, ["mcp", "--help"])
         assert result.exit_code == 0
-        assert "MCP stdio server" in result.output or "mcp" in result.output.lower()
+        import re
+
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "MCP stdio server" in clean or "mcp" in clean.lower()
 
     def test_mcp_command_requires_world_arg(self):
         """The mcp command requires a world argument."""

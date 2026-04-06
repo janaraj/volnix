@@ -7,7 +7,15 @@ if the CLI signature drifts — these tests catch it.
 
 from __future__ import annotations
 
+import re
+
 import pytest
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
 
 # ---------------------------------------------------------------------------
 # Preset tests
@@ -154,7 +162,9 @@ class TestCLIFlagsHarness:
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
-        assert "--deliverable" in result.output, "--deliverable not in run --help output"
+        assert "--deliverable" in _strip_ansi(result.output), (
+            "--deliverable not in run --help output"
+        )
 
     def test_run_command_has_actors_option(self):
         """The run command must accept --actors."""
@@ -164,7 +174,7 @@ class TestCLIFlagsHarness:
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
-        assert "--actors" in result.output, "--actors not in run --help output"
+        assert "--actors" in _strip_ansi(result.output), "--actors not in run --help output"
 
     def test_deliverable_help_lists_all_types(self):
         """--deliverable help text must mention all 6 types."""
@@ -182,6 +192,6 @@ class TestCLIFlagsHarness:
             "recommendation",
             "assessment",
         ]:
-            assert name in result.output, (
+            assert name in _strip_ansi(result.output), (
                 f"Deliverable '{name}' not mentioned in --deliverable help"
             )
