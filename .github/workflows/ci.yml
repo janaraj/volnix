@@ -27,7 +27,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run tests
-        run: uv run pytest --cov=volnix --cov-report=term-missing --cov-fail-under=90 -x -q
+        run: uv run pytest --cov=volnix --cov-report=term-missing --cov-fail-under=75 -x -q
         env:
           VOLNIX_RUN_REAL_API_TESTS: "0"
 

@@ -7,11 +7,18 @@ Commands that are self-contained (help, deferred, check) are tested directly.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text (Rich/Typer CI compatibility)."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
 
 from volnix.cli import app
 
@@ -59,7 +66,7 @@ class TestHelpAndBasics:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         for cmd in ALL_COMMANDS:
-            assert cmd in result.output, f"Command '{cmd}' missing from help output"
+            assert cmd in _strip_ansi(result.output), f"Command '{cmd}' missing from help output"
 
     @pytest.mark.parametrize("command", ALL_COMMANDS)
     def test_each_command_has_help(self, command: str):
@@ -74,7 +81,7 @@ class TestHelpAndBasics:
         result = runner.invoke(app, [])
         # Typer uses exit code 0 or 2 for no_args_is_help depending on version
         assert result.exit_code in (0, 2)
-        assert "Programmable worlds" in result.output
+        assert "Programmable worlds" in _strip_ansi(result.output)
 
     def test_invalid_command_fails(self):
         """An unknown command produces an error."""
@@ -94,7 +101,7 @@ class TestFeedbackCommands:
         """verify-pack on existing gmail pack succeeds."""
         result = runner.invoke(app, ["verify-pack", "gmail"])
         assert result.exit_code == 0
-        assert "passed all checks" in result.output
+        assert "passed all checks" in _strip_ansi(result.output)
 
     def test_verify_pack_missing(self):
         """verify-pack on non-existent pack fails."""
@@ -105,7 +112,7 @@ class TestFeedbackCommands:
         """annotate without --message exits with error."""
         result = runner.invoke(app, ["annotate", "stripe"])
         assert result.exit_code == 1
-        assert "required" in result.output.lower()
+        assert "required" in _strip_ansi(result.output).lower()
 
     def test_compile_pack_missing_source(self):
         """compile-pack with nonexistent source exits with error."""
@@ -116,7 +123,7 @@ class TestFeedbackCommands:
         """capture --help shows usage."""
         result = runner.invoke(app, ["capture", "--help"])
         assert result.exit_code == 0
-        assert "capture" in result.output.lower()
+        assert "capture" in _strip_ansi(result.output).lower()
 
     def test_promote_help(self):
         """promote --help shows usage."""
@@ -146,46 +153,39 @@ class TestCheckCommand:
         """check exits 0 and shows system check output."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-        assert "Volnix System Check" in result.output
+        assert "Volnix System Check" in _strip_ansi(result.output)
 
     def test_check_output_contains_python(self):
         """check output includes Python version info."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-        assert "Python" in result.output
+        assert "Python" in _strip_ansi(result.output)
 
     def test_check_output_contains_providers(self):
         """check output includes LLM Providers section."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-        assert "LLM Providers" in result.output
+        assert "LLM Providers" in _strip_ansi(result.output)
 
     def test_check_output_contains_packages(self):
         """check output shows required package status."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
         # At minimum, pydantic and typer should be reported
-        assert "pydantic" in result.output
-        assert "typer" in result.output
+        assert "pydantic" in _strip_ansi(result.output)
+        assert "typer" in _strip_ansi(result.output)
 
     def test_check_output_contains_configuration(self):
         """check output includes a Configuration section."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-        assert "Configuration" in result.output
+        assert "Configuration" in _strip_ansi(result.output)
 
     def test_check_help_shows_test_flag(self):
         """check --help mentions the --test flag."""
-        import os
-
-        env = {**os.environ, "NO_COLOR": "1", "TERM": "dumb"}
-        result = runner.invoke(app, ["check", "--help"], color=False, env=env)
+        result = runner.invoke(app, ["check", "--help"])
         assert result.exit_code == 0
-        # Strip any remaining ANSI sequences for CI compatibility
-        import re
-
-        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
-        assert "--test" in clean
+        assert "--test" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -364,7 +364,7 @@ class TestCreateCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["create", "broken world"])
             assert result.exit_code == 1
-            assert "Error" in result.output
+            assert "Error" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -383,7 +383,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "runs"])
             assert result.exit_code == 0
-            assert "Runs" in result.output
+            assert "Runs" in _strip_ansi(result.output)
 
     def test_list_runs_with_data(self):
         """list runs shows run data when runs exist."""
@@ -403,7 +403,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "runs"])
             assert result.exit_code == 0
-            assert "run-001" in result.output
+            assert "run-001" in _strip_ansi(result.output)
 
     def test_list_tools(self):
         """list tools shows tools table."""
@@ -420,8 +420,8 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "tools"])
             assert result.exit_code == 0
-            assert "Tools" in result.output
-            assert "95" in result.output  # Shows count in title
+            assert "Tools" in _strip_ansi(result.output)
+            assert "95" in _strip_ansi(result.output)  # Shows count in title
 
     def test_list_services(self):
         """list services shows services table."""
@@ -438,7 +438,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "services"])
             assert result.exit_code == 0
-            assert "Services" in result.output
+            assert "Services" in _strip_ansi(result.output)
 
     def test_list_engines(self):
         """list engines shows all registered engines."""
@@ -447,7 +447,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "engines"])
             assert result.exit_code == 0
-            assert "Engines" in result.output
+            assert "Engines" in _strip_ansi(result.output)
 
     def test_list_invalid_resource(self):
         """list with unknown resource type exits with error."""
@@ -456,7 +456,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "unicorns"])
             assert result.exit_code == 1
-            assert "Unknown resource" in result.output
+            assert "Unknown resource" in _strip_ansi(result.output)
 
     def test_list_artifacts_requires_run_id(self):
         """list artifacts without --run exits with error."""
@@ -465,7 +465,7 @@ class TestListCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["list", "artifacts"])
             assert result.exit_code == 1
-            assert "--run" in result.output
+            assert "--run" in _strip_ansi(result.output)
 
     def test_list_runs_json_format(self):
         """list runs --format json produces JSON output."""
@@ -493,7 +493,9 @@ class TestReportDiffCommands:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["report", "nonexistent-run"])
             assert result.exit_code == 1
-            assert "not found" in result.output.lower() or "Error" in result.output
+            assert "not found" in _strip_ansi(result.output).lower() or "Error" in _strip_ansi(
+                result.output
+            )
 
     def test_report_with_existing_run(self):
         """report shows report data when run exists."""
@@ -518,14 +520,16 @@ class TestReportDiffCommands:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["diff", "only-one-run"])
             assert result.exit_code == 1
-            assert "2" in result.output or "error" in result.output.lower()
+            assert (
+                "2" in _strip_ansi(result.output) or "error" in _strip_ansi(result.output).lower()
+            )
 
     def test_diff_help(self):
         """diff --help shows options."""
         result = runner.invoke(app, ["diff", "--help"])
         assert result.exit_code == 0
-        assert "--format" in result.output
-        assert "--gov-vs-ungov" in result.output
+        assert "--format" in _strip_ansi(result.output)
+        assert "--gov-vs-ungov" in _strip_ansi(result.output)
 
     def test_diff_with_two_runs(self):
         """diff with two run IDs calls diff_runs."""
@@ -552,15 +556,15 @@ class TestInspectCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "entities"])
             assert result.exit_code == 0
-            assert "type" in result.output.lower()
+            assert "type" in _strip_ansi(result.output).lower()
 
     def test_inspect_help(self):
         """inspect --help shows all flags."""
         result = runner.invoke(app, ["inspect", "--help"])
         assert result.exit_code == 0
-        assert "--type" in result.output
-        assert "--actor" in result.output
-        assert "--format" in result.output
+        assert "--type" in _strip_ansi(result.output)
+        assert "--actor" in _strip_ansi(result.output)
+        assert "--format" in _strip_ansi(result.output)
 
     def test_inspect_unknown_resource(self):
         """inspect with unknown resource exits with error."""
@@ -569,7 +573,7 @@ class TestInspectCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "galaxies"])
             assert result.exit_code == 1
-            assert "Unknown resource" in result.output
+            assert "Unknown resource" in _strip_ansi(result.output)
 
     def test_inspect_entities_with_type(self):
         """inspect entities --type email returns entity table."""
@@ -622,7 +626,7 @@ class TestInspectCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["inspect", "services"])
             assert result.exit_code == 0
-            assert "Services" in result.output
+            assert "Services" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -637,27 +641,27 @@ class TestSetupCommand:
         """setup --help shows provider list."""
         result = runner.invoke(app, ["setup", "--help"])
         assert result.exit_code == 0
-        assert "anthropic" in result.output
-        assert "openai" in result.output
-        assert "google" in result.output
+        assert "anthropic" in _strip_ansi(result.output)
+        assert "openai" in _strip_ansi(result.output)
+        assert "google" in _strip_ansi(result.output)
 
     def test_setup_invalid_provider(self):
         """setup with unknown provider exits with error."""
         result = runner.invoke(app, ["setup", "nonexistent-provider"])
         assert result.exit_code == 1
-        assert "Unknown provider" in result.output
+        assert "Unknown provider" in _strip_ansi(result.output)
 
     def test_setup_all_providers(self):
         """setup 'all' exits 0 and shows Setup complete."""
         result = runner.invoke(app, ["setup", "all"])
         assert result.exit_code == 0
-        assert "Setup complete" in result.output
+        assert "Setup complete" in _strip_ansi(result.output)
 
     def test_setup_single_provider(self):
         """setup with a valid provider name exits 0."""
         result = runner.invoke(app, ["setup", "google"])
         assert result.exit_code == 0
-        assert "GOOGLE" in result.output
+        assert "GOOGLE" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -675,7 +679,7 @@ class TestShowCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "unknown_thing", "some-id"])
             assert result.exit_code == 1
-            assert "Unknown resource" in result.output
+            assert "Unknown resource" in _strip_ansi(result.output)
 
     def test_show_run_not_found(self):
         """show run with nonexistent ID exits with error."""
@@ -685,7 +689,7 @@ class TestShowCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "run", "nonexistent"])
             assert result.exit_code == 1
-            assert "not found" in result.output.lower()
+            assert "not found" in _strip_ansi(result.output).lower()
 
     def test_show_run_found(self):
         """show run with existing ID displays details."""
@@ -702,15 +706,15 @@ class TestShowCommand:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["show", "run", "run-001"])
             assert result.exit_code == 0
-            assert "run-001" in result.output
+            assert "run-001" in _strip_ansi(result.output)
 
     def test_show_help(self):
         """show --help shows resource options."""
         result = runner.invoke(app, ["show", "--help"])
         assert result.exit_code == 0
-        assert "run" in result.output
-        assert "tool" in result.output
-        assert "service" in result.output
+        assert "run" in _strip_ansi(result.output)
+        assert "tool" in _strip_ansi(result.output)
+        assert "service" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -725,13 +729,13 @@ class TestSnapshotReplayCommands:
         """snapshot --help shows options."""
         result = runner.invoke(app, ["snapshot", "--help"])
         assert result.exit_code == 0
-        assert "label" in result.output.lower()
+        assert "label" in _strip_ansi(result.output).lower()
 
     def test_replay_help(self):
         """replay --help shows options."""
         result = runner.invoke(app, ["replay", "--help"])
         assert result.exit_code == 0
-        assert "--tag" in result.output
+        assert "--tag" in _strip_ansi(result.output)
 
     def test_snapshot_creates(self):
         """snapshot with a label creates a snapshot."""
@@ -741,7 +745,7 @@ class TestSnapshotReplayCommands:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["snapshot", "my-snapshot"])
             assert result.exit_code == 0
-            assert "snap-abc123" in result.output
+            assert "snap-abc123" in _strip_ansi(result.output)
 
     def test_replay_nonexistent_run(self):
         """replay with a nonexistent run ID exits with error."""
@@ -751,7 +755,7 @@ class TestSnapshotReplayCommands:
         with _patch_app_context(volnix):
             result = runner.invoke(app, ["replay", "nonexistent-run"])
             assert result.exit_code == 1
-            assert "not found" in result.output.lower()
+            assert "not found" in _strip_ansi(result.output).lower()
 
 
 # ===================================================================
@@ -766,10 +770,10 @@ class TestLedgerCommand:
         """ledger --help shows filter options."""
         result = runner.invoke(app, ["ledger", "--help"])
         assert result.exit_code == 0
-        assert "--type" in result.output
-        assert "--actor" in result.output
-        assert "--engine" in result.output
-        assert "--tail" in result.output
+        assert "--type" in _strip_ansi(result.output)
+        assert "--actor" in _strip_ansi(result.output)
+        assert "--engine" in _strip_ansi(result.output)
+        assert "--tail" in _strip_ansi(result.output)
 
     def test_ledger_basic(self):
         """ledger runs without crash and shows table."""
@@ -790,7 +794,7 @@ class TestLedgerCommand:
 
             result = runner.invoke(app, ["ledger"])
             assert result.exit_code == 0
-            assert "Ledger" in result.output
+            assert "Ledger" in _strip_ansi(result.output)
 
     def test_ledger_with_entries(self):
         """ledger shows formatted entries when data exists."""
@@ -831,8 +835,8 @@ class TestInitCommand:
         """init --help shows options."""
         result = runner.invoke(app, ["init", "--help"])
         assert result.exit_code == 0
-        assert "--settings" in result.output
-        assert "--output" in result.output
+        assert "--settings" in _strip_ansi(result.output)
+        assert "--output" in _strip_ansi(result.output)
 
     def test_init_with_yaml(self, tmp_path: Path):
         """init compiles a YAML file successfully."""
@@ -851,7 +855,7 @@ class TestInitCommand:
 
             result = runner.invoke(app, ["init", "world.yaml"])
             assert result.exit_code == 0
-            assert "Compiling" in result.output
+            assert "Compiling" in _strip_ansi(result.output)
 
 
 # ===================================================================
@@ -866,8 +870,8 @@ class TestPlanCommand:
         """plan --help shows options."""
         result = runner.invoke(app, ["plan", "--help"])
         assert result.exit_code == 0
-        assert "--output" in result.output
-        assert "--format" in result.output
+        assert "--output" in _strip_ansi(result.output)
+        assert "--format" in _strip_ansi(result.output)
 
     def test_plan_from_description(self):
         """plan generates a plan from a description."""
@@ -900,12 +904,12 @@ class TestRunCommand:
         """run --help shows all options."""
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--agent" in result.output
-        assert "--actor" in result.output
-        assert "--mode" in result.output
-        assert "--tag" in result.output
-        assert "--serve" in result.output
-        assert "--behavior" in result.output
+        assert "--agent" in _strip_ansi(result.output)
+        assert "--actor" in _strip_ansi(result.output)
+        assert "--mode" in _strip_ansi(result.output)
+        assert "--tag" in _strip_ansi(result.output)
+        assert "--serve" in _strip_ansi(result.output)
+        assert "--behavior" in _strip_ansi(result.output)
 
     def test_run_nonexistent_world(self):
         """run exits with error for a missing world file (non-YAML string)."""
@@ -933,9 +937,9 @@ class TestServeCommand:
         """serve --help shows options."""
         result = runner.invoke(app, ["serve", "--help"])
         assert result.exit_code == 0
-        assert "--host" in result.output
-        assert "--port" in result.output
-        assert "--settings" in result.output
+        assert "--host" in _strip_ansi(result.output)
+        assert "--port" in _strip_ansi(result.output)
+        assert "--settings" in _strip_ansi(result.output)
 
     def test_serve_compilation_error(self):
         """serve exits with error when compilation fails."""
