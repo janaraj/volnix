@@ -155,11 +155,13 @@ class PolicyEvent(Event):
         policy_id: The policy that produced this event.
         actor_id: The actor whose action triggered policy evaluation.
         action: The action under evaluation.
+        run_id: The evaluation run this event belongs to.
     """
 
     policy_id: PolicyId
     actor_id: ActorId
     action: str
+    run_id: str | None = None
 
 
 class PolicyBlockEvent(PolicyEvent):

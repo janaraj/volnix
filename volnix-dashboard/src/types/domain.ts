@@ -97,20 +97,17 @@ export interface BoundariesDimension {
 // -- Events -----------------------------------------------------------------
 
 export type EventType =
-  | 'agent_action'
-  | 'policy_hold'
-  | 'policy_block'
-  | 'policy_escalate'
-  | 'policy_flag'
-  | 'permission_denied'
-  | 'budget_deduction'
-  | 'budget_warning'
-  | 'budget_exhausted'
-  | 'capability_gap'
-  | 'animator_event'
-  | 'state_change'
-  | 'side_effect'
-  | 'system_event';
+  | 'world'
+  | 'policy.hold'
+  | 'policy.block'
+  | 'policy.escalate'
+  | 'policy.flag'
+  | 'permission.denied'
+  | 'budget.deduction'
+  | 'budget.warning'
+  | 'budget.exhausted'
+  | 'capability.gap'
+  | 'animator';
 
 export type Outcome =
   | 'success'

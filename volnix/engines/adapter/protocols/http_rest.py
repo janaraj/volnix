@@ -949,7 +949,11 @@ class HTTPRestAdapter(ProtocolAdapter):
                     if e.get("service_id") == service_id or e.get("target_service") == service_id
                 ]
             if event_type:
-                events = [e for e in events if e.get("event_type") == event_type]
+                events = [
+                    e for e in events
+                    if e.get("event_type") == event_type
+                    or e.get("event_type", "").startswith(event_type + ".")
+                ]
             if outcome:
                 events = [e for e in events if e.get("outcome") == outcome]
             # If filters were applied, total reflects filtered count
@@ -1419,11 +1423,27 @@ class HTTPRestAdapter(ProtocolAdapter):
                         return {"type": "run_complete", "data": data}
                     return {"type": "status", "data": data}
 
+                # Policy governance events
+                if event_type.startswith("policy."):
+                    return {"type": "policy", "data": data}
+
+                # Permission events
+                if event_type.startswith("permission."):
+                    return {"type": "permission", "data": data}
+
+                # Capability gap events
+                if event_type.startswith("capability."):
+                    return {"type": "capability", "data": data}
+
                 # World action events (tool calls from agents)
                 if event_type.startswith("world."):
                     return {"type": "event", "data": data}
 
-                # Skip everything else (engine lifecycle, pipeline steps, permissions, etc.)
+                # Animator events
+                if event_type.startswith("animator."):
+                    return {"type": "event", "data": data}
+
+                # Skip engine lifecycle, pipeline steps, etc.
                 return None
 
             def _make_chat_message(event: Any) -> dict | None:

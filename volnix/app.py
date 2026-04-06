@@ -673,6 +673,11 @@ class VolnixApp:
         if hasattr(policy_engine, "_policies"):
             policies = compiled_policies or getattr(plan, "policies", [])
             policy_engine._policies = policies
+            logger.info(
+                "Governance: loaded %d policies (%d compiled)",
+                len(policies),
+                sum(1 for p in policies if isinstance(p.get("trigger"), dict)),
+            )
         if hasattr(policy_engine, "_world_mode"):
             policy_engine._world_mode = mode
         if hasattr(permission_engine, "_world_mode"):

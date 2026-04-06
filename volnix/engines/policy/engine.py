@@ -84,6 +84,13 @@ class PolicyEngine(BaseEngine):
                 if self._evaluator.evaluate(condition, eval_context):
                     mode = str(policy.get("enforcement", "log")).lower()
                     triggered.append((policy, mode))
+                    logger.info(
+                        "Policy '%s' triggered: action=%s, enforcement=%s, actor=%s",
+                        policy.get("name", "unknown"),
+                        ctx.action,
+                        mode,
+                        ctx.actor_id,
+                    )
 
         if not triggered:
             return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW)
@@ -92,6 +99,7 @@ class PolicyEngine(BaseEngine):
         if self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned":
             now = datetime.now(UTC)
             ts = Timestamp(world_time=now, wall_time=now, tick=0)
+            run_id = str(ctx.run_id) if ctx.run_id else None
             events = [
                 PolicyFlagEvent(
                     event_type="policy.flag",
@@ -99,6 +107,7 @@ class PolicyEngine(BaseEngine):
                     policy_id=PolicyId(p.get("id", p.get("name", "unknown"))),
                     actor_id=ctx.actor_id,
                     action=ctx.action,
+                    run_id=run_id,
                 )
                 for p, _ in triggered
             ]

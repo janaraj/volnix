@@ -4,20 +4,20 @@
 // ---------------------------------------------------------------------------
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  agent_action: 'text-info',
-  policy_hold: 'text-warning',
-  policy_block: 'text-error',
-  policy_escalate: 'text-warning',
-  policy_flag: 'text-warning',
-  permission_denied: 'text-error',
-  budget_deduction: 'text-text-secondary',
-  budget_warning: 'text-warning',
-  budget_exhausted: 'text-error',
-  capability_gap: 'text-neutral',
-  animator_event: 'text-info',
-  state_change: 'text-text-secondary',
-  side_effect: 'text-text-secondary',
-  system_event: 'text-text-muted',
+  'world': 'text-info',
+  'policy.hold': 'text-warning',
+  'policy.block': 'text-error',
+  'policy.escalate': 'text-warning',
+  'policy.flag': 'text-warning',
+  'permission.denied': 'text-error',
+  'budget.deduction': 'text-text-secondary',
+  'budget.warning': 'text-warning',
+  'budget.exhausted': 'text-error',
+  'capability.gap': 'text-neutral',
+  'animator': 'text-info',
+  'world.populate': 'text-text-secondary',
+  'feedback': 'text-text-secondary',
+  'world.generation_complete': 'text-text-muted',
 };
 
 /** Map an event type to a Tailwind text color class. */

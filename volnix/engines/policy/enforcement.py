@@ -41,6 +41,10 @@ def _policy_id(policy: dict[str, Any]) -> PolicyId:
 class EnforcementHandler:
     """Dispatches enforcement actions based on policy mode."""
 
+    @staticmethod
+    def _run_id(ctx: ActionContext) -> str | None:
+        return str(ctx.run_id) if ctx.run_id else None
+
     async def handle_block(
         self, ctx: ActionContext, policy: dict[str, Any]
     ) -> StepResult:
@@ -53,6 +57,7 @@ class EnforcementHandler:
             actor_id=ctx.actor_id,
             action=ctx.action,
             reason=reason,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -79,6 +84,7 @@ class EnforcementHandler:
             approver_role=approver_role,
             timeout_seconds=timeout_seconds,
             hold_id=hold_id,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -100,6 +106,7 @@ class EnforcementHandler:
             action=ctx.action,
             target_role=target_role,
             original_actor=ctx.actor_id,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
@@ -118,6 +125,7 @@ class EnforcementHandler:
             policy_id=_policy_id(policy),
             actor_id=ctx.actor_id,
             action=ctx.action,
+            run_id=self._run_id(ctx),
         )
         return StepResult(
             step_name="policy",
