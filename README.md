@@ -6,9 +6,7 @@ Volnix creates stateful, causal, observable realities where AI agents exist as p
 
 Describe a world in natural language or YAML. Volnix compiles it into a deep, reproducible simulation. Agents interact through standard protocols (MCP, REST, OpenAI function calling, Anthropic tool use). Everything that happens is recorded, scored, and diffable.
 
-<p align="center">
-  <img src="docs/assets/dashboard-live.png" alt="Volnix Dashboard — Live simulation view" width="800">
-</p>
+<!-- TODO: Add dashboard screenshot to docs/assets/dashboard-live.png -->
 
 ---
 
