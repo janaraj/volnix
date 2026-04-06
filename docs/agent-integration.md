@@ -54,23 +54,19 @@ The server exposes:
 
 The recommended integration for Claude Desktop, Cursor, and Windsurf.
 
-### One-Command Setup
+### Setup
 
 ```bash
 # Start server
-volnix serve customer_support --port 8080
+uv run volnix serve customer_support --port 8080
 
-# Patch your agent's config (creates a backup first)
-volnix attach claude-desktop --port 8080
+# Export the MCP config snippet for your agent
+uv run volnix config --export claude-desktop --port 8080
 ```
 
-Supported agents: `claude-desktop`, `cursor`, `windsurf`
+Add the exported snippet to your agent's MCP configuration file.
 
-To disconnect:
-
-```bash
-volnix detach claude-desktop
-```
+Supported targets: `claude-desktop`, `cursor`, `windsurf`
 
 ### Manual Config
 
@@ -363,7 +359,7 @@ curl -H "Authorization: Bearer volnix_abc123" \
 
 ## Tips
 
-- **Start simple**: Use `volnix attach` for the fastest setup. Manual config is only needed for custom workflows.
+- **Start simple**: Use `volnix config --export` for the fastest setup. Manual config is only needed for custom workflows.
 - **Check available tools**: Run `curl http://localhost:8080/api/v1/tools?format=openai | python -m json.tool` to see what your agent can do.
 - **Watch the dashboard**: Run `volnix dashboard --port 8200` in another terminal to observe your agent's actions in real time.
 - **Review the report**: After a session, run `volnix report last` to see governance scores and capability gaps.

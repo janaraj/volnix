@@ -84,7 +84,6 @@ Override the base directory with the `VOLNIX_HOME` environment variable.
 
 ```toml
 [simulation]
-seed = 42                           # Reproducibility seed
 time_speed = 1.0                    # 1.0 = real-time, 2.0 = double speed
 mode = "governed"                   # "governed" | "ungoverned"
 behavior = "dynamic"                # "static" | "reactive" | "dynamic"
