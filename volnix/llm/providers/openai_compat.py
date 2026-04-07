@@ -49,7 +49,6 @@ def _fix_bare_arrays(schema: Any) -> Any:
     return result
 
 
-
 class OpenAICompatibleProvider(LLMProvider):
     """LLM provider for any OpenAI-compatible Chat Completions API."""
 

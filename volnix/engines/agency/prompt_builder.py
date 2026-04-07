@@ -172,7 +172,11 @@ class ActorPromptBuilder:
         # --- 4. Context ---
         context_parts = []
 
-        # Goal context
+        # Team mission (shared across all agents)
+        if actor.current_goal:
+            context_parts.append(f"### Team Mission\n{actor.current_goal}")
+
+        # Goal context (role-specific focus)
         context_parts.append(
             f"### Mission Context\n"
             f"{actor.goal_context or 'Not set — update via state_updates.goal_context'}"

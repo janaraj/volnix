@@ -919,7 +919,7 @@ class VolnixApp:
                 traits = extract_behavior_traits(agent_def)
                 # Set initial goal_context from personality so each agent
                 # starts with role-specific focus, not just the shared mission.
-                personality_text = agent_def.metadata.get("personality", "")
+                personality_text = agent_def.personality_hint or ""
                 initial_goal = (
                     f"Your role focus: {personality_text.strip()}" if personality_text else ""
                 )

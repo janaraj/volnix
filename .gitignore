@@ -2,6 +2,10 @@
 # Volnix .gitignore
 # ──────────────────────────────────────────────
 
+# Video assets (hosted on GitHub releases, not in git)
+*.mp4
+*.mov
+
 # Volnix local config & runtime data
 volnix.local.toml
 volnix.development.toml.bak

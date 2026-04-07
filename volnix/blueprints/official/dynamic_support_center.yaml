@@ -67,11 +67,11 @@ world:
         target_role: "supervisor"
 
   seeds:
-    - "VIP customer Acme Corp with pending $249 refund on charge ch_vip_001, ticket TK-201. Customer has been waiting 3 days — process the refund."
+    - "VIP customer Acme Corp with pending $249 refund on charge ch_vip_001, ticket TK-201 marked urgent. Customer waiting 3 days — process the refund."
     - "New customer locked out of account, urgent ticket TK-202 filed 2 hours ago. Resolve immediately."
-    - "Customer reports double charge of $85 on charge ch_double_001, ticket TK-203. Investigate and process refund if confirmed."
-    - "Slack channel #support-queue has 4 unread messages about SLA breaches"
-    - "Customer satisfaction survey results show 72% rating, down from 85% last month"
+    - "Customer reports double charge of $85 on charge ch_double_001, ticket TK-203. Process refund for the duplicate charge."
+    - "4 Slack messages in #support-queue channel about SLA breaches on open tickets"
+    - "Slack message from manager reporting customer satisfaction score dropped to 72% from 85% last month"
 
   reality:
     preset: messy

@@ -3,10 +3,12 @@
 
 mission: >
   Handle the support queue as a team. For each open ticket:
-  investigate the issue, process refunds where appropriate,
-  and resolve the ticket. Senior-agent processes refunds under $100
-  independently. Refunds over $100 must be escalated to supervisor.
-  Produce a shift summary with resolution metrics.
+  1. Investigate the issue (read ticket, check charge/refund history)
+  2. Take action: process refunds using create_refund, update ticket status, add comments
+  3. Close resolved tickets
+  Senior-agent: process refunds under $100 independently using create_refund tool.
+  Supervisor: approve and process refunds over $100.
+  Do NOT just investigate and report — actually resolve each issue by processing payments and updating tickets.
 
 deliverable: synthesis
 
