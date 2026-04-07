@@ -50,7 +50,7 @@ State Engine commits the entity → Agent receives full ticket JSON response
 
 ### Available Packs
 
-Volnix ships with 10 verified service packs:
+Volnix ships with 11 verified service packs:
 
 | Pack | Category | Tools | What It Simulates |
 |------|----------|-------|-------------------|
@@ -60,6 +60,7 @@ Volnix ships with 10 verified service packs:
 | **stripe** | Payments | 21 | Stripe API — charges, customers, refunds, payment intents, invoices |
 | **github** | Code/DevOps | 15 | GitHub API — repos, issues, PRs, commits, file operations |
 | **google_calendar** | Scheduling | 9 | Calendar API — events, calendars, attendees, recurring events |
+| **notion** | Documents | 15 | Notion API — pages, databases, blocks, search, users |
 | **twitter** | Social Media | 16 | Twitter API — tweets, replies, search, followers, timeline |
 | **reddit** | Social Media | 18 | Reddit API — posts, comments, subreddits, votes, search |
 | **alpaca** | Trading | 22 | Alpaca API — orders, positions, market data, account management |
@@ -158,8 +159,6 @@ Profiles are YAML files that define a service's API surface, entity schemas, beh
 | **shopify** | Commerce | 8 | Curated |
 | **twilio** | Communications | 7 | Curated |
 | **email** | Communication | 11 | Curated |
-| **stripe** | Money | 14 | Bootstrapped |
-| **gmail** | Communication | 10 | Bootstrapped |
 
 Profiles live in `volnix/packs/profiles/`.
 
@@ -294,8 +293,8 @@ world:
   services:
     slack: verified/slack       # Force Tier 1 verified pack
     stripe: verified/stripe     # Force Tier 1 verified pack
+    notion: verified/notion     # Force Tier 1 verified pack
     jira: jira                  # Auto-resolve (compiler picks best tier)
-    notion: notion              # Unknown — will be bootstrapped at compile time
 ```
 
 ### The Semantic Kernel
@@ -423,15 +422,42 @@ The `DriftReport` shows:
 
 ---
 
-## BYOP — Bring Your Own Pack
+## BYOSP — Bring Your Own Service Pack
 
-Volnix simulates any API. You can add your own service at three levels:
+Volnix simulates any API. You don't need to wait for a verified pack — add your own service at three levels:
 
 | Level | Effort | How | Fidelity |
 |-------|--------|-----|----------|
-| **Automatic** | Zero | Just put the service name in your YAML — the compiler fetches Context Hub docs and generates a profile via LLM | Tier 2 (bootstrapped, confidence 0.3-0.7) |
-| **YAML Profile** | Minutes | Write a `.profile.yaml` with operations, entities, and behavioral rules | Tier 2 (curated, confidence 0.9) |
-| **Verified Pack** | Hours | Write Python handlers with deterministic logic, entity schemas, and state machines | Tier 1 (deterministic, confidence 1.0) |
+| **Zero config** | None | Put the service name in your world YAML. The compiler resolves it through the Semantic Kernel, Context Hub docs, and LLM inference. | Tier 2 (bootstrapped, confidence 0.3-0.7) |
+| **YAML Profile** | Minutes | Write a `.profile.yaml` with operations, entities, schemas, and behavioral rules. Drop it in `volnix/packs/profiles/`. | Tier 2 (curated, confidence 0.9) |
+| **OpenAPI Spec** | Minutes | Drop an OpenAPI 3.x YAML/JSON spec in the spec directory. Operations are extracted programmatically — no LLM. | Tier 2 (spec-derived, confidence 0.5-0.6) |
+| **Verified Pack** | Hours | Write Python handlers with deterministic logic, entity schemas, and state machines. Full control, no LLM at runtime. | Tier 1 (deterministic, confidence 1.0) |
+
+### Zero config example
+
+```yaml
+world:
+  services:
+    slack: verified/slack
+    hubspot: hubspot          # No verified pack exists — compiler auto-resolves
+    salesforce: salesforce    # Same — bootstrapped at compile time
+```
+
+The compiler:
+1. Classifies `hubspot` via the Semantic Kernel → `work_management` category
+2. Fetches real API docs from Context Hub (if available)
+3. Generates a Tier 2 profile via LLM, constrained by category primitives and real docs
+4. Saves the profile for reuse in future compilations
+
+### Promotion ladder
+
+Bootstrapped services can be promoted over time:
+
+```
+Zero config (bootstrapped, 0.3-0.7) → YAML Profile (curated, 0.9) → Verified Pack (deterministic, 1.0)
+```
+
+Each promotion increases fidelity, reproducibility, and confidence. The bootstrapped profile is saved to disk after first compilation — edit it to curate, or write a full Python pack for Tier 1.
 
 ---
 

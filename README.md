@@ -495,7 +495,9 @@ See [docs/blueprints-reference.md](docs/blueprints-reference.md) for the full ca
 
 ## Verified Service Packs
 
-Each verified pack simulates a real service with deterministic state machines. Volnix also supports YAML-defined profiles for services without a verified pack. See [docs/service-packs.md](docs/service-packs.md) for the full guide on fidelity tiers, profiles, bootstrapping, and creating custom services.
+Each verified pack simulates a real service with deterministic state machines — no LLM at runtime. For services without a verified pack, Volnix supports YAML profiles, OpenAPI specs, and zero-config bootstrapping (the compiler generates a profile from real API docs via the Context Hub + LLM inference).
+
+**BYOSP — Bring Your Own Service Pack.** Put any service name in your world YAML. If no verified pack exists, the compiler auto-resolves it. Or write a YAML profile in minutes for curated fidelity. See [docs/service-packs.md](docs/service-packs.md) for the full guide.
 
 | Pack | Category | Simulates |
 |------|----------|-----------|
