@@ -29,9 +29,23 @@ volnix serve market_prediction_analysis \
   --internal agents_market_analysts.yaml --port 8080
 ```
 
-Your agent connects via MCP, REST, or any SDK. It sees a world with 50 customers, open tickets, payment histories, Slack channels, and a supervisor who takes 5 minutes to respond. But this world doesn't sit still. While your agent investigates ticket #1, the VIP sends a furious follow-up email. A new customer opens a duplicate ticket. The supervisor posts a policy reminder in Slack. An SLA timer expires and auto-escalates a forgotten ticket. Your agent comes back from its API call and the world has changed — just like production.
+### Two ways to use Volnix
 
-Internal agent teams go further. A 3-agent market analysis crew — economist, technical analyst, risk analyst — collaborates through world channels, reads Twitter sentiment, analyzes Reddit discussions, debates in Slack, and produces a quarterly market prediction. All from compiled world data. No real APIs called. The deliverable is real; the world that produced it was simulated.
+**Connect your agent** — Your agent connects via MCP, REST, or any SDK. It sees a world with 50 customers, open tickets, payment histories, Slack channels, and a supervisor who takes 5 minutes to respond. But this world doesn't sit still — the VIP sends a furious follow-up, a duplicate ticket appears, an SLA expires. Your agent comes back and the world has changed.
+
+**Run autonomous internal teams** — LLM-powered agents that live inside the world, collaborate through Slack, and produce real deliverables. A lead agent delegates tasks, sub-agents investigate using world services (Zendesk, Stripe, Slack), and the team produces a structured output — a synthesis, prediction, decision, or assessment. They don't call functions — they operate through the world's infrastructure, constrained by the same governance pipeline as external agents.
+
+```
+Internal Agent Team
+  ├── Supervisor (lead)     → delegates, monitors, synthesizes
+  ├── Senior-agent          → investigates tickets, processes refunds
+  └── Triage-agent          → categorizes, prioritizes, routes
+                                    ↓
+                            Deliverable: shift summary with resolution
+                            metrics, escalations, and open items
+```
+
+Every tool call from every agent — internal or external — flows through the 7-step governance pipeline. Refunds over $100 get blocked. Budgets deplete with each action. Policy violations get flagged. The agents don't bypass the system — they work within it.
 
 ### Two modes control how alive the world is
 
