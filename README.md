@@ -33,27 +33,50 @@ volnix serve market_prediction_analysis \
 
 **Connect your agent** — Your agent connects via MCP, REST, or any SDK. It sees a world with 50 customers, open tickets, payment histories, Slack channels, and a supervisor who takes 5 minutes to respond. But this world doesn't sit still — the VIP sends a furious follow-up, a duplicate ticket appears, an SLA expires. Your agent comes back and the world has changed.
 
-**Run autonomous internal teams** — LLM-powered agents that live inside the world and produce real deliverables. No orchestrator routes messages between them. Instead, agents coordinate through the world itself — posting in Slack, updating tickets, reading each other's actions through shared state. The world mediates the collaboration, not a framework.
+**Run autonomous internal teams** — Deploy 3 agents or 30. Each is an LLM-powered actor that lives inside the world. No orchestrator routes messages between them — agents coordinate through the world itself. They post in Slack, update tickets, process payments, and observe each other's actions through shared state. The world mediates the collaboration, not a framework.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   VOLNIX WORLD                      │
-│                                                     │
-│   Supervisor ──▶ Slack ──▶ Senior-agent             │
-│       ▲           ▲            │                    │
-│       │           │            ▼                    │
-│   Triage-agent    │      Stripe (refunds)           │
-│       │           │            │                    │
-│       ▼           │            ▼                    │
-│   Zendesk ────────┘      Policy Engine (block/hold) │
-│                                                     │
-│   NPCs: customers follow up, escalate, complain     │
-│                          ↓                          │
-│              Deliverable: synthesis / prediction     │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      VOLNIX WORLD                        │
+│                                                          │
+│   Agent 1 ──▶ Slack ◀── Agent 2 ◀── Agent 3             │
+│     │           ▲          │            │                │
+│     ▼           │          ▼            ▼                │
+│   Zendesk ──────┘    Stripe (refunds)  Gmail             │
+│     │                      │                             │
+│     ▼                      ▼                             │
+│   Policy Engine ◀── Budget Engine ◀── Permission Engine  │
+│                                                          │
+│   NPCs: customers follow up, escalate, complain          │
+│   Animator: new events arrive on the world's own timeline│
+│                            ↓                             │
+│          Deliverable: synthesis / prediction / decision   │
+└──────────────────────────────────────────────────────────┘
 ```
 
-Agents observe what teammates did through world state. They react to NPC events they didn't cause. They get blocked by policies and constrained by budgets — structurally, not through prompts. The deliverable emerges from agents operating inside an environment, not from a pipeline of LLM calls.
+Each agent has its own role, personality, permissions, and budget. They observe what teammates did through world state. They react to NPC events they didn't cause. They get blocked by policies and constrained by budgets — structurally, not through prompts. The deliverable emerges from agents operating inside an environment, not from a pipeline of LLM calls.
+
+Define a team in YAML — roles, permissions, budgets, and a mission:
+
+```yaml
+mission: >
+  Investigate each open ticket. Process refunds where appropriate.
+  Senior-agent handles refunds under $100. Supervisor approves over $100.
+
+deliverable: synthesis
+
+agents:
+  - role: supervisor
+    lead: true
+    permissions: { read: [zendesk, stripe, slack], write: [zendesk, stripe, slack] }
+    budget: { api_calls: 50, spend_usd: 500 }
+  - role: senior-agent
+    permissions: { read: [zendesk, stripe, slack], write: [zendesk, stripe, slack] }
+    budget: { api_calls: 40, spend_usd: 100 }
+  - role: triage-agent
+    permissions: { read: [zendesk, slack], write: [zendesk, slack] }
+    budget: { api_calls: 30 }
+```
 
 ### Two modes control how alive the world is
 
