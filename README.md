@@ -7,7 +7,7 @@ Every AI agent today runs in a vacuum. It calls APIs, gets responses, and has no
 Volnix changes that. It creates complete, living realities — with places, institutions, actors that have personalities and agendas, budgets, policies, communication systems, and causal chains — where AI agents exist as participants inside a world that doesn't stop when they do.
 
 <p align="center">
-  <img src="docs/assets/Dashboard.png" alt="Volnix Dashboard — Live simulation view" width="800">
+  <video src="https://github.com/janaraj/volnix/releases/download/v0.1.2/Volnix.mp4" width="800" controls></video>
 </p>
 
 ```bash
