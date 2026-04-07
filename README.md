@@ -33,19 +33,27 @@ volnix serve market_prediction_analysis \
 
 **Connect your agent** — Your agent connects via MCP, REST, or any SDK. It sees a world with 50 customers, open tickets, payment histories, Slack channels, and a supervisor who takes 5 minutes to respond. But this world doesn't sit still — the VIP sends a furious follow-up, a duplicate ticket appears, an SLA expires. Your agent comes back and the world has changed.
 
-**Run autonomous internal teams** — LLM-powered agents that live inside the world, collaborate through Slack, and produce real deliverables. A lead agent delegates tasks, sub-agents investigate using world services (Zendesk, Stripe, Slack), and the team produces a structured output — a synthesis, prediction, decision, or assessment. They don't call functions — they operate through the world's infrastructure, constrained by the same governance pipeline as external agents.
+**Run autonomous internal teams** — LLM-powered agents that live inside the world and produce real deliverables. No orchestrator routes messages between them. Instead, agents coordinate through the world itself — posting in Slack, updating tickets, reading each other's actions through shared state. The world mediates the collaboration, not a framework.
 
 ```
-Internal Agent Team
-  ├── Supervisor (lead)     → delegates, monitors, synthesizes
-  ├── Senior-agent          → investigates tickets, processes refunds
-  └── Triage-agent          → categorizes, prioritizes, routes
-                                    ↓
-                            Deliverable: shift summary with resolution
-                            metrics, escalations, and open items
+┌─────────────────────────────────────────────────────┐
+│                   VOLNIX WORLD                      │
+│                                                     │
+│   Supervisor ──▶ Slack ──▶ Senior-agent             │
+│       ▲           ▲            │                    │
+│       │           │            ▼                    │
+│   Triage-agent    │      Stripe (refunds)           │
+│       │           │            │                    │
+│       ▼           │            ▼                    │
+│   Zendesk ────────┘      Policy Engine (block/hold) │
+│                                                     │
+│   NPCs: customers follow up, escalate, complain     │
+│                          ↓                          │
+│              Deliverable: synthesis / prediction     │
+└─────────────────────────────────────────────────────┘
 ```
 
-Every tool call from every agent — internal or external — flows through the 7-step governance pipeline. Refunds over $100 get blocked. Budgets deplete with each action. Policy violations get flagged. The agents don't bypass the system — they work within it.
+Agents observe what teammates did through world state. They react to NPC events they didn't cause. They get blocked by policies and constrained by budgets — structurally, not through prompts. The deliverable emerges from agents operating inside an environment, not from a pipeline of LLM calls.
 
 ### Two modes control how alive the world is
 
