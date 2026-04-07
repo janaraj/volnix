@@ -151,6 +151,12 @@ export interface WorldEvent {
   policy_hit?: PolicyHit | null;
   budget_delta?: number;
   budget_remaining?: number;
+  // Budget event fields
+  budget_type?: string;
+  amount?: number;
+  remaining?: number;
+  // Policy event fields
+  policy_id?: string;
   causal_parent_ids?: string[];
   causal_child_ids?: string[];
   fidelity_tier?: 1 | 2;

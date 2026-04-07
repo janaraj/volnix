@@ -1368,12 +1368,21 @@ class VolnixApp:
         world_def = run.get("world_def", {}) if run else {}
         actors_raw = world_def.get("actor_specs", world_def.get("actors", []))
 
-        # Build actors list for reporter (explicit — not from global registry)
-        actors_for_report = [
-            {"id": a.get("id", ""), "type": a.get("type", ""), "role": a.get("role", "")}
-            for a in actors_raw
-            if isinstance(a, dict) and a.get("id")
-        ]
+        # Build actors list for reporter.
+        # Primary: actor registry (has actual generated IDs + correct types).
+        # Fallback: world_def raw actors (for runs where registry is empty).
+        actors_for_report = []
+        if self._actor_registry:
+            actors_for_report = [
+                {"id": str(a.id), "type": str(a.type), "role": a.role}
+                for a in self._actor_registry.list_actors()
+            ]
+        if not actors_for_report:
+            actors_for_report = [
+                {"id": a.get("id", ""), "type": a.get("type", ""), "role": a.get("role", "")}
+                for a in actors_raw
+                if isinstance(a, dict) and a.get("id")
+            ]
 
         # Get run-scoped events FIRST (filtered by run_id).
         # Must happen before report generation so the reporter uses only

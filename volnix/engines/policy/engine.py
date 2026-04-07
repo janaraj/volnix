@@ -215,18 +215,29 @@ class PolicyEngine(BaseEngine):
             return False
 
         if isinstance(trigger, dict):
-            # Dict trigger with "action" and optional "condition"
             trigger_action = trigger.get("action", "")
+            trigger_service = trigger.get("service", "")
+
+            # Check action match (if specified)
             if trigger_action:
-                # Exact match or prefix match
-                if trigger_action == ctx.action:
-                    return True
-                if ctx.action.startswith(trigger_action + "."):
-                    return True
-                if ctx.action.startswith(trigger_action + "_"):
-                    return True
-                return False
-            # No action specified in trigger dict = matches all
+                action_match = (
+                    trigger_action == ctx.action
+                    or ctx.action.startswith(trigger_action + ".")
+                    or ctx.action.startswith(trigger_action + "_")
+                )
+                if not action_match:
+                    return False
+
+            # Check service match (if specified)
+            if trigger_service:
+                if str(ctx.service_id) != trigger_service:
+                    return False
+
+            # At least one filter must be specified to match
+            if trigger_action or trigger_service:
+                return True
+
+            # No action AND no service = matches all
             return True
 
         return False

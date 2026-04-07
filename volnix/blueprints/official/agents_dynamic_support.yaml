@@ -2,10 +2,11 @@
 # Use with: volnix serve dynamic_support_center --internal agents_dynamic_support
 
 mission: >
-  Handle the support queue as a team while new issues arrive in
-  real-time. Triage by priority, resolve issues, process refunds,
-  and coordinate via Slack. React to new customer events as they
-  happen. Produce a shift summary with resolution metrics.
+  Handle the support queue as a team. For each open ticket:
+  investigate the issue, process refunds where appropriate,
+  and resolve the ticket. Senior-agent processes refunds under $100
+  independently. Refunds over $100 must be escalated to supervisor.
+  Produce a shift summary with resolution metrics.
 
 deliverable: synthesis
 
@@ -30,7 +31,7 @@ agents:
       Documents resolution steps in ticket comments.
     permissions:
       read: [zendesk, stripe, slack]
-      write: [zendesk, slack]
+      write: [zendesk, stripe, slack]
     budget:
       api_calls: 40
       spend_usd: 100

@@ -110,7 +110,7 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
         definitions.append(
             ActorDefinition(
                 id=actor_id,
-                type=ActorType.HUMAN,
+                type=ActorType.AGENT,
                 role=role,
                 permissions=entry.get("permissions", {}),
                 budget=entry.get("budget"),

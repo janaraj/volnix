@@ -313,38 +313,38 @@ timeout_seconds = 300
 # model (anthropic): "claude-sonnet-4-6" | "claude-haiku-4-5-20251001"
 
 [llm.routing.world_compiler]
-provider = "openai"                     # "gemini"
-model = "gpt-5.4-nano"                 # "gemini-3.1-flash-lite-preview"
+provider = "openai"
+model = "gpt-5.4-nano"
 max_tokens = 16384
 temperature = 0
 
 [llm.routing.responder_tier2]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-4.1-mini"
+provider = "openai"                     # "openai"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-4.1-mini"
+provider = "openai"                     # "openai"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.profile_infer]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-4.1-mini"
+provider = "openai"                     # "openai"
+model = "gpt-5.4-mini"        # "gpt-4.1-mini"
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.animator]
-provider = "gemini"                     # "openai"
-model = "gemini-3.1-flash-lite-preview"        # "gpt-4.1-mini"
+provider = "openai"                     # "openai"
+model = "gpt-5.4-mini"        # "gpt-4.1-mini"
 max_tokens = 2048
 temperature = 0.5
 
 [llm.routing.data_generator]
 provider = "openai"
-model = "gpt-5.4-nano"
+model = "gpt-5.4-mini"
 max_tokens = 16384
 temperature = 0
 

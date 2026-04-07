@@ -63,6 +63,16 @@ export function useLiveEvents(runId: string): ConnectionStatus {
         }
 
         case 'budget_update': {
+          // Append to event feed (same as world events)
+          const budgetEvent = message.data;
+          queryClient.setQueriesData<EventsListResponse>(
+            { queryKey: ['runs', runId, 'events'] },
+            (old) => {
+              if (!old) return old;
+              if (old.events.some((e) => e.event_id === budgetEvent.event_id)) return old;
+              return { ...old, events: [budgetEvent, ...old.events], total: old.total + 1 };
+            },
+          );
           // Patch specific actor's budget in actor cache.
           const { actor_id, remaining, total, budget_type } = message.data;
           queryClient.setQueryData<AgentSummary>(
@@ -79,6 +89,22 @@ export function useLiveEvents(runId: string): ConnectionStatus {
                   budget_total: { ...oldBudgetTotal, [budget_type]: total },
                 },
               };
+            },
+          );
+          break;
+        }
+
+        case 'policy':
+        case 'permission':
+        case 'capability': {
+          // Append governance events to event feed
+          const govEvent = message.data;
+          queryClient.setQueriesData<EventsListResponse>(
+            { queryKey: ['runs', runId, 'events'] },
+            (old) => {
+              if (!old) return old;
+              if (old.events.some((e) => e.event_id === govEvent.event_id)) return old;
+              return { ...old, events: [govEvent, ...old.events], total: old.total + 1 };
             },
           );
           break;

@@ -176,8 +176,9 @@ const columns: ColumnDef<WorldEvent>[] = [
     cell: ({ row }) => {
       const action = row.original.action;
       const eventType = row.original.event_type;
-      const display = action || String(eventType).replace(/_/g, ' ');
-      return <span className="truncate text-sm text-text-secondary capitalize">{display}</span>;
+      const isWorld = eventType?.startsWith('world.');
+      const display = isWorld ? (action || eventType) : eventType;
+      return <span className={`truncate text-sm ${isWorld ? 'text-text-secondary capitalize' : 'font-mono text-warning'}`}>{display}</span>;
     },
   },
   {
@@ -357,27 +358,50 @@ function EventDetail({
           return (
           <div className="space-y-4">
             {/* Summary */}
-            <p className="text-sm text-text-secondary">
-              <span className="text-text-primary">{event.actor_id}</span> &rarr;{' '}
-              {event.action ? event.action : String(event.event_type).replace(/_/g, ' ')} &rarr;{' '}
-              <span className="uppercase font-medium">{event.outcome ?? ''}</span>
-            </p>
+            {event.event_type?.startsWith('world.') ? (
+              <p className="text-sm text-text-secondary">
+                <span className="text-text-primary">{event.actor_id}</span> &rarr;{' '}
+                {event.action ?? event.event_type} &rarr;{' '}
+                <span className="uppercase font-medium">{event.outcome ?? ''}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-text-secondary">
+                <span className="text-warning font-mono">{event.event_type}</span> &middot;{' '}
+                <span className="text-text-primary">{event.actor_id}</span>
+                {event.action && <span className="text-text-muted"> &middot; {event.action} on {event.service_id}</span>}
+              </p>
+            )}
 
-            {/* Input / Output */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-1 text-xs font-medium uppercase text-text-muted">
-                  Input
+            {/* Type-specific detail */}
+            {event.event_type?.startsWith('budget.') ? (
+              <div className="space-y-1">
+                <p className="text-sm font-mono text-text-secondary">
+                  {event.budget_type ?? 'api_calls'}: <span className="text-warning">-{event.amount ?? event.budget_delta ?? 0}</span>
+                  {' '}&middot;{' '}remaining: {event.remaining ?? event.budget_remaining ?? 0}
                 </p>
-                <JsonViewer data={event.input_data} />
+                <p className="text-xs text-text-muted">Triggered by: <span className="font-mono">{event.action}</span></p>
               </div>
-              <div>
-                <p className="mb-1 text-xs font-medium uppercase text-text-muted">
-                  Output
-                </p>
-                <JsonViewer data={event.response_body} />
+            ) : event.event_type?.startsWith('policy.') ? (
+              <div className="space-y-1">
+                <p className="text-sm font-mono text-text-primary">{event.policy_id ?? event.policy_hit?.policy_name ?? '-'}</p>
+                <p className="text-xs text-text-muted">Triggered by: <span className="font-mono">{event.action}</span> on {event.service_id}</p>
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase text-text-muted">
+                    Input
+                  </p>
+                  <JsonViewer data={event.input_data} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase text-text-muted">
+                    Output
+                  </p>
+                  <JsonViewer data={event.response_body} />
+                </div>
+              </div>
+            )}
 
             {/* Budget impact */}
             {((event.budget_delta ?? 0) !== 0 || (event.budget_remaining ?? 0) > 0) && (

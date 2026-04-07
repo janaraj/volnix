@@ -1,6 +1,7 @@
 import type { WorldEvent } from '@/types/domain';
 import { OutcomeIcon } from '@/components/domain/outcome-icon';
 import { TimestampCell } from '@/components/domain/timestamp-cell';
+import { eventTypeToColorClass } from '@/lib/classifiers';
 import { formatTick } from '@/lib/formatters';
 import { cn } from '@/lib/cn';
 
@@ -34,17 +35,67 @@ export function EventFeedItem({ event, isSelected, onSelect, onSelectActor }: Ev
 
       {/* Line 2: actor → action → outcome (narrative) */}
       <div className="mt-0.5 flex items-center gap-1 text-xs">
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
-          className="text-info hover:underline truncate max-w-[140px]"
-        >
-          {event.actor_id}
-        </span>
-        <span className="text-text-muted">&rarr;</span>
-        <span className="font-mono text-text-primary truncate">{event.action ?? event.event_type}</span>
+        {event.event_type?.startsWith('world.') ? (
+          <>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
+              className="text-info hover:underline truncate max-w-[140px]"
+            >
+              {event.actor_id}
+            </span>
+            <span className="text-text-muted">&rarr;</span>
+            <span className="font-mono text-text-primary truncate">{event.action ?? event.event_type}</span>
+          </>
+        ) : event.event_type?.startsWith('budget.') ? (
+          <>
+            <span className={cn('font-mono truncate', eventTypeToColorClass(event.event_type ?? ''))}>{event.event_type}</span>
+            <span className="text-text-muted">&middot;</span>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
+              className="text-info hover:underline truncate max-w-[140px]"
+            >
+              {event.actor_id}
+            </span>
+            <span className="text-text-muted">&middot;</span>
+            <span className="font-mono text-text-muted truncate">-{event.amount ?? event.budget_delta ?? 0} {event.budget_type ?? 'api_calls'}</span>
+          </>
+        ) : event.event_type?.startsWith('policy.') ? (
+          <>
+            <span className={cn('font-mono truncate', eventTypeToColorClass(event.event_type ?? ''))}>{event.event_type}</span>
+            <span className="text-text-muted">&middot;</span>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
+              className="text-info hover:underline truncate max-w-[140px]"
+            >
+              {event.actor_id}
+            </span>
+            <span className="text-text-muted">&middot;</span>
+            <span className="font-mono text-text-muted truncate">{event.action} on {event.service_id}</span>
+          </>
+        ) : (
+          <>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onSelectActor(event.actor_id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelectActor(event.actor_id); } }}
+              className="text-info hover:underline truncate max-w-[140px]"
+            >
+              {event.actor_id}
+            </span>
+            <span className="text-text-muted">&rarr;</span>
+            <span className="font-mono text-text-primary truncate">{event.event_type}</span>
+          </>
+        )}
         {isBlocked && (
           <>
             <span className="text-text-muted">&rarr;</span>

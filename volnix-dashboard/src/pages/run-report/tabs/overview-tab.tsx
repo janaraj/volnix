@@ -211,7 +211,7 @@ function KeyEvents({ runId }: { runId: string }) {
                     <ActorBadge actorId={event.actor_id} role={event.actor_role} />
                     <span className="text-text-muted">&rarr;</span>
                     <span className="flex-1 truncate font-mono text-sm text-text-secondary">
-                      {event.action ?? event.event_type}
+                      {event.event_type?.startsWith('world.') ? (event.action ?? event.event_type) : event.event_type}
                     </span>
                     {event.outcome && event.outcome !== 'success' && (
                       <span className="text-xs font-medium uppercase text-error">

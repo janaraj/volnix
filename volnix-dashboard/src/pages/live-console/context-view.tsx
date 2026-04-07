@@ -136,41 +136,82 @@ function EventDetailView({
           <div className="space-y-4">
             {/* Summary line */}
             <div className="flex items-center gap-2 text-sm">
-              <ActorBadge actorId={event.actor_id} role={event.actor_role} />
-              <span className="text-text-muted">&rarr;</span>
-              <span className="font-mono text-text-secondary">{event.action ?? event.event_type}</span>
-              <span className="text-text-muted">&rarr;</span>
-              <OutcomeIcon outcome={event.outcome ?? 'success'} />
-              <span className="text-xs font-medium uppercase">{event.outcome ?? ''}</span>
+              {event.event_type?.startsWith('world.') ? (
+                <>
+                  <ActorBadge actorId={event.actor_id} role={event.actor_role} />
+                  <span className="text-text-muted">&rarr;</span>
+                  <span className="font-mono text-text-secondary">{event.action ?? event.event_type}</span>
+                  <span className="text-text-muted">&rarr;</span>
+                  <OutcomeIcon outcome={event.outcome ?? 'success'} />
+                  <span className="text-xs font-medium uppercase">{event.outcome ?? ''}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-warning">{event.event_type}</span>
+                  <span className="text-text-muted">&middot;</span>
+                  <ActorBadge actorId={event.actor_id} role={event.actor_role} />
+                </>
+              )}
             </div>
 
             {/* Timestamp */}
             <TimestampCell iso={event.timestamp?.wall_time ?? ''} />
 
-            {/* Input / Output */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-xs uppercase text-text-muted">Input</p>
-                <JsonViewer data={event.input_data} />
+            {/* Type-specific detail */}
+            {event.event_type?.startsWith('budget.') ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-3 font-mono text-sm">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-text-muted">Budget Type</p>
+                    <p className="text-text-primary">{event.budget_type ?? event.budget_delta !== undefined ? 'api_calls' : '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-text-muted">Amount</p>
+                    <p className="text-warning">-{event.amount ?? event.budget_delta ?? 0}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-text-muted">Remaining</p>
+                    <p className="text-text-primary">{event.remaining ?? event.budget_remaining ?? 0}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-text-muted">Triggered by: <span className="font-mono text-text-secondary">{event.action}</span></p>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs uppercase text-text-muted">Output</p>
-                <JsonViewer data={event.response_body} />
+            ) : event.event_type?.startsWith('policy.') ? (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase text-text-muted">Policy</p>
+                  <p className="font-mono text-sm text-text-primary">{event.policy_id ?? event.policy_hit?.policy_name ?? '-'}</p>
+                </div>
+                <p className="text-xs text-text-muted">Triggered by: <span className="font-mono text-text-secondary">{event.action}</span> on <span className="text-text-secondary">{event.service_id}</span></p>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* World event: Input / Output */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-text-muted">Input</p>
+                    <JsonViewer data={event.input_data} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-text-muted">Output</p>
+                    <JsonViewer data={event.response_body} />
+                  </div>
+                </div>
 
-            {/* Budget impact */}
-            <div className="space-y-1">
-              <p className="text-xs uppercase text-text-muted">Budget Impact</p>
-              <div className="flex items-center gap-3 font-mono text-sm">
-                <span className="text-text-secondary">
-                  Delta: <span className="text-warning">{formatCurrency(event.budget_delta ?? 0)}</span>
-                </span>
-                <span className="text-text-secondary">
-                  Remaining: <span className="font-mono">{formatCurrency(event.budget_remaining ?? 0)}</span>
-                </span>
-              </div>
-            </div>
+                {/* Budget impact */}
+                <div className="space-y-1">
+                  <p className="text-xs uppercase text-text-muted">Budget Impact</p>
+                  <div className="flex items-center gap-3 font-mono text-sm">
+                    <span className="text-text-secondary">
+                      Delta: <span className="text-warning">{formatCurrency(event.budget_delta ?? 0)}</span>
+                    </span>
+                    <span className="text-text-secondary">
+                      Remaining: <span className="font-mono">{formatCurrency(event.budget_remaining ?? 0)}</span>
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Policy hit */}
             {event.policy_hit && (
@@ -227,8 +268,10 @@ function EventDetailView({
               </div>
             )}
 
-            {/* Fidelity */}
-            <FidelityIndicator tier={event.fidelity_tier ?? 2} source={event.fidelity?.fidelity_source ?? undefined} />
+            {/* Fidelity — only for world events */}
+            {event.event_type?.startsWith('world.') && (
+              <FidelityIndicator tier={event.fidelity_tier ?? 2} source={event.fidelity?.fidelity_source ?? undefined} />
+            )}
           </div>
           );
         }}

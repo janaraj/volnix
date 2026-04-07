@@ -28,6 +28,28 @@ from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 logger = logging.getLogger(__name__)
 
 
+def _fix_bare_arrays(schema: Any) -> Any:
+    """Recursively add ``items`` to bare array schemas for OpenAI compatibility.
+
+    OpenAI structured output requires every ``{"type": "array"}`` to include
+    an ``items`` definition.  Many service pack schemas omit this (e.g.
+    ``"data": {"type": "array"}``).  This function adds a permissive
+    ``"items": {"type": "object"}`` default so the schema passes validation.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    result: dict[str, Any] = {}
+    for k, v in schema.items():
+        if isinstance(v, dict):
+            if v.get("type") == "array" and "items" not in v:
+                v = {**v, "items": {"type": "object"}}
+            result[k] = _fix_bare_arrays(v)
+        else:
+            result[k] = v
+    return result
+
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """LLM provider for any OpenAI-compatible Chat Completions API."""
 
@@ -91,11 +113,11 @@ class OpenAICompatibleProvider(LLMProvider):
 
             # Structured output: force valid JSON matching the schema.
             # Uses response_format with json_schema type.
-            # OpenAI requires root schema to be type: "object". If the
-            # caller sends type: "array", wrap it automatically.
+            # OpenAI requires: (1) root schema type: "object", (2) every
+            # array must have "items" defined. Fix both automatically.
             _unwrap_array = False
             if request.output_schema:
-                schema = request.output_schema
+                schema = _fix_bare_arrays(request.output_schema)
                 if schema.get("type") == "array":
                     # Wrap array in object: {"items": [...]}
                     schema = {

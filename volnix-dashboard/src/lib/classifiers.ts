@@ -10,7 +10,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   'policy.escalate': 'text-warning',
   'policy.flag': 'text-warning',
   'permission.denied': 'text-error',
-  'budget.deduction': 'text-text-secondary',
+  'budget.deduction': 'text-warning',
   'budget.warning': 'text-warning',
   'budget.exhausted': 'text-error',
   'capability.gap': 'text-neutral',

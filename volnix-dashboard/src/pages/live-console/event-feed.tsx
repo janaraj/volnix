@@ -74,7 +74,7 @@ export function EventFeed({ events, selectedEventId, onSelectEvent, onSelectActo
     return events.filter((e) => {
       if (hideInternal && INTERNAL_ACTORS.has(e.actor_id)) return false;
       if (outcomeFilter && (e.outcome ?? '') !== outcomeFilter) return false;
-      if (eventTypeFilter && e.event_type !== eventTypeFilter) return false;
+      if (eventTypeFilter && !e.event_type?.startsWith(eventTypeFilter)) return false;
       if (actorFilter && e.actor_id !== actorFilter) return false;
       if (serviceFilter && (e.service_id ?? '') !== serviceFilter) return false;
       return true;
