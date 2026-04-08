@@ -48,10 +48,10 @@ cd volnix-dashboard && npm install && npm run dev    # http://localhost:3000
 
 ## How It Works
 
-Volnix supports two modes — test your own agents against a governed world, or deploy internal agent teams that collaborate autonomously.
+Volnix supports two modes — connect your own agents to a governed world, or deploy internal agent teams that collaborate autonomously.
 
 ```
-  Mode 1: Connect Your Own Agent           Mode 2: Deploy Agent Teams
+  Mode 1: Connect Your Own Agent           Mode 2: Deploy Internal Agent Teams
   ────────────────────────                ──────────────────────────
 
   Your Agent (any framework)              Mission + Team YAML
