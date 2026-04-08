@@ -111,16 +111,16 @@ async def test_execute_short_circuit_hold():
 
 
 @pytest.mark.asyncio
-async def test_execute_short_circuit_escalate():
-    """ESCALATE verdict short-circuits."""
+async def test_execute_escalate_continues():
+    """ESCALATE verdict does NOT short-circuit — it's a notification, not a gate."""
     s1 = MockStep("a")
     s2 = MockStep("b", verdict=StepVerdict.ESCALATE)
     s3 = MockStep("c")
     dag = PipelineDAG(steps=[s1, s2, s3])
     ctx = _make_ctx()
     await dag.execute(ctx)
-    assert s3.called is False
-    assert ctx.short_circuited is True
+    assert s3.called is True
+    assert ctx.short_circuited is False
 
 
 @pytest.mark.asyncio

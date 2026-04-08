@@ -105,6 +105,9 @@ class PromptTemplate:
         content = re.sub(r"\n?\s*```\s*$", "", content)
         content = content.strip()
 
+        # Strip trailing commas before } or ] (common LLM quirk, especially Gemini)
+        content = re.sub(r",\s*([}\]])", r"\1", content)
+
         # Try direct parse
         try:
             return json.loads(content)
@@ -128,7 +131,7 @@ class PromptTemplate:
         if arr_start != -1:
             # Try each } from the end backwards until we find valid JSON
             search_from = len(content)
-            for _ in range(20):  # max 20 attempts
+            for _ in range(50):  # max 50 attempts (complex nested entities need more)
                 last_obj_end = content.rfind("}", 0, search_from)
                 if last_obj_end == -1 or last_obj_end <= arr_start:
                     break

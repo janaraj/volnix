@@ -59,10 +59,11 @@ def test_step_name_property():
 
 
 def test_step_result_is_terminal():
-    """Test that DENY, HOLD, ESCALATE, ERROR are terminal; ALLOW is not."""
-    for verdict in (StepVerdict.DENY, StepVerdict.HOLD, StepVerdict.ESCALATE, StepVerdict.ERROR):
+    """Test that DENY, HOLD, ERROR are terminal; ALLOW and ESCALATE are not."""
+    for verdict in (StepVerdict.DENY, StepVerdict.HOLD, StepVerdict.ERROR):
         result = StepResult(step_name="t", verdict=verdict)
         assert result.is_terminal is True, f"{verdict} should be terminal"
 
-    result = StepResult(step_name="t", verdict=StepVerdict.ALLOW)
-    assert result.is_terminal is False
+    for verdict in (StepVerdict.ALLOW, StepVerdict.ESCALATE):
+        result = StepResult(step_name="t", verdict=verdict)
+        assert result.is_terminal is False, f"{verdict} should NOT be terminal"

@@ -26,7 +26,7 @@ def test_step_result_frozen():
 def test_step_result_is_terminal():
     assert StepResult(step_name="t", verdict=StepVerdict.DENY).is_terminal is True
     assert StepResult(step_name="t", verdict=StepVerdict.HOLD).is_terminal is True
-    assert StepResult(step_name="t", verdict=StepVerdict.ESCALATE).is_terminal is True
+    assert StepResult(step_name="t", verdict=StepVerdict.ESCALATE).is_terminal is False
     assert StepResult(step_name="t", verdict=StepVerdict.ERROR).is_terminal is True
     assert StepResult(step_name="t", verdict=StepVerdict.ALLOW).is_terminal is False
 

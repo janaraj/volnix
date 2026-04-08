@@ -59,7 +59,6 @@ class StepResult(BaseModel, frozen=True):
         return self.verdict in (
             StepVerdict.DENY,
             StepVerdict.HOLD,
-            StepVerdict.ESCALATE,
             StepVerdict.ERROR,
         )
 

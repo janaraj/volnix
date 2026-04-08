@@ -67,8 +67,31 @@ class EnforcementHandler:
         self, ctx: ActionContext, policy: dict[str, Any], config: dict[str, Any]
     ) -> StepResult:
         """Place the action on hold pending approval."""
-        hold_id = f"hold-{uuid.uuid4().hex[:12]}"
         approver_role = config.get("approver_role", "supervisor")
+
+        # Auto-approve if the acting agent already holds the approver role.
+        # Actor IDs follow the format "{role}-{hash}", so rsplit extracts the role.
+        actor_role = str(ctx.actor_id).rsplit("-", 1)[0]
+        if actor_role == approver_role:
+            event = PolicyFlagEvent(
+                event_type="policy.flag",
+                timestamp=_now_timestamp(),
+                policy_id=_policy_id(policy),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                run_id=self._run_id(ctx),
+            )
+            return StepResult(
+                step_name="policy",
+                verdict=StepVerdict.ALLOW,
+                events=[event],
+                message=(
+                    f"Hold auto-approved — '{ctx.actor_id}' "
+                    f"has approver role '{approver_role}'"
+                ),
+            )
+
+        hold_id = f"hold-{uuid.uuid4().hex[:12]}"
         timeout_str = config.get("timeout", "30m")
         timeout_seconds = _parse_timeout(timeout_str)
 

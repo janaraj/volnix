@@ -181,6 +181,34 @@ class GoogleNativeProvider(LLMProvider):
             latency = (time.monotonic() - start) * 1000
             content = response.text if response.text else ""
 
+            # Check finish reason for diagnostics (truncation detection)
+            finish_reason = None
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                finish_reason = getattr(candidate, "finish_reason", None)
+                if finish_reason and str(finish_reason) not in ("STOP", "FinishReason.STOP"):
+                    logger.warning(
+                        "Gemini finish_reason=%s (content=%d chars, max_tokens=%d)",
+                        finish_reason,
+                        len(content),
+                        request.max_tokens,
+                    )
+
+            # Schema-constrained generation produced empty content — retry without schema
+            if request.output_schema and not content and "response_json_schema" in config:
+                logger.warning(
+                    "Gemini schema-constrained generation produced no content — "
+                    "retrying without schema enforcement"
+                )
+                del config["response_json_schema"]
+                response = await asyncio.to_thread(
+                    self._client.models.generate_content,
+                    model=model,
+                    contents=prompt if not cached_content_name else request.user_content,
+                    config=config,
+                )
+                content = response.text if response.text else ""
+
             # Parse native tool calls from response
             parsed_tool_calls = None
             if hasattr(response, "candidates") and response.candidates:
@@ -211,8 +239,11 @@ class GoogleNativeProvider(LLMProvider):
                     )
                 except json.JSONDecodeError:
                     logger.warning(
-                        "Gemini structured output was not valid JSON (%d chars)",
+                        "Gemini structured output was not valid JSON "
+                        "(%d chars, finish=%s, tail=%.200s)",
                         len(content),
+                        finish_reason,
+                        content[-200:] if content else "",
                     )
 
             usage_meta = response.usage_metadata

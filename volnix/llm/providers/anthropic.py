@@ -11,12 +11,36 @@ import logging
 import time
 from typing import ClassVar
 
+import anthropic
 from anthropic import AsyncAnthropic
 
 logger = logging.getLogger(__name__)
 
+from typing import Any
+
 from volnix.llm.provider import LLMProvider
 from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ToolCall
+
+
+def _fix_schema_for_anthropic(schema: Any) -> Any:
+    """Recursively fix schemas for Anthropic structured output compatibility.
+
+    Anthropic requires ``additionalProperties: false`` on every object type
+    and ``items`` on every array type.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    result: dict[str, Any] = {}
+    for k, v in schema.items():
+        if isinstance(v, dict):
+            if v.get("type") == "object" and "additionalProperties" not in v:
+                v = {**v, "additionalProperties": False}
+            if v.get("type") == "array" and "items" not in v:
+                v = {**v, "items": {"type": "object"}}
+            result[k] = _fix_schema_for_anthropic(v)
+        else:
+            result[k] = v
+    return result
 
 
 class AnthropicProvider(LLMProvider):
@@ -80,7 +104,7 @@ class AnthropicProvider(LLMProvider):
                 create_kwargs["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": request.output_schema,
+                        "schema": _fix_schema_for_anthropic(request.output_schema),
                     }
                 }
                 schema_type = request.output_schema.get("type", "?")
@@ -104,7 +128,21 @@ class AnthropicProvider(LLMProvider):
                     request.tool_choice or "required", {"type": "any"}
                 )
 
-            message = await self._client.messages.create(**create_kwargs)
+            try:
+                message = await self._client.messages.create(**create_kwargs)
+            except anthropic.BadRequestError as schema_exc:
+                err_msg = str(schema_exc).lower()
+                if "output_config" in create_kwargs and (
+                    "schema" in err_msg or "too complex" in err_msg or "not supported" in err_msg
+                ):
+                    logger.warning(
+                        "Anthropic schema rejected (%s) — retrying without structured output",
+                        str(schema_exc)[:100],
+                    )
+                    del create_kwargs["output_config"]
+                    message = await self._client.messages.create(**create_kwargs)
+                else:
+                    raise
             latency = (time.monotonic() - start) * 1000
 
             # Parse text and tool_use blocks from the response content.
