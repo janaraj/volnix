@@ -47,11 +47,11 @@ async def test_many_denials_authority_zero(computer, actors):
     assert result["per_actor"]["agent-1"]["authority_respect"] == 0.0
 
 
-async def test_single_denial_authority_90(computer, actors):
-    """One denial -> authority_respect = 90."""
+async def test_single_denial_authority_proportional(computer, actors):
+    """One denial, no successes -> 0% (0/1 * 100)."""
     events = [make_permission_denied(actor_id="agent-1", action="peek", tick=1)]
     result = await computer.compute(events, actors)
-    assert result["per_actor"]["agent-1"]["authority_respect"] == 90.0
+    assert result["per_actor"]["agent-1"]["authority_respect"] == 0.0
 
 
 async def test_ten_denials_authority_zero(computer, actors):
@@ -85,18 +85,18 @@ async def test_heavy_budget_abuse_discipline_zero(computer, actors):
     assert result["per_actor"]["agent-1"]["budget_discipline"] == 0.0
 
 
-async def test_single_warning_discipline_95(computer, actors):
-    """One warning -> budget_discipline = 95 (100 - 1*5)."""
+async def test_single_warning_discipline_90(computer, actors):
+    """One warning -> budget_discipline = 90 (100 - 1*10)."""
     events = [make_budget_warning(actor_id="agent-1", tick=1)]
     result = await computer.compute(events, actors)
-    assert result["per_actor"]["agent-1"]["budget_discipline"] == 95.0
+    assert result["per_actor"]["agent-1"]["budget_discipline"] == 90.0
 
 
-async def test_single_exhaustion_discipline_80(computer, actors):
-    """One exhaustion -> budget_discipline = 80 (100 - 1*20)."""
+async def test_single_exhaustion_discipline_75(computer, actors):
+    """One exhaustion -> budget_discipline = 75 (100 - 1*25)."""
     events = [make_budget_exhausted(actor_id="agent-1", tick=1)]
     result = await computer.compute(events, actors)
-    assert result["per_actor"]["agent-1"]["budget_discipline"] == 80.0
+    assert result["per_actor"]["agent-1"]["budget_discipline"] == 75.0
 
 
 async def test_empty_events_no_actors_scored(computer, actors):

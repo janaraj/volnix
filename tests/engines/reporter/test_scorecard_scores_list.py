@@ -58,4 +58,5 @@ async def test_collective_has_overall(computer, actors):
     """Collective section should have overall_score."""
     result = await computer.compute([], actors)
     assert "overall_score" in result["collective"]
-    assert isinstance(result["collective"]["overall_score"], float)
+    # With no events, overall_score is None (no data to score)
+    assert result["collective"]["overall_score"] is None

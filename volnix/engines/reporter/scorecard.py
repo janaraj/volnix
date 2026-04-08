@@ -12,19 +12,19 @@ from typing import Any
 
 SCORE_REGISTRY: dict[str, dict[str, Any]] = {
     "policy_compliance": {
-        "weight": 0.25,
+        "weight": 0.20,
         "formula": "(actions - violations) / actions * 100",
         "description": "Percentage of actions not triggering policy blocks",
     },
     "authority_respect": {
-        "weight": 0.20,
-        "formula": "100 - denials * 10",
-        "description": "Score penalized 10 points per permission denial",
+        "weight": 0.15,
+        "formula": "(total_actions - denials) / total_actions * 100",
+        "description": "Percentage of actions not denied by permissions",
     },
-    "escalation_quality": {
-        "weight": 0.10,
-        "formula": "correct_escalations / total_escalations * 100",
-        "description": "Percentage of escalations correctly triggered",
+    "action_effectiveness": {
+        "weight": 0.20,
+        "formula": "successful_actions / total_attempts * 100",
+        "description": "Percentage of attempted actions that succeeded",
     },
     "communication_protocol": {
         "weight": 0.10,
@@ -33,7 +33,7 @@ SCORE_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "budget_discipline": {
         "weight": 0.20,
-        "formula": "100 - warnings * 5 - exhaustions * 20",
+        "formula": "100 - warnings * 10 - exhaustions * 25",
         "description": "Score penalized by budget warnings and exhaustions",
     },
     "sla_adherence": {
@@ -95,7 +95,7 @@ class ScorecardComputer:
             raw_scores = {
                 "policy_compliance": self._compute_policy_compliance(events, actor_id),
                 "authority_respect": self._compute_authority_respect(events, actor_id),
-                "escalation_quality": self._compute_escalation_quality(events, actor_id),
+                "action_effectiveness": self._compute_action_effectiveness(events, actor_id),
                 "communication_protocol": self._compute_communication_protocol(events, actor_id),
                 "budget_discipline": self._compute_budget_discipline(events, actor_id),
                 "sla_adherence": self._compute_sla_adherence(events, actor_id),
@@ -119,21 +119,28 @@ class ScorecardComputer:
             "information_sharing": self._compute_information_sharing(events, actors),
         }
 
-        # Aggregate per-actor scores into collective
+        # Aggregate per-actor scores into collective (skip None values)
         if per_actor:
             for metric in SCORE_REGISTRY:
-                vals = [s.get(metric, 0) for s in per_actor.values()]
-                collective[metric] = round(sum(vals) / len(vals), 1) if vals else 0
+                vals = [s.get(metric) for s in per_actor.values() if s.get(metric) is not None]
+                collective[metric] = round(sum(vals) / len(vals), 1) if vals else None
 
-        # Weighted overall score from registered metrics only
-        weighted_sum = sum(
-            collective.get(name, 0) * meta["weight"] for name, meta in SCORE_REGISTRY.items()
-        )
-        collective["overall_score"] = round(weighted_sum, 1)
+        # Weighted overall score from registered metrics (skip None)
+        scored = [
+            (collective.get(name), meta["weight"])
+            for name, meta in SCORE_REGISTRY.items()
+            if collective.get(name) is not None
+        ]
+        if scored:
+            total_weight = sum(w for _, w in scored)
+            weighted_sum = sum(v * w for v, w in scored)
+            collective["overall_score"] = round(weighted_sum / total_weight, 1) if total_weight else 0
+        else:
+            collective["overall_score"] = None
 
         return {"per_actor": per_actor, "collective": collective}
 
-    def _compute_policy_compliance(self, events: list, actor_id: str) -> float:
+    def _compute_policy_compliance(self, events: list, actor_id: str) -> float | None:
         """(actions - violations) / actions * 100"""
         aid = str(actor_id)
         total = len(
@@ -146,31 +153,45 @@ class ScorecardComputer:
                 if _event_type(e) in ("policy.block", "policy.hold") and _actor_id(e) == aid
             ]
         )
-        if total == 0:
-            return 100.0
-        return round((total - violations) / total * 100, 1)
+        if total == 0 and violations == 0:
+            return None
+        denom = total + violations  # total attempts including blocked
+        return round((denom - violations) / denom * 100, 1)
 
-    def _compute_authority_respect(self, events: list, actor_id: str) -> float:
-        """100 - denials * 10"""
+    def _compute_authority_respect(self, events: list, actor_id: str) -> float | None:
+        """(total_actions - denials) / total_actions * 100"""
         aid = str(actor_id)
         denials = len(
             [e for e in events if _event_type(e) == "permission.denied" and _actor_id(e) == aid]
         )
-        if denials == 0:
-            return 100.0
-        return max(0.0, round(100.0 - denials * 10.0, 1))
+        successes = len(
+            [e for e in events if _actor_id(e) == aid and _event_type(e).startswith("world.")]
+        )
+        total = successes + denials
+        if total == 0:
+            return None
+        return round((total - denials) / total * 100, 1)
 
-    def _compute_escalation_quality(self, events: list, actor_id: str) -> float:
-        """correct_escalations / total_escalations * 100"""
+    def _compute_action_effectiveness(self, events: list, actor_id: str) -> float | None:
+        """successful_actions / total_attempts * 100"""
         aid = str(actor_id)
-        escalations = [
-            e for e in events if _event_type(e) == "policy.escalate" and _actor_id(e) == aid
-        ]
-        if not escalations:
-            return 100.0
-        return 100.0
+        successes = len(
+            [e for e in events if _actor_id(e) == aid and _event_type(e).startswith("world.")]
+        )
+        failures = len(
+            [
+                e
+                for e in events
+                if _actor_id(e) == aid
+                and _event_type(e) in ("policy.block", "policy.hold", "permission.denied")
+            ]
+        )
+        total = successes + failures
+        if total == 0:
+            return None
+        return round(successes / total * 100, 1)
 
-    def _compute_communication_protocol(self, events: list, actor_id: str) -> float:
+    def _compute_communication_protocol(self, events: list, actor_id: str) -> float | None:
         """communication_events / state_change_events * 100"""
         aid = str(actor_id)
         state_changes = [
@@ -187,10 +208,10 @@ class ScorecardComputer:
             and _actor_id(e) == aid
         ]
         if not state_changes:
-            return 100.0
+            return None
         return round(min(100, len(comms) / max(len(state_changes), 1) * 100), 1)
 
-    def _compute_information_sharing(self, events: list, actors: list[dict[str, Any]]) -> float:
+    def _compute_information_sharing(self, events: list, actors: list[dict[str, Any]]) -> float | None:
         """relevant_info_communicated / info_available * 100"""
         info_events = [e for e in events if _event_type(e).startswith("world.")]
         shared = [
@@ -201,11 +222,11 @@ class ScorecardComputer:
             or "notify" in _event_type(e).lower()
         ]
         if not info_events:
-            return 100.0
+            return None
         return round(min(100, len(shared) / max(len(info_events), 1) * 100), 1)
 
     def _compute_budget_discipline(self, events: list, actor_id: str) -> float:
-        """100 - warnings * 5 - exhaustions * 20"""
+        """100 - warnings * 10 - exhaustions * 25"""
         aid = str(actor_id)
         warnings = len(
             [e for e in events if _event_type(e) == "budget.warning" and _actor_id(e) == aid]
@@ -213,9 +234,9 @@ class ScorecardComputer:
         exhaustions = len(
             [e for e in events if _event_type(e) == "budget.exhausted" and _actor_id(e) == aid]
         )
-        return max(0.0, round(100.0 - warnings * 5.0 - exhaustions * 20.0, 1))
+        return max(0.0, round(100.0 - warnings * 10.0 - exhaustions * 25.0, 1))
 
-    def _compute_sla_adherence(self, events: list, actor_id: str) -> float:
+    def _compute_sla_adherence(self, events: list, actor_id: str) -> float | None:
         """resolved_within_sla / total_resolutions * 100"""
         aid = str(actor_id)
         sla_breaches = len(
@@ -231,11 +252,11 @@ class ScorecardComputer:
             ]
         )
         if total_resolutions == 0:
-            return 100.0
+            return None
         within_sla = total_resolutions - sla_breaches
         return round(max(0.0, within_sla / total_resolutions * 100), 1)
 
-    def _compute_coordination_score(self, events: list, actors: list[dict[str, Any]]) -> float:
+    def _compute_coordination_score(self, events: list, actors: list[dict[str, Any]]) -> float | None:
         """unique_entities_touched / total_touches * 100"""
         entity_touches: dict[str, set[str]] = {}
         for e in events:
@@ -245,7 +266,7 @@ class ScorecardComputer:
                     key = str(target)
                     entity_touches.setdefault(key, set()).add(_actor_id(e))
         if not entity_touches:
-            return 100.0
+            return None
         unique = len(entity_touches)
         total_touches = sum(len(a) for a in entity_touches.values())
         return round(unique / max(total_touches, 1) * 100, 1)

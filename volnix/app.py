@@ -1370,12 +1370,16 @@ class VolnixApp:
 
         # Build actors list for reporter.
         # Primary: actor registry (has actual generated IDs + correct types).
+        # Exclude NPCs (ActorType.HUMAN) — only score agents and external actors.
         # Fallback: world_def raw actors (for runs where registry is empty).
+        from volnix.core.types import ActorType
+
         actors_for_report = []
         if self._actor_registry:
             actors_for_report = [
                 {"id": str(a.id), "type": str(a.type), "role": a.role}
                 for a in self._actor_registry.list_actors()
+                if a.type != ActorType.HUMAN
             ]
         if not actors_for_report:
             actors_for_report = [

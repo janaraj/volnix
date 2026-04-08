@@ -1050,10 +1050,16 @@ class HTTPRestAdapter(ProtocolAdapter):
                 "scorecard",
             )
             if scorecard is None:
-                # Try live reporter for active run
+                # Regenerate from stored event log — NOT the live bus
+                # which may have events from a different run.
                 reporter = gateway._app.registry.get("reporter")
                 if reporter:
-                    scorecard = await reporter.generate_scorecard()
+                    stored_events = await gateway._app.artifact_store.load_artifact(
+                        _RId(run_id), "event_log"
+                    )
+                    scorecard = await reporter.generate_scorecard(
+                        events=stored_events or []
+                    )
             if scorecard is None:
                 from starlette.responses import JSONResponse
 

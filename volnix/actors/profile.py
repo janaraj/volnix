@@ -109,7 +109,7 @@ def make_default_agent(
     name_hash = hashlib.md5(agent_name.encode()).hexdigest()[:8]  # noqa: S324
     return ActorDefinition(
         id=ActorId(f"{agent_name}-{name_hash}"),
-        type=ActorType.AGENT,
+        type=ActorType.HUMAN,
         role=agent_name,
         permissions=default_permissions or {"read": "all", "write": "all"},
         budget=default_budget,

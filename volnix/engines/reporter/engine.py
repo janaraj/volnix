@@ -99,13 +99,12 @@ class ReportGeneratorEngine(BaseEngine):
         return await state.get_timeline()
 
     def _get_actors(self) -> list[dict[str, Any]]:
-        """Get actor definitions from config."""
+        """Get actor definitions from config, excluding NPCs (type=human)."""
         actor_registry = self._config.get("_actor_registry")
         if actor_registry is None:
             return []
-        # ActorRegistry has list_all() or similar
-        if hasattr(actor_registry, "list_all"):
-            actors = actor_registry.list_all()
+        if hasattr(actor_registry, "list_actors"):
+            actors = actor_registry.list_actors()
             return [
                 {
                     "id": str(a.id),
@@ -113,6 +112,7 @@ class ReportGeneratorEngine(BaseEngine):
                     "role": getattr(a, "role", ""),
                 }
                 for a in actors
+                if str(a.type) != "human"
             ]
         return []
 
@@ -136,26 +136,30 @@ class ReportGeneratorEngine(BaseEngine):
         if events is None:
             events = await self._get_timeline()
         if actors is None:
-            actors = self._get_actors()
-
-        # Supplement with actors discovered from events (external agents
-        # that connected at runtime may not be in the static registry).
-        known_ids = {a.get("id") or a.get("actor_id") for a in actors}
-        internal = {
-            "world_compiler",
-            "animator",
-            "system",
-            "policy",
-            "budget",
-            "state",
-            "permission",
-            "responder",
-        }
-        for evt in events:
-            aid = evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
-            if aid and str(aid) not in known_ids and str(aid) not in internal:
-                actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
-                known_ids.add(str(aid))
+            # Derive actors from events only — the live registry may have
+            # actors from a different run (e.g., animator NPCs from a new
+            # simulation that has nothing to do with the completed run).
+            internal = {
+                "world_compiler",
+                "animator",
+                "system",
+                "policy",
+                "budget",
+                "state",
+                "permission",
+                "responder",
+            }
+            seen: set[str] = set()
+            actors = []
+            for evt in events:
+                aid = (
+                    evt.get("actor_id")
+                    if isinstance(evt, dict)
+                    else getattr(evt, "actor_id", None)
+                )
+                if aid and str(aid) not in seen and str(aid) not in internal:
+                    actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
+                    seen.add(str(aid))
 
         return await self._scorecard.compute(events, actors)
 
