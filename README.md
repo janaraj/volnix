@@ -2,7 +2,7 @@
 
 **Programmable worlds for AI agents.**
 
-Volnix creates stateful, governed realities where AI agents operate as participants — not isolated prompt loops, but actors inside a world with services, policies, budgets, other agents, and real consequences. Describe a world. Compile it. Put agents inside. Watch what happens.
+Volnix creates living, governed realities for AI agents. Not mock servers. Not test harnesses. Complete worlds with stateful services, policies that push back, budgets that run out, NPCs that follow up and escalate, and consequences that cascade. Worlds are defined in YAML, run on their own timelines, and score every agent that interacts with them.
 
 [![PyPI](https://img.shields.io/pypi/v/volnix)](https://pypi.org/project/volnix/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
