@@ -139,6 +139,19 @@ See [docs/agent-integration.md](docs/agent-integration.md) for the full guide.
 - **Causal graph** — every event traces back to its causes
 - **13 built-in blueprints** across support, finance, DevOps, research, security, and marketing
 
+## Use Cases
+
+Some of the things you can do with Volnix:
+
+| Use Case | What It Means |
+|----------|---------------|
+| **Agent evaluation** | Put your agent in a governed world, measure how it handles policies, budgets, and ambiguity |
+| **Multi-agent coordination** | Deploy agent teams that collaborate through shared world state — not a pipeline |
+| **Scenario simulation** | Explore "what if" scenarios with realistic services, actors, and consequences |
+| **Gateway deployment** | Route agent actions through governance (permission, policy, budget) before they hit real APIs |
+| **Synthetic data generation** | Generate interconnected, realistic service data (tickets, charges, customers) with causal consistency |
+| **PMF / product exploration** | Simulate business environments to test workflows, team structures, or product decisions |
+
 ---
 
 ## Built-in Blueprints
