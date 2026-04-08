@@ -153,9 +153,7 @@ class ReportGeneratorEngine(BaseEngine):
             actors = []
             for evt in events:
                 aid = (
-                    evt.get("actor_id")
-                    if isinstance(evt, dict)
-                    else getattr(evt, "actor_id", None)
+                    evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
                 )
                 if aid and str(aid) not in seen and str(aid) not in internal:
                     actors.append({"id": str(aid), "type": "agent", "role": str(aid)})

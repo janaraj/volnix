@@ -86,8 +86,7 @@ class EnforcementHandler:
                 verdict=StepVerdict.ALLOW,
                 events=[event],
                 message=(
-                    f"Hold auto-approved — '{ctx.actor_id}' "
-                    f"has approver role '{approver_role}'"
+                    f"Hold auto-approved — '{ctx.actor_id}' has approver role '{approver_role}'"
                 ),
             )
 

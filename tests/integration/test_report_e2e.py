@@ -156,7 +156,7 @@ async def test_e2e_permission_denial_drops_authority_respect():
     expected_per_actor = {
         "policy_compliance",
         "authority_respect",
-        "escalation_quality",
+        "action_effectiveness",
         "communication_protocol",
         "budget_discipline",
         "sla_adherence",

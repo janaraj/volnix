@@ -134,7 +134,9 @@ class ScorecardComputer:
         if scored:
             total_weight = sum(w for _, w in scored)
             weighted_sum = sum(v * w for v, w in scored)
-            collective["overall_score"] = round(weighted_sum / total_weight, 1) if total_weight else 0
+            collective["overall_score"] = (
+                round(weighted_sum / total_weight, 1) if total_weight else 0
+            )
         else:
             collective["overall_score"] = None
 
@@ -211,7 +213,9 @@ class ScorecardComputer:
             return None
         return round(min(100, len(comms) / max(len(state_changes), 1) * 100), 1)
 
-    def _compute_information_sharing(self, events: list, actors: list[dict[str, Any]]) -> float | None:
+    def _compute_information_sharing(
+        self, events: list, actors: list[dict[str, Any]]
+    ) -> float | None:
         """relevant_info_communicated / info_available * 100"""
         info_events = [e for e in events if _event_type(e).startswith("world.")]
         shared = [
@@ -256,7 +260,9 @@ class ScorecardComputer:
         within_sla = total_resolutions - sla_breaches
         return round(max(0.0, within_sla / total_resolutions * 100), 1)
 
-    def _compute_coordination_score(self, events: list, actors: list[dict[str, Any]]) -> float | None:
+    def _compute_coordination_score(
+        self, events: list, actors: list[dict[str, Any]]
+    ) -> float | None:
         """unique_entities_touched / total_touches * 100"""
         entity_touches: dict[str, set[str]] = {}
         for e in events:

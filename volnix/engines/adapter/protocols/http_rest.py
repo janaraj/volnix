@@ -1057,9 +1057,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     stored_events = await gateway._app.artifact_store.load_artifact(
                         _RId(run_id), "event_log"
                     )
-                    scorecard = await reporter.generate_scorecard(
-                        events=stored_events or []
-                    )
+                    scorecard = await reporter.generate_scorecard(events=stored_events or [])
             if scorecard is None:
                 from starlette.responses import JSONResponse
 
