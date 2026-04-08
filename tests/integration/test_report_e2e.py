@@ -137,7 +137,7 @@ async def test_e2e_permission_denial_drops_authority_respect():
             self.role = role
 
     class _ActorRegistry:
-        def list_all(self):
+        def list_actors(self):
             return [_LimitedActorDef("agent-1", "agent", "support")]
 
     eng._config["_actor_registry"] = _ActorRegistry()
@@ -173,8 +173,8 @@ async def test_e2e_permission_denial_drops_authority_respect():
     assert actor_scores["authority_respect"] < 100.0, (
         f"Expected authority_respect < 100 after denial, got {actor_scores['authority_respect']}"
     )
-    # Specifically: 1 denial -> 100 - 10 = 90
-    assert actor_scores["authority_respect"] == 90.0
+    # 3 successes, 1 denial: (4-1)/4 * 100 = 75.0
+    assert actor_scores["authority_respect"] == 75.0
 
     # Policy compliance should also be < 100 (policy block occurred)
     assert actor_scores["policy_compliance"] < 100.0
