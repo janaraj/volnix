@@ -917,6 +917,8 @@ class WorldCompilerEngine(BaseEngine):
 
             for section in repairable_sections:
                 spec = section_specs[section]
+                # Build ref_context so repair LLM knows valid entity IDs
+                ref_context = data_gen._build_ref_context(spec.entity_schema, all_entities)
                 repaired_payload = await self._repair_section_payload(
                     repair_template=repair_template,
                     ctx=ctx,
@@ -927,10 +929,12 @@ class WorldCompilerEngine(BaseEngine):
                     relevant_schema={
                         "entity_schema": spec.entity_schema,
                         "state_machine": state_machines.get(section),
+                        "existing_entity_references": ref_context,
                     },
                     output_contract=(
                         f"JSON array of exactly {spec.count} {section} entities "
-                        "that satisfy the schema and validation errors."
+                        "that satisfy the schema and validation errors. "
+                        "For reference fields, use ONLY IDs from existing_entity_references.valid_ids."
                     ),
                 )
                 all_entities[section] = data_gen.parse_generated_entities(

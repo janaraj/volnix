@@ -1188,8 +1188,9 @@ class VolnixApp:
             return str(obj)
 
         world_dir = self._world_manager.get_world_dir(world_id)
+        # ensure_ascii handles surrogate characters from local LLMs (Ollama)
         (world_dir / "generation.json").write_text(
-            _json.dumps(result, indent=2, default=_serialize_result)
+            _json.dumps(result, indent=2, default=_serialize_result, ensure_ascii=True)
         )
 
         # Update world metadata with counts

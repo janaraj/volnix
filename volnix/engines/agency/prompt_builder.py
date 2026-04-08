@@ -293,16 +293,16 @@ class ActorPromptBuilder:
             steps = [
                 "DELEGATE: Assign tasks and set reporting expectations.",
                 "MONITOR: Read team updates in the channel.",
+                "ACT: Use write/update tools to make changes. If sub-agents are blocked or need approval, step in and act directly.",
                 "VALIDATE: Check findings for accuracy and completeness.",
-                "ASSIST: Provide guidance if sub-agents are stuck or blocked.",
                 "SYNTHESIZE: When findings are sufficient, share your synthesis.",
                 "If nothing new to act on: call the `do_nothing` tool.",
             ]
         else:
             steps = [
                 "INVESTIGATE. Read relevant data to understand the situation.",
-                "SHARE your findings. Post a summary in the team channel so the lead and teammates can see what you learned.",
-                "ACT on what you find. Update records, process requests, post updates — whatever the mission requires.",
+                "ACT on what you find. Use write/update tools to make changes — don't just read and report.",
+                "SHARE your findings and actions. Post a summary in the team channel.",
             ]
             if team_size > 1:
                 steps.append("RESPOND to teammates. Messages marked [TO YOU] need your response.")

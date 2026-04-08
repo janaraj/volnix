@@ -66,10 +66,17 @@ class OpenAICompatibleProvider(LLMProvider):
         # we use a placeholder that satisfies the SDK's validation.
         import httpx
 
+        # Local providers (Ollama, vLLM) need longer timeouts and
+        # don't support json_schema structured output.
+        self._is_local = "localhost" in base_url or "127.0.0.1" in base_url
+        if self._is_local:
+            t = httpx.Timeout(connect=30.0, read=max(timeout, 600.0), write=30.0, pool=30.0)
+        else:
+            t = httpx.Timeout(connect=10.0, read=timeout, write=10.0, pool=10.0)
         self._client = AsyncOpenAI(
             api_key=api_key if api_key else "local-no-auth-needed",
             base_url=base_url,
-            timeout=httpx.Timeout(connect=10.0, read=timeout, write=10.0, pool=10.0),
+            timeout=t,
         )
         self._default_model = default_model
         self._base_url = base_url
@@ -111,30 +118,35 @@ class OpenAICompatibleProvider(LLMProvider):
                 ).hexdigest()[:16]
 
             # Structured output: force valid JSON matching the schema.
-            # Uses response_format with json_schema type.
-            # OpenAI requires: (1) root schema type: "object", (2) every
-            # array must have "items" defined. Fix both automatically.
+            # Local providers (Ollama, vLLM) don't support json_schema —
+            # use simple json_object mode instead. The prompt still asks
+            # for JSON, and the parser handles raw JSON content.
             _unwrap_array = False
             if request.output_schema:
-                schema = _fix_bare_arrays(request.output_schema)
-                if schema.get("type") == "array":
-                    # Wrap array in object: {"items": [...]}
-                    schema = {
-                        "type": "object",
-                        "properties": {"items": schema},
-                        "required": ["items"],
+                if self._is_local:
+                    # Simple JSON mode — no schema enforcement
+                    kwargs["response_format"] = {"type": "json_object"}
+                    logger.info("Local provider: using json_object mode (no schema enforcement)")
+                else:
+                    schema = _fix_bare_arrays(request.output_schema)
+                    if schema.get("type") == "array":
+                        # Wrap array in object: {"items": [...]}
+                        schema = {
+                            "type": "object",
+                            "properties": {"items": schema},
+                            "required": ["items"],
+                        }
+                        _unwrap_array = True
+                    kwargs["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "response",
+                            "schema": schema,
+                            "strict": False,
+                        },
                     }
-                    _unwrap_array = True
-                kwargs["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "response",
-                        "schema": schema,
-                        "strict": False,
-                    },
-                }
-                schema_type = request.output_schema.get("type", "?")
-                logger.info("OpenAI structured output enabled (schema type=%s)", schema_type)
+                    schema_type = request.output_schema.get("type", "?")
+                    logger.info("OpenAI structured output enabled (schema type=%s)", schema_type)
 
             # Native tool calling: pass tool definitions so the LLM returns
             # structured tool_calls instead of raw JSON text.
@@ -177,6 +189,10 @@ class OpenAICompatibleProvider(LLMProvider):
             content = ""
             if message:
                 content = message.content or getattr(message, "refusal", None) or ""
+                # Sanitize invalid Unicode surrogates (local models like Ollama
+                # can produce these, causing JSON serialization failures).
+                if self._is_local and content:
+                    content = content.encode("utf-8", errors="replace").decode("utf-8")
 
             # Parse native tool calls from response.
             # Note: message.tool_calls can be [] (empty list) which is falsy —

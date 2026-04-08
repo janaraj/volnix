@@ -25,6 +25,24 @@ from volnix.llm.types import LLMRequest, LLMResponse
 
 logger = logging.getLogger(__name__)
 
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+
+def _strip_surrogates(obj: Any) -> Any:
+    """Recursively remove Unicode surrogate characters from parsed JSON.
+
+    Local LLMs (Ollama) can produce lone surrogates that are valid in
+    Python strings but cause UnicodeEncodeError when serialized to
+    UTF-8 or JSON downstream.
+    """
+    if isinstance(obj, str):
+        return _SURROGATE_RE.sub("", obj)
+    if isinstance(obj, dict):
+        return {k: _strip_surrogates(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_strip_surrogates(v) for v in obj]
+    return obj
+
 
 class PromptTemplate:
     """Reusable prompt template for LLM interactions."""
@@ -84,7 +102,7 @@ class PromptTemplate:
             )
 
         if response.structured_output:
-            return response.structured_output
+            return _strip_surrogates(response.structured_output)
 
         content = response.content.strip()
         if not content:
@@ -110,7 +128,7 @@ class PromptTemplate:
 
         # Try direct parse
         try:
-            return json.loads(content)
+            return _strip_surrogates(json.loads(content))
         except json.JSONDecodeError:
             pass
 
@@ -120,7 +138,7 @@ class PromptTemplate:
             end = content.rfind(end_char)
             if start != -1 and end != -1 and end > start:
                 try:
-                    return json.loads(content[start : end + 1])
+                    return _strip_surrogates(json.loads(content[start : end + 1]))
                 except json.JSONDecodeError:
                     continue
 
@@ -139,7 +157,7 @@ class PromptTemplate:
                 try:
                     result = json.loads(truncated)
                     if isinstance(result, list) and result:
-                        return result
+                        return _strip_surrogates(result)
                 except json.JSONDecodeError:
                     pass
                 search_from = last_obj_end

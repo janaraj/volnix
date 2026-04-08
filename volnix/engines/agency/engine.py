@@ -1015,6 +1015,10 @@ class AgencyEngine(BaseEngine):
                     # Update agent's goal_context with findings
                     actor.goal_context = text[:500]
 
+                    # Persist text response in conversation history so the
+                    # agent sees it on re-activation and doesn't repeat itself.
+                    messages.append({"role": "assistant", "content": text})
+
                     # Auto-post findings to team channel
                     if actor.team_channel:
                         post_env = self._create_channel_post(
