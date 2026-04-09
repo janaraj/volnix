@@ -924,12 +924,14 @@ class HTTPRestAdapter(ProtocolAdapter):
             """Paginated events for a run. Default: newest first."""
             from volnix.core.types import RunId as _RId
 
-            # DB-level sort + pagination
+            # When filters are active, load all events first, filter, then paginate.
+            # Without filters, paginate at load time for efficiency.
+            has_filters = any([actor_id, service_id, event_type, outcome])
             events, total = await _load_run_events(
                 run_id,
                 order=sort,
-                limit=limit,
-                offset=offset,
+                limit=None if has_filters else limit,
+                offset=0 if has_filters else offset,
             )
 
             # Enrich: causal_child_ids
@@ -978,9 +980,10 @@ class HTTPRestAdapter(ProtocolAdapter):
                 ]
             if outcome:
                 events = [e for e in events if e.get("outcome") == outcome]
-            # If filters were applied, total reflects filtered count
-            if any([actor_id, service_id, event_type, outcome]):
+            # If filters were applied, paginate the filtered results
+            if has_filters:
                 total = len(events)
+                events = events[offset : offset + limit]
             return {"run_id": run_id, "events": events, "total": total}
 
         @app.get("/api/v1/runs/{run_id}/events/{event_id}")
@@ -1446,6 +1449,10 @@ class HTTPRestAdapter(ProtocolAdapter):
                 # Animator events
                 if event_type.startswith("animator."):
                     return {"type": "event", "data": data}
+
+                # Game lifecycle events
+                if event_type.startswith("game."):
+                    return {"type": "game", "data": data}
 
                 # Skip engine lifecycle, pipeline steps, etc.
                 return None

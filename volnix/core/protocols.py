@@ -100,6 +100,10 @@ class StateEngineProtocol(Protocol):
         """Query entities of a given type with optional filters."""
         ...
 
+    async def list_entity_types(self) -> list[str]:
+        """Return distinct entity types in the store."""
+        ...
+
     async def propose_mutation(
         self,
         deltas: list[StateDelta],
@@ -252,6 +256,16 @@ class BudgetEngineProtocol(Protocol):
         actor_id: ActorId,
     ) -> list[dict[str, Any]]:
         """Return a time-series of the actor's spend across budget dimensions."""
+        ...
+
+    async def refill(self, actor_id: ActorId, dimension: str, amount: int) -> None:
+        """Refill a budget dimension (for per-round resource reset in games).
+
+        Args:
+            actor_id: The actor whose budget to refill.
+            dimension: Budget dimension name (e.g. ``"api_calls"``, ``"world_actions"``).
+            amount: How much to refill. Use ``-1`` for a full refill back to total.
+        """
         ...
 
 

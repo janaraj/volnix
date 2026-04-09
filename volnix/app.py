@@ -1271,6 +1271,55 @@ class VolnixApp:
 
         await agency.configure(actor_states, world_context, available_actions)
 
+    async def configure_game(self, plan: Any, internal_profile: Any | None = None) -> None:
+        """Configure the game engine from blueprint game definition.
+
+        When an internal agent profile is provided, only those agents become
+        game players. Otherwise falls back to all non-HUMAN/non-SYSTEM actors.
+
+        Call this after ``configure_agency()`` so the actor registry is
+        populated with internal agent actors.
+        """
+        from volnix.core.types import ActorType
+
+        game_def = getattr(plan, "game", None)
+        if game_def is None or not game_def.enabled:
+            return
+
+        try:
+            game_engine = self._registry.get("game")
+        except KeyError:
+            logger.debug("Game engine not registered — skipping configure_game")
+            return
+
+        # Collect player IDs
+        players: list[str] = []
+        if internal_profile:
+            # Use internal profile agents — these are the actual game players
+            players = [str(agent_def.id) for agent_def in internal_profile.agents]
+        elif self._actor_registry:
+            # Fallback: all non-HUMAN/non-SYSTEM actors (for external-only games)
+            for actor in self._actor_registry.list_actors():
+                if actor.type != ActorType.HUMAN and actor.type != ActorType.SYSTEM:
+                    players.append(str(actor.id))
+
+        if not players:
+            logger.warning("Game enabled but no eligible players found — skipping configure_game")
+            return
+
+        await game_engine.configure(
+            definition=game_def,
+            players=players,
+            run_id=self._current_run_id,
+        )
+        logger.info(
+            "Game configured: mode=%s, %d rounds, %d players (%s)",
+            game_def.mode,
+            game_def.rounds.count,
+            len(players),
+            ", ".join(players),
+        )
+
     async def compile_and_run(self, plan: Any) -> dict:
         """Compile world + configure all runtime engines in one call.
 
@@ -1478,9 +1527,12 @@ class VolnixApp:
         await self.configure_animator(plan)
         await self.configure_agency(plan, result, internal_profile=internal_profile)
 
-        # Track active run + world
+        # Track active run + world (must be set BEFORE configure_game
+        # so the game engine receives the correct run_id)
         self._current_run_id = str(run_id)
         self._current_world_id = str(world_id)
+
+        await self.configure_game(plan, internal_profile=internal_profile)
         self._last_action_time = None
         await self._run_manager.start_run(run_id)
 

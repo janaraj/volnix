@@ -38,9 +38,15 @@ export interface WsRunCompleteMessage {
   data: Run;
 }
 
+export interface WsGameMessage {
+  type: 'game';
+  data: WorldEvent;
+}
+
 export type WsMessage =
   | WsEventMessage
   | WsStatusMessage
   | WsBudgetUpdateMessage
   | WsEntityUpdateMessage
-  | WsRunCompleteMessage;
+  | WsRunCompleteMessage
+  | WsGameMessage;

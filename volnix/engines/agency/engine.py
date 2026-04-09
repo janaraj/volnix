@@ -1648,3 +1648,39 @@ class AgencyEngine(BaseEngine):
     def get_all_states(self) -> list[ActorState]:
         """Return all actor states managed by this engine."""
         return list(self._actor_states.values())
+
+    async def activate_for_game_turn(
+        self,
+        actor_id: ActorId,
+        round_number: int = 0,
+        total_rounds: int = 0,
+        standings_summary: str = "",
+    ) -> list[ActionEnvelope]:
+        """Activate an actor for a game turn. Public API for GameRunner.
+
+        Injects round-specific context into the actor's goal_context so the
+        LLM knows this is a new round and should take fresh actions. The
+        prompt builder renders goal_context — no changes needed there.
+        """
+        actor_state = self._actor_states.get(actor_id)
+        if actor_state is None:
+            return []
+
+        # Prepend round context to existing goal_context.
+        # No restore needed — _activate_with_tool_loop may update goal_context
+        # (delegation at L349, buffer at L486, findings at L1016) and we must
+        # not wipe those updates.
+        round_ctx = (
+            f"ROUND {round_number}/{total_rounds} — NEW ROUND. "
+            f"Your action budget has been refreshed. You MUST take actions this round. "
+            f"Do NOT repeat previous analysis — each round is a new opportunity to act."
+        )
+        if standings_summary:
+            round_ctx += f"\nCurrent standings: {standings_summary}"
+        actor_state.goal_context = f"{round_ctx}\n{actor_state.goal_context or ''}"
+
+        # Fresh conversation each game round — prevents accumulated history
+        # from causing the LLM to decide "I already did everything".
+        actor_state.activation_messages = []
+
+        return await self._activate_with_tool_loop(actor_state, "game_turn", None)

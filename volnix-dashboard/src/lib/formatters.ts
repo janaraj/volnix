@@ -66,7 +66,7 @@ export function formatTick(tick: number): string {
 
 /** Truncate a long identifier for display purposes. */
 export function truncateId(id: string, len?: number): string {
-  return id.slice(0, len ?? 8);
+  return (id ?? '').slice(0, len ?? 8);
 }
 
 /** Capitalize first letter of each word. */

@@ -24,6 +24,7 @@ def create_default_registry() -> EngineRegistry:
     from volnix.engines.animator.engine import WorldAnimatorEngine
     from volnix.engines.budget.engine import BudgetEngine
     from volnix.engines.feedback.engine import FeedbackEngine
+    from volnix.engines.game.engine import GameEngine
     from volnix.engines.permission.engine import PermissionEngine
     from volnix.engines.policy.engine import PolicyEngine
     from volnix.engines.reporter.engine import ReportGeneratorEngine
@@ -43,4 +44,5 @@ def create_default_registry() -> EngineRegistry:
     registry.register(FeedbackEngine())
     registry.register(WorldCompilerEngine())
     registry.register(AgencyEngine())
+    registry.register(GameEngine())
     return registry

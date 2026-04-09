@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from volnix.engines.game.definition import GameDefinition
 from volnix.kernel.surface import ServiceSurface
 from volnix.reality.dimensions import WorldConditions
 
@@ -66,6 +67,9 @@ class WorldPlan(BaseModel, frozen=True):
 
     # ── Runtime settings (carried to engines) ──
     animator_settings: dict[str, Any] = Field(default_factory=dict)
+
+    # ── Game configuration (optional) ──
+    game: GameDefinition | None = None
 
     # ── Blueprint (if detected) ──
     blueprint: str | None = None

@@ -354,6 +354,10 @@ class StateEngine(BaseEngine):
         """Query entities of a given type with optional filters."""
         return await self._store.query(entity_type, filters)
 
+    async def list_entity_types(self) -> list[str]:
+        """Return distinct entity types in the store."""
+        return await self._store.list_entity_types()
+
     async def populate_entities(self, entities: dict[str, list[dict[str, Any]]]) -> int:
         """Bulk-create entities for world generation.
 

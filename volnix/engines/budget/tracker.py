@@ -210,6 +210,21 @@ class BudgetTracker:
 
         return events
 
+    def refill(self, actor_id: ActorId, dimension: str, amount: int) -> None:
+        """Refill a budget dimension."""
+        aid = str(actor_id)
+        state = self._budgets.get(aid)
+        if state is None:
+            return
+        key = f"{dimension}_remaining"
+        total_key = f"{dimension}_total"
+        if key not in state:
+            return
+        if amount == -1:
+            state[key] = state.get(total_key, 0)
+        else:
+            state[key] = min(state[key] + amount, state.get(total_key, 0))
+
     def _check_dimension_threshold(
         self,
         actor_id: ActorId,

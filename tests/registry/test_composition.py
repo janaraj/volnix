@@ -8,7 +8,7 @@ from volnix.registry.registry import EngineRegistry
 def test_create_default_registry():
     reg = create_default_registry()
     assert isinstance(reg, EngineRegistry)
-    assert len(reg.list_engines()) == 11
+    assert len(reg.list_engines()) == 12
 
 
 def test_all_engines_registered():
@@ -25,6 +25,7 @@ def test_all_engines_registered():
         "feedback",
         "world_compiler",
         "agency",
+        "game",
     }
     assert set(reg.list_engines()) == expected
 
@@ -33,11 +34,14 @@ def test_topo_sort_no_cycles():
     reg = create_default_registry()
     order = reg.resolve_initialization_order()
     assert order[0] == "state"
-    assert len(order) == 11
+    assert len(order) == 12
     # adapter depends on permission — must come after
     assert order.index("permission") < order.index("adapter")
     # agency depends on state — must come after
     assert order.index("state") < order.index("agency")
+    # game depends on state and budget — must come after both
+    assert order.index("state") < order.index("game")
+    assert order.index("budget") < order.index("game")
     # Exact expected order (deterministic Kahn's with sorted queues)
     expected = [
         "state",
@@ -45,6 +49,7 @@ def test_topo_sort_no_cycles():
         "animator",
         "budget",
         "feedback",
+        "game",
         "permission",
         "adapter",
         "policy",

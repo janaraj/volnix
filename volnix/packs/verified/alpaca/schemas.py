@@ -256,10 +256,7 @@ SENTIMENT_ENTITY_SCHEMA: dict = {
     "properties": {
         "id": {"type": "string"},
         "symbol": {"type": "string"},
-        "source": {
-            "type": "string",
-            "enum": ["reddit", "twitter", "all"],
-        },
+        "source": {"type": "string"},
         "window": {"type": "string"},
         "score": {"type": "number", "minimum": -1, "maximum": 1},
         "post_count": {"type": "integer", "default": 0},
@@ -864,10 +861,7 @@ TRADING_TOOL_DEFINITIONS: list[dict] = [
             "required": ["symbol", "source", "score"],
             "properties": {
                 "symbol": {"type": "string"},
-                "source": {
-                    "type": "string",
-                    "enum": ["reddit", "twitter", "all"],
-                },
+                "source": {"type": "string"},
                 "score": {"type": "number"},
                 "post_count": {"type": "integer"},
                 "positive_count": {"type": "integer"},

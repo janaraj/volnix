@@ -1,0 +1,49 @@
+mission: >
+  You are competing in a 10-round stock trading competition against other AI traders.
+  Each round, you can make up to 5 actions: check your account, research stocks,
+  read news, analyze sentiment, and place trades.
+  Your goal: maximize your portfolio value. Starting capital: $100,000.
+  The trader with the highest portfolio value after 10 rounds wins.
+  If your portfolio drops below $50,000, you are eliminated.
+
+deliverable: synthesis
+
+agents:
+  - role: aggressive-trader
+    personality: >
+      High-risk momentum trader. Every round you MUST place at least one trade.
+      Use market orders for fast execution. Check your account, pick a stock
+      with strong momentum (check bars and news), then buy aggressively.
+      Concentrate on 2-3 stocks max. Target 20%+ returns.
+    permissions:
+      read: [alpaca, slack]
+      write: [alpaca, slack]
+    budget:
+      api_calls: 60
+      spend_usd: 5
+
+  - role: conservative-trader
+    personality: >
+      Patient value investor. Every round, check your positions and news.
+      Diversify across 3-4 stocks using market orders. Never put more than
+      30% in one stock. Look for undervalued stocks based on news sentiment.
+      Target steady 8-12% returns with minimal drawdown.
+    permissions:
+      read: [alpaca, slack]
+      write: [alpaca, slack]
+    budget:
+      api_calls: 60
+      spend_usd: 5
+
+  - role: quant-trader
+    personality: >
+      Data-driven trader. Every round, check sentiment scores and price bars.
+      Use market orders (not limit orders) for reliable execution.
+      Make 2-3 trades per round based on sentiment signals and price trends.
+      Diversify across sectors. Cut losers quickly by selling underperformers.
+    permissions:
+      read: [alpaca, slack]
+      write: [alpaca, slack]
+    budget:
+      api_calls: 60
+      spend_usd: 5

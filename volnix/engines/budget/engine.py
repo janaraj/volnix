@@ -383,6 +383,19 @@ class BudgetEngine(BaseEngine):
         """Return spend curve data (stub — Phase G analytics)."""
         return []
 
+    # -- Game integration: per-round resource refill --------------------------
+
+    async def refill(self, actor_id: ActorId, dimension: str, amount: int) -> None:
+        """Refill a budget dimension (for per-round resource reset in games).
+
+        Args:
+            actor_id: The actor whose budget to refill.
+            dimension: Budget dimension name (e.g. ``"api_calls"``, ``"world_actions"``).
+            amount: How much to refill. Use ``-1`` for a full refill back to the
+                original total.
+        """
+        self._tracker.refill(actor_id, dimension, amount)
+
     # -- Internal helpers ------------------------------------------------------
 
     def _get_actor(self, actor_id: ActorId) -> Any:

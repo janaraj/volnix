@@ -109,6 +109,13 @@ class EntityStore:
                 results.append(entity)
         return results
 
+    async def list_entity_types(self) -> list[str]:
+        """Return distinct entity types in the store."""
+        rows = await self._db.fetchall(
+            "SELECT DISTINCT entity_type FROM entities ORDER BY entity_type"
+        )
+        return [row["entity_type"] for row in rows]
+
     async def count(self, entity_type: str) -> int:
         """Return the count of entities of the given type."""
         row = await self._db.fetchone(

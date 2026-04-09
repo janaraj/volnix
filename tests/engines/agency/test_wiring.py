@@ -61,8 +61,9 @@ def test_default_registry_engine_count():
     """Ensure registration of agency doesn't break existing engine count.
 
     Previous count was 10 (state, policy, permission, budget, responder,
-    adapter, animator, reporter, feedback, world_compiler). Now 11.
+    adapter, animator, reporter, feedback, world_compiler). Then 11 with
+    agency, now 12 with game.
     """
     registry = create_default_registry()
     names = registry.list_engines()
-    assert len(names) == 11
+    assert len(names) == 12

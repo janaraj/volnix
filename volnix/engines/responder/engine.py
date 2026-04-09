@@ -313,7 +313,8 @@ class WorldResponderEngine(BaseEngine):
             pack = self._pack_registry.get_pack_for_tool(ctx.action)
         entity_types = list(pack.get_entity_schemas().keys())
 
-        result = {}
+        result: dict[str, Any] = {}
+        result["_actor_id"] = str(ctx.actor_id)
         for etype in entity_types:
             key = self._pluralize(etype)
             try:

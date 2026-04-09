@@ -94,6 +94,7 @@ export function useLiveEvents(runId: string): ConnectionStatus {
           break;
         }
 
+        case 'game':
         case 'policy':
         case 'permission':
         case 'capability': {

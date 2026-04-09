@@ -843,3 +843,107 @@ class TestTimeBudget:
         state = engine._tracker.get_budget_state(ctx.actor_id)
         # time was deducted from remaining
         assert state.time_remaining_seconds < 100.0
+
+
+class TestBudgetRefill:
+    """Test per-round budget refill for game integration."""
+
+    @pytest.mark.asyncio
+    async def test_refill_partial_amount(self, engine):
+        """Partial refill adds to remaining without exceeding total."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10}))
+        engine._actor_registry = reg
+
+        # Use some budget
+        for _ in range(7):
+            ctx = _make_ctx()
+            await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 3
+
+        # Refill 5
+        await engine.refill(ActorId("agent-1"), "api_calls", 5)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 8
+
+    @pytest.mark.asyncio
+    async def test_refill_capped_at_total(self, engine):
+        """Refill cannot exceed the original total."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10}))
+        engine._actor_registry = reg
+
+        # Use 2 calls
+        for _ in range(2):
+            ctx = _make_ctx()
+            await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 8
+
+        # Refill 50 (much more than remaining capacity)
+        await engine.refill(ActorId("agent-1"), "api_calls", 50)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 10  # Capped at total
+
+    @pytest.mark.asyncio
+    async def test_refill_full_with_minus_one(self, engine):
+        """amount=-1 restores to full total."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10}))
+        engine._actor_registry = reg
+
+        # Exhaust all budget
+        for _ in range(10):
+            ctx = _make_ctx()
+            await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 0
+
+        # Full refill
+        await engine.refill(ActorId("agent-1"), "api_calls", -1)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 10
+
+    @pytest.mark.asyncio
+    async def test_refill_world_actions(self, engine):
+        """Refill works on world_actions dimension."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "world_actions": 5}))
+        engine._actor_registry = reg
+
+        for _ in range(4):
+            ctx = _make_ctx()
+            await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.world_actions_remaining == 1
+
+        await engine.refill(ActorId("agent-1"), "world_actions", -1)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.world_actions_remaining == 5
+
+    @pytest.mark.asyncio
+    async def test_refill_unknown_actor_is_noop(self, engine):
+        """Refill on unknown actor does nothing (no error)."""
+        await engine.refill(ActorId("nonexistent"), "api_calls", 10)
+        # No error raised
+
+    @pytest.mark.asyncio
+    async def test_refill_unknown_dimension_is_noop(self, engine):
+        """Refill on unknown dimension does nothing."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # "mana" is not a budget dimension
+        await engine.refill(ActorId("agent-1"), "mana", 5)
+
+        # api_calls unchanged
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.api_calls_remaining == 9

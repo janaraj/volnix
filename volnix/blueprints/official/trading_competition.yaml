@@ -1,0 +1,88 @@
+world:
+  name: "Trading Competition"
+  description: >
+    A simulated stock market where AI traders compete over 10 rounds.
+    Each round, traders research market conditions, analyze their positions,
+    and place orders. The trader with the highest portfolio value after
+    all rounds wins. Market conditions shift between rounds as the
+    animator generates price movements and news events.
+
+  services:
+    alpaca: verified/alpaca
+    slack: verified/slack
+
+  actors:
+    - role: market-commentator
+      type: internal
+      count: 1
+      personality: >
+        A market analyst who posts commentary about price movements,
+        earnings surprises, and sector rotations in the team channel.
+
+  policies:
+    - name: "Max order size"
+      trigger:
+        action: create_order
+        condition: "input.qty and float(input.qty) > 500"
+      enforcement: block
+      reason: "Maximum 500 shares per order to prevent market manipulation"
+
+    - name: "Audit all trades"
+      trigger:
+        service: alpaca
+      enforcement: log
+      reason: "All trading activity logged for competition scorecard"
+
+  seeds:
+    - >
+      Trading accounts: three trader accounts each with $100,000 starting equity.
+      Account status ACTIVE, buying_power and cash both $100,000, portfolio_value $100,000.
+    - >
+      Available stocks: AAPL at $185, MSFT at $420, GOOGL at $175, AMZN at $190,
+      NVDA at $130, TSLA at $245, META at $505, JPM at $200.
+      Each should have an alpaca_asset entity and a recent quote entity.
+    - >
+      Price history: for each stock above, create bar entities showing
+      the last 5 days of trading data with realistic open/high/low/close prices.
+    - >
+      Market news: 3-4 recent news articles. One bullish on NVDA (AI demand),
+      one bearish on TSLA (delivery miss), one neutral on Fed holding rates.
+
+  behavior: dynamic
+  reality:
+    preset: messy
+    complexity:
+      volatility: 70
+  mode: governed
+
+  game:
+    enabled: true
+    mode: competition
+    rounds:
+      count: 10
+      actions_per_turn: 5
+      simultaneous: true
+    resource_reset_per_round:
+      api_calls: 5
+    scoring:
+      metrics:
+        - name: portfolio_value
+          source: state
+          entity_type: alpaca_account
+          field: equity
+          weight: 0.7
+        - name: trade_activity
+          source: events
+          event_type: "world.create_order"
+          aggregation: count
+          weight: 0.3
+      ranking: descending
+    win_conditions:
+      - type: rounds_complete
+      - type: elimination
+        metric: portfolio_value
+        threshold: 50000
+        below: true
+    between_rounds:
+      animator_tick: true
+      announce_scores: true

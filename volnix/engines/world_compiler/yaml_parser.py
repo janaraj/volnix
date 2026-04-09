@@ -68,6 +68,9 @@ class YAMLParser:
         # World + compiler metadata
         meta = self._extract_compiler_metadata(world, compiler)
 
+        # Extract optional game configuration
+        game_config = self._extract_game_config(world_def)
+
         plan = WorldPlan(
             name=world.get("name", "Unnamed World"),
             description=world.get("description", ""),
@@ -85,6 +88,7 @@ class YAMLParser:
             deliverable_config=deliverable_config,
             collaboration_config=collaboration_config,
             animator_settings=world.get("animator", {}) or compiler.get("animator", {}),
+            game=game_config,
             source="yaml",
         )
         return plan, service_specs
@@ -162,3 +166,12 @@ class YAMLParser:
             "fidelity": world.get("fidelity") or compiler.get("fidelity", "auto"),
             "mode": world.get("mode") or compiler.get("mode", "governed"),
         }
+
+    def _extract_game_config(self, raw: dict) -> Any:
+        """Extract game configuration from blueprint YAML."""
+        game_raw = raw.get("game") or raw.get("world", {}).get("game")
+        if not game_raw or not game_raw.get("enabled", False):
+            return None
+        from volnix.engines.game.definition import GameDefinition
+
+        return GameDefinition(**game_raw)

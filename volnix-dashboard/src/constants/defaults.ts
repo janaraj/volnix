@@ -13,7 +13,7 @@ export const STALE_TIME_WORLDS = 10_000;
 
 // Pagination
 export const PAGE_SIZE_RUNS = 20;
-export const PAGE_SIZE_EVENTS = 50;
+export const PAGE_SIZE_EVENTS = 1000;
 export const PAGE_SIZE_ENTITIES = 50;
 
 // UI

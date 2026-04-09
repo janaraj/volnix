@@ -244,7 +244,12 @@ async def handle_get_account(
         return ResponseProposal(
             response_body=_alpaca_error(404, "Account not found"),
         )
-    return ResponseProposal(response_body=accounts[0])
+    caller_id = state.get("_actor_id", "")
+    account = next(
+        (a for a in accounts if a.get("game_owner_id") == caller_id),
+        accounts[0],
+    )
+    return ResponseProposal(response_body=account)
 
 
 # ---------------------------------------------------------------------------
@@ -287,13 +292,17 @@ async def handle_create_order(
             response_body=_alpaca_error(422, f"Asset '{symbol}' not tradable"),
         )
 
-    # Validate account
+    # Validate account — prefer account owned by calling actor (game mode)
     accounts = state.get("alpaca_accounts", [])
     if not accounts:
         return ResponseProposal(
             response_body=_alpaca_error(403, "No account"),
         )
-    account = accounts[0]
+    caller_id = state.get("_actor_id", "")
+    account = next(
+        (a for a in accounts if a.get("game_owner_id") == caller_id),
+        accounts[0],
+    )
     if account.get("trading_blocked"):
         return ResponseProposal(
             response_body=_alpaca_error(403, "Trading blocked"),
@@ -341,10 +350,10 @@ async def handle_create_order(
         "type": order_type,
         "side": side,
         "time_in_force": tif,
-        "limit_price": limit_price,
-        "stop_price": stop_price,
-        "trail_price": input_data.get("trail_price"),
-        "trail_percent": input_data.get("trail_percent"),
+        "limit_price": float(limit_price) if limit_price is not None else None,
+        "stop_price": float(stop_price) if stop_price is not None else None,
+        "trail_price": float(input_data["trail_price"]) if input_data.get("trail_price") is not None else None,
+        "trail_percent": float(input_data["trail_percent"]) if input_data.get("trail_percent") is not None else None,
         "status": new_status,
         "order_class": "simple",
     }
@@ -1096,7 +1105,7 @@ async def handle_create_news(
         # Internal fields (stripped by handle_get_news before serving)
         "factual_accuracy": input_data.get("factual_accuracy", 1.0),
         "sentiment_bias": input_data.get("sentiment_bias", 0.0),
-        "market_impact_expected": input_data.get("market_impact_expected", "none"),
+        "market_impact_expected": float(input_data["market_impact_expected"]) if input_data.get("market_impact_expected") is not None else 0.0,
     }
     delta = StateDelta(
         entity_type="alpaca_news",
