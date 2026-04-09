@@ -81,6 +81,11 @@ observer_read_prefixes = [
 [budget]
 warning_threshold_pct = 80
 critical_threshold_pct = 95
+track_api_calls = true
+track_world_actions = true
+track_llm_spend = true
+track_spend_usd = true
+track_time = true
 
 # ── Responder Engine ─────────────────────────────────────────
 

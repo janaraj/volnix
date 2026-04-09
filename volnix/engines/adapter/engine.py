@@ -19,6 +19,7 @@ from volnix.core import (
     StepResult,
     StepVerdict,
 )
+from volnix.core.events import CapabilityResolvedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +62,23 @@ class AgentAdapterEngine(BaseEngine):
                     ctx.action,
                     ctx.actor_id,
                 )
+                from datetime import datetime
+
+                from volnix.core.types import Timestamp, ToolName
+
+                now = datetime.now(UTC)
+                resolved_event = CapabilityResolvedEvent(
+                    event_type="capability.resolved",
+                    timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                    actor_id=ctx.actor_id,
+                    requested_tool=ToolName(ctx.action),
+                    resolved_tier="tier1",
+                    service_id=str(ctx.service_id) if ctx.service_id else "",
+                )
                 return StepResult(
                     step_name=self.step_name,
                     verdict=StepVerdict.ALLOW,
+                    events=[resolved_event],
                     message=f"tool '{ctx.action}' available (tier1)",
                 )
 
@@ -78,9 +93,23 @@ class AgentAdapterEngine(BaseEngine):
                         profile.service_name,
                         ctx.actor_id,
                     )
+                    from datetime import datetime
+
+                    from volnix.core.types import Timestamp, ToolName
+
+                    now = datetime.now(UTC)
+                    resolved_event = CapabilityResolvedEvent(
+                        event_type="capability.resolved",
+                        timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                        actor_id=ctx.actor_id,
+                        requested_tool=ToolName(ctx.action),
+                        resolved_tier="tier2",
+                        service_id=profile.service_name,
+                    )
                     return StepResult(
                         step_name=self.step_name,
                         verdict=StepVerdict.ALLOW,
+                        events=[resolved_event],
                         message=f"tool '{ctx.action}' available (tier2, profile={profile.service_name})",
                     )
 
@@ -118,9 +147,22 @@ class AgentAdapterEngine(BaseEngine):
             ctx.action,
             ctx.actor_id,
         )
+        from datetime import datetime
+
+        from volnix.core.types import Timestamp, ToolName
+
+        now = datetime.now(UTC)
+        resolved_event = CapabilityResolvedEvent(
+            event_type="capability.resolved",
+            timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+            actor_id=ctx.actor_id,
+            requested_tool=ToolName(ctx.action),
+            resolved_tier="passthrough",
+        )
         return StepResult(
             step_name=self.step_name,
             verdict=StepVerdict.ALLOW,
+            events=[resolved_event],
             message="pass-through (no pack registry)",
         )
 

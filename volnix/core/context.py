@@ -90,6 +90,7 @@ class ResponseProposal(BaseModel, frozen=True):
     proposed_side_effects: list[SideEffect] = Field(default_factory=list)
     fidelity: FidelityMetadata | None = None
     fidelity_warning: str | None = None
+    validation_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -160,5 +161,6 @@ class ActionContext(BaseModel):
     policy_flags: list[str] = Field(default_factory=list)
     fidelity: FidelityMetadata | None = None
     computed_cost: ActionCost | None = None
+    budget_start_ns: float | None = None
     short_circuited: bool = False
     short_circuit_step: str | None = None

@@ -18,6 +18,7 @@ from volnix.core import (
     StepResult,
     StepVerdict,
 )
+from volnix.core.events import ResponderDispatchEvent
 from volnix.packs.profile_schema import ServiceProfileData
 
 logger = logging.getLogger(__name__)
@@ -140,9 +141,23 @@ class WorldResponderEngine(BaseEngine):
             state = await self._build_state_for_pack(ctx)
             proposal = await self._tier1.dispatch(ctx, state=state)
             ctx.response_proposal = proposal
+            from datetime import UTC, datetime
+
+            from volnix.core.types import Timestamp
+
+            now = datetime.now(UTC)
+            dispatch_event = ResponderDispatchEvent(
+                event_type="responder.dispatch",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                fidelity_tier=1,
+                service_id=str(ctx.service_id),
+            )
             return StepResult(
                 step_name="responder",
                 verdict=StepVerdict.ALLOW,
+                events=[dispatch_event],
                 metadata={
                     "fidelity_tier": proposal.fidelity.tier if proposal.fidelity else None,
                 },
@@ -155,19 +170,56 @@ class WorldResponderEngine(BaseEngine):
             if tier2 is not None:
                 state = await self._build_state_for_profile(ctx, profile)
                 proposal = await tier2.generate(ctx, profile, state)
+                # Capture LLM cost from Tier 2 generation
+                if tier2._last_llm_cost_usd > 0:
+                    from volnix.core.types import ActionCost as _ActionCost
+
+                    ctx.computed_cost = _ActionCost(llm_spend_usd=tier2._last_llm_cost_usd)
+                vm = self._extract_validation_metadata(profile, ctx.action)
+                if vm:
+                    proposal = proposal.model_copy(update={"validation_metadata": vm})
                 ctx.response_proposal = proposal
+                from datetime import UTC, datetime
+
+                from volnix.core.types import Timestamp
+
+                now = datetime.now(UTC)
+                dispatch_event = ResponderDispatchEvent(
+                    event_type="responder.dispatch",
+                    timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                    actor_id=ctx.actor_id,
+                    action=ctx.action,
+                    fidelity_tier=2,
+                    profile_name=profile.profile_name,
+                    service_id=str(ctx.service_id),
+                )
                 return StepResult(
                     step_name="responder",
                     verdict=StepVerdict.ALLOW,
+                    events=[dispatch_event],
                     metadata={
                         "fidelity_tier": 2,
                         "profile": profile.profile_name,
                     },
                 )
             # Profile found but no LLM router available
+            from datetime import UTC, datetime
+
+            from volnix.core.types import Timestamp
+
+            now = datetime.now(UTC)
+            error_event = ResponderDispatchEvent(
+                event_type="responder.dispatch",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                fidelity_tier=0,
+                service_id=str(ctx.service_id) if ctx.service_id else "",
+            )
             return StepResult(
                 step_name="responder",
                 verdict=StepVerdict.ERROR,
+                events=[error_event],
                 message=(
                     f"Profile found for '{ctx.action}' but Tier 2 generator "
                     f"unavailable (no LLM router)"
@@ -175,9 +227,23 @@ class WorldResponderEngine(BaseEngine):
             )
 
         # No handler
+        from datetime import UTC, datetime
+
+        from volnix.core.types import Timestamp
+
+        now = datetime.now(UTC)
+        error_event = ResponderDispatchEvent(
+            event_type="responder.dispatch",
+            timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+            actor_id=ctx.actor_id,
+            action=ctx.action,
+            fidelity_tier=0,
+            service_id=str(ctx.service_id) if ctx.service_id else "",
+        )
         return StepResult(
             step_name="responder",
             verdict=StepVerdict.ERROR,
+            events=[error_event],
             message=f"No pack or profile found for action '{ctx.action}'",
         )
 
@@ -295,6 +361,22 @@ class WorldResponderEngine(BaseEngine):
                 )
                 result[key] = []
         return result
+
+    def _extract_validation_metadata(
+        self, profile: ServiceProfileData, action: str
+    ) -> dict[str, Any]:
+        """Extract schema/SM/entity metadata from profile for validation."""
+        meta: dict[str, Any] = {}
+        op = next((o for o in profile.operations if o.name == action), None)
+        if op and op.response_schema:
+            meta["response_schema"] = op.response_schema
+        if profile.state_machines:
+            meta["state_machines"] = {
+                sm.entity_type: {"transitions": sm.transitions} for sm in profile.state_machines
+            }
+        if profile.entities:
+            meta["entity_schemas"] = {e.name: {"fields": e.fields} for e in profile.entities}
+        return meta
 
     # -- Responder operations --------------------------------------------------
 

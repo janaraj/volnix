@@ -11,7 +11,7 @@ from volnix.core.events import (
     PolicyFlagEvent,
     PolicyHoldEvent,
 )
-from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.core.types import ActorId, ActorType, PolicyId, ServiceId, StepVerdict
 from volnix.engines.policy.engine import PolicyEngine
 
 
@@ -69,7 +69,9 @@ class TestNoPolicies:
         ctx = _make_ctx()
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
-        assert not result.events
+        assert len(result.events) == 1
+        assert isinstance(result.events[0], PolicyFlagEvent)
+        assert result.events[0].policy_id == PolicyId("none")
 
 
 class TestPolicyBlock:

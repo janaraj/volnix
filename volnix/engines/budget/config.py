@@ -10,3 +10,8 @@ class BudgetConfig(BaseModel):
 
     warning_threshold_pct: float = 80.0
     critical_threshold_pct: float = 95.0
+    track_api_calls: bool = True
+    track_world_actions: bool = True
+    track_llm_spend: bool = True
+    track_spend_usd: bool = True
+    track_time: bool = True

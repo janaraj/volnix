@@ -53,6 +53,7 @@ class Tier2Generator:
         self._router = llm_router
         self._seed = seed
         self._schema_validator = SchemaValidator()
+        self._last_llm_cost_usd: float = 0.0
 
     async def generate(
         self,
@@ -80,6 +81,8 @@ class Tier2Generator:
         Returns:
             A ResponseProposal with fidelity tier 2 metadata.
         """
+        self._last_llm_cost_usd = 0.0  # Reset for this generation
+
         if current_state is None:
             current_state = {}
 
@@ -109,6 +112,7 @@ class Tier2Generator:
             engine_name="responder",
             use_case="tier2",
         )
+        self._last_llm_cost_usd = response.usage.cost_usd if response.usage else 0.0
 
         # 5. Parse JSON response
         response_body = self._parse_response(response)
@@ -348,6 +352,7 @@ class Tier2Generator:
                 engine_name="responder",
                 use_case="tier2",
             )
+            self._last_llm_cost_usd += response.usage.cost_usd if response.usage else 0.0
             return self._parse_response(response)
         except Exception as exc:
             logger.warning("Tier2 retry LLM call failed: %s", exc)

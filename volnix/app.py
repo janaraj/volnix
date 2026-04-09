@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +16,7 @@ from volnix.bus.bus import EventBus
 from volnix.config.schema import VolnixConfig
 from volnix.core.context import ActionContext
 from volnix.core.errors import VolnixError
-from volnix.core.types import ActorId, RunId, ServiceId, WorldId
+from volnix.core.types import ActorId, RunId, ServiceId, StepVerdict, WorldId
 from volnix.ledger.ledger import Ledger
 from volnix.persistence.manager import ConnectionManager
 from volnix.pipeline.builder import build_pipeline_from_config
@@ -57,6 +59,9 @@ class VolnixApp:
         self._current_world_id: str | None = None
         self._world_manager: Any = None
         self._actor_registry: Any = None
+        self._escalation_handler: Any = None
+        self._hold_store: Any = None
+        self._hold_expiry_task: Any = None
         self._started = False
         self._last_action_time: datetime | None = None
         self._idle_watcher_task: Any = None
@@ -114,7 +119,10 @@ class VolnixApp:
 
             # 7. Build pipeline (bus and ledger passed via constructor)
             steps = self._registry.get_pipeline_steps()
-            steps["validation"] = ValidationStep(ledger=self._ledger)
+            steps["validation"] = ValidationStep(
+                ledger=self._ledger,
+                state_engine=self._registry.get("state"),
+            )
             self._pipeline = build_pipeline_from_config(
                 self._config.pipeline,
                 steps,
@@ -124,6 +132,17 @@ class VolnixApp:
 
             # 8. Side-effect processor
             self._side_effects = SideEffectProcessor(self._pipeline)
+
+            # 8b. Hold store for policy approval queue
+            from volnix.engines.policy.hold_store import HoldStore
+
+            hold_db = await self._conn_mgr.get_connection("holds")
+            self._hold_store = HoldStore(hold_db)
+            await self._hold_store.initialize()
+
+            # Start hold expiry background task
+            if self._hold_store is not None:
+                self._hold_expiry_task = asyncio.create_task(self._hold_expiry_loop())
 
             # 9. Health
             self._health = HealthAggregator(self._registry)
@@ -141,6 +160,17 @@ class VolnixApp:
 
                 self._webhook_manager = WebhookManager(self._config.webhook)
                 await self._webhook_manager.start(self._bus)
+
+            # 12. Escalation handler — routes policy.escalate events to
+            #     team communication channels via the standard pipeline.
+            from volnix.engines.policy.escalation_handler import EscalationHandler
+
+            self._escalation_handler = EscalationHandler(
+                app=self,
+                bus=self._bus,
+                state_engine=self._registry.get("state"),
+            )
+            await self._escalation_handler.start()
 
             self._started = True
             logger.info(
@@ -237,6 +267,19 @@ class VolnixApp:
                 existing_kernel = SemanticRegistry()
                 await existing_kernel.initialize()
                 compiler._config["_kernel"] = existing_kernel
+
+            # Auto-sync: register discovered packs into the kernel so that
+            # adding a new verified pack doesn't require editing services.toml.
+            for pack_info in pack_reg.list_packs():
+                svc = pack_info["pack_name"]
+                cat = pack_info["category"]
+                if (
+                    cat
+                    and existing_kernel.has_category(cat)
+                    and not existing_kernel.has_service(svc)
+                ):
+                    existing_kernel.register_service(svc, cat)
+                    logger.debug("Kernel auto-registered pack '%s' → category '%s'", svc, cat)
 
             # Gather profile loader from responder for Tier 2 resolution
             profile_loader = getattr(responder, "_profile_loader", None)
@@ -365,6 +408,13 @@ class VolnixApp:
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
+        self._escalation_handler = None
+        if self._hold_expiry_task and not self._hold_expiry_task.done():
+            self._hold_expiry_task.cancel()
+            self._hold_expiry_task = None
+        if self._hold_store:
+            await self._hold_store.close()
+            self._hold_store = None
         if hasattr(self, "_webhook_manager") and self._webhook_manager:
             await self._webhook_manager.stop()
         if self._gateway:
@@ -558,6 +608,7 @@ class VolnixApp:
         service_id: str,
         action: str,
         input_data: dict[str, Any],
+        policy_flags: list[str] | None = None,
         **overrides: Any,
     ) -> dict[str, Any]:
         """Execute a single action through the full 7-step pipeline."""
@@ -585,9 +636,51 @@ class VolnixApp:
             wall_time=now,
             tick=overrides.get("tick", 0),
             run_id=RunId(self._current_run_id) if self._current_run_id else None,
+            policy_flags=policy_flags or [],
         )
 
         await self._pipeline.execute(ctx)
+
+        # Post-pipeline: if pipeline was held, store the action for approval
+        if (
+            ctx.short_circuit_step == "policy"
+            and ctx.policy_result
+            and ctx.policy_result.verdict == StepVerdict.HOLD
+            and self._hold_store
+        ):
+            from volnix.core.events import PolicyHoldEvent
+
+            hold_event = next(
+                (e for e in ctx.policy_result.events if isinstance(e, PolicyHoldEvent)),
+                None,
+            )
+            if hold_event:
+                await self._hold_store.store(
+                    hold_id=hold_event.hold_id,
+                    actor_id=str(ctx.actor_id),
+                    service_id=str(ctx.service_id),
+                    action=ctx.action,
+                    input_data=ctx.input_data,
+                    approver_role=hold_event.approver_role,
+                    policy_id=str(hold_event.policy_id),
+                    timeout_seconds=hold_event.timeout_seconds,
+                    run_id=str(ctx.run_id) if ctx.run_id else None,
+                )
+
+        # Post-pipeline: deduct LLM spend from budget (if tracking enabled)
+        if ctx.computed_cost and ctx.computed_cost.llm_spend_usd > 0:
+            budget_engine = self._registry.get("budget")
+            if budget_engine and budget_engine._budget_config.track_llm_spend:
+                await budget_engine.deduct_llm_spend(ctx.actor_id, ctx.computed_cost.llm_spend_usd)
+
+        # Post-pipeline: deduct elapsed time from budget
+        if ctx.budget_start_ns is not None:
+            import time as _time_mod
+
+            elapsed = _time_mod.monotonic() - ctx.budget_start_ns
+            budget_engine = self._registry.get("budget")
+            if budget_engine and budget_engine._budget_config.track_time:
+                await budget_engine.deduct(ctx.actor_id, time_seconds=elapsed)
 
         # Publish event for short-circuited actions only. Successful actions
         # are already published by the commit step in StateEngine via the
@@ -683,6 +776,56 @@ class VolnixApp:
                 result["_event"] = committed_event
             return result
         return {"error": "No response produced", "_event": committed_event}
+
+    async def resolve_hold(
+        self,
+        hold_id: str,
+        approved: bool,
+        approver: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Resolve a held action. If approved, re-execute through pipeline."""
+        if self._hold_store is None:
+            return {"error": "Hold store not initialized"}
+        stored = await self._hold_store.resolve(hold_id, approved, approver, reason)
+        if stored is None:
+            return {"error": f"Hold '{hold_id}' not found or already resolved"}
+        if not approved:
+            return {"status": "rejected", "hold_id": hold_id, "reason": reason}
+        # Re-execute through pipeline with hold_approved flag
+        result = await self.handle_action(
+            actor_id=stored["actor_id"],
+            service_id=stored["service_id"],
+            action=stored["action"],
+            input_data=json.loads(stored["input_data"]),
+            policy_flags=["hold_approved"],
+        )
+        return {"status": "approved", "hold_id": hold_id, "result": result}
+
+    async def list_holds(
+        self,
+        approver_role: str | None = None,
+        run_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List pending holds, optionally filtered by approver role or run."""
+        if self._hold_store is None:
+            return []
+        return await self._hold_store.list_pending(approver_role=approver_role, run_id=run_id)
+
+    async def get_hold(self, hold_id: str) -> dict[str, Any] | None:
+        """Get details of a specific hold."""
+        if self._hold_store is None:
+            return None
+        return await self._hold_store.get(hold_id)
+
+    async def _hold_expiry_loop(self) -> None:
+        """Background task that expires stale holds."""
+        while True:
+            await asyncio.sleep(60)
+            if self._hold_store:
+                expired = await self._hold_store.expire_stale(time.time())
+                if expired:
+                    logger.info("Expired %d stale holds: %s", len(expired), expired)
 
     def configure_governance(
         self,

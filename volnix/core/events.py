@@ -148,6 +148,21 @@ class PermissionDeniedEvent(Event):
     target_entity: EntityId | None = None
 
 
+class PermissionAllowEvent(Event):
+    """Permission step allowed the action.
+
+    Attributes:
+        actor_id: The actor whose request was allowed.
+        action: The action that was requested.
+        reason: Why the action was allowed (e.g. ``"explicit_permission"``,
+            ``"no_permissions_defined"``, ``"ungoverned"``).
+    """
+
+    actor_id: ActorId
+    action: str
+    reason: str
+
+
 # ---------------------------------------------------------------------------
 # Policy events
 # ---------------------------------------------------------------------------
@@ -289,6 +304,40 @@ class CapabilityGapEvent(Event):
     actor_id: ActorId
     requested_tool: ToolName
     input_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityResolvedEvent(Event):
+    """Tool/action resolved to a service handler.
+
+    Attributes:
+        actor_id: The actor whose tool request was resolved.
+        requested_tool: The tool name that was requested.
+        resolved_tier: Resolution tier (``"tier1"``, ``"tier2"``, or ``"passthrough"``).
+        service_id: The service that provides the tool, if known.
+    """
+
+    actor_id: ActorId
+    requested_tool: ToolName
+    resolved_tier: str
+    service_id: str = ""
+
+
+class ResponderDispatchEvent(Event):
+    """Responder generated a response for an action.
+
+    Attributes:
+        actor_id: The actor whose action triggered the response.
+        action: The action that was handled.
+        fidelity_tier: The fidelity tier used (1 or 2).
+        profile_name: The profile name, if a Tier 2 profile was used.
+        service_id: The service that handled the action, if known.
+    """
+
+    actor_id: ActorId
+    action: str
+    fidelity_tier: int
+    profile_name: str = ""
+    service_id: str = ""
 
 
 # ---------------------------------------------------------------------------

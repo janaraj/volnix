@@ -5,7 +5,7 @@ import pytest
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.registry import ActorRegistry
 from volnix.core.context import ActionContext
-from volnix.core.events import PermissionDeniedEvent
+from volnix.core.events import PermissionAllowEvent, PermissionDeniedEvent
 from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
 from volnix.engines.permission.engine import PermissionEngine
 
@@ -265,8 +265,10 @@ class TestUngovernedMode:
         ctx = _make_ctx(action="stripe_refunds_create", service_id="stripe")
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
-        assert len(result.events) == 1
+        assert len(result.events) == 2
         assert isinstance(result.events[0], PermissionDeniedEvent)
+        assert isinstance(result.events[1], PermissionAllowEvent)
+        assert result.events[1].reason == "ungoverned"
         assert "ungoverned" in result.message
 
     @pytest.mark.asyncio
@@ -288,5 +290,8 @@ class TestUngovernedMode:
         )
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
-        assert len(result.events) == 1
+        assert len(result.events) == 2
+        assert isinstance(result.events[0], PermissionDeniedEvent)
+        assert isinstance(result.events[1], PermissionAllowEvent)
+        assert result.events[1].reason == "ungoverned"
         assert "ungoverned" in result.message

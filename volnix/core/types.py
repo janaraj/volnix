@@ -207,12 +207,14 @@ class ActionCost(BaseModel, frozen=True):
         llm_spend_usd: LLM token spend in US dollars.
         world_actions: Number of world-mutating actions performed.
         spend_usd: Domain spend in US dollars (e.g. refund amount, order value).
+        time_seconds: Wall-clock seconds consumed by this action.
     """
 
     api_calls: int = 0
     llm_spend_usd: float = 0.0
     world_actions: int = 0
     spend_usd: float = 0.0
+    time_seconds: float = 0.0
 
 
 class BudgetState(BaseModel, frozen=True):

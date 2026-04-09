@@ -11,6 +11,7 @@ from volnix.core.events import (
     BudgetWarningEvent,
 )
 from volnix.core.types import ActorId, ActorType, ServiceId, StepVerdict
+from volnix.engines.budget.config import BudgetConfig
 from volnix.engines.budget.engine import BudgetEngine
 
 
@@ -105,8 +106,12 @@ class TestBasicDeduction:
         result = await engine.execute(ctx)
         assert result.verdict == StepVerdict.ALLOW
 
-        # Check for deduction event
-        deduction_events = [e for e in result.events if isinstance(e, BudgetDeductionEvent)]
+        # Check for api_calls deduction event
+        deduction_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "api_calls"
+        ]
         assert len(deduction_events) == 1
         assert deduction_events[0].amount == 1.0
         assert deduction_events[0].remaining == 9.0
@@ -122,7 +127,11 @@ class TestBasicDeduction:
             assert result.verdict == StepVerdict.ALLOW
 
         # After 4 deductions, 1 remaining
-        deduction_events = [e for e in result.events if isinstance(e, BudgetDeductionEvent)]
+        deduction_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "api_calls"
+        ]
         assert deduction_events[0].remaining == 1.0
 
 
@@ -428,3 +437,409 @@ class TestBudgetResetBetweenRuns:
         state = engine._tracker.get_budget_state(ActorId("agent-1"))
         assert state.api_calls_remaining == 4  # 5 - 1
         assert state.spend_usd_remaining == 90.0  # 100 - 10
+
+
+class TestWorldActionsDeductionEvent:
+    """Test that world_actions deduction emits BudgetDeductionEvent."""
+
+    @pytest.mark.asyncio
+    async def test_world_actions_deduction_event_emitted(self, engine):
+        """Verify world_actions deduction emits BudgetDeductionEvent."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10, "world_actions": 10}))
+        engine._actor_registry = reg
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        wa_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "world_actions"
+        ]
+        assert len(wa_events) == 1
+        assert wa_events[0].amount == 1.0
+        assert wa_events[0].remaining == 9.0
+
+    @pytest.mark.asyncio
+    async def test_world_actions_deduction_decrements_each_action(self, engine):
+        """Each action decrements world_actions by 1."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10, "world_actions": 5}))
+        engine._actor_registry = reg
+
+        for i in range(4):
+            ctx = _make_ctx()
+            result = await engine.execute(ctx)
+            assert result.verdict == StepVerdict.ALLOW
+
+        # After 4 actions, world_actions remaining should be 1
+        wa_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "world_actions"
+        ]
+        assert wa_events[0].remaining == 1.0
+
+    @pytest.mark.asyncio
+    async def test_world_actions_and_api_calls_both_emitted(self, engine):
+        """Both api_calls and world_actions deduction events are emitted."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 10, "world_actions": 10}))
+        engine._actor_registry = reg
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+
+        api_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "api_calls"
+        ]
+        wa_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "world_actions"
+        ]
+        assert len(api_events) == 1
+        assert len(wa_events) == 1
+
+
+class TestConfigToggleDisablesDimension:
+    """Test that track_* config flags suppress events and enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_track_world_actions_false_suppresses_event(self):
+        """track_world_actions=False suppresses the world_actions deduction event."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_world_actions=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 10, "world_actions": 10}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        wa_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "world_actions"
+        ]
+        assert len(wa_events) == 0
+
+        # api_calls event should still be present (track_api_calls defaults to True)
+        api_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "api_calls"
+        ]
+        assert len(api_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_track_api_calls_false_suppresses_event(self):
+        """track_api_calls=False suppresses the api_calls deduction event."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_api_calls=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 10, "world_actions": 10}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        api_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "api_calls"
+        ]
+        assert len(api_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_track_spend_usd_false_suppresses_event(self):
+        """track_spend_usd=False suppresses the spend_usd deduction event."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_spend_usd=False)
+        reg = _make_registry(_make_agent(budget={"spend_usd": 1000.0}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx(input_data={"amount": 200})
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        spend_events = [
+            e
+            for e in result.events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "spend_usd"
+        ]
+        assert len(spend_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_track_world_actions_false_skips_exhaustion_check(self):
+        """track_world_actions=False skips world_actions exhaustion enforcement."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_world_actions=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "world_actions": 5}))
+        engine._actor_registry = reg
+
+        # Manually exhaust world_actions
+        engine._tracker.initialize_budget(
+            ActorId("agent-1"), {"api_calls": 100, "world_actions": 5}
+        )
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["world_actions_remaining"] = 0
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        # Should ALLOW because world_actions tracking is disabled
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_track_api_calls_false_skips_exhaustion_check(self):
+        """track_api_calls=False skips api_calls exhaustion enforcement."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_api_calls=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 2}))
+        engine._actor_registry = reg
+
+        # Manually exhaust api_calls
+        engine._tracker.initialize_budget(ActorId("agent-1"), {"api_calls": 2})
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["api_calls_remaining"] = 0
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        # Should ALLOW because api_calls tracking is disabled
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_track_llm_spend_false_skips_exhaustion_check(self):
+        """track_llm_spend=False skips llm_spend exhaustion enforcement."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_llm_spend=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "llm_spend": 10.0}))
+        engine._actor_registry = reg
+
+        # Manually exhaust llm_spend
+        engine._tracker.initialize_budget(ActorId("agent-1"), {"api_calls": 100, "llm_spend": 10.0})
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["llm_spend_remaining"] = 0.0
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        # Should ALLOW because llm_spend tracking is disabled
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_track_spend_usd_false_skips_exhaustion_check(self):
+        """track_spend_usd=False skips spend_usd exhaustion enforcement."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_spend_usd=False)
+        reg = _make_registry(_make_agent(budget={"spend_usd": 100.0}))
+        engine._actor_registry = reg
+
+        # Manually exhaust spend_usd
+        engine._tracker.initialize_budget(ActorId("agent-1"), {"spend_usd": 100.0})
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["spend_usd_remaining"] = 0.0
+
+        ctx = _make_ctx(input_data={"amount": 50})
+        result = await engine.execute(ctx)
+        # Should ALLOW because spend_usd tracking is disabled
+        assert result.verdict == StepVerdict.ALLOW
+
+
+class TestLLMSpendDeduction:
+    """Test post-responder LLM spend deduction."""
+
+    @pytest.mark.asyncio
+    async def test_deduct_llm_spend_updates_tracker(self, engine):
+        """deduct_llm_spend reduces llm_spend_remaining."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "llm_spend": 10.0}))
+        engine._actor_registry = reg
+
+        # Initialize budget through a normal execute
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # Now deduct LLM spend
+        await engine.deduct_llm_spend(ActorId("agent-1"), 3.5)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.llm_spend_remaining_usd == 6.5
+
+    @pytest.mark.asyncio
+    async def test_deduct_llm_spend_emits_event(self, engine):
+        """deduct_llm_spend publishes BudgetDeductionEvent to bus."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "llm_spend": 10.0}))
+        engine._actor_registry = reg
+
+        # Create a mock bus to capture published events
+        published_events = []
+
+        class MockBus:
+            async def publish(self, event):
+                published_events.append(event)
+
+        engine._bus = MockBus()
+
+        # Initialize budget through a normal execute
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # Deduct LLM spend
+        await engine.deduct_llm_spend(ActorId("agent-1"), 2.0)
+
+        # Check that a deduction event was published to the bus
+        llm_events = [
+            e
+            for e in published_events
+            if isinstance(e, BudgetDeductionEvent) and e.budget_type == "llm_spend"
+        ]
+        assert len(llm_events) == 1
+        assert llm_events[0].amount == 2.0
+        assert llm_events[0].remaining == 8.0
+
+    @pytest.mark.asyncio
+    async def test_llm_spend_exhausted_denies(self, engine):
+        """Exhausted llm_spend budget returns DENY."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "llm_spend": 5.0}))
+        engine._actor_registry = reg
+
+        # Initialize and exhaust LLM spend
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # Directly exhaust the llm_spend
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["llm_spend_remaining"] = 0.0
+
+        # Next execute should DENY because llm_spend is exhausted
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+        assert "llm_spend" in result.message
+        exhausted_events = [e for e in result.events if isinstance(e, BudgetExhaustedEvent)]
+        assert len(exhausted_events) == 1
+        assert exhausted_events[0].budget_type == "llm_spend"
+
+
+class TestTimeBudget:
+    """Test time budget initialization, tracking, and enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_time_budget_initialized(self, engine):
+        """time_seconds in budget_def initializes time_remaining."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "time_seconds": 300.0}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.time_remaining_seconds == 300.0
+
+    @pytest.mark.asyncio
+    async def test_time_budget_exhausted_denies(self, engine):
+        """Exhausted time budget returns DENY."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "time_seconds": 60.0}))
+        engine._actor_registry = reg
+
+        # Initialize
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # Manually exhaust time
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["time_remaining"] = 0.0
+
+        # Next execute should DENY
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.DENY
+        assert "time" in result.message
+        exhausted_events = [e for e in result.events if isinstance(e, BudgetExhaustedEvent)]
+        assert len(exhausted_events) == 1
+        assert exhausted_events[0].budget_type == "time"
+
+    @pytest.mark.asyncio
+    async def test_time_not_defined_skips(self, engine):
+        """No time_seconds in budget -> no time check."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        assert result.verdict == StepVerdict.ALLOW
+
+        # time_remaining_seconds should be None
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.time_remaining_seconds is None
+
+    @pytest.mark.asyncio
+    async def test_time_deduction_via_tracker(self, engine):
+        """ActionCost with time_seconds deducts from time_remaining."""
+        from volnix.core.types import ActionCost
+
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "time_seconds": 100.0}))
+        engine._actor_registry = reg
+
+        # Initialize budget
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # Deduct time via tracker
+        cost = ActionCost(time_seconds=25.5)
+        engine._tracker.deduct(ActorId("agent-1"), cost)
+
+        state = engine._tracker.get_budget_state(ActorId("agent-1"))
+        assert state.time_remaining_seconds == pytest.approx(74.5, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_track_time_false_skips_exhaustion_check(self):
+        """track_time=False skips time exhaustion enforcement."""
+        engine = BudgetEngine()
+        engine._world_mode = "governed"
+        engine._budget_config = BudgetConfig(track_time=False)
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "time_seconds": 60.0}))
+        engine._actor_registry = reg
+
+        # Initialize and exhaust time
+        engine._tracker.initialize_budget(
+            ActorId("agent-1"), {"api_calls": 100, "time_seconds": 60.0}
+        )
+        budget = engine._tracker.get_budget(ActorId("agent-1"))
+        budget["time_remaining"] = 0.0
+
+        ctx = _make_ctx()
+        result = await engine.execute(ctx)
+        # Should ALLOW because time tracking is disabled
+        assert result.verdict == StepVerdict.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_post_pipeline_time_deduction_via_budget_start_ns(self, engine):
+        """budget_start_ns is set during execute() and can be used for post-pipeline deduction."""
+        reg = _make_registry(_make_agent(budget={"api_calls": 100, "time_seconds": 100.0}))
+        engine._actor_registry = reg
+
+        ctx = _make_ctx()
+        await engine.execute(ctx)
+
+        # budget_start_ns should be set by execute()
+        assert ctx.budget_start_ns is not None
+        assert ctx.budget_start_ns > 0
+
+        # Simulate post-pipeline deduction (as app.py does)
+        import time as _time_mod
+
+        elapsed = _time_mod.monotonic() - ctx.budget_start_ns
+        assert elapsed >= 0
+
+        from volnix.core.types import ActionCost
+
+        engine._tracker.deduct(ctx.actor_id, ActionCost(time_seconds=elapsed))
+        state = engine._tracker.get_budget_state(ctx.actor_id)
+        # time was deducted from remaining
+        assert state.time_remaining_seconds < 100.0

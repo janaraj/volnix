@@ -21,7 +21,7 @@ from volnix.core import (
     StepVerdict,
     WorldMode,
 )
-from volnix.core.events import PermissionDeniedEvent
+from volnix.core.events import PermissionAllowEvent, PermissionDeniedEvent
 from volnix.core.types import Timestamp
 
 logger = logging.getLogger(__name__)
@@ -78,9 +78,17 @@ class PermissionEngine(BaseEngine):
         if actor is None:
             if self._is_ungoverned() or self._actor_registry is None:
                 # Ungoverned mode or no registry injected: allow unknown actors
+                allow_event = PermissionAllowEvent(
+                    event_type="permission.allow",
+                    timestamp=_now_timestamp(),
+                    actor_id=ctx.actor_id,
+                    action=ctx.action,
+                    reason="ungoverned",
+                )
                 return StepResult(
                     step_name=self.step_name,
                     verdict=StepVerdict.ALLOW,
+                    events=[allow_event],
                     message="actor not in registry — allowed",
                 )
             # Governed mode: unknown actors are denied
@@ -101,9 +109,17 @@ class PermissionEngine(BaseEngine):
         perms = actor.permissions
         if not perms:
             # No permissions defined — allow
+            allow_event = PermissionAllowEvent(
+                event_type="permission.allow",
+                timestamp=_now_timestamp(),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                reason="no_permissions_defined",
+            )
             return StepResult(
                 step_name=self.step_name,
                 verdict=StepVerdict.ALLOW,
+                events=[allow_event],
                 message="no permissions defined — allowed",
             )
 
@@ -146,10 +162,17 @@ class PermissionEngine(BaseEngine):
                     reason=reason,
                 )
                 if self._is_ungoverned():
+                    allow_event = PermissionAllowEvent(
+                        event_type="permission.allow",
+                        timestamp=_now_timestamp(),
+                        actor_id=ctx.actor_id,
+                        action=ctx.action,
+                        reason="ungoverned",
+                    )
                     return StepResult(
                         step_name=self.step_name,
                         verdict=StepVerdict.ALLOW,
-                        events=[event],
+                        events=[event, allow_event],
                         message=f"ungoverned: {reason}",
                     )
                 return StepResult(
@@ -170,10 +193,17 @@ class PermissionEngine(BaseEngine):
                     reason=reason,
                 )
                 if self._is_ungoverned():
+                    allow_event = PermissionAllowEvent(
+                        event_type="permission.allow",
+                        timestamp=_now_timestamp(),
+                        actor_id=ctx.actor_id,
+                        action=ctx.action,
+                        reason="ungoverned",
+                    )
                     return StepResult(
                         step_name=self.step_name,
                         verdict=StepVerdict.ALLOW,
-                        events=[event],
+                        events=[event, allow_event],
                         message=f"ungoverned: {reason}",
                     )
                 return StepResult(
@@ -209,10 +239,17 @@ class PermissionEngine(BaseEngine):
                             reason=reason,
                         )
                         if self._is_ungoverned():
+                            allow_event = PermissionAllowEvent(
+                                event_type="permission.allow",
+                                timestamp=_now_timestamp(),
+                                actor_id=ctx.actor_id,
+                                action=ctx.action,
+                                reason="ungoverned",
+                            )
                             return StepResult(
                                 step_name=self.step_name,
                                 verdict=StepVerdict.ALLOW,
-                                events=[event],
+                                events=[event, allow_event],
                                 message=f"ungoverned: {reason}",
                             )
                         return StepResult(
@@ -222,7 +259,18 @@ class PermissionEngine(BaseEngine):
                             message=reason,
                         )
 
-        return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW)
+        allow_event = PermissionAllowEvent(
+            event_type="permission.allow",
+            timestamp=_now_timestamp(),
+            actor_id=ctx.actor_id,
+            action=ctx.action,
+            reason="explicit_permission",
+        )
+        return StepResult(
+            step_name=self.step_name,
+            verdict=StepVerdict.ALLOW,
+            events=[allow_event],
+        )
 
     # -- BaseEngine hook -------------------------------------------------------
 

@@ -72,8 +72,40 @@ class PolicyEngine(BaseEngine):
         In ungoverned mode, all enforcement becomes LOG — policies still
         trigger and events are recorded, but nothing is blocked or held.
         """
+        # Skip policy re-evaluation for pre-approved holds
+        if "hold_approved" in ctx.policy_flags:
+            now = datetime.now(UTC)
+            _ts = Timestamp(world_time=now, wall_time=now, tick=0)
+            event = PolicyFlagEvent(
+                event_type="policy.flag",
+                timestamp=_ts,
+                policy_id=PolicyId("hold_approved"),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+                run_id=str(ctx.run_id) if ctx.run_id else None,
+            )
+            return StepResult(
+                step_name=self.step_name,
+                verdict=StepVerdict.ALLOW,
+                events=[event],
+                message="Hold pre-approved — skipping policy re-evaluation",
+            )
+
         if not self._policies:
-            return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW)
+            now = datetime.now(UTC)
+            ts = Timestamp(world_time=now, wall_time=now, tick=0)
+            flag_event = PolicyFlagEvent(
+                event_type="policy.flag",
+                timestamp=ts,
+                policy_id=PolicyId("none"),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+            )
+            return StepResult(
+                step_name=self.step_name,
+                verdict=StepVerdict.ALLOW,
+                events=[flag_event],
+            )
 
         triggered: list[tuple[dict[str, Any], str]] = []
 
@@ -93,7 +125,20 @@ class PolicyEngine(BaseEngine):
                     )
 
         if not triggered:
-            return StepResult(step_name=self.step_name, verdict=StepVerdict.ALLOW)
+            now = datetime.now(UTC)
+            ts = Timestamp(world_time=now, wall_time=now, tick=0)
+            flag_event = PolicyFlagEvent(
+                event_type="policy.flag",
+                timestamp=ts,
+                policy_id=PolicyId("none"),
+                actor_id=ctx.actor_id,
+                action=ctx.action,
+            )
+            return StepResult(
+                step_name=self.step_name,
+                verdict=StepVerdict.ALLOW,
+                events=[flag_event],
+            )
 
         # Ungoverned mode: all enforcement becomes LOG
         if self._world_mode == WorldMode.UNGOVERNED or self._world_mode == "ungoverned":

@@ -238,6 +238,7 @@ class BudgetEngineProtocol(Protocol):
         llm_spend_usd: float = 0.0,
         world_actions: int = 0,
         spend_usd: float = 0.0,
+        time_seconds: float = 0.0,
     ) -> BudgetState:
         """Deduct resources from an actor's budget and return the new state."""
         ...

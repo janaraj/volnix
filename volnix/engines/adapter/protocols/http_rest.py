@@ -1501,6 +1501,72 @@ class HTTPRestAdapter(ProtocolAdapter):
                 except Exception:
                     logger.debug("Failed to unsubscribe from event bus")
 
+        # -- Hold approval queue endpoints ----------------------------------------
+
+        @app.get("/api/v1/holds")
+        async def list_holds(
+            approver_role: str | None = fastapi.Query(default=None),
+            run_id: str | None = fastapi.Query(default=None),
+        ):
+            """List pending holds awaiting approval."""
+            holds = await gateway._app.list_holds(approver_role=approver_role, run_id=run_id)
+            return {"holds": holds, "total": len(holds)}
+
+        @app.get("/api/v1/holds/{hold_id}")
+        async def get_hold(hold_id: str):
+            """Get details of a specific hold."""
+            from starlette.responses import JSONResponse
+
+            hold = await gateway._app.get_hold(hold_id)
+            if hold is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": f"Hold '{hold_id}' not found"},
+                )
+            return hold
+
+        @app.post("/api/v1/holds/{hold_id}/approve")
+        async def approve_hold(hold_id: str, request: StarletteRequest):
+            """Approve a held action and re-execute it through the pipeline."""
+            from starlette.responses import JSONResponse
+
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            approver = body.get("approver", "http-approver")
+            reason = body.get("reason", "")
+            result = await gateway._app.resolve_hold(
+                hold_id=hold_id,
+                approved=True,
+                approver=approver,
+                reason=reason,
+            )
+            if "error" in result:
+                return JSONResponse(status_code=404, content=result)
+            return result
+
+        @app.post("/api/v1/holds/{hold_id}/reject")
+        async def reject_hold(hold_id: str, request: StarletteRequest):
+            """Reject a held action."""
+            from starlette.responses import JSONResponse
+
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            approver = body.get("approver", "http-approver")
+            reason = body.get("reason", "")
+            result = await gateway._app.resolve_hold(
+                hold_id=hold_id,
+                approved=False,
+                approver=approver,
+                reason=reason,
+            )
+            if "error" in result:
+                return JSONResponse(status_code=404, content=result)
+            return result
+
         # Mount real-world API paths from pack http_path definitions
         await self._mount_pack_routes(app, gateway)
 

@@ -60,6 +60,8 @@ class BudgetTracker:
             "world_actions_total": budget_def.get("world_actions", 0),
             "spend_usd_remaining": budget_def.get("spend_usd", 0.0),
             "spend_usd_total": budget_def.get("spend_usd", 0.0),
+            "time_remaining": budget_def.get("time_seconds", None),
+            "time_total": budget_def.get("time_seconds", None),
         }
         self._warned[aid] = set()
 
@@ -84,6 +86,7 @@ class BudgetTracker:
             world_actions_total=state["world_actions_total"],
             spend_usd_remaining=state["spend_usd_remaining"],
             spend_usd_total=state["spend_usd_total"],
+            time_remaining_seconds=state.get("time_remaining"),
         )
 
     def deduct(self, actor_id: ActorId, cost: ActionCost) -> dict[str, Any]:
@@ -107,6 +110,8 @@ class BudgetTracker:
             0, state["world_actions_remaining"] - cost.world_actions
         )
         state["spend_usd_remaining"] = max(0.0, state["spend_usd_remaining"] - cost.spend_usd)
+        if cost.time_seconds > 0 and state.get("time_remaining") is not None:
+            state["time_remaining"] = max(0.0, state["time_remaining"] - cost.time_seconds)
 
         return state
 

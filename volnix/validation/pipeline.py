@@ -41,7 +41,7 @@ class ValidationPipeline:
     async def validate_response_proposal(
         self,
         proposal: ResponseProposal,
-        state: StateEngineProtocol,
+        state: StateEngineProtocol | None = None,
         response_schema: dict[str, Any] | None = None,
         state_machines: dict[str, dict] | None = None,
         entity_schemas: dict[str, dict] | None = None,
@@ -50,7 +50,8 @@ class ValidationPipeline:
 
         Args:
             proposal: The response proposal to validate.
-            state: The state engine for consistency checks.
+            state: Optional state engine for consistency checks.  When
+                ``None``, consistency validation is skipped.
             response_schema: Optional JSON Schema for the response body.
             state_machines: Optional mapping of entity type to state machine
                 definitions (each with a ``"transitions"`` key).
@@ -100,8 +101,8 @@ class ValidationPipeline:
                             )
                         )
 
-        # 3. Consistency validation on deltas
-        if entity_schemas is not None:
+        # 3. Consistency validation on deltas (requires state engine)
+        if entity_schemas is not None and state is not None:
             for delta in proposal.proposed_state_deltas:
                 es = entity_schemas.get(delta.entity_type)
                 if es is None:
@@ -132,7 +133,7 @@ class ValidationPipeline:
     async def validate_with_retry(
         self,
         proposal: ResponseProposal,
-        state: StateEngineProtocol,
+        state: StateEngineProtocol | None,
         llm_callback: Callable[..., Any],
         max_retries: int | None = None,
         response_schema: dict[str, Any] | None = None,
