@@ -232,20 +232,46 @@ class AnthropicProvider(LLMProvider):
                 messages=msg_list,
             )
 
-            # Extended thinking: opt in via request.thinking_enabled. The
-            # Anthropic SDK enforces a minimum budget of 1024 tokens; we
-            # clamp defensively so the request never gets rejected at the
-            # type layer (values <=0 are treated as "use the minimum").
-            # When disabled (default), no ``thinking`` key is added and
-            # Claude behaves identically to before.
+            # Extended thinking: opt in via request.thinking_enabled.
+            #
+            # Anthropic API constraints (not validated by the SDK types, all
+            # enforced server-side with invalid_request_error):
+            #   1. budget_tokens must be >= 1024 — clamped here.
+            #   2. temperature must equal 1.0 when thinking is enabled —
+            #      the request's temperature is overridden for this call.
+            #   3. max_tokens must be STRICTLY greater than budget_tokens —
+            #      the thinking budget is drawn from the overall output
+            #      budget. We bump max_tokens up when needed so the call
+            #      always has at least 1024 tokens of room for the final
+            #      response on top of the thinking budget.
+            #
+            # When disabled (default), none of this runs and Claude
+            # behaves identically to before.
             if request.thinking_enabled:
                 budget = max(request.thinking_budget_tokens, 1024)
                 create_kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": budget,
                 }
+                create_kwargs["temperature"] = 1.0
+                # Guarantee headroom above the thinking budget so the
+                # final response has tokens to use. Anthropic's docs
+                # suggest at least 1024 tokens of headroom is reasonable.
+                min_max_tokens = budget + 1024
+                if create_kwargs["max_tokens"] <= budget:
+                    logger.info(
+                        "Anthropic max_tokens (%d) <= thinking budget (%d); "
+                        "bumping max_tokens to %d so the response has headroom",
+                        create_kwargs["max_tokens"],
+                        budget,
+                        min_max_tokens,
+                    )
+                    create_kwargs["max_tokens"] = min_max_tokens
                 logger.info(
-                    "Anthropic extended thinking enabled (budget=%d)", budget
+                    "Anthropic extended thinking enabled "
+                    "(budget=%d, max_tokens=%d, temperature=1.0)",
+                    budget,
+                    create_kwargs["max_tokens"],
                 )
 
             # Structured output: force valid JSON matching the schema.

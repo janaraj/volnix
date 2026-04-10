@@ -422,6 +422,93 @@ class TestExtendedThinkingConfig:
         assert "tools" in captured
         assert captured["thinking"]["budget_tokens"] == 2048
 
+    async def test_thinking_enabled_forces_temperature_to_1(self):
+        """Anthropic rejects any temperature != 1.0 when thinking is enabled.
+
+        Server-side API constraint (not client-side validated by the SDK):
+        ``temperature may only be set to 1 when thinking is enabled``.
+        The provider must override whatever temperature the request carries
+        and force 1.0 in ``create_kwargs`` for the API call.
+        """
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=100,
+            temperature=0.7,  # default framework temperature
+            thinking_enabled=True,
+            thinking_budget_tokens=2048,
+        )
+        await provider.generate(req)
+        assert captured["temperature"] == 1.0, (
+            f"thinking enabled must force temperature=1.0, got {captured['temperature']}"
+        )
+
+    async def test_thinking_disabled_preserves_request_temperature(self):
+        """Without thinking, the request's temperature is passed through."""
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=100,
+            temperature=0.5,
+            thinking_enabled=False,
+        )
+        await provider.generate(req)
+        assert captured["temperature"] == 0.5
+
+    async def test_thinking_bumps_max_tokens_when_equal_to_budget(self):
+        """max_tokens must be STRICTLY greater than thinking budget.
+
+        Anthropic rejects with ``max_tokens must be greater than
+        thinking.budget_tokens`` when they are equal. The provider must
+        bump max_tokens up to leave headroom for the actual response.
+        """
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=4096,  # same as default budget
+            thinking_enabled=True,
+            thinking_budget_tokens=4096,
+        )
+        await provider.generate(req)
+        assert captured["max_tokens"] > captured["thinking"]["budget_tokens"]
+        assert captured["max_tokens"] == 4096 + 1024  # budget + headroom
+
+    async def test_thinking_bumps_max_tokens_when_below_budget(self):
+        """max_tokens < budget is bumped above the budget."""
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=2048,
+            thinking_enabled=True,
+            thinking_budget_tokens=4096,
+        )
+        await provider.generate(req)
+        assert captured["max_tokens"] > captured["thinking"]["budget_tokens"]
+        assert captured["max_tokens"] == 4096 + 1024
+
+    async def test_thinking_preserves_max_tokens_when_already_above_budget(self):
+        """When max_tokens is already well above the budget, it's preserved."""
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=16384,
+            thinking_enabled=True,
+            thinking_budget_tokens=4096,
+        )
+        await provider.generate(req)
+        assert captured["max_tokens"] == 16384
+
+    async def test_thinking_disabled_preserves_max_tokens(self):
+        """Without thinking, max_tokens is not touched."""
+        provider, captured = self._build_provider_and_capture_kwargs()
+        req = LLMRequest(
+            user_content="hi",
+            max_tokens=4096,
+            thinking_enabled=False,
+        )
+        await provider.generate(req)
+        assert captured["max_tokens"] == 4096
+
 
 class TestResponseBlockParser:
     """Tests for Anthropic response block parsing.
