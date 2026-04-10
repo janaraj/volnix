@@ -126,6 +126,9 @@ class TestProtocolsAreRuntimeCheckable:
             async def build_deliverable_extras(self, state_engine):
                 return {}
 
+            def game_tools(self):
+                return []
+
         assert isinstance(StubEvaluator(), RoundEvaluator)
 
     def test_round_evaluator_protocol_requires_build_deliverable_extras(self):
@@ -135,7 +138,22 @@ class TestProtocolsAreRuntimeCheckable:
             async def evaluate(self, state_engine, round_events, round_state, player_scores):
                 pass
 
+            def game_tools(self):
+                return []
+
         assert not isinstance(IncompleteEvaluator(), RoundEvaluator)
+
+    def test_round_evaluator_protocol_requires_game_tools(self):
+        """A class missing game_tools is NOT a RoundEvaluator."""
+
+        class NoGameToolsEvaluator:
+            async def evaluate(self, state_engine, round_events, round_state, player_scores):
+                pass
+
+            async def build_deliverable_extras(self, state_engine):
+                return {}
+
+        assert not isinstance(NoGameToolsEvaluator(), RoundEvaluator)
 
     def test_non_conforming_class_fails_protocol(self):
         """A class missing the required method is NOT a ScoringProvider."""

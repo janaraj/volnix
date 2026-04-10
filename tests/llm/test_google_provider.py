@@ -4,7 +4,10 @@ import os
 
 import pytest
 
-from volnix.llm.providers.google import GoogleNativeProvider
+from volnix.llm.providers.google import (
+    GoogleNativeProvider,
+    _sanitize_tool_params_for_gemini,
+)
 from volnix.llm.types import LLMRequest
 
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -509,3 +512,146 @@ class TestThoughtSignatureRoundTrip:
         part = contents[0].parts[0]
         assert part.function_call.name == "f"
         assert part.thought_signature is None
+
+
+class TestSanitizeToolParamsForGemini:
+    """Tests for _sanitize_tool_params_for_gemini.
+
+    Gemini's function-declaration API rejects any JSON Schema key outside
+    its allowed set. This sanitizer keeps only supported keys, recursing
+    into nested ``properties`` and ``items``. Standard JSON Schema keys
+    like ``additionalProperties`` (required by Anthropic, ignored by
+    OpenAI, rejected by Gemini) must be stripped.
+    """
+
+    def test_strips_additional_properties_at_top_level(self):
+        schema = {
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "integer"}},
+            "additionalProperties": False,
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "additionalProperties" not in out
+        assert out["type"] == "object"
+        assert out["required"] == ["x"]
+        assert out["properties"] == {"x": {"type": "integer"}}
+
+    def test_strips_additional_properties_nested(self):
+        """Nested ``properties`` are recursively cleaned."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "nested": {
+                    "type": "object",
+                    "properties": {"inner": {"type": "string"}},
+                    "additionalProperties": False,
+                }
+            },
+            "additionalProperties": False,
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "additionalProperties" not in out
+        assert "additionalProperties" not in out["properties"]["nested"]
+        assert out["properties"]["nested"]["properties"]["inner"]["type"] == "string"
+
+    def test_strips_additional_properties_in_array_items(self):
+        """``items`` schemas are also recursively cleaned."""
+        schema = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "additionalProperties": False,
+            },
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "additionalProperties" not in out["items"]
+        assert out["items"]["properties"]["id"]["type"] == "string"
+
+    def test_keeps_allowed_keys(self):
+        """Known-good JSON Schema keys are preserved."""
+        schema = {
+            "type": "object",
+            "description": "a thing",
+            "required": ["price"],
+            "properties": {
+                "price": {
+                    "type": "number",
+                    "description": "price per unit",
+                    "minimum": 0,
+                    "maximum": 1000,
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "closed"],
+                },
+            },
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        # Fully-compliant schema is an identity (property values are
+        # themselves recursively sanitized but all their keys are allowed)
+        assert out["type"] == "object"
+        assert out["description"] == "a thing"
+        assert out["required"] == ["price"]
+        assert out["properties"]["price"]["minimum"] == 0
+        assert out["properties"]["price"]["maximum"] == 1000
+        assert out["properties"]["tags"]["items"]["type"] == "string"
+        assert out["properties"]["status"]["enum"] == ["open", "closed"]
+
+    def test_drops_unknown_top_level_keys(self):
+        """Anything not in the allowlist is dropped."""
+        schema = {
+            "type": "object",
+            "properties": {"x": {"type": "integer"}},
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "definitions": {},
+            "examples": [{"x": 1}],
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "$schema" not in out
+        assert "definitions" not in out
+        assert "examples" not in out
+        assert out["type"] == "object"
+        assert out["properties"] == {"x": {"type": "integer"}}
+
+    def test_non_dict_input_returned_unchanged(self):
+        """Primitive inputs pass through untouched."""
+        assert _sanitize_tool_params_for_gemini("string") == "string"
+        assert _sanitize_tool_params_for_gemini(42) == 42
+        assert _sanitize_tool_params_for_gemini(None) is None
+        assert _sanitize_tool_params_for_gemini([1, 2, 3]) == [1, 2, 3]
+
+    def test_negotiation_tool_schemas_survive_sanitization(self):
+        """End-to-end: the actual NEGOTIATION_TOOLS schemas sanitize cleanly."""
+        from volnix.game.evaluators.negotiation import NEGOTIATION_TOOLS
+
+        for tool in NEGOTIATION_TOOLS:
+            out = _sanitize_tool_params_for_gemini(tool.parameters)
+            # No forbidden keys at top level
+            assert "additionalProperties" not in out, (
+                f"{tool.name} still has additionalProperties after sanitize"
+            )
+            # No forbidden keys in nested properties either
+            for prop_name, prop_schema in out.get("properties", {}).items():
+                if isinstance(prop_schema, dict):
+                    assert "additionalProperties" not in prop_schema, (
+                        f"{tool.name}.{prop_name} has additionalProperties"
+                    )
+            # Core structure survives
+            assert out["type"] == "object"
+            assert "required" in out
+            assert "properties" in out
+            # Propose / counter still require all five terms
+            if tool.name in ("negotiate_propose", "negotiate_counter"):
+                assert set(out["required"]) == {
+                    "deal_id",
+                    "price",
+                    "delivery_weeks",
+                    "payment_days",
+                    "warranty_months",
+                }

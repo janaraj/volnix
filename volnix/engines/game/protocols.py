@@ -124,3 +124,19 @@ class RoundEvaluator(Protocol):
         meaningful per-game-type summaries.
         """
         return {}
+
+    def game_tools(self) -> list[Any]:
+        """Return the structured game-move tools for this game type.
+
+        The runner registers these with the agency engine at game start so
+        the LLM can call them as native structured tool calls. Each tool is
+        a :class:`~volnix.llm.types.ToolDefinition` whose parameters define
+        the move's JSON Schema — the LLM provider enforces validation so
+        the evaluator never sees malformed data. Default: no tools (game
+        types that rely only on chat / state changes).
+
+        Typed as ``list[Any]`` at the Protocol boundary to avoid a forward
+        import of ``ToolDefinition`` into ``engines/game/`` — concrete
+        evaluators return properly typed ``list[ToolDefinition]``.
+        """
+        return []

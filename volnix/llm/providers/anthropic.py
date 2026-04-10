@@ -20,28 +20,133 @@ from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, To
 logger = logging.getLogger(__name__)
 
 
-_ANTHROPIC_FRAMEWORK_ONLY_KEYS = frozenset({"provider_metadata"})
+def _build_anthropic_messages(
+    messages: list[dict[str, Any]],
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Convert OpenAI-style message dicts into Anthropic (system, messages).
 
+    Returns a tuple of ``(system_prompt_or_none, anthropic_messages)``. The
+    system prompt is extracted from ``role: system`` messages and joined
+    with double newlines. The returned messages list contains only
+    ``role: user`` and ``role: assistant`` entries with ``content`` as a
+    list of ContentBlockParam dicts (or a plain string for simple cases).
 
-def _strip_framework_keys(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop framework-only keys from tool_call entries before Anthropic SDK.
+    Conversion rules:
 
-    Keys like ``provider_metadata`` (used for Gemini thought_signature
-    round-trip) are internal to the framework and must not leak to the
-    Anthropic SDK's payload validation.
+      - ``{role: system, content: X}`` → appended to the system_prompt string
+      - ``{role: user, content: X}`` → ``{role: user, content: X}``
+      - ``{role: assistant, content: X}`` (text only) → passthrough
+      - ``{role: assistant, tool_calls: [...], _provider_metadata: {thinking_blocks: [...]}}``
+        → ``{role: assistant, content: [*thinking_blocks, text?, *tool_use_blocks]}``
+      - ``{role: tool, tool_call_id, content}``
+        → ``{role: user, content: [{type: tool_result, tool_use_id, content}]}``
+
+    Consecutive messages of the same resolved role (after converting
+    ``role: tool`` → ``role: user``) are merged into a single message
+    with concatenated content blocks, matching Anthropic's API expectation.
+
+    Tool call argument conversion: OpenAI ``arguments`` is a JSON string;
+    Anthropic ``input`` is a dict. ``json.loads`` the string; on failure
+    fall back to ``{}`` with a debug log.
     """
-    result: list[dict[str, Any]] = []
-    for m in messages:
-        if m.get("tool_calls"):
-            m_copy = dict(m)
-            m_copy["tool_calls"] = [
-                {k: v for k, v in tc.items() if k not in _ANTHROPIC_FRAMEWORK_ONLY_KEYS}
-                for tc in m["tool_calls"]
-            ]
-            result.append(m_copy)
+    system_parts: list[str] = []
+    raw_converted: list[dict[str, Any]] = []
+
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "") or ""
+
+        if role == "system":
+            if content:
+                system_parts.append(content)
+            continue
+
+        if role == "user":
+            raw_converted.append({"role": "user", "content": content})
+            continue
+
+        if role == "assistant":
+            blocks: list[dict[str, Any]] = []
+
+            # 1. Thinking blocks from _provider_metadata (must come first)
+            pmeta = msg.get("_provider_metadata") or {}
+            thinking_blocks = pmeta.get("thinking_blocks") or []
+            for tb in thinking_blocks:
+                if isinstance(tb, dict) and tb.get("type") in (
+                    "thinking",
+                    "redacted_thinking",
+                ):
+                    blocks.append(dict(tb))
+
+            # 2. Optional text content
+            if content:
+                blocks.append({"type": "text", "text": content})
+
+            # 3. Tool-use blocks from tool_calls
+            for tc in msg.get("tool_calls") or []:
+                fn = tc.get("function", {}) or {}
+                name = fn.get("name", "") or ""
+                raw_args = fn.get("arguments", "") or "{}"
+                try:
+                    parsed_input = (
+                        json.loads(raw_args)
+                        if isinstance(raw_args, str)
+                        else dict(raw_args)
+                    )
+                    if not isinstance(parsed_input, dict):
+                        parsed_input = {}
+                except (json.JSONDecodeError, ValueError):
+                    logger.debug(
+                        "Malformed tool arguments for Anthropic: %.80s", raw_args
+                    )
+                    parsed_input = {}
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.get("id") or "",
+                        "name": name,
+                        "input": parsed_input,
+                    }
+                )
+
+            if blocks:
+                raw_converted.append({"role": "assistant", "content": blocks})
+            continue
+
+        if role == "tool":
+            raw_converted.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": msg.get("tool_call_id") or "",
+                            "content": content,
+                        }
+                    ],
+                }
+            )
+            continue
+
+    # Merge consecutive same-role messages into a single content-block list.
+    merged: list[dict[str, Any]] = []
+    for rm in raw_converted:
+        if merged and merged[-1]["role"] == rm["role"]:
+            prev_content = merged[-1]["content"]
+            this_content = rm["content"]
+            if isinstance(prev_content, str):
+                prev_content = [{"type": "text", "text": prev_content}]
+            if isinstance(this_content, str):
+                this_content = [{"type": "text", "text": this_content}]
+            merged[-1] = {
+                "role": rm["role"],
+                "content": prev_content + this_content,
+            }
         else:
-            result.append(m)
-    return result
+            merged.append(rm)
+
+    system_prompt = "\n\n".join(system_parts) if system_parts else None
+    return system_prompt, merged
 
 
 def _fix_schema_for_anthropic(schema: Any) -> Any:
@@ -105,11 +210,16 @@ class AnthropicProvider(LLMProvider):
                 system_param = system_content
 
             if request.messages:
-                sanitized = _strip_framework_keys(request.messages)
-                sys_msgs = [m for m in sanitized if m.get("role") == "system"]
-                other_msgs = [m for m in sanitized if m.get("role") != "system"]
-                msg_system = sys_msgs[0]["content"] if sys_msgs else system_param
-                msg_list = other_msgs if other_msgs else [{"role": "user", "content": ""}]
+                # Convert OpenAI-style messages to Anthropic content blocks.
+                # This is where tool_use / tool_result / thinking blocks
+                # are built — the raw message dicts never reach the SDK.
+                converted_system, converted_msgs = _build_anthropic_messages(
+                    request.messages
+                )
+                msg_system = (
+                    converted_system if converted_system is not None else system_param
+                )
+                msg_list = converted_msgs or [{"role": "user", "content": ""}]
             else:
                 msg_system = system_param
                 msg_list = [{"role": "user", "content": request.user_content}]
@@ -121,6 +231,23 @@ class AnthropicProvider(LLMProvider):
                 system=msg_system,
                 messages=msg_list,
             )
+
+            # Extended thinking: opt in via request.thinking_enabled. The
+            # Anthropic SDK enforces a minimum budget of 1024 tokens; we
+            # clamp defensively so the request never gets rejected at the
+            # type layer (values <=0 are treated as "use the minimum").
+            # When disabled (default), no ``thinking`` key is added and
+            # Claude behaves identically to before.
+            if request.thinking_enabled:
+                budget = max(request.thinking_budget_tokens, 1024)
+                create_kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": budget,
+                }
+                logger.info(
+                    "Anthropic extended thinking enabled (budget=%d)", budget
+                )
+
             # Structured output: force valid JSON matching the schema.
             # Uses output_config with json_schema format.
             if request.output_schema:
@@ -134,11 +261,16 @@ class AnthropicProvider(LLMProvider):
                 logger.info("Anthropic structured output enabled (schema type=%s)", schema_type)
 
             if request.tools:
+                # Normalize each tool's input_schema — Anthropic requires
+                # ``additionalProperties: false`` on every object type and
+                # ``items`` on every array type. Schemas that happen to
+                # already comply are a no-op; schemas missing those fields
+                # are fixed before the SDK call to avoid BadRequestError.
                 create_kwargs["tools"] = [
                     {
                         "name": t.name,
                         "description": t.description,
-                        "input_schema": t.parameters,
+                        "input_schema": _fix_schema_for_anthropic(t.parameters),
                     }
                     for t in request.tools
                 ]
@@ -168,20 +300,53 @@ class AnthropicProvider(LLMProvider):
                     raise
             latency = (time.monotonic() - start) * 1000
 
-            # Parse text and tool_use blocks from the response content.
+            # Parse text, tool_use, thinking, and redacted_thinking blocks.
+            # Thinking blocks are stashed into ``provider_metadata`` so the
+            # agency engine can round-trip them on the next tool-loop turn
+            # (Claude rejects follow-up requests whose history contains
+            # tool_use blocks without their preceding thinking signatures).
             content = ""
             parsed_tool_calls: list[ToolCall] | None = None
+            thinking_blocks_out: list[dict[str, Any]] = []
             for block in message.content:
-                if hasattr(block, "text"):
+                btype = getattr(block, "type", None)
+                if btype == "text":
                     content = block.text
-                elif hasattr(block, "type") and block.type == "tool_use":
+                elif btype == "tool_use":
                     if parsed_tool_calls is None:
                         parsed_tool_calls = []
+                    tool_input = block.input if isinstance(block.input, dict) else {}
                     parsed_tool_calls.append(
                         ToolCall(
-                            name=block.name, arguments=block.input, id=getattr(block, "id", "")
+                            name=block.name,
+                            arguments=tool_input,
+                            id=getattr(block, "id", ""),
                         )
                     )
+                elif btype == "thinking":
+                    thinking_blocks_out.append(
+                        {
+                            "type": "thinking",
+                            "thinking": getattr(block, "thinking", ""),
+                            "signature": getattr(block, "signature", ""),
+                        }
+                    )
+                elif btype == "redacted_thinking":
+                    thinking_blocks_out.append(
+                        {
+                            "type": "redacted_thinking",
+                            "data": getattr(block, "data", ""),
+                        }
+                    )
+                elif hasattr(block, "text"):
+                    # Defensive fallback for SDK variants that don't set
+                    # ``type`` but do carry a ``text`` attribute.
+                    content = block.text
+
+            response_provider_metadata: dict[str, Any] | None = None
+            if thinking_blocks_out:
+                response_provider_metadata = {"thinking_blocks": thinking_blocks_out}
+
             usage = LLMUsage(
                 prompt_tokens=message.usage.input_tokens,
                 completion_tokens=message.usage.output_tokens,
@@ -214,6 +379,7 @@ class AnthropicProvider(LLMProvider):
                 model=model,
                 provider="anthropic",
                 latency_ms=latency,
+                provider_metadata=response_provider_metadata,
             )
         except Exception as e:
             latency = (time.monotonic() - start) * 1000

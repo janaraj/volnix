@@ -22,6 +22,64 @@ from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, To
 logger = logging.getLogger(__name__)
 
 
+# Gemini's function-declaration schema is a strict subset of JSON Schema.
+# Any field outside this whitelist is rejected by the API with
+# "Unknown name ... Cannot find field". This includes `additionalProperties`,
+# which OpenAI / Anthropic accept (and Anthropic actually requires).
+_GEMINI_SCHEMA_ALLOWED_KEYS: frozenset[str] = frozenset(
+    {
+        "type",
+        "description",
+        "format",
+        "nullable",
+        "enum",
+        "properties",
+        "required",
+        "items",
+        "minimum",
+        "maximum",
+        "min_items",
+        "max_items",
+        "min_length",
+        "max_length",
+        "example",
+        "default",
+        "title",
+    }
+)
+
+
+def _sanitize_tool_params_for_gemini(schema: Any) -> Any:
+    """Recursively drop JSON Schema keys that Gemini's function-declaration
+    API does not support.
+
+    Gemini rejects requests containing unknown fields like
+    ``additionalProperties`` (even though it is standard JSON Schema and
+    required by Anthropic). This helper walks the parameter schema and
+    keeps only keys in ``_GEMINI_SCHEMA_ALLOWED_KEYS``, recursing into
+    ``properties`` and ``items``.
+
+    Non-dict inputs are returned unchanged so the function is a no-op
+    for primitive schema leaves.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    result: dict[str, Any] = {}
+    for k, v in schema.items():
+        if k not in _GEMINI_SCHEMA_ALLOWED_KEYS:
+            continue
+        if k == "properties" and isinstance(v, dict):
+            result[k] = {
+                prop_name: _sanitize_tool_params_for_gemini(prop_schema)
+                for prop_name, prop_schema in v.items()
+            }
+        elif k == "items":
+            result[k] = _sanitize_tool_params_for_gemini(v)
+        else:
+            result[k] = v
+    return result
+
+
 def _find_tool_name_for_id(messages: list[dict], tool_call_id: str) -> str:
     """Look up the tool name matching a tool_call_id in earlier assistant messages.
 
@@ -234,11 +292,14 @@ class GoogleNativeProvider(LLMProvider):
             tool_objects = None
             tool_config_obj = None
             if request.tools:
+                # Sanitize each tool's parameter schema — Gemini's
+                # function-declaration API rejects any JSON Schema key
+                # outside its allowed set (e.g., `additionalProperties`).
                 declarations = [
                     types.FunctionDeclaration(
                         name=t.name,
                         description=t.description,
-                        parameters=t.parameters,
+                        parameters=_sanitize_tool_params_for_gemini(t.parameters),
                     )
                     for t in request.tools
                 ]

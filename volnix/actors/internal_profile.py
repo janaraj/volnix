@@ -114,6 +114,15 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
                 metadata["llm_model"] = llm_config["model"]
             if llm_config.get("provider"):
                 metadata["llm_provider"] = llm_config["provider"]
+            # Optional extended-thinking opt-in: llm.thinking.enabled +
+            # optional llm.thinking.budget_tokens. Honored by Anthropic.
+            thinking_cfg = llm_config.get("thinking")
+            if isinstance(thinking_cfg, dict):
+                if thinking_cfg.get("enabled"):
+                    metadata["llm_thinking_enabled"] = bool(thinking_cfg["enabled"])
+                bt = thinking_cfg.get("budget_tokens")
+                if isinstance(bt, int) and bt > 0:
+                    metadata["llm_thinking_budget_tokens"] = bt
 
         definitions.append(
             ActorDefinition(

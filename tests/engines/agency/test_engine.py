@@ -1504,3 +1504,237 @@ class TestScheduledActionsList:
         assert "check_status" in action_types
         assert "send_report" in action_types
         assert len(actor.scheduled_actions) == 0
+
+
+# ---------------------------------------------------------------------------
+# register_game_tools — structured game-move tool registration
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterGameTools:
+    """Validate that GameRunner can register per-game-type tools with agency.
+
+    The registration feeds `_tool_definitions`, `_tool_name_map`, and
+    `_tool_to_service` so that `_parse_tool_call` can resolve game moves,
+    and `_get_tools_for_actor` can filter them by permissions.
+    """
+
+    async def test_register_appends_to_tool_definitions(self):
+        from volnix.llm.types import ToolDefinition
+
+        engine = await _create_engine([])
+        tool = ToolDefinition(
+            name="negotiate_propose",
+            service="game",
+            description="Opening proposal",
+            parameters={"type": "object", "required": []},
+        )
+        engine.register_game_tools([tool])
+
+        names = [t.name for t in engine._tool_definitions]
+        assert "negotiate_propose" in names
+
+    async def test_register_updates_name_and_service_maps(self):
+        from volnix.llm.types import ToolDefinition
+
+        engine = await _create_engine([])
+        tool = ToolDefinition(
+            name="negotiate_counter",
+            service="game",
+            description="Counter offer",
+            parameters={"type": "object", "required": []},
+        )
+        engine.register_game_tools([tool])
+
+        assert engine._tool_name_map["negotiate_counter"] == "negotiate_counter"
+        assert engine._tool_to_service["negotiate_counter"] == "game"
+
+    async def test_register_idempotent_same_name_replaces(self):
+        """Registering the same tool twice keeps exactly one entry."""
+        from volnix.llm.types import ToolDefinition
+
+        engine = await _create_engine([])
+        tool_v1 = ToolDefinition(
+            name="negotiate_accept",
+            service="game",
+            description="v1",
+            parameters={"type": "object"},
+        )
+        tool_v2 = ToolDefinition(
+            name="negotiate_accept",
+            service="game",
+            description="v2",
+            parameters={"type": "object"},
+        )
+        engine.register_game_tools([tool_v1])
+        engine.register_game_tools([tool_v2])
+
+        matching = [
+            t for t in engine._tool_definitions if t.name == "negotiate_accept"
+        ]
+        assert len(matching) == 1
+        assert matching[0].description == "v2"
+
+    async def test_register_multiple_tools_in_one_call(self):
+        from volnix.llm.types import ToolDefinition
+
+        engine = await _create_engine([])
+        tools = [
+            ToolDefinition(
+                name="negotiate_propose",
+                service="game",
+                description="Propose",
+                parameters={"type": "object"},
+            ),
+            ToolDefinition(
+                name="negotiate_counter",
+                service="game",
+                description="Counter",
+                parameters={"type": "object"},
+            ),
+        ]
+        engine.register_game_tools(tools)
+
+        names = [t.name for t in engine._tool_definitions]
+        assert "negotiate_propose" in names
+        assert "negotiate_counter" in names
+        assert engine._tool_to_service["negotiate_propose"] == "game"
+        assert engine._tool_to_service["negotiate_counter"] == "game"
+
+
+# ---------------------------------------------------------------------------
+# Extended-thinking field plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestThinkingFieldsOnActorState:
+    """Tests that ActorState accepts and stores the new thinking fields."""
+
+    def test_defaults(self):
+        """Default ActorState has thinking disabled."""
+        actor = _make_actor()
+        assert actor.llm_thinking_enabled is False
+        assert actor.llm_thinking_budget_tokens is None
+
+    def test_explicit_enable(self):
+        """Thinking fields can be set on construction."""
+        actor = _make_actor()
+        actor.llm_thinking_enabled = True
+        actor.llm_thinking_budget_tokens = 4096
+        assert actor.llm_thinking_enabled is True
+        assert actor.llm_thinking_budget_tokens == 4096
+
+
+class TestThinkingYAMLParser:
+    """Tests that the agent YAML parser picks up llm.thinking config.
+
+    Validates the round-trip from ``llm.thinking.enabled`` /
+    ``llm.thinking.budget_tokens`` in agent YAML through to
+    ``ActorDefinition.metadata`` entries that ``app.py`` reads when
+    constructing ``ActorState``.
+    """
+
+    @staticmethod
+    def _write_yaml(tmp_path, yaml_body):
+        import yaml
+
+        p = tmp_path / "agents.yaml"
+        p.write_text(yaml.safe_dump(yaml_body))
+        return p
+
+    def test_parser_reads_thinking_enabled(self, tmp_path):
+        from volnix.actors.internal_profile import load_internal_profile
+
+        path = self._write_yaml(
+            tmp_path,
+            {
+                "mission": "test",
+                "agents": [
+                    {
+                        "role": "buyer",
+                        "llm": {
+                            "model": "claude-sonnet-4-6",
+                            "provider": "anthropic",
+                            "thinking": {"enabled": True, "budget_tokens": 4096},
+                        },
+                    }
+                ],
+            },
+        )
+        profile = load_internal_profile(path)
+        assert len(profile.agents) == 1
+        meta = profile.agents[0].metadata
+        assert meta.get("llm_thinking_enabled") is True
+        assert meta.get("llm_thinking_budget_tokens") == 4096
+        # Existing fields still work
+        assert meta.get("llm_model") == "claude-sonnet-4-6"
+        assert meta.get("llm_provider") == "anthropic"
+
+    def test_parser_omits_thinking_when_absent(self, tmp_path):
+        from volnix.actors.internal_profile import load_internal_profile
+
+        path = self._write_yaml(
+            tmp_path,
+            {
+                "mission": "test",
+                "agents": [
+                    {
+                        "role": "buyer",
+                        "llm": {"model": "gpt-4.1-mini", "provider": "openai"},
+                    }
+                ],
+            },
+        )
+        profile = load_internal_profile(path)
+        meta = profile.agents[0].metadata
+        assert "llm_thinking_enabled" not in meta
+        assert "llm_thinking_budget_tokens" not in meta
+
+    def test_parser_thinking_disabled_false_ignored(self, tmp_path):
+        """thinking.enabled: false does not set the metadata flag."""
+        from volnix.actors.internal_profile import load_internal_profile
+
+        path = self._write_yaml(
+            tmp_path,
+            {
+                "mission": "test",
+                "agents": [
+                    {
+                        "role": "buyer",
+                        "llm": {
+                            "model": "claude-sonnet-4-6",
+                            "provider": "anthropic",
+                            "thinking": {"enabled": False},
+                        },
+                    }
+                ],
+            },
+        )
+        profile = load_internal_profile(path)
+        meta = profile.agents[0].metadata
+        # False → not set (default applies)
+        assert "llm_thinking_enabled" not in meta
+
+    def test_parser_thinking_budget_only_ignored_when_not_enabled(self, tmp_path):
+        """budget_tokens is parsed independently of enabled flag."""
+        from volnix.actors.internal_profile import load_internal_profile
+
+        path = self._write_yaml(
+            tmp_path,
+            {
+                "mission": "test",
+                "agents": [
+                    {
+                        "role": "buyer",
+                        "llm": {
+                            "model": "claude-sonnet-4-6",
+                            "provider": "anthropic",
+                            "thinking": {"enabled": True, "budget_tokens": 8192},
+                        },
+                    }
+                ],
+            },
+        )
+        profile = load_internal_profile(path)
+        meta = profile.agents[0].metadata
+        assert meta.get("llm_thinking_budget_tokens") == 8192

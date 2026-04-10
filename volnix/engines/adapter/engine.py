@@ -49,10 +49,42 @@ class AgentAdapterEngine(BaseEngine):
     async def execute(self, ctx: ActionContext) -> StepResult:
         """Check if the requested tool exists in the world.
 
-        Uses PackRegistry.has_tool() when available.
+        Dispatch order:
+        0. Game actions (``service_id == "game"``): short-circuit to
+           ALLOW. Game moves are registered directly on the agency
+           engine by the GameRunner and have no pack/profile backing —
+           the commit itself IS the action.
+        1. Tier 1 pack (via ``PackRegistry.has_tool``)
+        2. Tier 2 profile (via ``ProfileRegistry.get_profile_for_action``)
+        3. Capability gap — ERROR with ``CapabilityGapEvent``
+
         Falls back to ALLOW when pack_registry is not yet injected
         (backward compat with tests that don't wire the full app).
         """
+        # Game actions are structured tools registered by the GameRunner
+        # via ``AgencyEngine.register_game_tools``. They have no pack or
+        # profile — the evaluator reads their committed events directly.
+        if str(ctx.service_id or "") == "game":
+            from datetime import datetime
+
+            from volnix.core.types import Timestamp, ToolName
+
+            now = datetime.now(UTC)
+            resolved_event = CapabilityResolvedEvent(
+                event_type="capability.resolved",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                actor_id=ctx.actor_id,
+                requested_tool=ToolName(ctx.action),
+                resolved_tier="game",
+                service_id="game",
+            )
+            return StepResult(
+                step_name=self.step_name,
+                verdict=StepVerdict.ALLOW,
+                events=[resolved_event],
+                message=f"game action '{ctx.action}' resolved",
+            )
+
         if self._pack_registry is not None:
             # Check Tier 1 packs
             if self._pack_registry.has_tool(ctx.action):

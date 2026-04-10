@@ -1,8 +1,13 @@
 """Negotiation evaluator — generic round evaluator for negotiation games.
 
-Parses structured proposal messages from round events, tracks deal state,
+Reads structured game-move events from round events, tracks deal state,
 computes deal scores using weighted distance from each player's ideal terms.
 All configuration comes from state entities — zero hardcoded terms.
+
+Game moves are first-class structured tools (``negotiate_propose``,
+``negotiate_counter``, ``negotiate_accept``, ``negotiate_reject``) that the
+LLM calls natively. The provider enforces the JSON Schema, so the evaluator
+reads typed payloads — no regex, no text parsing.
 
 Entity types read from state:
 - negotiation_deal: deal definition with terms_template, status, parties
@@ -15,42 +20,141 @@ Entity types created by this evaluator:
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Any
 
 from volnix.engines.game.definition import PlayerScore, RoundState
 from volnix.game.evaluators.base import BaseRoundEvaluator
+from volnix.llm.types import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Message patterns — agents must use these exact formats
+# Structured game-move tool schemas
 # ---------------------------------------------------------------------------
 
-# Non-greedy flat-JSON capture: `[^{}]*` matches any run of characters that
-# are NOT braces, so we grab exactly one flat `{...}` object and ignore any
-# braces that might appear in surrounding natural-language preamble or
-# postamble. Negotiation terms are always flat dicts (price, delivery_weeks,
-# payment_days, warranty_months); if a future game needs nested JSON in
-# terms, swap to a proper balanced-brace scanner.
-PROPOSAL_RE = re.compile(r"PROPOSAL:\s*(\{[^{}]*\})", re.DOTALL)
-COUNTER_RE = re.compile(r"COUNTER:\s*(\{[^{}]*\})", re.DOTALL)
-ACCEPT_RE = re.compile(r"ACCEPT:\s*([\w-]+)")
-REJECT_RE = re.compile(r"REJECT:\s*([\w-]+)")
+_TERMS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": [
+        "deal_id",
+        "price",
+        "delivery_weeks",
+        "payment_days",
+        "warranty_months",
+    ],
+    "properties": {
+        "deal_id": {
+            "type": "string",
+            "description": "ID of the deal you are negotiating (e.g., 'deal-001').",
+        },
+        "price": {
+            "type": "number",
+            "description": "Price per unit, in the deal's currency.",
+        },
+        "delivery_weeks": {
+            "type": "integer",
+            "description": "Delivery timeline in weeks.",
+        },
+        "payment_days": {
+            "type": "integer",
+            "description": "Payment terms in days.",
+        },
+        "warranty_months": {
+            "type": "integer",
+            "description": "Warranty period in months.",
+        },
+        "message": {
+            "type": "string",
+            "description": (
+                "Optional one-sentence in-character framing for this move "
+                "(e.g., 'Here's my opening offer')."
+            ),
+        },
+    },
+    "additionalProperties": False,
+}
+
+_CLOSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["deal_id"],
+    "properties": {
+        "deal_id": {
+            "type": "string",
+            "description": "ID of the deal you are closing.",
+        },
+        "message": {
+            "type": "string",
+            "description": "Optional in-character framing (e.g., 'Done').",
+        },
+    },
+    "additionalProperties": False,
+}
+
+NEGOTIATION_TOOLS: list[ToolDefinition] = [
+    ToolDefinition(
+        name="negotiate_propose",
+        service="game",
+        description=(
+            "Put an opening proposal on the table. Use this to make the "
+            "first offer of the negotiation. Specify all four terms "
+            "(price, delivery_weeks, payment_days, warranty_months). "
+            "This creates a visible proposal record the other party can "
+            "counter, accept, or reject."
+        ),
+        parameters=_TERMS_SCHEMA,
+    ),
+    ToolDefinition(
+        name="negotiate_counter",
+        service="game",
+        description=(
+            "Counter-offer on an open deal. Use this to respond to the "
+            "other party's proposal with your own terms. Specify all four "
+            "terms — any term you don't repeat will be reset to your "
+            "counter values."
+        ),
+        parameters=_TERMS_SCHEMA,
+    ),
+    ToolDefinition(
+        name="negotiate_accept",
+        service="game",
+        description=(
+            "Accept the deal at the other party's most recent terms. "
+            "This closes the deal immediately and is scored at the "
+            "current term values. Only use this if the current terms are "
+            "acceptable — you cannot modify them by accepting."
+        ),
+        parameters=_CLOSE_SCHEMA,
+    ),
+    ToolDefinition(
+        name="negotiate_reject",
+        service="game",
+        description=(
+            "Reject the deal and walk away. Use this if the terms are "
+            "worse than your BATNA (walk-away value). You will receive "
+            "your BATNA fallback score instead of a deal score."
+        ),
+        parameters=_CLOSE_SCHEMA,
+    ),
+]
+
+# Action-type set for fast membership checks in the evaluator
+_NEGOTIATE_PROPOSAL_ACTIONS: frozenset[str] = frozenset(
+    {"negotiate_propose", "negotiate_counter"}
+)
+_NEGOTIATE_ACCEPT_ACTION: str = "negotiate_accept"
+_NEGOTIATE_REJECT_ACTION: str = "negotiate_reject"
 
 # Efficiency bonus: points per remaining round when deal is reached early
 EFFICIENCY_BONUS_PER_ROUND = 2.0
 
 
 # ---------------------------------------------------------------------------
-# Parsed message types
+# Parsed move types
 # ---------------------------------------------------------------------------
 
 
-class ParsedMessage:
-    """A structured message extracted from a round event."""
+class ParsedMove:
+    """A structured move extracted from a committed game-action event."""
 
     __slots__ = ("actor_id", "msg_type", "deal_id", "terms")
 
@@ -84,6 +188,10 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         super().__init__()
         self._proposal_counter: int = 0  # per-round sequence counter
 
+    def game_tools(self) -> list[ToolDefinition]:
+        """Return the four structured negotiation tools."""
+        return NEGOTIATION_TOOLS
+
     async def evaluate(
         self,
         state_engine: Any,
@@ -91,16 +199,16 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         round_state: RoundState,
         player_scores: dict[str, PlayerScore],
     ) -> None:
-        """Parse round messages, update deal state, compute scores."""
+        """Read structured moves from round events, update deal state, score."""
         if not self._init_state_access(state_engine):
             return
 
         # Reset per-round counter
         self._proposal_counter = 0
 
-        # 1. Parse structured messages from round events
-        messages = self._parse_round_messages(round_events)
-        if not messages:
+        # 1. Read structured moves from committed game-action events
+        moves = self._parse_round_moves(round_events)
+        if not moves:
             # Check if final round — apply BATNA for players with no deal
             if round_state.current_round >= round_state.total_rounds:
                 await self._apply_batna_for_no_deal(player_scores)
@@ -119,9 +227,9 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
         # 3. Two-pass processing: proposals/counters first (updates deal terms in DB),
         #    then reload deals, then accepts/rejects (read updated terms).
-        for msg in messages:
-            if msg.msg_type in ("proposal", "counter"):
-                await self._process_proposal(msg, deals, round_state)
+        for move in moves:
+            if move.msg_type in ("proposal", "counter"):
+                await self._process_proposal(move, deals, round_state)
 
         # Reload deals to pick up term updates from proposals/counters
         try:
@@ -131,87 +239,92 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         except Exception as exc:
             logger.warning("Failed to reload deals after proposals: %s", exc)
 
-        for msg in messages:
-            if msg.msg_type == "accept":
-                await self._process_accept(msg, deals, round_state, player_scores)
-            elif msg.msg_type == "reject":
-                await self._process_reject(msg, deals)
+        for move in moves:
+            if move.msg_type == "accept":
+                await self._process_accept(move, deals, round_state, player_scores)
+            elif move.msg_type == "reject":
+                await self._process_reject(move, deals)
 
         # 4. Final round — apply BATNA for players with no accepted deal
         if round_state.current_round >= round_state.total_rounds:
             await self._apply_batna_for_no_deal(player_scores)
 
-    # -- Message parsing ---------------------------------------------------
+    # -- Move parsing ------------------------------------------------------
 
-    def _parse_round_messages(self, round_events: list[Any]) -> list[ParsedMessage]:
-        """Extract structured messages from round events."""
-        messages: list[ParsedMessage] = []
+    def _parse_round_moves(self, round_events: list[Any]) -> list[ParsedMove]:
+        """Extract structured moves from committed game-action events.
 
+        Each committed game move arrives as a ``SimpleNamespace`` in
+        ``round_events`` with:
+
+          * ``event_type``: ``"world.negotiate_propose"`` / ``_counter`` /
+                            ``_accept`` / ``_reject``
+          * ``actor_id``: the player who made the move
+          * ``input_data``: the typed payload (already validated by the
+                            LLM provider's JSON-schema enforcement — no
+                            parsing, no regex, no try/except JSON decode)
+
+        Non-game events (e.g. ``world.chat.postMessage`` dialogue) are
+        skipped silently.
+        """
+        moves: list[ParsedMove] = []
         for event in round_events:
-            event_type = getattr(event, "event_type", "")
-            if event_type != "world.chat.postMessage":
+            event_type = str(getattr(event, "event_type", ""))
+            if not event_type.startswith("world.") or "negotiate_" not in event_type:
                 continue
-
+            action = event_type.removeprefix("world.")
             actor_id = str(getattr(event, "actor_id", ""))
-            input_data = getattr(event, "input_data", {})
-            text = input_data.get("text", "") if isinstance(input_data, dict) else ""
-
-            if not text or not actor_id:
+            payload = getattr(event, "input_data", None) or {}
+            if not isinstance(payload, dict) or not actor_id:
                 continue
 
-            parsed = self._parse_message_text(actor_id, text)
-            if parsed is not None:
-                messages.append(parsed)
-
-        return messages
-
-    def _parse_message_text(self, actor_id: str, text: str) -> ParsedMessage | None:
-        """Try each pattern against message text. First match wins."""
-        # PROPOSAL
-        match = PROPOSAL_RE.search(text)
-        if match:
-            terms = self._safe_parse_json(match.group(1))
-            if terms is not None:
-                return ParsedMessage(actor_id, "proposal", terms=terms)
-            return None
-
-        # COUNTER
-        match = COUNTER_RE.search(text)
-        if match:
-            terms = self._safe_parse_json(match.group(1))
-            if terms is not None:
-                return ParsedMessage(actor_id, "counter", terms=terms)
-            return None
-
-        # ACCEPT
-        match = ACCEPT_RE.search(text)
-        if match:
-            return ParsedMessage(actor_id, "accept", deal_id=match.group(1))
-
-        # REJECT
-        match = REJECT_RE.search(text)
-        if match:
-            return ParsedMessage(actor_id, "reject", deal_id=match.group(1))
-
-        logger.debug("No structured pattern in message from %s: %.80s", actor_id, text)
-        return None
-
-    @staticmethod
-    def _safe_parse_json(raw: str) -> dict[str, Any] | None:
-        """Parse JSON from message text, returning None on failure."""
-        try:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                return data
-        except (json.JSONDecodeError, ValueError) as exc:
-            logger.debug("Failed to parse proposal JSON: %s — %.80s", exc, raw)
-        return None
+            if action in _NEGOTIATE_PROPOSAL_ACTIONS:
+                deal_id = str(payload.get("deal_id") or "")
+                terms = {
+                    k: payload[k]
+                    for k in (
+                        "price",
+                        "delivery_weeks",
+                        "payment_days",
+                        "warranty_months",
+                    )
+                    if k in payload
+                }
+                if not deal_id or not terms:
+                    continue
+                moves.append(
+                    ParsedMove(
+                        actor_id=actor_id,
+                        msg_type=(
+                            "proposal" if action == "negotiate_propose" else "counter"
+                        ),
+                        deal_id=deal_id,
+                        terms=terms,
+                    )
+                )
+            elif action == _NEGOTIATE_ACCEPT_ACTION:
+                deal_id = str(payload.get("deal_id") or "")
+                if deal_id:
+                    moves.append(
+                        ParsedMove(
+                            actor_id=actor_id, msg_type="accept", deal_id=deal_id
+                        )
+                    )
+            elif action == _NEGOTIATE_REJECT_ACTION:
+                deal_id = str(payload.get("deal_id") or "")
+                if deal_id:
+                    moves.append(
+                        ParsedMove(
+                            actor_id=actor_id, msg_type="reject", deal_id=deal_id
+                        )
+                    )
+        return moves
 
     # -- Proposal / Counter ------------------------------------------------
 
     async def _process_proposal(
         self,
-        msg: ParsedMessage,
+        msg: ParsedMove,
         deals: list[dict[str, Any]],
         round_state: RoundState,
     ) -> None:
@@ -258,7 +371,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
     async def _process_accept(
         self,
-        msg: ParsedMessage,
+        msg: ParsedMove,
         deals: list[dict[str, Any]],
         round_state: RoundState,
         player_scores: dict[str, PlayerScore],
@@ -339,7 +452,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
     async def _process_reject(
         self,
-        msg: ParsedMessage,
+        msg: ParsedMove,
         deals: list[dict[str, Any]],
     ) -> None:
         """Reject a deal: update deal status."""

@@ -100,6 +100,11 @@ class LLMRequest(BaseModel, frozen=True):
     )
     tool_choice: str | None = None  # "auto" | "required" | "none" | None=provider default
 
+    # Extended / native thinking opt-in. Currently honored by Anthropic;
+    # Gemini thinking stays hardcoded off (see google.py). OpenAI ignores.
+    thinking_enabled: bool = False
+    thinking_budget_tokens: int = 2048  # Anthropic min is 1024 (clamped at provider)
+
 
 class LLMResponse(BaseModel, frozen=True):
     """Response returned from an LLM provider.
@@ -122,6 +127,13 @@ class LLMResponse(BaseModel, frozen=True):
     provider: str = ""
     latency_ms: float = 0.0
     error: str | None = None
+    provider_metadata: dict[str, Any] | None = None
+    # Opaque per-turn metadata the provider wants round-tripped on the next
+    # request. Anthropic uses this to carry extended-thinking blocks
+    # (``{"thinking_blocks": [{"type": "thinking", ...}, ...]}``). The agency
+    # engine stashes this on the corresponding assistant message dict as
+    # ``_provider_metadata`` so the same provider can read it back when
+    # rebuilding history on the next turn. Other providers never read it.
 
 
 class ProviderInfo(BaseModel, frozen=True):

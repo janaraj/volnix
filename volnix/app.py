@@ -1078,6 +1078,12 @@ class VolnixApp:
                     is_lead=agent_def.metadata.get("lead", False),
                     llm_model=agent_def.metadata.get("llm_model") or None,
                     llm_provider=agent_def.metadata.get("llm_provider") or None,
+                    llm_thinking_enabled=bool(
+                        agent_def.metadata.get("llm_thinking_enabled", False)
+                    ),
+                    llm_thinking_budget_tokens=agent_def.metadata.get(
+                        "llm_thinking_budget_tokens"
+                    ),
                 )
                 actor_states.append(state)
 

@@ -34,25 +34,31 @@ _OPENAI_TOOL_CALL_KEYS = frozenset({"id", "type", "function"})
 def _sanitize_messages_for_openai(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Strip non-OpenAI keys from tool_call entries.
+    """Strip framework-only keys before handing messages to the OpenAI SDK.
 
-    Framework-level keys such as ``provider_metadata`` (used for Gemini
-    thought_signature round-trip) must not leak to OpenAI's schema-strict
-    API, which rejects unknown fields with
-    "Additional properties are not allowed". We copy each message shallowly
-    and rebuild its ``tool_calls`` list with only OpenAI-supported fields.
+    OpenAI's chat completions API rejects unknown fields inside ``tool_calls``
+    entries with "Additional properties are not allowed". We defensively strip:
+
+    - Any top-level message-dict key starting with ``_`` (framework-only,
+      e.g. ``_provider_metadata`` used to round-trip Anthropic extended-
+      thinking blocks on the next turn — harmless to OpenAI if the field
+      is never sent).
+    - The ``provider_metadata`` key inside each ``tool_calls`` entry (used
+      to round-trip Gemini ``thought_signature`` via ToolCall).
+
+    A shallow copy is made so the original message dicts are never mutated
+    (callers may retain references to them).
     """
     result: list[dict[str, Any]] = []
     for m in messages:
-        if m.get("tool_calls"):
-            m_copy = dict(m)
+        # Strip top-level framework-only keys (underscore-prefixed).
+        m_copy = {k: v for k, v in m.items() if not k.startswith("_")}
+        if m_copy.get("tool_calls"):
             m_copy["tool_calls"] = [
                 {k: v for k, v in tc.items() if k in _OPENAI_TOOL_CALL_KEYS}
-                for tc in m["tool_calls"]
+                for tc in m_copy["tool_calls"]
             ]
-            result.append(m_copy)
-        else:
-            result.append(m)
+        result.append(m_copy)
     return result
 
 

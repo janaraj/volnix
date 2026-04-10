@@ -224,6 +224,35 @@ class AgencyEngine(BaseEngine):
         )
         return tools
 
+    def register_game_tools(self, tools: list[ToolDefinition]) -> None:
+        """Register structured game-move tools for the active game.
+
+        Called by the GameRunner at game setup time. Tools are appended to
+        the agency's tool list and mapped in the name→action / name→service
+        lookup tables so that ``_parse_tool_call`` can resolve them when
+        the LLM calls them natively.
+
+        Idempotent: registering the same tool name twice replaces the prior
+        entry (safe for reloads). Tools registered here are naturally
+        filtered by the existing ``_get_tools_for_actor`` permission logic —
+        only agents with ``write: [game]`` in their profile will see them.
+        The ``method_lookup.get(name, "POST")`` fallback in the filter
+        classifies unknown-service tools as write, so no change to the
+        filter is needed.
+        """
+        for tool in tools:
+            # Replace any existing entry with the same name (idempotent reload)
+            self._tool_definitions = [
+                t for t in self._tool_definitions if t.name != tool.name
+            ]
+            self._tool_definitions.append(tool)
+            # Identity mapping: tool name == action type
+            self._tool_name_map[tool.name] = tool.name
+            self._tool_to_service[tool.name] = tool.service
+            logger.info(
+                "Registered game tool %s (service=%s)", tool.name, tool.service
+            )
+
     def _get_tools_for_actor(self, actor_id: str) -> list[ToolDefinition]:
         """Filter tool definitions by actor's service permissions.
 
@@ -914,6 +943,10 @@ class AgencyEngine(BaseEngine):
                     cache_system_prompt=True,
                     model_override=actor.llm_model,
                     provider_override=actor.llm_provider,
+                    thinking_enabled=actor.llm_thinking_enabled,
+                    thinking_budget_tokens=(
+                        actor.llm_thinking_budget_tokens or 2048
+                    ),
                 )
                 response = await self._llm_router.route(
                     request,
@@ -953,14 +986,22 @@ class AgencyEngine(BaseEngine):
                     if committed_event is None:
                         # Pipeline blocked — tell the agent
                         blocked_tc_id = tc.id or f"call_{step_idx}"
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "tool_calls": [
-                                    _build_tool_call_dict(tc, blocked_tc_id),
-                                ],
-                            }
-                        )
+                        blocked_assistant_msg: dict[str, Any] = {
+                            "role": "assistant",
+                            "tool_calls": [
+                                _build_tool_call_dict(tc, blocked_tc_id),
+                            ],
+                        }
+                        if response.provider_metadata:
+                            # Stash per-turn provider metadata (e.g., Anthropic
+                            # extended-thinking blocks) so the same provider can
+                            # echo them back on the next turn. Other providers
+                            # strip the ``_provider_metadata`` key at their
+                            # boundary — it never leaks to an unintended SDK.
+                            blocked_assistant_msg["_provider_metadata"] = (
+                                response.provider_metadata
+                            )
+                        messages.append(blocked_assistant_msg)
                         messages.append(
                             {
                                 "role": "tool",
@@ -990,12 +1031,20 @@ class AgencyEngine(BaseEngine):
                     )[:2000]
 
                     tc_id = tc.id or f"call_{step_idx}"
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "tool_calls": [_build_tool_call_dict(tc, tc_id)],
-                        }
-                    )
+                    success_assistant_msg: dict[str, Any] = {
+                        "role": "assistant",
+                        "tool_calls": [_build_tool_call_dict(tc, tc_id)],
+                    }
+                    if response.provider_metadata:
+                        # Stash per-turn provider metadata (e.g., Anthropic
+                        # extended-thinking blocks) so the same provider can
+                        # echo them back on the next turn. Other providers
+                        # strip the ``_provider_metadata`` key at their
+                        # boundary — it never leaks to an unintended SDK.
+                        success_assistant_msg["_provider_metadata"] = (
+                            response.provider_metadata
+                        )
+                    messages.append(success_assistant_msg)
                     messages.append(
                         {
                             "role": "tool",

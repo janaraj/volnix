@@ -174,6 +174,58 @@ class TestSanitizeMessagesForOpenAI:
         for tc in result[0]["tool_calls"]:
             assert "provider_metadata" not in tc
 
+    def test_strips_underscore_prefixed_top_level_keys(self):
+        """Top-level ``_provider_metadata`` (framework-only) is stripped.
+
+        Anthropic stashes extended-thinking blocks here via
+        ``_provider_metadata``. It must never reach OpenAI's SDK.
+        """
+        messages = [
+            {
+                "role": "assistant",
+                "content": "hi",
+                "_provider_metadata": {"thinking_blocks": [{"type": "thinking"}]},
+            },
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        assert "_provider_metadata" not in result[0]
+        assert result[0] == {"role": "assistant", "content": "hi"}
+
+    def test_strips_underscore_key_alongside_tool_calls(self):
+        """Both the top-level underscore key AND tool_call metadata are stripped."""
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "f", "arguments": "{}"},
+                        "provider_metadata": {"thought_signature": "abc=="},
+                    }
+                ],
+                "_provider_metadata": {"thinking_blocks": []},
+            }
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        assert "_provider_metadata" not in result[0]
+        assert "provider_metadata" not in result[0]["tool_calls"][0]
+
+    def test_non_underscore_custom_keys_preserved(self):
+        """Only ``_``-prefixed keys are stripped; other custom keys pass through."""
+        messages = [
+            {
+                "role": "assistant",
+                "content": "hi",
+                "custom_tag": "x",
+                "weight": 0.5,
+            }
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        # custom_tag and weight are not underscore-prefixed → preserved
+        assert result[0]["custom_tag"] == "x"
+        assert result[0]["weight"] == 0.5
+
 
 @skipif_no_openai
 @skipif_no_real

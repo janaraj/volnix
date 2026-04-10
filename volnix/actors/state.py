@@ -157,3 +157,5 @@ class ActorState(BaseModel):
     max_recent_interactions: int = 20
     llm_model: str | None = None     # Per-agent LLM model override
     llm_provider: str | None = None  # Per-agent LLM provider override
+    llm_thinking_enabled: bool = False  # Opt in to provider extended thinking
+    llm_thinking_budget_tokens: int | None = None  # None → provider default

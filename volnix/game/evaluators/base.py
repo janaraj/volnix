@@ -40,6 +40,17 @@ class BaseRoundEvaluator:
         """
         return {}
 
+    def game_tools(self) -> list[Any]:
+        """Default: no structured game-move tools.
+
+        Override in subclasses to declare tools like ``negotiate_propose``,
+        ``auction_bid``, ``debate_argue``. The runner registers these with
+        the agency engine at game start so the LLM sees them as first-class
+        structured tool calls, and the evaluator reads their committed
+        events directly from ``round_events`` — no text parsing required.
+        """
+        return []
+
     def _init_state_access(self, state_engine: Any) -> bool:
         """Extract store and ledger from state engine. Returns False if unavailable."""
         if state_engine is None:

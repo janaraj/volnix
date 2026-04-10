@@ -137,6 +137,19 @@ class GameRunner:
             if evaluator_name and evaluator_name in ROUND_EVALUATOR_REGISTRY:
                 self._round_evaluator = ROUND_EVALUATOR_REGISTRY[evaluator_name]()
 
+        # Register structured game-move tools with the agency engine
+        # before any turns start. Tools are scoped by the agent's
+        # write:[game] permission — non-game agents never see them.
+        if self._round_evaluator is not None and self._agency is not None:
+            game_tools = self._round_evaluator.game_tools()
+            if game_tools and hasattr(self._agency, "register_game_tools"):
+                self._agency.register_game_tools(game_tools)
+                logger.info(
+                    "Registered %d game tools for mode=%s",
+                    len(game_tools),
+                    getattr(definition, "mode", "?"),
+                )
+
         await self._game.start_game()
         await self._resolve_team_channel()
         logger.info(
