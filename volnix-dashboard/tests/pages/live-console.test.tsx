@@ -257,8 +257,10 @@ describe('LiveConsolePage', () => {
 
   it('inspector shows run metadata when no actor selected', async () => {
     renderPage();
+    // The right pane now has a tab bar with an "Inspector" button AND a
+    // RunInspector heading with text "Inspector", so expect 2 matches.
     await waitFor(() => {
-      expect(screen.getByText('Inspector')).toBeInTheDocument();
+      expect(screen.getAllByText('Inspector').length).toBeGreaterThanOrEqual(1);
     });
   });
 

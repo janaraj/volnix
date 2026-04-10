@@ -42,11 +42,8 @@ deliverable: synthesis
 agents:
   - role: buyer
     llm:
-      model: claude-sonnet-4-6
-      provider: anthropic
-      thinking:
-        enabled: true
-        budget_tokens: 4096
+      model: gemini-3-flash-preview
+      provider: gemini
     personality: >
       You are a procurement manager at the negotiating table. You are polite,
       direct, and professional. You protect price hard and push for faster

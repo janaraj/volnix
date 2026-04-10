@@ -366,4 +366,133 @@ describe('RunReportPage', () => {
       expect(screen.getByText('Not found')).toBeInTheDocument();
     });
   });
+
+  // ── Chat tab ──────────────────────────────────────────────────
+
+  it('shows Chat tab in the tab bar', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    });
+  });
+
+  it('renders chat messages when Chat tab is clicked', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/v1/runs/:id/events', () =>
+        HttpResponse.json({
+          events: [
+            {
+              event_type: 'world.chat.postMessage',
+              event_id: 'e1',
+              actor_id: 'buyer-1',
+              actor_role: 'buyer',
+              action: 'chat.postMessage',
+              service_id: 'slack',
+              outcome: 'success',
+              timestamp: { wall_time: '', world_time: '', tick: 0 },
+              input_data: { channel_id: 'C1', text: 'hello from report' },
+              response_body: { ok: true, message: { text: 'hello from report' } },
+            },
+          ],
+          total: 1,
+        }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Chat' }));
+    await waitFor(() => {
+      expect(screen.getByText('hello from report')).toBeInTheDocument();
+    });
+  });
+
+  it('renders Chat empty state when no chat events', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/v1/runs/:id/events', () =>
+        HttpResponse.json({ events: [], total: 0 }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Chat' }));
+    await waitFor(() => {
+      expect(screen.getByText(/No chat messages yet/i)).toBeInTheDocument();
+    });
+  });
+
+  it('respects ?tab=chat URL parameter', async () => {
+    server.use(
+      http.get('/api/v1/runs/:id/events', () =>
+        HttpResponse.json({
+          events: [
+            {
+              event_type: 'world.chat.postMessage',
+              event_id: 'e1',
+              actor_id: 'buyer-1',
+              actor_role: 'buyer',
+              action: 'chat.postMessage',
+              service_id: 'slack',
+              outcome: 'success',
+              timestamp: { wall_time: '', world_time: '', tick: 0 },
+              input_data: { channel_id: 'C1', text: 'direct-url-chat' },
+              response_body: { ok: true, message: { text: 'direct-url-chat' } },
+            },
+          ],
+          total: 1,
+        }),
+      ),
+    );
+    renderPage('run-test-001', '?tab=chat');
+    await waitFor(() => {
+      expect(screen.getByText('direct-url-chat')).toBeInTheDocument();
+    });
+  });
+
+  it('Chat tab renders actors as non-clickable spans (no Inspector in report)', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/v1/runs/:id/events', () =>
+        HttpResponse.json({
+          events: [
+            {
+              event_type: 'world.chat.postMessage',
+              event_id: 'e1',
+              actor_id: 'buyer-xyz',
+              actor_role: 'buyer',
+              action: 'chat.postMessage',
+              service_id: 'slack',
+              outcome: 'success',
+              timestamp: { wall_time: '', world_time: '', tick: 0 },
+              input_data: { channel_id: 'C1', text: 'msg' },
+              response_body: { ok: true, message: { text: 'msg' } },
+            },
+          ],
+          total: 1,
+        }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Chat' }));
+    await waitFor(() => {
+      // When onSelectActor is absent (Run Report), the avatar is rendered
+      // as a <div> (not a <button>) with aria-label absent.
+      // There should be no "View buyer-xyz" button anywhere.
+      expect(screen.queryByRole('button', { name: /View buyer-xyz/ })).toBeNull();
+      // But the actor is still discoverable by title attribute
+      const elementsWithTitle = screen.getAllByTitle('buyer-xyz');
+      expect(elementsWithTitle.length).toBeGreaterThan(0);
+      elementsWithTitle.forEach((el) => {
+        expect(el.tagName).not.toBe('BUTTON');
+      });
+    });
+  });
 });
