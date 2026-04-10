@@ -29,8 +29,14 @@ logger = logging.getLogger(__name__)
 # Message patterns — agents must use these exact formats
 # ---------------------------------------------------------------------------
 
-PROPOSAL_RE = re.compile(r"PROPOSAL:\s*(\{.*\})", re.DOTALL)
-COUNTER_RE = re.compile(r"COUNTER:\s*(\{.*\})", re.DOTALL)
+# Non-greedy flat-JSON capture: `[^{}]*` matches any run of characters that
+# are NOT braces, so we grab exactly one flat `{...}` object and ignore any
+# braces that might appear in surrounding natural-language preamble or
+# postamble. Negotiation terms are always flat dicts (price, delivery_weeks,
+# payment_days, warranty_months); if a future game needs nested JSON in
+# terms, swap to a proper balanced-brace scanner.
+PROPOSAL_RE = re.compile(r"PROPOSAL:\s*(\{[^{}]*\})", re.DOTALL)
+COUNTER_RE = re.compile(r"COUNTER:\s*(\{[^{}]*\})", re.DOTALL)
 ACCEPT_RE = re.compile(r"ACCEPT:\s*([\w-]+)")
 REJECT_RE = re.compile(r"REJECT:\s*([\w-]+)")
 

@@ -206,6 +206,86 @@ class TestMessageParsing:
         assert len(messages) == 1
         assert messages[0].terms == {"price": 95}
 
+    def test_proposal_with_natural_language_preamble(self):
+        """A first-person preamble before PROPOSAL: is captured correctly."""
+        evaluator = NegotiationEvaluator()
+        events = [
+            _make_chat_event(
+                "buyer-abc",
+                "Thanks for joining. Here's my opening offer. "
+                'PROPOSAL: {"price": 80, "delivery_weeks": 3}',
+            )
+        ]
+        messages = evaluator._parse_round_messages(events)
+        assert len(messages) == 1
+        assert messages[0].msg_type == "proposal"
+        assert messages[0].terms == {"price": 80, "delivery_weeks": 3}
+
+    def test_counter_with_natural_language_preamble(self):
+        """A first-person preamble before COUNTER: is captured correctly."""
+        evaluator = NegotiationEvaluator()
+        events = [
+            _make_chat_event(
+                "supplier-xyz",
+                "I can meet you halfway if you can move on delivery. "
+                'COUNTER: {"price": 95, "delivery_weeks": 5}',
+            )
+        ]
+        messages = evaluator._parse_round_messages(events)
+        assert len(messages) == 1
+        assert messages[0].msg_type == "counter"
+        assert messages[0].terms == {"price": 95, "delivery_weeks": 5}
+
+    def test_proposal_with_natural_language_postamble(self):
+        """Text after the structured line (incl. trailing period) still parses."""
+        evaluator = NegotiationEvaluator()
+        events = [
+            _make_chat_event(
+                "buyer-abc",
+                'PROPOSAL: {"price": 80}. Let me know what you think.',
+            )
+        ]
+        messages = evaluator._parse_round_messages(events)
+        assert len(messages) == 1
+        assert messages[0].msg_type == "proposal"
+        assert messages[0].terms == {"price": 80}
+
+    def test_proposal_preamble_with_parenthesis_punctuation(self):
+        """Preamble with parentheses or other punctuation does not confuse the parser.
+
+        Regression guard for the greedy-regex bug: under the old
+        ``\\{.*\\}`` DOTALL pattern, non-brace punctuation wasn't a
+        problem on its own, but any brace-like noise in the preamble
+        would extend the capture. The new ``[^{}]*`` bound stops at
+        the next brace, so preamble punctuation is always safe.
+        """
+        evaluator = NegotiationEvaluator()
+        events = [
+            _make_chat_event(
+                "buyer-abc",
+                "Looking at Q3 (tight quarter, frankly). Here is my number. "
+                'PROPOSAL: {"price": 80, "delivery_weeks": 3}',
+            )
+        ]
+        messages = evaluator._parse_round_messages(events)
+        assert len(messages) == 1
+        assert messages[0].terms == {"price": 80, "delivery_weeks": 3}
+
+    def test_proposal_with_preamble_and_postamble(self):
+        """Preamble + structured + postamble all in one message."""
+        evaluator = NegotiationEvaluator()
+        events = [
+            _make_chat_event(
+                "buyer-abc",
+                "Thanks for the quick reply. Here's my counter: "
+                'PROPOSAL: {"price": 85}. Hope we can close this today.',
+            )
+        ]
+        messages = evaluator._parse_round_messages(events)
+        assert len(messages) == 1
+        assert messages[0].msg_type == "proposal"
+        assert messages[0].terms == {"price": 85}
+
     def test_empty_events(self):
         evaluator = NegotiationEvaluator()
         messages = evaluator._parse_round_messages([])

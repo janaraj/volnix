@@ -157,6 +157,10 @@ class ActorPromptBuilder:
                 "Choose ONE action or 'do_nothing'. Respond with JSON.\n"
                 "For messages: only provide `text` in payload — the system "
                 "auto-fills `channel_id`.\n"
+                "The `text` of a message is VISIBLE to other participants — "
+                "write it in character, speaking directly to the recipient. "
+                "Put private planning or tactical reasoning in the `reasoning` "
+                "field of your tool call, not in the message text.\n"
                 "Use `intended_for` to address teammates by role."
             )
 
