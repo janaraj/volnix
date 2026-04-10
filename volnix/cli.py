@@ -993,7 +993,9 @@ async def _serve_impl(
 
                                 try:
                                     await volnix.end_run(_ERId2(_active_run_id[0]))
-                                    console.print("  [green]Run completed + report generated[/green]")
+                                    console.print(
+                                        "  [green]Run completed + report generated[/green]"
+                                    )
                                 except Exception as exc:
                                     console.print(f"  [red]Run completion failed: {exc}[/red]")
                     except Exception as exc:

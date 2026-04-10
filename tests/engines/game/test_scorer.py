@@ -228,9 +228,7 @@ class TestGameOwnerIdScoring:
         )
         config = ScoringConfig(
             metrics=[
-                ScoringMetric(
-                    name="value", source="state", entity_type="account", field="equity"
-                ),
+                ScoringMetric(name="value", source="state", entity_type="account", field="equity"),
             ],
         )
         scorer = GameScorer(config)
@@ -241,14 +239,10 @@ class TestGameOwnerIdScoring:
     async def test_fallback_to_id_matching(self):
         """Without game_owner_id, falls back to id/owner_id matching."""
         mock_state = AsyncMock()
-        mock_state.query_entities = AsyncMock(
-            return_value=[{"id": "p1", "equity": 50000.0}]
-        )
+        mock_state.query_entities = AsyncMock(return_value=[{"id": "p1", "equity": 50000.0}])
         config = ScoringConfig(
             metrics=[
-                ScoringMetric(
-                    name="value", source="state", entity_type="account", field="equity"
-                ),
+                ScoringMetric(name="value", source="state", entity_type="account", field="equity"),
             ],
         )
         scorer = GameScorer(config)
@@ -283,14 +277,14 @@ class TestGameOwnerIdScoring:
         )
         config = ScoringConfig(
             metrics=[
-                ScoringMetric(
-                    name="value", source="state", entity_type="account", field="equity"
-                ),
+                ScoringMetric(name="value", source="state", entity_type="account", field="equity"),
             ],
         )
         scorer = GameScorer(config)
         scores = await scorer.compute_scores(
-            ["p1"], mock_state, [],
+            ["p1"],
+            mock_state,
+            [],
             resolved_entity_types={"account": "alpaca_account"},
         )
         assert scores["p1"]["value"] == 200000.0

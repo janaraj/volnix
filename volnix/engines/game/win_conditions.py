@@ -160,9 +160,7 @@ class WinConditionEvaluator:
         if handlers is not None:
             self._handlers: dict[str, WinConditionHandler] = dict(handlers)
         else:
-            self._handlers = {
-                name: cls() for name, cls in WIN_CONDITION_HANDLER_REGISTRY.items()
-            }
+            self._handlers = {name: cls() for name, cls in WIN_CONDITION_HANDLER_REGISTRY.items()}
 
     def register_handler(self, name: str, handler: WinConditionHandler) -> None:
         """Register a custom win condition handler at runtime."""
@@ -188,9 +186,7 @@ class WinConditionEvaluator:
     ) -> WinResult | None:
         handler = self._handlers.get(condition.type)
         if handler is None:
-            logger.warning(
-                "No handler registered for condition type '%s'", condition.type
-            )
+            logger.warning("No handler registered for condition type '%s'", condition.type)
             return None
         ctx = WinConditionContext(
             condition=condition,

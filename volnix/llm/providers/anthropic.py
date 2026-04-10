@@ -89,16 +89,12 @@ def _build_anthropic_messages(
                 raw_args = fn.get("arguments", "") or "{}"
                 try:
                     parsed_input = (
-                        json.loads(raw_args)
-                        if isinstance(raw_args, str)
-                        else dict(raw_args)
+                        json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
                     )
                     if not isinstance(parsed_input, dict):
                         parsed_input = {}
                 except (json.JSONDecodeError, ValueError):
-                    logger.debug(
-                        "Malformed tool arguments for Anthropic: %.80s", raw_args
-                    )
+                    logger.debug("Malformed tool arguments for Anthropic: %.80s", raw_args)
                     parsed_input = {}
                 blocks.append(
                     {
@@ -213,12 +209,8 @@ class AnthropicProvider(LLMProvider):
                 # Convert OpenAI-style messages to Anthropic content blocks.
                 # This is where tool_use / tool_result / thinking blocks
                 # are built — the raw message dicts never reach the SDK.
-                converted_system, converted_msgs = _build_anthropic_messages(
-                    request.messages
-                )
-                msg_system = (
-                    converted_system if converted_system is not None else system_param
-                )
+                converted_system, converted_msgs = _build_anthropic_messages(request.messages)
+                msg_system = converted_system if converted_system is not None else system_param
                 msg_list = converted_msgs or [{"role": "user", "content": ""}]
             else:
                 msg_system = system_param

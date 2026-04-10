@@ -20,9 +20,7 @@ from volnix.game.evaluators.negotiation import (
 # ---------------------------------------------------------------------------
 
 
-def _make_move_event(
-    actor_id: str, action: str, **payload
-) -> SimpleNamespace:
+def _make_move_event(actor_id: str, action: str, **payload) -> SimpleNamespace:
     """Build a committed game-action event as the runner would reconstruct it.
 
     Mirrors the SimpleNamespace shape from
@@ -36,9 +34,7 @@ def _make_move_event(
     )
 
 
-def _make_chat_event(
-    actor_id: str, text: str, channel_id: str = "CH001"
-) -> SimpleNamespace:
+def _make_chat_event(actor_id: str, text: str, channel_id: str = "CH001") -> SimpleNamespace:
     """Build a chat.postMessage event (used only to verify they're ignored)."""
     return SimpleNamespace(
         event_type="world.chat.postMessage",
@@ -262,9 +258,7 @@ class TestMoveParsing:
 
     def test_parse_accept_event(self):
         evaluator = NegotiationEvaluator()
-        events = [
-            _make_move_event("buyer-abc", "negotiate_accept", deal_id="deal-001")
-        ]
+        events = [_make_move_event("buyer-abc", "negotiate_accept", deal_id="deal-001")]
         moves = evaluator._parse_round_moves(events)
         assert len(moves) == 1
         assert moves[0].msg_type == "accept"
@@ -273,9 +267,7 @@ class TestMoveParsing:
 
     def test_parse_reject_event(self):
         evaluator = NegotiationEvaluator()
-        events = [
-            _make_move_event("supplier-xyz", "negotiate_reject", deal_id="deal-001")
-        ]
+        events = [_make_move_event("supplier-xyz", "negotiate_reject", deal_id="deal-001")]
         moves = evaluator._parse_round_moves(events)
         assert len(moves) == 1
         assert moves[0].msg_type == "reject"
@@ -296,18 +288,14 @@ class TestMoveParsing:
     def test_ignore_propose_without_deal_id(self):
         """Malformed payload (no deal_id) is dropped gracefully."""
         evaluator = NegotiationEvaluator()
-        events = [
-            _make_move_event("buyer-abc", "negotiate_propose", price=80)
-        ]
+        events = [_make_move_event("buyer-abc", "negotiate_propose", price=80)]
         moves = evaluator._parse_round_moves(events)
         assert moves == []
 
     def test_ignore_propose_without_terms(self):
         """Malformed payload (no term fields) is dropped gracefully."""
         evaluator = NegotiationEvaluator()
-        events = [
-            _make_move_event("buyer-abc", "negotiate_propose", deal_id="deal-001")
-        ]
+        events = [_make_move_event("buyer-abc", "negotiate_propose", deal_id="deal-001")]
         moves = evaluator._parse_round_moves(events)
         assert moves == []
 
@@ -496,9 +484,7 @@ class TestEvaluatorIntegration:
             "warranty_months": 12,
         }
 
-        update_calls = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"
-        ]
+        update_calls = [c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"]
         assert len(update_calls) >= 1
         assert update_calls[0][0][2]["status"] == "proposed"
 
@@ -523,9 +509,7 @@ class TestEvaluatorIntegration:
         evaluator = NegotiationEvaluator()
         await evaluator.evaluate(state, events, round_state, {})
 
-        update_calls = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"
-        ]
+        update_calls = [c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"]
         assert len(update_calls) >= 1
         assert update_calls[0][0][2]["status"] == "countered"
 
@@ -540,9 +524,7 @@ class TestEvaluatorIntegration:
             targets=_default_targets(),
             scorecards=_default_scorecards(),
         )
-        events = [
-            _make_move_event("buyer-abc", "negotiate_accept", deal_id="deal-001")
-        ]
+        events = [_make_move_event("buyer-abc", "negotiate_accept", deal_id="deal-001")]
         round_state = RoundState(current_round=3, total_rounds=8)
         player_scores = {
             "buyer-abc": PlayerScore(actor_id="buyer-abc"),
@@ -552,14 +534,10 @@ class TestEvaluatorIntegration:
         evaluator = NegotiationEvaluator()
         await evaluator.evaluate(state, events, round_state, player_scores)
 
-        deal_updates = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"
-        ]
+        deal_updates = [c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"]
         assert any(c[0][2].get("status") == "accepted" for c in deal_updates)
 
-        sc_updates = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"
-        ]
+        sc_updates = [c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"]
         assert len(sc_updates) == 2
         for call in sc_updates:
             fields = call[0][2]
@@ -571,17 +549,13 @@ class TestEvaluatorIntegration:
         deal["status"] = "countered"
         store = _make_mock_store()
         state = _make_mock_state(store=store, deals=[deal])
-        events = [
-            _make_move_event("buyer-abc", "negotiate_reject", deal_id="deal-001")
-        ]
+        events = [_make_move_event("buyer-abc", "negotiate_reject", deal_id="deal-001")]
         round_state = RoundState(current_round=5, total_rounds=8)
 
         evaluator = NegotiationEvaluator()
         await evaluator.evaluate(state, events, round_state, {})
 
-        update_calls = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"
-        ]
+        update_calls = [c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"]
         assert any(c[0][2].get("status") == "rejected" for c in update_calls)
 
     async def test_no_messages_is_noop(self):
@@ -612,9 +586,7 @@ class TestEvaluatorIntegration:
         evaluator = NegotiationEvaluator()
         await evaluator.evaluate(state, [], round_state, player_scores)
 
-        sc_updates = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"
-        ]
+        sc_updates = [c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"]
         assert len(sc_updates) == 2
         for call in sc_updates:
             assert call[0][2]["total_points"] == 25.0
@@ -709,15 +681,11 @@ class TestEvaluatorIntegration:
         await evaluator.evaluate(state, events, round_state, player_scores)
 
         # Deal should be accepted (terms available after reload)
-        deal_updates = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"
-        ]
+        deal_updates = [c for c in store.update.call_args_list if c[0][0] == "negotiation_deal"]
         assert any(c[0][2].get("status") == "accepted" for c in deal_updates)
 
         # Both scorecards should be updated
-        sc_updates = [
-            c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"
-        ]
+        sc_updates = [c for c in store.update.call_args_list if c[0][0] == "negotiation_scorecard"]
         assert len(sc_updates) == 2
         for call in sc_updates:
             assert call[0][2]["total_points"] > 0

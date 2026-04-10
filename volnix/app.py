@@ -1081,9 +1081,7 @@ class VolnixApp:
                     llm_thinking_enabled=bool(
                         agent_def.metadata.get("llm_thinking_enabled", False)
                     ),
-                    llm_thinking_budget_tokens=agent_def.metadata.get(
-                        "llm_thinking_budget_tokens"
-                    ),
+                    llm_thinking_budget_tokens=agent_def.metadata.get("llm_thinking_budget_tokens"),
                 )
                 actor_states.append(state)
 

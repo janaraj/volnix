@@ -352,8 +352,12 @@ async def handle_create_order(
         "time_in_force": tif,
         "limit_price": float(limit_price) if limit_price is not None else None,
         "stop_price": float(stop_price) if stop_price is not None else None,
-        "trail_price": float(input_data["trail_price"]) if input_data.get("trail_price") is not None else None,
-        "trail_percent": float(input_data["trail_percent"]) if input_data.get("trail_percent") is not None else None,
+        "trail_price": float(input_data["trail_price"])
+        if input_data.get("trail_price") is not None
+        else None,
+        "trail_percent": float(input_data["trail_percent"])
+        if input_data.get("trail_percent") is not None
+        else None,
         "status": new_status,
         "order_class": "simple",
     }
@@ -1105,7 +1109,9 @@ async def handle_create_news(
         # Internal fields (stripped by handle_get_news before serving)
         "factual_accuracy": input_data.get("factual_accuracy", 1.0),
         "sentiment_bias": input_data.get("sentiment_bias", 0.0),
-        "market_impact_expected": float(input_data["market_impact_expected"]) if input_data.get("market_impact_expected") is not None else 0.0,
+        "market_impact_expected": float(input_data["market_impact_expected"])
+        if input_data.get("market_impact_expected") is not None
+        else 0.0,
     }
     delta = StateDelta(
         entity_type="alpaca_news",

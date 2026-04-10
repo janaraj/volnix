@@ -480,9 +480,7 @@ class TestThoughtSignatureRoundTrip:
                             "id": "c1",
                             "type": "function",
                             "function": {"name": "f", "arguments": "{}"},
-                            "provider_metadata": {
-                                "thought_signature": "!!!not-valid-base64!!!"
-                            },
+                            "provider_metadata": {"thought_signature": "!!!not-valid-base64!!!"},
                         }
                     ],
                 },

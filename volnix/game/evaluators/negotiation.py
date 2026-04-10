@@ -138,9 +138,7 @@ NEGOTIATION_TOOLS: list[ToolDefinition] = [
 ]
 
 # Action-type set for fast membership checks in the evaluator
-_NEGOTIATE_PROPOSAL_ACTIONS: frozenset[str] = frozenset(
-    {"negotiate_propose", "negotiate_counter"}
-)
+_NEGOTIATE_PROPOSAL_ACTIONS: frozenset[str] = frozenset({"negotiate_propose", "negotiate_counter"})
 _NEGOTIATE_ACCEPT_ACTION: str = "negotiate_accept"
 _NEGOTIATE_REJECT_ACTION: str = "negotiate_reject"
 
@@ -233,9 +231,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
         # Reload deals to pick up term updates from proposals/counters
         try:
-            deals = await self._state_engine.query_entities(
-                entity_type="negotiation_deal"
-            )
+            deals = await self._state_engine.query_entities(entity_type="negotiation_deal")
         except Exception as exc:
             logger.warning("Failed to reload deals after proposals: %s", exc)
 
@@ -295,9 +291,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
                 moves.append(
                     ParsedMove(
                         actor_id=actor_id,
-                        msg_type=(
-                            "proposal" if action == "negotiate_propose" else "counter"
-                        ),
+                        msg_type=("proposal" if action == "negotiate_propose" else "counter"),
                         deal_id=deal_id,
                         terms=terms,
                     )
@@ -305,19 +299,11 @@ class NegotiationEvaluator(BaseRoundEvaluator):
             elif action == _NEGOTIATE_ACCEPT_ACTION:
                 deal_id = str(payload.get("deal_id") or "")
                 if deal_id:
-                    moves.append(
-                        ParsedMove(
-                            actor_id=actor_id, msg_type="accept", deal_id=deal_id
-                        )
-                    )
+                    moves.append(ParsedMove(actor_id=actor_id, msg_type="accept", deal_id=deal_id))
             elif action == _NEGOTIATE_REJECT_ACTION:
                 deal_id = str(payload.get("deal_id") or "")
                 if deal_id:
-                    moves.append(
-                        ParsedMove(
-                            actor_id=actor_id, msg_type="reject", deal_id=deal_id
-                        )
-                    )
+                    moves.append(ParsedMove(actor_id=actor_id, msg_type="reject", deal_id=deal_id))
         return moves
 
     # -- Proposal / Counter ------------------------------------------------
@@ -408,9 +394,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
         # Load targets for both parties
         try:
-            targets = await self._state_engine.query_entities(
-                entity_type="negotiation_target"
-            )
+            targets = await self._state_engine.query_entities(entity_type="negotiation_target")
         except Exception as exc:
             logger.warning("Failed to query negotiation_target entities: %s", exc)
             return
@@ -424,9 +408,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         )
 
         all_player_ids = list(player_scores.keys())
-        target_player_map = self._resolve_targets_via_deals(
-            deal_targets, [deal], all_player_ids
-        )
+        target_player_map = self._resolve_targets_via_deals(deal_targets, [deal], all_player_ids)
         for player_id, target in target_player_map.items():
             deal_score = self._compute_deal_score(agreed_terms, target)
             total_points = deal_score + efficiency_bonus
@@ -487,18 +469,14 @@ class NegotiationEvaluator(BaseRoundEvaluator):
             return
 
         try:
-            targets = await self._state_engine.query_entities(
-                entity_type="negotiation_target"
-            )
+            targets = await self._state_engine.query_entities(entity_type="negotiation_target")
         except Exception:
             return
 
         # Resolve targets to players via deal parties fallback
         all_player_ids = list(player_scores.keys())
         try:
-            deals = await self._state_engine.query_entities(
-                entity_type="negotiation_deal"
-            )
+            deals = await self._state_engine.query_entities(entity_type="negotiation_deal")
         except Exception:
             deals = []
         target_map = self._resolve_targets_via_deals(targets, deals, all_player_ids)
@@ -526,16 +504,12 @@ class NegotiationEvaluator(BaseRoundEvaluator):
                     total_points=batna,
                     batna_applied=True,
                 )
-                logger.info(
-                    "[NEGOTIATION] %s gets BATNA score %.1f (no deal)", player_id, batna
-                )
+                logger.info("[NEGOTIATION] %s gets BATNA score %.1f (no deal)", player_id, batna)
 
     # -- Deal score computation --------------------------------------------
 
     @staticmethod
-    def _compute_deal_score(
-        actual_terms: dict[str, Any], target: dict[str, Any]
-    ) -> float:
+    def _compute_deal_score(actual_terms: dict[str, Any], target: dict[str, Any]) -> float:
         """Compute how close agreed terms are to a player's ideal.
 
         Returns 0-100. Uses weighted distance normalized by term ranges.
@@ -589,11 +563,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
             return
 
         sc = next(
-            (
-                s
-                for s in scorecards
-                if self._resolve_player_for_entity(s, [player_id]) == player_id
-            ),
+            (s for s in scorecards if self._resolve_player_for_entity(s, [player_id]) == player_id),
             None,
         )
         if sc is None:
@@ -605,9 +575,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
     # -- Deal lookup helpers -----------------------------------------------
 
     @staticmethod
-    def _find_active_deal(
-        deals: list[dict[str, Any]], actor_id: str
-    ) -> dict[str, Any] | None:
+    def _find_active_deal(deals: list[dict[str, Any]], actor_id: str) -> dict[str, Any] | None:
         """Find the active (non-terminal) deal involving this actor."""
         terminal = {"accepted", "rejected", "expired"}
         for deal in deals:
@@ -625,9 +593,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         return None
 
     @staticmethod
-    def _find_deal_by_id(
-        deals: list[dict[str, Any]], deal_id: str
-    ) -> dict[str, Any] | None:
+    def _find_deal_by_id(deals: list[dict[str, Any]], deal_id: str) -> dict[str, Any] | None:
         """Find a deal by its ID."""
         if not deal_id:
             return None
@@ -638,9 +604,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
     # -- Deliverable summary -----------------------------------------------
 
-    async def build_deliverable_extras(
-        self, state_engine: Any
-    ) -> dict[str, Any]:
+    async def build_deliverable_extras(self, state_engine: Any) -> dict[str, Any]:
         """Summarize negotiation deals for the run deliverable.
 
         Emits a ``deals`` array of flat-primitive objects so the frontend
@@ -654,9 +618,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
         if state_engine is None:
             return {}
         try:
-            deals = await state_engine.query_entities(
-                entity_type="negotiation_deal"
-            )
+            deals = await state_engine.query_entities(entity_type="negotiation_deal")
         except Exception as exc:
             logger.warning("build_deliverable_extras: query failed — %s", exc)
             return {}
@@ -670,9 +632,7 @@ class NegotiationEvaluator(BaseRoundEvaluator):
             status = (deal.get("status") or "unknown").upper()
             terms = deal.get("terms") or {}
             terms_str = (
-                ", ".join(f"{k}={v}" for k, v in terms.items())
-                if terms
-                else "no terms proposed"
+                ", ".join(f"{k}={v}" for k, v in terms.items()) if terms else "no terms proposed"
             )
 
             entry: dict[str, Any] = {

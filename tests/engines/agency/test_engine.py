@@ -1569,9 +1569,7 @@ class TestRegisterGameTools:
         engine.register_game_tools([tool_v1])
         engine.register_game_tools([tool_v2])
 
-        matching = [
-            t for t in engine._tool_definitions if t.name == "negotiate_accept"
-        ]
+        matching = [t for t in engine._tool_definitions if t.name == "negotiate_accept"]
         assert len(matching) == 1
         assert matching[0].description == "v2"
 

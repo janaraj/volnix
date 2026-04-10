@@ -128,9 +128,7 @@ class OpenAICompatibleProvider(LLMProvider):
         start = time.monotonic()
         try:
             if request.messages:
-                messages: list[dict[str, Any]] = _sanitize_messages_for_openai(
-                    request.messages
-                )
+                messages: list[dict[str, Any]] = _sanitize_messages_for_openai(request.messages)
             else:
                 messages: list[dict[str, Any]] = []
                 if request.system_prompt:

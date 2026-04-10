@@ -111,9 +111,7 @@ class RoundEvaluator(Protocol):
         player_scores: dict[str, PlayerScore],
     ) -> None: ...
 
-    async def build_deliverable_extras(
-        self, state_engine: Any
-    ) -> dict[str, Any]:
+    async def build_deliverable_extras(self, state_engine: Any) -> dict[str, Any]:
         """Return game-type-specific data to merge into the run deliverable.
 
         Called once by the runner after ``complete_game()``. Evaluators may

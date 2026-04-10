@@ -588,12 +588,8 @@ class TestBuildDeliverable:
 
         deliverable = GameRunner._build_deliverable(result)
 
-        eliminated_entry = next(
-            e for e in deliverable["standings"] if e["actor"] == "p1"
-        )
-        alive_entry = next(
-            e for e in deliverable["standings"] if e["actor"] == "p2"
-        )
+        eliminated_entry = next(e for e in deliverable["standings"] if e["actor"] == "p1")
+        alive_entry = next(e for e in deliverable["standings"] if e["actor"] == "p2")
         assert eliminated_entry["eliminated"] is True
         assert "eliminated" not in alive_entry
 

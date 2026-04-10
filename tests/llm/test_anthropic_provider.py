@@ -38,9 +38,7 @@ class TestBuildAnthropicMessages:
 
     def test_system_extracted_to_first_return(self):
         """System messages → returned as system_prompt, not in messages list."""
-        system, msgs = _build_anthropic_messages(
-            [{"role": "system", "content": "be helpful"}]
-        )
+        system, msgs = _build_anthropic_messages([{"role": "system", "content": "be helpful"}])
         assert system == "be helpful"
         assert msgs == []
 
@@ -175,9 +173,7 @@ class TestBuildAnthropicMessages:
                         }
                     ],
                     "_provider_metadata": {
-                        "thinking_blocks": [
-                            {"type": "redacted_thinking", "data": "opaque-data"}
-                        ]
+                        "thinking_blocks": [{"type": "redacted_thinking", "data": "opaque-data"}]
                     },
                 }
             ]
@@ -542,9 +538,7 @@ class TestResponseBlockParser:
         assert resp.provider_metadata is None
 
     async def test_response_tool_use_block_populates_tool_calls(self):
-        tool_block = SimpleNamespace(
-            type="tool_use", id="c1", name="f", input={"x": 1}
-        )
+        tool_block = SimpleNamespace(type="tool_use", id="c1", name="f", input={"x": 1})
         provider = self._build_provider([tool_block])
         resp = await provider.generate(LLMRequest(user_content="hi"))
         assert resp.tool_calls is not None

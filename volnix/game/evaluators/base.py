@@ -28,9 +28,7 @@ class BaseRoundEvaluator:
         self._ledger: Any = None
         self._state_engine: Any = None
 
-    async def build_deliverable_extras(
-        self, state_engine: Any
-    ) -> dict[str, Any]:
+    async def build_deliverable_extras(self, state_engine: Any) -> dict[str, Any]:
         """Default: no extras. Override in subclasses to contribute summary data.
 
         Called by the runner after ``complete_game()`` to collect game-type-
@@ -88,9 +86,7 @@ class BaseRoundEvaluator:
             logger.warning("Failed to update %s/%s: %s", entity_type, entity_id, exc)
             return False
 
-        await self._record_mutation(
-            entity_type, entity_id, "update", before=previous, after=fields
-        )
+        await self._record_mutation(entity_type, entity_id, "update", before=previous, after=fields)
         return True
 
     async def _record_mutation(

@@ -105,9 +105,7 @@ class TestGameActionShortCircuit:
         result = await responder.execute(ctx)
 
         assert result.verdict == StepVerdict.ALLOW
-        assert call_count["n"] == 0, (
-            "pack_registry.has_pack should not be called for game actions"
-        )
+        assert call_count["n"] == 0, "pack_registry.has_pack should not be called for game actions"
 
     async def test_non_game_action_still_consults_packs(self):
         """Regression guard: non-game actions take the normal path."""
@@ -139,6 +137,4 @@ class TestGameActionShortCircuit:
             await responder.execute(ctx)
         except Exception:
             pass  # downstream dispatch may fail without full setup; that's ok
-        assert call_count["n"] >= 1, (
-            "pack_registry.has_pack should be called for non-game actions"
-        )
+        assert call_count["n"] >= 1, "pack_registry.has_pack should be called for non-game actions"

@@ -237,9 +237,7 @@ class GameRunner:
         # predate this contract.
         extras: dict[str, Any] = {}
         if self._round_evaluator is not None:
-            extras_fn = getattr(
-                self._round_evaluator, "build_deliverable_extras", None
-            )
+            extras_fn = getattr(self._round_evaluator, "build_deliverable_extras", None)
             if extras_fn is not None:
                 try:
                     state = (
@@ -335,7 +333,13 @@ class GameRunner:
             round_num = self._game.round_state.current_round
             total_rounds = self._game.round_state.total_rounds
             standings_summary = self._format_standings_brief()
-            logger.info("[GAME] Activating %s round %d/%d (max %d actions)", player_id, round_num, total_rounds, max_actions)
+            logger.info(
+                "[GAME] Activating %s round %d/%d (max %d actions)",
+                player_id,
+                round_num,
+                total_rounds,
+                max_actions,
+            )
             envelopes = await self._agency.activate_for_game_turn(
                 ActorId(player_id),
                 round_number=round_num,
@@ -382,7 +386,10 @@ class GameRunner:
         if not scores:
             return ""
         ranked = sorted(scores.values(), key=lambda s: s.total_score, reverse=True)
-        parts = [f"#{i+1} {s.actor_id.split('-')[0]}: {s.total_score:.0f}" for i, s in enumerate(ranked)]
+        parts = [
+            f"#{i + 1} {s.actor_id.split('-')[0]}: {s.total_score:.0f}"
+            for i, s in enumerate(ranked)
+        ]
         return " | ".join(parts)
 
     async def _regenerate_resources(self, definition: GameDefinition) -> None:

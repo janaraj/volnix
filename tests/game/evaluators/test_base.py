@@ -230,9 +230,7 @@ class TestResolveTargetsViaDeals:
     def test_no_matching_parties(self):
         targets = [{"game_owner_id": "X", "deal_id": "d1"}]
         deals = [{"id": "d1", "parties": ["unknown"]}]
-        result = BaseRoundEvaluator._resolve_targets_via_deals(
-            targets, deals, ["buyer-abc"]
-        )
+        result = BaseRoundEvaluator._resolve_targets_via_deals(targets, deals, ["buyer-abc"])
         assert result == {}
 
     def test_partial_match(self):

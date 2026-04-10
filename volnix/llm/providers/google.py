@@ -239,9 +239,7 @@ class GoogleNativeProvider(LLMProvider):
 
         return contents, "\n\n".join(system_parts)
 
-    def _resolve_contents_and_config(
-        self, request: LLMRequest, config: dict, cached: bool
-    ) -> Any:
+    def _resolve_contents_and_config(self, request: LLMRequest, config: dict, cached: bool) -> Any:
         """Resolve the generate_content `contents` param and update config.
 
         Single source of truth for what to pass as `contents`. Handles both
@@ -258,9 +256,7 @@ class GoogleNativeProvider(LLMProvider):
             or a list of Content objects (multi-turn).
         """
         if request.messages:
-            contents_list, sys_instr = self._build_contents_from_messages(
-                request.messages
-            )
+            contents_list, sys_instr = self._build_contents_from_messages(request.messages)
             # Skip setting system_instruction when cached (cache already has it)
             if sys_instr and not cached:
                 config["system_instruction"] = sys_instr

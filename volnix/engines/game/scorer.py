@@ -39,16 +39,12 @@ class StateScoringProvider:
                 return 0.0
 
             # Primary: match by game_owner_id (set by game engine at start)
-            player_entities = [
-                e for e in entities if e.get("game_owner_id") == ctx.player_id
-            ]
+            player_entities = [e for e in entities if e.get("game_owner_id") == ctx.player_id]
 
             # Fallback: check owner_id / actor_id / id fields
             if not player_entities:
                 for entity in entities:
-                    owner = entity.get(
-                        "owner_id", entity.get("actor_id", entity.get("id", ""))
-                    )
+                    owner = entity.get("owner_id", entity.get("actor_id", entity.get("id", "")))
                     if owner == ctx.player_id or entity.get("id") == ctx.player_id:
                         player_entities.append(entity)
 
@@ -88,27 +84,20 @@ class EventsScoringProvider:
         if ctx.metric.aggregation == "count":
             return float(len(matching))
         elif ctx.metric.aggregation == "sum":
-            return sum(
-                float(getattr(e, "input_data", {}).get("amount", 0) or 0)
-                for e in matching
-            )
+            return sum(float(getattr(e, "input_data", {}).get("amount", 0) or 0) for e in matching)
         elif ctx.metric.aggregation == "max":
             vals = [
-                float(getattr(e, "input_data", {}).get(ctx.metric.field, 0) or 0)
-                for e in matching
+                float(getattr(e, "input_data", {}).get(ctx.metric.field, 0) or 0) for e in matching
             ]
             return max(vals) if vals else 0.0
         elif ctx.metric.aggregation == "min":
             vals = [
-                float(getattr(e, "input_data", {}).get(ctx.metric.field, 0) or 0)
-                for e in matching
+                float(getattr(e, "input_data", {}).get(ctx.metric.field, 0) or 0) for e in matching
             ]
             return min(vals) if vals else 0.0
         elif ctx.metric.aggregation == "last":
             if matching:
-                return float(
-                    getattr(matching[-1], "input_data", {}).get(ctx.metric.field, 0) or 0
-                )
+                return float(getattr(matching[-1], "input_data", {}).get(ctx.metric.field, 0) or 0)
         return 0.0
 
 
@@ -150,9 +139,7 @@ class GameScorer:
         if providers is not None:
             self._providers: dict[str, ScoringProvider] = dict(providers)
         else:
-            self._providers = {
-                name: cls() for name, cls in SCORING_PROVIDER_REGISTRY.items()
-            }
+            self._providers = {name: cls() for name, cls in SCORING_PROVIDER_REGISTRY.items()}
 
     @property
     def weights(self) -> dict[str, float]:
@@ -200,9 +187,7 @@ class GameScorer:
     ) -> float:
         provider = self._providers.get(metric.source)
         if provider is None:
-            logger.warning(
-                "No scoring provider registered for source '%s'", metric.source
-            )
+            logger.warning("No scoring provider registered for source '%s'", metric.source)
             return 0.0
         ctx = ScoringContext(
             player_id=player_id,

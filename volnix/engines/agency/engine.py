@@ -242,16 +242,12 @@ class AgencyEngine(BaseEngine):
         """
         for tool in tools:
             # Replace any existing entry with the same name (idempotent reload)
-            self._tool_definitions = [
-                t for t in self._tool_definitions if t.name != tool.name
-            ]
+            self._tool_definitions = [t for t in self._tool_definitions if t.name != tool.name]
             self._tool_definitions.append(tool)
             # Identity mapping: tool name == action type
             self._tool_name_map[tool.name] = tool.name
             self._tool_to_service[tool.name] = tool.service
-            logger.info(
-                "Registered game tool %s (service=%s)", tool.name, tool.service
-            )
+            logger.info("Registered game tool %s (service=%s)", tool.name, tool.service)
 
     def _get_tools_for_actor(self, actor_id: str) -> list[ToolDefinition]:
         """Filter tool definitions by actor's service permissions.
@@ -944,9 +940,7 @@ class AgencyEngine(BaseEngine):
                     model_override=actor.llm_model,
                     provider_override=actor.llm_provider,
                     thinking_enabled=actor.llm_thinking_enabled,
-                    thinking_budget_tokens=(
-                        actor.llm_thinking_budget_tokens or 2048
-                    ),
+                    thinking_budget_tokens=(actor.llm_thinking_budget_tokens or 2048),
                 )
                 response = await self._llm_router.route(
                     request,
@@ -998,9 +992,7 @@ class AgencyEngine(BaseEngine):
                             # echo them back on the next turn. Other providers
                             # strip the ``_provider_metadata`` key at their
                             # boundary — it never leaks to an unintended SDK.
-                            blocked_assistant_msg["_provider_metadata"] = (
-                                response.provider_metadata
-                            )
+                            blocked_assistant_msg["_provider_metadata"] = response.provider_metadata
                         messages.append(blocked_assistant_msg)
                         messages.append(
                             {
@@ -1041,9 +1033,7 @@ class AgencyEngine(BaseEngine):
                         # echo them back on the next turn. Other providers
                         # strip the ``_provider_metadata`` key at their
                         # boundary — it never leaks to an unintended SDK.
-                        success_assistant_msg["_provider_metadata"] = (
-                            response.provider_metadata
-                        )
+                        success_assistant_msg["_provider_metadata"] = response.provider_metadata
                     messages.append(success_assistant_msg)
                     messages.append(
                         {
