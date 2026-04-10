@@ -1,8 +1,10 @@
 # Games
 
-A **game** in Volnix is a special run mode where internal agents take **turns**, are **scored**, and a **winner** is declared. Games sit on top of the same world engine, the same 7-step pipeline, the same internal-agent infrastructure — but add round structure, structured move tools, win conditions, and a per-game-type evaluator that interprets each round.
+A **game** in Volnix is a run mode where agents take **turns**, are **scored**, and a **winner** is declared. Games sit on top of the same world engine, the same 7-step pipeline, the same internal-agent infrastructure — but add round structure, structured move tools, win conditions, and a per-game-type evaluator that interprets each round.
 
 Use a game when you want to evaluate agent behavior under structured competition (negotiation, auction, debate, trading) — anywhere outcomes can be scored and compared turn-by-turn.
+
+> **Player scope (today): internal agents only.** The game runner activates each player synchronously by calling `agency.activate_for_game_turn()` per turn. External (gateway) agents connect via MCP/REST and push actions asynchronously, so they don't have a turn-activation entry point yet. The structured tools, evaluator, scoring, and full governance pipeline are caller-agnostic — adding external players is a future enhancement (turn coordination + a per-turn endpoint with timeout fallback), not an architectural rework.
 
 ---
 

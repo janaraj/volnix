@@ -98,38 +98,6 @@ agents:
 
 See [docs/internal-agents.md](docs/internal-agents.md) for the complete guide.
 
-## Games
-
-Games are a special run mode where internal agents take **turns**, are **scored**, and a **winner** is declared. Players call **structured tools** the LLM provider validates natively (no regex parsing of chat messages), the round evaluator interprets each round, and the framework picks a winner via pluggable win conditions.
-
-Different players can run on different LLM providers — head-to-head Claude vs. Gemini vs. OpenAI in the same game.
-
-```yaml
-agents:
-  - role: buyer
-    llm:
-      model: claude-sonnet-4-6
-      provider: anthropic
-      thinking: { enabled: true, budget_tokens: 4096 }   # extended thinking
-    permissions: { read: [slack], write: [slack, game] }
-    budget: { api_calls: 30, spend_usd: 3 }
-
-  - role: supplier
-    llm:
-      model: gemini-3-flash-preview
-      provider: gemini
-    permissions: { read: [slack], write: [slack, game] }
-    budget: { api_calls: 30, spend_usd: 3 }
-```
-
-Adding a new game type (auction, debate, …) is a single-file plug-in: declare your structured tools, implement the evaluator, register it. The framework handles tool dispatch, multi-turn conversation, scoring, win conditions, and the deliverable.
-
-```bash
-volnix serve negotiation_competition --internal agents_negotiation --port 8080
-```
-
-See [docs/games.md](docs/games.md) for the complete guide.
-
 ## External Agents
 
 Connect any agent framework — CrewAI, PydanticAI, LangGraph, AutoGen, or plain HTTP. Your agent interacts with simulated services as if they were real. It doesn't know it's in a simulation.
@@ -155,6 +123,40 @@ async with agent:
 ```
 
 See [docs/agent-integration.md](docs/agent-integration.md) for the full guide.
+
+## Games
+
+Games are a run mode where agents take **turns**, are **scored**, and a **winner** is declared. Players call **structured tools** the LLM provider validates natively (no regex parsing of chat messages), a per-game-type evaluator interprets each round, and the framework picks a winner via pluggable win conditions.
+
+Different players can run on different LLM providers — head-to-head Claude vs. Gemini vs. OpenAI in the same game, with per-agent model selection and Claude extended thinking opt-in.
+
+```yaml
+agents:
+  - role: buyer
+    llm:
+      model: claude-sonnet-4-6
+      provider: anthropic
+      thinking: { enabled: true, budget_tokens: 4096 }   # extended thinking
+    permissions: { read: [slack], write: [slack, game] }
+    budget: { api_calls: 30, spend_usd: 3 }
+
+  - role: supplier
+    llm:
+      model: gemini-3-flash-preview
+      provider: gemini
+    permissions: { read: [slack], write: [slack, game] }
+    budget: { api_calls: 30, spend_usd: 3 }
+```
+
+Adding a new game type (auction, debate, …) is a single-file plug-in: declare your structured tools, implement the round evaluator, register it. The framework handles tool dispatch, multi-turn conversation, scoring, win conditions, and the deliverable.
+
+```bash
+volnix serve negotiation_competition --internal agents_negotiation --port 8080
+```
+
+> **Today, players must be internal agents.** The game runner activates each player synchronously through the agency engine on every turn — external (gateway) agents push actions asynchronously and don't have a turn-activation entry point yet. The structured tools, evaluator, scoring, and governance pipeline are all caller-agnostic, so adding external players is a future enhancement (turn coordination + per-turn endpoint), not an architectural rework.
+
+See [docs/games.md](docs/games.md) for the complete guide.
 
 ---
 
