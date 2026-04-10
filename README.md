@@ -98,6 +98,38 @@ agents:
 
 See [docs/internal-agents.md](docs/internal-agents.md) for the complete guide.
 
+## Games
+
+Games are a special run mode where internal agents take **turns**, are **scored**, and a **winner** is declared. Players call **structured tools** the LLM provider validates natively (no regex parsing of chat messages), the round evaluator interprets each round, and the framework picks a winner via pluggable win conditions.
+
+Different players can run on different LLM providers — head-to-head Claude vs. Gemini vs. OpenAI in the same game.
+
+```yaml
+agents:
+  - role: buyer
+    llm:
+      model: claude-sonnet-4-6
+      provider: anthropic
+      thinking: { enabled: true, budget_tokens: 4096 }   # extended thinking
+    permissions: { read: [slack], write: [slack, game] }
+    budget: { api_calls: 30, spend_usd: 3 }
+
+  - role: supplier
+    llm:
+      model: gemini-3-flash-preview
+      provider: gemini
+    permissions: { read: [slack], write: [slack, game] }
+    budget: { api_calls: 30, spend_usd: 3 }
+```
+
+Adding a new game type (auction, debate, …) is a single-file plug-in: declare your structured tools, implement the evaluator, register it. The framework handles tool dispatch, multi-turn conversation, scoring, win conditions, and the deliverable.
+
+```bash
+volnix serve negotiation_competition --internal agents_negotiation --port 8080
+```
+
+See [docs/games.md](docs/games.md) for the complete guide.
+
 ## External Agents
 
 Connect any agent framework — CrewAI, PydanticAI, LangGraph, AutoGen, or plain HTTP. Your agent interacts with simulated services as if they were real. It doesn't know it's in a simulation.
@@ -134,10 +166,11 @@ See [docs/agent-integration.md](docs/agent-integration.md) for the full guide.
 - **Reality dimensions** — tune information quality, reliability, social friction, complexity, and boundaries
 - **11 verified service packs** — Stripe, Zendesk, Slack, Gmail, GitHub, Calendar, Twitter, Reddit, Notion, Alpaca, Browser
 - **BYOSP** — bring any service; the compiler auto-resolves from API docs
-- **Multi-provider LLM** — Gemini, OpenAI, Anthropic, Ollama, vLLM, CLI tools
+- **Multi-provider LLM** — Gemini, OpenAI, Anthropic, Ollama, vLLM, CLI tools, with per-agent model + provider selection and Claude extended thinking opt-in
+- **Game framework** — turn-based agent contests (negotiation, …) with structured move tools, round evaluators, and pluggable win conditions; head-to-head across LLM providers
 - **Real-time dashboard** with event feed, scorecards, and agent timeline
 - **Causal graph** — every event traces back to its causes
-- **13 built-in blueprints** across support, finance, DevOps, research, security, and marketing
+- **13 built-in blueprints** across support, finance, DevOps, research, security, marketing, and games
 
 ## Use Cases
 
@@ -192,6 +225,7 @@ Live event streaming, governance scorecards, policy trigger logs, deliverable in
 | [Getting Started](docs/getting-started.md) | Installation, first run, connecting agents |
 | [Creating Worlds](docs/creating-worlds.md) | World YAML schema, reality dimensions, seeds |
 | [Internal Agents](docs/internal-agents.md) | Agent teams, lead lifecycle, deliverables |
+| [Games](docs/games.md) | Turn-based agent contests, structured moves, win conditions, evaluators |
 | [Agent Integration](docs/agent-integration.md) | MCP, REST, SDK, framework adapters |
 | [Blueprints Reference](docs/blueprints-reference.md) | Complete catalog of blueprints and pairings |
 | [Service Packs](docs/service-packs.md) | Verified packs, YAML profiles, BYOSP |

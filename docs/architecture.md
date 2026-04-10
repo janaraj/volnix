@@ -1,6 +1,6 @@
 # Architecture
 
-This document covers Volnix's architectural design: the two-half model, the 10 engines, the governance pipeline, and the key patterns that hold the system together.
+This document covers Volnix's architectural design: the two-half model, the 11 engines, the governance pipeline, and the key patterns that hold the system together.
 
 For the full design rules and enforcement mechanisms, see [DESIGN_PRINCIPLES.md](../DESIGN_PRINCIPLES.md).
 
@@ -38,7 +38,7 @@ The governance pipeline processes every agent action. Services return data as it
 
 ---
 
-## The 10 Engines
+## The 11 Engines
 
 Every engine inherits from `BaseEngine`, which provides lifecycle hooks and event bus integration. Engines communicate only through the event bus and typed protocols -- never by importing each other directly.
 
@@ -100,6 +100,10 @@ Translates between external protocols (MCP, HTTP REST, OpenAI function calling, 
 ### Report Generator (`engines/reporter/`)
 
 Produces governance scorecards, capability gap logs, causal traces, and counterfactual diffs. Scores are derived from events, not LLM judgment. Observes in two directions: world challenges presented to agents, and agent behavior within the world.
+
+### Game Engine (`engines/game/`)
+
+Adds turn-based contest semantics on top of the agency engine. Manages round lifecycle (`start_game` → per-round `start_round` → activate players → `end_round` → win condition checks → `complete_game`), per-player scores, and pluggable extension points: `ScoringProvider`, `WinConditionHandler`, `TurnProtocol`, and `RoundEvaluator` registries. Each game type (negotiation, …) plugs in by implementing the `RoundEvaluator` protocol — declaring its structured tools (e.g. `negotiate_propose`) and processing committed events at the end of each round to update game state and scores. Game tools share a single `service: "game"` namespace and flow through the same 7-step governance pipeline as any other action; the capability and responder steps short-circuit them with no external service simulation. See [docs/games.md](games.md).
 
 ---
 
