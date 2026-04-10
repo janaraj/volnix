@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -17,9 +17,56 @@ from typing import Any
 from volnix.core.types import ActorId, Timestamp
 from volnix.engines.game.definition import GameDefinition, GameResult, WinResult
 from volnix.engines.game.events import GameTurnEvent
+from volnix.engines.game.protocols import RoundEvaluator, TurnProtocol
 from volnix.game.turn_manager import TurnManager, TurnOrder
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Built-in turn protocol
+# ---------------------------------------------------------------------------
+
+
+class IndependentTurnProtocol:
+    """Default turn protocol — each player acts independently.
+
+    Supports both sequential (one at a time) and simultaneous
+    (asyncio.gather) execution based on config.
+    """
+
+    def __init__(self, simultaneous: bool = False) -> None:
+        self._simultaneous = simultaneous
+
+    async def execute_round(
+        self,
+        active_players: list[str],
+        actions_per_turn: int,
+        activate_fn: Callable[[str, int], Awaitable[None]],
+    ) -> None:
+        if self._simultaneous:
+            tasks = [activate_fn(pid, actions_per_turn) for pid in active_players]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            for pid in active_players:
+                await activate_fn(pid, actions_per_turn)
+
+
+# ---------------------------------------------------------------------------
+# Registries
+# ---------------------------------------------------------------------------
+
+TURN_PROTOCOL_REGISTRY: dict[str, type] = {
+    "independent": IndependentTurnProtocol,
+}
+
+ROUND_EVALUATOR_REGISTRY: dict[str, type] = {}
+
+
+# ---------------------------------------------------------------------------
+# GameRunner
+# ---------------------------------------------------------------------------
 
 
 class GameRunner:
@@ -33,6 +80,8 @@ class GameRunner:
         budget_engine: Any | None,  # BudgetEngine
         pipeline_executor: Callable[..., Any],
         app: Any | None = None,  # VolnixApp (for handle_action)
+        turn_protocol: TurnProtocol | None = None,
+        round_evaluator: RoundEvaluator | None = None,
     ) -> None:
         self._game = game_engine
         self._agency = agency_engine
@@ -41,6 +90,8 @@ class GameRunner:
         self._pipeline_executor = pipeline_executor
         self._app = app
         self._turn_manager: TurnManager | None = None
+        self._turn_protocol: TurnProtocol | None = turn_protocol
+        self._round_evaluator: RoundEvaluator | None = round_evaluator
         self._stopped = False
         self._round_events: list[Any] = []
         self._team_channel: str | None = None
@@ -65,6 +116,27 @@ class GameRunner:
             seed=42,
         )
 
+        # Resolve turn protocol from registry if not injected
+        if self._turn_protocol is None:
+            protocol_name = getattr(definition, "turn_protocol", "independent")
+            protocol_cls = TURN_PROTOCOL_REGISTRY.get(protocol_name, IndependentTurnProtocol)
+            self._turn_protocol = protocol_cls(simultaneous=definition.rounds.simultaneous)
+
+        # Lazy-load evaluator registrations (avoids circular import at module level)
+        if not ROUND_EVALUATOR_REGISTRY:
+            try:
+                from volnix.game.evaluators import NegotiationEvaluator
+
+                ROUND_EVALUATOR_REGISTRY["negotiation"] = NegotiationEvaluator
+            except ImportError:
+                pass
+
+        # Resolve round evaluator from registry if not injected
+        if self._round_evaluator is None:
+            evaluator_name = getattr(definition.between_rounds, "evaluator", "")
+            if evaluator_name and evaluator_name in ROUND_EVALUATOR_REGISTRY:
+                self._round_evaluator = ROUND_EVALUATOR_REGISTRY[evaluator_name]()
+
         await self._game.start_game()
         await self._resolve_team_channel()
         logger.info(
@@ -88,11 +160,17 @@ class GameRunner:
             # 2. Resource regeneration
             await self._regenerate_resources(definition)
 
-            # 3. Player turns
-            if definition.rounds.simultaneous:
-                await self._run_simultaneous_round(definition)
-            else:
-                await self._run_sequential_round(definition)
+            # 3. Player turns (delegated to turn protocol)
+            active_players = [
+                pid
+                for pid in self._turn_manager.get_order()
+                if not self._turn_manager.is_eliminated(pid)
+            ]
+            await self._turn_protocol.execute_round(
+                active_players,
+                definition.rounds.actions_per_turn,
+                self._activate_player_turn,
+            )
 
             # 4. Between-round hooks
             if definition.between_rounds.animator_tick and self._animator:
@@ -100,6 +178,23 @@ class GameRunner:
                     await self._animator.tick(datetime.now(UTC))
                 except Exception as exc:
                     logger.warning("Animator tick failed in round %d: %s", round_num, exc)
+
+            # 4.5. Game-type-specific evaluation (between turns and scoring)
+            if self._round_evaluator:
+                try:
+                    state = (
+                        self._game._dependencies.get("state")
+                        if hasattr(self._game, "_dependencies")
+                        else None
+                    )
+                    await self._round_evaluator.evaluate(
+                        state_engine=state,
+                        round_events=self._round_events,
+                        round_state=self._game.round_state,
+                        player_scores=self._game.player_scores,
+                    )
+                except Exception as exc:
+                    logger.warning("Round evaluator failed in round %d: %s", round_num, exc)
 
             # 5. End round + score
             standings = await self._game.end_round(round_events=self._round_events)
@@ -124,8 +219,30 @@ class GameRunner:
 
         result = await self._game.complete_game(win_result)
 
-        # Build deliverable from game result
-        self.deliverable_content = self._build_deliverable(result)
+        # Fetch game-type-specific extras from the evaluator (optional).
+        # Uses getattr for forward compatibility with evaluators that
+        # predate this contract.
+        extras: dict[str, Any] = {}
+        if self._round_evaluator is not None:
+            extras_fn = getattr(
+                self._round_evaluator, "build_deliverable_extras", None
+            )
+            if extras_fn is not None:
+                try:
+                    state = (
+                        self._game._dependencies.get("state")
+                        if hasattr(self._game, "_dependencies")
+                        else None
+                    )
+                    extras = await extras_fn(state) or {}
+                except Exception as exc:
+                    logger.warning(
+                        "Round evaluator build_deliverable_extras failed: %s",
+                        exc,
+                    )
+
+        # Build deliverable from game result + evaluator extras
+        self.deliverable_content = self._build_deliverable(result, extras)
         self.deliverable_produced = True
 
         return result
@@ -135,22 +252,19 @@ class GameRunner:
         self._stopped = True
 
     @staticmethod
-    def _build_deliverable(result: GameResult) -> dict[str, Any]:
-        """Build a flat, human-readable game summary as the run deliverable."""
-        # Build standings as a readable string table
-        standings_lines = []
-        for s in result.final_standings or []:
-            rank = s.get("rank", 0)
-            actor = s.get("actor_id", "")
-            score = s.get("total_score", 0.0)
-            eliminated = s.get("eliminated", False)
-            metrics = s.get("metrics", {})
-            status = "ELIMINATED" if eliminated else f"#{rank}"
-            metric_parts = [f"{k}: {v:,.0f}" for k, v in metrics.items()]
-            standings_lines.append(
-                f"{status} {actor} — score: {score:,.1f} ({', '.join(metric_parts)})"
-            )
+    def _build_deliverable(
+        result: GameResult, extras: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Build a human-readable game summary as the run deliverable.
 
+        Emits standings as an array of flat-primitive objects so the
+        frontend's array-of-objects renderer can show them as a grouped
+        card list instead of one card per player. ``extras`` is an
+        optional dict from the round evaluator with game-type-specific
+        summary data (e.g., ``deals`` array for negotiation). Keys that
+        collide with built-in deliverable keys are prefixed with
+        ``extras.`` so the scoreboard is never silently overwritten.
+        """
         deliverable: dict[str, Any] = {
             "title": f"Winner: {result.winner or 'No winner'}",
             "game_mode": result.game_mode,
@@ -158,44 +272,41 @@ class GameRunner:
             "result": result.reason.replace("_", " ").title(),
         }
 
-        # Add per-player standings as flat keys
+        # Standings as a flat-object array (one card per player, grouped
+        # under a single "Standings" section by the frontend).
+        standings_list: list[dict[str, Any]] = []
         for s in result.final_standings or []:
             rank = s.get("rank", 0)
             actor = s.get("actor_id", "").split("-")[0]
             score = s.get("total_score", 0.0)
+            eliminated = s.get("eliminated", False)
             metrics = s.get("metrics", {})
             metric_str = " | ".join(f"{k}: {v:,.0f}" for k, v in metrics.items())
-            deliverable[f"#{rank} {actor}"] = f"Score: {score:,.1f} ({metric_str})"
+
+            entry: dict[str, Any] = {
+                "rank": rank,
+                "actor": actor,
+                "score": f"{score:,.1f}",
+            }
+            if metric_str:
+                entry["metrics"] = metric_str
+            if eliminated:
+                entry["eliminated"] = True
+            standings_list.append(entry)
+
+        if standings_list:
+            deliverable["standings"] = standings_list
+
+        # Merge evaluator-provided extras (e.g., ``deals`` for negotiation).
+        # Protect built-in keys from collision by prefixing with ``extras.``.
+        if extras:
+            for k, v in extras.items():
+                if k in deliverable:
+                    deliverable[f"extras.{k}"] = v
+                else:
+                    deliverable[k] = v
 
         return deliverable
-
-    async def _run_sequential_round(self, definition: GameDefinition) -> None:
-        """Each player takes turns in order."""
-        if self._turn_manager is None:
-            return
-        turn_order = self._turn_manager.get_order()
-        for player_id in turn_order:
-            if self._stopped:
-                break
-            if self._turn_manager.is_eliminated(player_id):
-                continue
-            await self._activate_player_turn(player_id, definition.rounds.actions_per_turn)
-
-    async def _run_simultaneous_round(self, definition: GameDefinition) -> None:
-        """All players act in parallel."""
-        if self._turn_manager is None:
-            return
-        active_players = [
-            pid
-            for pid in self._turn_manager.get_order()
-            if not self._turn_manager.is_eliminated(pid)
-        ]
-        tasks = [
-            self._activate_player_turn(pid, definition.rounds.actions_per_turn)
-            for pid in active_players
-        ]
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _activate_player_turn(self, player_id: str, max_actions: int) -> None:
         """Activate a player for their turn via the agency engine.

@@ -31,6 +31,27 @@ from volnix.simulation.world_context import WorldContextBundle
 logger = logging.getLogger(__name__)
 
 
+def _build_tool_call_dict(tc: ToolCall, tc_id: str) -> dict[str, Any]:
+    """Build an OpenAI-format tool_call dict from a ToolCall.
+
+    Carries ``provider_metadata`` alongside the standard fields so
+    provider-specific passthrough data (e.g., Gemini thought_signature)
+    can be restored when the history is replayed on the next turn.
+    Non-Gemini providers strip this key at their own boundary.
+    """
+    entry: dict[str, Any] = {
+        "id": tc_id,
+        "type": "function",
+        "function": {
+            "name": tc.name,
+            "arguments": json.dumps(tc.arguments),
+        },
+    }
+    if tc.provider_metadata:
+        entry["provider_metadata"] = tc.provider_metadata
+    return entry
+
+
 class AgencyEngine(BaseEngine):
     """Manages internal actor lifecycle: activation, action generation, state updates."""
 
@@ -579,6 +600,8 @@ class AgencyEngine(BaseEngine):
                 output_schema=schema,
                 temperature=0.3,
                 cache_system_prompt=True,
+                model_override=actor.llm_model,
+                provider_override=actor.llm_provider,
             )
             response = await self._llm_router.route(
                 request,
@@ -889,6 +912,8 @@ class AgencyEngine(BaseEngine):
                     tools=actor_tools or None,
                     tool_choice=tool_choice,
                     cache_system_prompt=True,
+                    model_override=actor.llm_model,
+                    provider_override=actor.llm_provider,
                 )
                 response = await self._llm_router.route(
                     request,
@@ -927,25 +952,19 @@ class AgencyEngine(BaseEngine):
 
                     if committed_event is None:
                         # Pipeline blocked — tell the agent
+                        blocked_tc_id = tc.id or f"call_{step_idx}"
                         messages.append(
                             {
                                 "role": "assistant",
                                 "tool_calls": [
-                                    {
-                                        "id": tc.id or f"call_{step_idx}",
-                                        "type": "function",
-                                        "function": {
-                                            "name": tc.name,
-                                            "arguments": json.dumps(tc.arguments),
-                                        },
-                                    }
+                                    _build_tool_call_dict(tc, blocked_tc_id),
                                 ],
                             }
                         )
                         messages.append(
                             {
                                 "role": "tool",
-                                "tool_call_id": tc.id or f"call_{step_idx}",
+                                "tool_call_id": blocked_tc_id,
                                 "content": "BLOCKED: This action was not permitted by the governance pipeline.",
                             }
                         )
@@ -974,16 +993,7 @@ class AgencyEngine(BaseEngine):
                     messages.append(
                         {
                             "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "id": tc_id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tc.name,
-                                        "arguments": json.dumps(tc.arguments),
-                                    },
-                                }
-                            ],
+                            "tool_calls": [_build_tool_call_dict(tc, tc_id)],
                         }
                     )
                     messages.append(

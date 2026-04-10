@@ -107,6 +107,14 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
         if is_lead:
             metadata["lead"] = True
 
+        # Per-agent LLM config (optional)
+        llm_config = entry.get("llm")
+        if llm_config and isinstance(llm_config, dict):
+            if llm_config.get("model"):
+                metadata["llm_model"] = llm_config["model"]
+            if llm_config.get("provider"):
+                metadata["llm_provider"] = llm_config["provider"]
+
         definitions.append(
             ActorDefinition(
                 id=actor_id,

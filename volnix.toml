@@ -319,54 +319,54 @@ timeout_seconds = 300
 
 [llm.routing.world_compiler]
 provider = "openai"
-model = "gpt-5.4-mini"
+model = "gpt-5.4-nano"
 max_tokens = 32768
 temperature = 0
 
 [llm.routing.responder_tier2]
 provider = "openai"                     # "openai"
-model = "gpt-5.4-mini"        # "gpt-4.1-mini"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.7
 
 [llm.routing.service_bootstrapper]
 provider = "openai"                     # "openai"
-model = "gpt-5.4-mini"        # "gpt-4.1-mini"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 4096
 temperature = 0.5
 
 [llm.routing.profile_infer]
 provider = "openai"                     # "openai"
-model = "gpt-5.4-mini"        # "gpt-4.1-mini"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 8192
 temperature = 0.4
 
 [llm.routing.animator]
 provider = "openai"                     # "openai"
-model = "gpt-5.4-mini"        # "gpt-4.1-mini"
+model = "gpt-5.4-nano"        # "gpt-4.1-mini"
 max_tokens = 2048
 temperature = 0.5
 
 [llm.routing.data_generator]
 provider = "openai"
-model = "gpt-5.4-mini"
+model = "gpt-5.4-nano"
 max_tokens = 32768
 temperature = 0
 
 [llm.routing.agency_individual]
 provider = "openai"                     # "gemini"
-model = "gpt-5.4-mini"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
+model = "gpt-5.4-nano"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
 max_tokens = 4096
 temperature = 0
 
 [llm.routing.agency_batch]
 provider = "openai"                     # "gemini"
-model = "gpt-5.4-mini"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
+model = "gpt-5.4-nano"                 # "gpt-5.4-nano" | "gemini-3.1-flash-lite-preview"
 max_tokens = 8192
 temperature = 0
 
 [llm.routing.world_compiler_policy_trigger_compilation]
 provider = "openai"                     # "gemini"
-model = "gpt-5.4-mini"                 # "gemini-3.1-flash-lite-preview"
+model = "gpt-5.4-nano"                 # "gemini-3.1-flash-lite-preview"
 max_tokens = 4096
 temperature = 0

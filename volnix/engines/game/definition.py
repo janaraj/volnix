@@ -5,7 +5,7 @@ Parsed from the `game:` section of blueprint YAML.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -22,11 +22,11 @@ class ScoringMetric(BaseModel, frozen=True):
     """A single scoring metric definition."""
 
     name: str
-    source: Literal["state", "budget", "events", "custom"] = "state"
+    source: str = "state"
     entity_type: str = ""
     field: str = ""
     event_type: str = ""
-    aggregation: Literal["sum", "count", "max", "min", "last"] = "last"
+    aggregation: str = "last"
     weight: float = 1.0
 
 
@@ -34,18 +34,17 @@ class ScoringConfig(BaseModel, frozen=True):
     """Scoring configuration."""
 
     metrics: list[ScoringMetric] = Field(default_factory=list)
-    ranking: Literal["ascending", "descending"] = "descending"
+    ranking: str = "descending"
 
 
 class WinCondition(BaseModel, frozen=True):
     """A win/loss condition."""
 
-    type: Literal["score_threshold", "rounds_complete", "elimination", "time_limit"] = (
-        "rounds_complete"
-    )
+    type: str = "rounds_complete"
     metric: str = ""
     threshold: float = 0.0
     below: bool = False
+    type_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ResourceReset(BaseModel, frozen=True):
@@ -61,13 +60,16 @@ class BetweenRoundsConfig(BaseModel, frozen=True):
 
     animator_tick: bool = True
     announce_scores: bool = True
+    evaluator: str = ""
 
 
 class GameDefinition(BaseModel, frozen=True):
     """Complete game configuration from blueprint YAML."""
 
     enabled: bool = False
-    mode: Literal["competition", "cooperative", "solo"] = "competition"
+    mode: str = "competition"
+    turn_protocol: str = "independent"
+    type_config: dict[str, Any] = Field(default_factory=dict)
     rounds: RoundConfig = Field(default_factory=RoundConfig)
     resource_reset_per_round: ResourceReset = Field(default_factory=ResourceReset)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)

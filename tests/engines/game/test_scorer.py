@@ -309,3 +309,115 @@ class TestWeights:
         scorer = GameScorer(config)
 
         assert scorer.weights == {"speed": 2.0, "accuracy": 3.0}
+
+
+# ---------------------------------------------------------------------------
+# Registry + extensibility tests
+# ---------------------------------------------------------------------------
+
+from volnix.engines.game.protocols import ScoringContext
+from volnix.engines.game.scorer import (
+    SCORING_PROVIDER_REGISTRY,
+    BudgetScoringProvider,
+    EventsScoringProvider,
+    StateScoringProvider,
+)
+
+
+class TestScoringProviderRegistry:
+    def test_registry_contains_built_in_providers(self):
+        assert "state" in SCORING_PROVIDER_REGISTRY
+        assert "events" in SCORING_PROVIDER_REGISTRY
+        assert "budget" in SCORING_PROVIDER_REGISTRY
+        assert SCORING_PROVIDER_REGISTRY["state"] is StateScoringProvider
+        assert SCORING_PROVIDER_REGISTRY["events"] is EventsScoringProvider
+        assert SCORING_PROVIDER_REGISTRY["budget"] is BudgetScoringProvider
+
+    def test_default_scorer_uses_registry(self):
+        config = ScoringConfig(metrics=[])
+        scorer = GameScorer(config)
+        assert "state" in scorer._providers
+        assert "events" in scorer._providers
+        assert "budget" in scorer._providers
+
+    async def test_unknown_source_returns_zero_with_warning(self, caplog):
+        config = ScoringConfig(
+            metrics=[ScoringMetric(name="mystery", source="unknown_source")],
+        )
+        scorer = GameScorer(config)
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            scores = await scorer.compute_scores(["p1"], None, [])
+        assert scores["p1"]["mystery"] == 0.0
+        assert "No scoring provider registered for source 'unknown_source'" in caplog.text
+
+
+class TestCustomScoringProvider:
+    async def test_custom_provider_via_constructor(self):
+        class FixedProvider:
+            async def compute(self, ctx: ScoringContext) -> float:
+                return 42.0
+
+        config = ScoringConfig(
+            metrics=[ScoringMetric(name="fixed", source="custom_src")],
+        )
+        scorer = GameScorer(config, providers={"custom_src": FixedProvider()})
+        scores = await scorer.compute_scores(["p1"], None, [])
+        assert scores["p1"]["fixed"] == 42.0
+
+    async def test_register_provider_at_runtime(self):
+        class LateProvider:
+            async def compute(self, ctx: ScoringContext) -> float:
+                return 99.0
+
+        config = ScoringConfig(
+            metrics=[ScoringMetric(name="late", source="late_src")],
+        )
+        scorer = GameScorer(config)
+        scores = await scorer.compute_scores(["p1"], None, [])
+        assert scores["p1"]["late"] == 0.0
+
+        scorer.register_provider("late_src", LateProvider())
+        scores = await scorer.compute_scores(["p1"], None, [])
+        assert scores["p1"]["late"] == 99.0
+
+    async def test_custom_provider_overrides_built_in(self):
+        class OverrideState:
+            async def compute(self, ctx: ScoringContext) -> float:
+                return 999.0
+
+        config = ScoringConfig(
+            metrics=[ScoringMetric(name="val", source="state", entity_type="x", field="y")],
+        )
+        scorer = GameScorer(config, providers={"state": OverrideState()})
+        scores = await scorer.compute_scores(["p1"], None, [])
+        assert scores["p1"]["val"] == 999.0
+
+
+class TestProviderReceivesCorrectContext:
+    async def test_context_contains_all_fields(self):
+        received_contexts: list[ScoringContext] = []
+
+        class SpyProvider:
+            async def compute(self, ctx: ScoringContext) -> float:
+                received_contexts.append(ctx)
+                return 1.0
+
+        metric = ScoringMetric(name="spy", source="spy_src", entity_type="acct", field="bal")
+        config = ScoringConfig(metrics=[metric])
+        scorer = GameScorer(config, providers={"spy_src": SpyProvider()})
+
+        mock_state = AsyncMock()
+        events = [SimpleNamespace(event_type="x", actor_id="p1", input_data={})]
+        resolved = {"acct": "pack_acct"}
+
+        await scorer.compute_scores(["p1"], mock_state, events, resolved_entity_types=resolved)
+
+        assert len(received_contexts) == 1
+        ctx = received_contexts[0]
+        assert ctx.player_id == "p1"
+        assert ctx.metric.name == "spy"
+        assert ctx.state_engine is mock_state
+        assert len(ctx.events) == 1
+        assert ctx.resolved_entity_types == {"acct": "pack_acct"}

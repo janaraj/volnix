@@ -9,17 +9,39 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import anthropic
 from anthropic import AsyncAnthropic
 
-logger = logging.getLogger(__name__)
-
-from typing import Any
-
 from volnix.llm.provider import LLMProvider
 from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ToolCall
+
+logger = logging.getLogger(__name__)
+
+
+_ANTHROPIC_FRAMEWORK_ONLY_KEYS = frozenset({"provider_metadata"})
+
+
+def _strip_framework_keys(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop framework-only keys from tool_call entries before Anthropic SDK.
+
+    Keys like ``provider_metadata`` (used for Gemini thought_signature
+    round-trip) are internal to the framework and must not leak to the
+    Anthropic SDK's payload validation.
+    """
+    result: list[dict[str, Any]] = []
+    for m in messages:
+        if m.get("tool_calls"):
+            m_copy = dict(m)
+            m_copy["tool_calls"] = [
+                {k: v for k, v in tc.items() if k not in _ANTHROPIC_FRAMEWORK_ONLY_KEYS}
+                for tc in m["tool_calls"]
+            ]
+            result.append(m_copy)
+        else:
+            result.append(m)
+    return result
 
 
 def _fix_schema_for_anthropic(schema: Any) -> Any:
@@ -83,8 +105,9 @@ class AnthropicProvider(LLMProvider):
                 system_param = system_content
 
             if request.messages:
-                sys_msgs = [m for m in request.messages if m.get("role") == "system"]
-                other_msgs = [m for m in request.messages if m.get("role") != "system"]
+                sanitized = _strip_framework_keys(request.messages)
+                sys_msgs = [m for m in sanitized if m.get("role") == "system"]
+                other_msgs = [m for m in sanitized if m.get("role") != "system"]
                 msg_system = sys_msgs[0]["content"] if sys_msgs else system_param
                 msg_list = other_msgs if other_msgs else [{"role": "user", "content": ""}]
             else:

@@ -887,29 +887,33 @@ async def _serve_impl(
                     is_game = _is_game_runner(runner)
 
                     async def _run_sim() -> None:
-                        run_result = await runner.run()
-                        stop = _format_run_result(run_result, is_game)
-                        label = "Game" if is_game else "Simulation"
-                        console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
-                        # Save deliverable artifact if produced
-                        if getattr(runner, "deliverable_produced", False) and getattr(
-                            runner, "deliverable_content", None
-                        ):
-                            from volnix.core.types import RunId as _DRId
-
-                            await volnix.artifact_store.save_deliverable(
-                                _DRId(_active_run_id[0]),
-                                runner.deliverable_content,
-                            )
-                            console.print("  [green]Deliverable saved[/green]")
-                        # End run: generate report + scorecard
-                        from volnix.core.types import RunId as _ERId
-
                         try:
-                            await volnix.end_run(_ERId(_active_run_id[0]))
-                            console.print("  [green]Report generated[/green]")
+                            run_result = await runner.run()
+                            stop = _format_run_result(run_result, is_game)
+                            label = "Game" if is_game else "Simulation"
+                            console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
+                            # Save deliverable artifact if produced
+                            if getattr(runner, "deliverable_produced", False) and getattr(
+                                runner, "deliverable_content", None
+                            ):
+                                from volnix.core.types import RunId as _DRId
+
+                                await volnix.artifact_store.save_deliverable(
+                                    _DRId(_active_run_id[0]),
+                                    runner.deliverable_content,
+                                )
+                                console.print("  [green]Deliverable saved[/green]")
                         except Exception as exc:
-                            console.print(f"  [red]Report generation failed: {exc}[/red]")
+                            console.print(f"  [red]Game/simulation failed: {exc}[/red]")
+                        finally:
+                            # Always complete the run, even if game/sim failed
+                            from volnix.core.types import RunId as _FRId
+
+                            try:
+                                await volnix.end_run(_FRId(_active_run_id[0]))
+                                console.print("  [green]Run completed + report generated[/green]")
+                            except Exception as exc:
+                                console.print(f"  [red]Run completion failed: {exc}[/red]")
 
                     asyncio.create_task(_run_sim())
 
@@ -966,28 +970,32 @@ async def _serve_impl(
                         if sim is not None:
                             runner, _, _ = sim
                             is_game = _is_game_runner(runner)
-                            run_result = await runner.run()
-                            stop = _format_run_result(run_result, is_game)
-                            label = "Game" if is_game else "Simulation"
-                            console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
-                            # Save deliverable + end run
-                            if getattr(runner, "deliverable_produced", False) and getattr(
-                                runner, "deliverable_content", None
-                            ):
-                                from volnix.core.types import RunId as _DRId2
-
-                                await volnix.artifact_store.save_deliverable(
-                                    _DRId2(_active_run_id[0]),
-                                    runner.deliverable_content,
-                                )
-                                console.print("  [green]Deliverable saved[/green]")
-                            from volnix.core.types import RunId as _ERId2
-
                             try:
-                                await volnix.end_run(_ERId2(_active_run_id[0]))
-                                console.print("  [green]Report generated[/green]")
+                                run_result = await runner.run()
+                                stop = _format_run_result(run_result, is_game)
+                                label = "Game" if is_game else "Simulation"
+                                console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
+                                # Save deliverable
+                                if getattr(runner, "deliverable_produced", False) and getattr(
+                                    runner, "deliverable_content", None
+                                ):
+                                    from volnix.core.types import RunId as _DRId2
+
+                                    await volnix.artifact_store.save_deliverable(
+                                        _DRId2(_active_run_id[0]),
+                                        runner.deliverable_content,
+                                    )
+                                    console.print("  [green]Deliverable saved[/green]")
                             except Exception as exc:
-                                console.print(f"  [red]Report generation failed: {exc}[/red]")
+                                console.print(f"  [red]Game/simulation failed: {exc}[/red]")
+                            finally:
+                                from volnix.core.types import RunId as _ERId2
+
+                                try:
+                                    await volnix.end_run(_ERId2(_active_run_id[0]))
+                                    console.print("  [green]Run completed + report generated[/green]")
+                                except Exception as exc:
+                                    console.print(f"  [red]Run completion failed: {exc}[/red]")
                     except Exception as exc:
                         console.print(f"[red]Compilation failed: {exc}[/red]")
 

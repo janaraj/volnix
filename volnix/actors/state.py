@@ -155,3 +155,5 @@ class ActorState(BaseModel):
 
     # Configuration
     max_recent_interactions: int = 20
+    llm_model: str | None = None     # Per-agent LLM model override
+    llm_provider: str | None = None  # Per-agent LLM provider override

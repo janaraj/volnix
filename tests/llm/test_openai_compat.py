@@ -4,7 +4,10 @@ import os
 
 import pytest
 
-from volnix.llm.providers.openai_compat import OpenAICompatibleProvider
+from volnix.llm.providers.openai_compat import (
+    OpenAICompatibleProvider,
+    _sanitize_messages_for_openai,
+)
 from volnix.llm.types import LLMRequest
 
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
@@ -77,6 +80,99 @@ async def test_openai_compat_error_handling():
     assert resp.content == ""
     assert resp.provider == "openai_compatible"
     assert resp.latency_ms >= 0
+
+
+class TestSanitizeMessagesForOpenAI:
+    """Tests for _sanitize_messages_for_openai.
+
+    OpenAI's chat completions API rejects unknown fields in tool_call entries
+    with "Additional properties are not allowed". The sanitizer ensures that
+    framework-only keys (e.g., provider_metadata for Gemini thought_signature
+    round-trip) are stripped before the messages reach the SDK.
+    """
+
+    def test_strips_provider_metadata_from_tool_calls(self):
+        """provider_metadata key in tool_calls entry is stripped."""
+        messages = [
+            {"role": "user", "content": "hi"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "f", "arguments": "{}"},
+                        "provider_metadata": {"thought_signature": "abc=="},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "result"},
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        assert len(result) == 3
+        # provider_metadata dropped from tool_call entry
+        sanitized_tc = result[1]["tool_calls"][0]
+        assert "provider_metadata" not in sanitized_tc
+        # Standard fields retained
+        assert sanitized_tc["id"] == "c1"
+        assert sanitized_tc["type"] == "function"
+        assert sanitized_tc["function"] == {"name": "f", "arguments": "{}"}
+        # Other messages untouched
+        assert result[0] == {"role": "user", "content": "hi"}
+        assert result[2] == {
+            "role": "tool",
+            "tool_call_id": "c1",
+            "content": "result",
+        }
+
+    def test_passthrough_when_no_tool_calls(self):
+        """Messages without tool_calls are passed through unchanged."""
+        messages = [
+            {"role": "system", "content": "be nice"},
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        assert result == messages
+
+    def test_does_not_mutate_input(self):
+        """Sanitizer does not mutate the original message dicts."""
+        original_tc = {
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "f", "arguments": "{}"},
+            "provider_metadata": {"thought_signature": "abc=="},
+        }
+        messages = [{"role": "assistant", "tool_calls": [original_tc]}]
+        _sanitize_messages_for_openai(messages)
+        # Original tool_call dict still has provider_metadata
+        assert "provider_metadata" in original_tc
+        assert messages[0]["tool_calls"][0] is original_tc
+
+    def test_multiple_tool_calls_all_sanitized(self):
+        """All tool_calls in a single message are sanitized."""
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "f1", "arguments": "{}"},
+                        "provider_metadata": {"thought_signature": "a=="},
+                    },
+                    {
+                        "id": "c2",
+                        "type": "function",
+                        "function": {"name": "f2", "arguments": "{}"},
+                        "provider_metadata": {"thought_signature": "b=="},
+                    },
+                ],
+            },
+        ]
+        result = _sanitize_messages_for_openai(messages)
+        for tc in result[0]["tool_calls"]:
+            assert "provider_metadata" not in tc
 
 
 @skipif_no_openai

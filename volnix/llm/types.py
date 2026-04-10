@@ -50,6 +50,9 @@ class ToolCall(BaseModel, frozen=True):
     name: str  # "search_recent"
     arguments: dict[str, Any] = Field(default_factory=dict)  # {"query": "..."}
     id: str = ""  # Provider-assigned ID for multi-turn mapping
+    provider_metadata: dict[str, Any] | None = None
+    # Opaque provider-specific passthrough data (e.g., Gemini thought_signature
+    # base64-encoded). Providers own their own keys — DO NOT depend on structure.
 
 
 class LLMUsage(BaseModel, frozen=True):
@@ -88,6 +91,7 @@ class LLMRequest(BaseModel, frozen=True):
     max_tokens: int = 4096
     temperature: float = 0.7
     model_override: str | None = None
+    provider_override: str | None = None  # Override routing provider for this request
     fresh_session: bool = False  # ACP: create isolated session for this call
     cache_system_prompt: bool = False  # Enable prompt caching for system prompt
     tools: list[ToolDefinition] | None = None  # Native tool calling definitions

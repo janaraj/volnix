@@ -1076,6 +1076,8 @@ class VolnixApp:
                     current_goal=internal_profile.mission,
                     goal_context=initial_goal,
                     is_lead=agent_def.metadata.get("lead", False),
+                    llm_model=agent_def.metadata.get("llm_model") or None,
+                    llm_provider=agent_def.metadata.get("llm_provider") or None,
                 )
                 actor_states.append(state)
 
@@ -1312,6 +1314,19 @@ class VolnixApp:
             players=players,
             run_id=self._current_run_id,
         )
+        # Game mode: clear lead status on all players.
+        # Game players act independently — there is no coordinator.
+        # Lead behavior (delegation, synthesis) is for simulation mode only.
+        try:
+            agency = self._registry.get("agency")
+            for pid in players:
+                actor_state = agency._actor_states.get(ActorId(pid))
+                if actor_state and actor_state.is_lead:
+                    actor_state.is_lead = False
+                    logger.info("Cleared lead status for game player %s", pid)
+        except Exception as exc:
+            logger.debug("Could not clear lead status: %s", exc)
+
         logger.info(
             "Game configured: mode=%s, %d rounds, %d players (%s)",
             game_def.mode,

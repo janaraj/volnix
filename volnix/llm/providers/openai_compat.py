@@ -28,6 +28,34 @@ from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 logger = logging.getLogger(__name__)
 
 
+_OPENAI_TOOL_CALL_KEYS = frozenset({"id", "type", "function"})
+
+
+def _sanitize_messages_for_openai(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Strip non-OpenAI keys from tool_call entries.
+
+    Framework-level keys such as ``provider_metadata`` (used for Gemini
+    thought_signature round-trip) must not leak to OpenAI's schema-strict
+    API, which rejects unknown fields with
+    "Additional properties are not allowed". We copy each message shallowly
+    and rebuild its ``tool_calls`` list with only OpenAI-supported fields.
+    """
+    result: list[dict[str, Any]] = []
+    for m in messages:
+        if m.get("tool_calls"):
+            m_copy = dict(m)
+            m_copy["tool_calls"] = [
+                {k: v for k, v in tc.items() if k in _OPENAI_TOOL_CALL_KEYS}
+                for tc in m["tool_calls"]
+            ]
+            result.append(m_copy)
+        else:
+            result.append(m)
+    return result
+
+
 def _fix_bare_arrays(schema: Any) -> Any:
     """Recursively add ``items`` to bare array schemas for OpenAI compatibility.
 
@@ -94,7 +122,9 @@ class OpenAICompatibleProvider(LLMProvider):
         start = time.monotonic()
         try:
             if request.messages:
-                messages: list[dict[str, Any]] = [dict(m) for m in request.messages]
+                messages: list[dict[str, Any]] = _sanitize_messages_for_openai(
+                    request.messages
+                )
             else:
                 messages: list[dict[str, Any]] = []
                 if request.system_prompt:

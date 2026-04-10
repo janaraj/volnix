@@ -90,6 +90,12 @@ class LLMRouter:
             provider_name = self._config.defaults.type
             model = self._config.defaults.default_model
 
+        # Per-request overrides (from agent config or caller)
+        if request.provider_override:
+            provider_name = request.provider_override
+        if request.model_override:
+            model = request.model_override
+
         try:
             provider = self._registry.get(provider_name)
         except KeyError:

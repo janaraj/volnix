@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from volnix.llm.providers.anthropic import AnthropicProvider
+from volnix.llm.providers.anthropic import AnthropicProvider, _strip_framework_keys
 from volnix.llm.types import LLMRequest
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -20,6 +20,57 @@ def test_anthropic_provider_init():
     provider = AnthropicProvider(api_key="test-key", default_model="claude-haiku-4-5")
     assert provider._default_model == "claude-haiku-4-5"
     assert provider.provider_name == "anthropic"
+
+
+class TestStripFrameworkKeys:
+    """Tests for _strip_framework_keys.
+
+    Defensively removes framework-only keys (e.g., provider_metadata used for
+    Gemini thought_signature round-trip) from tool_call entries before the
+    messages reach the Anthropic SDK.
+    """
+
+    def test_strips_provider_metadata_from_tool_calls(self):
+        """provider_metadata key in tool_calls entry is stripped."""
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "f", "arguments": "{}"},
+                        "provider_metadata": {"thought_signature": "abc=="},
+                    }
+                ],
+            },
+        ]
+        result = _strip_framework_keys(messages)
+        sanitized_tc = result[0]["tool_calls"][0]
+        assert "provider_metadata" not in sanitized_tc
+        assert sanitized_tc["id"] == "c1"
+        assert sanitized_tc["function"] == {"name": "f", "arguments": "{}"}
+
+    def test_passthrough_when_no_tool_calls(self):
+        """Messages without tool_calls are passed through unchanged."""
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        result = _strip_framework_keys(messages)
+        assert result == messages
+
+    def test_does_not_mutate_input(self):
+        """Sanitizer does not mutate the original tool_call dicts."""
+        original_tc = {
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "f", "arguments": "{}"},
+            "provider_metadata": {"thought_signature": "abc=="},
+        }
+        messages = [{"role": "assistant", "tool_calls": [original_tc]}]
+        _strip_framework_keys(messages)
+        assert "provider_metadata" in original_tc
 
 
 @skipif_no_anthropic

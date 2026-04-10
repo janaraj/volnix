@@ -7,18 +7,37 @@ using the Google Generative AI (Gemini) native SDK.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import time
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from google import genai
 
 from volnix.llm.provider import LLMProvider
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ToolCall
 
 logger = logging.getLogger(__name__)
+
+
+def _find_tool_name_for_id(messages: list[dict], tool_call_id: str) -> str:
+    """Look up the tool name matching a tool_call_id in earlier assistant messages.
+
+    Gemini's FunctionResponse requires a name field, but OpenAI-format tool
+    messages only carry tool_call_id + content. We resolve the name by
+    scanning earlier assistant messages for the matching tool_calls entry.
+    """
+    if not tool_call_id:
+        return ""
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for tc in msg.get("tool_calls") or []:
+            if tc.get("id") == tool_call_id:
+                return (tc.get("function", {}) or {}).get("name", "") or ""
+    return ""
 
 
 class GoogleNativeProvider(LLMProvider):
@@ -34,6 +53,165 @@ class GoogleNativeProvider(LLMProvider):
         self._timeout = timeout
         # Cache: hash(model:system_prompt:tools) → cache.name for reuse
         self._prompt_cache: dict[str, str] = {}
+
+    @staticmethod
+    def _build_contents_from_messages(
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[Any], str]:
+        """Convert OpenAI-format messages to Gemini Content list + system instruction.
+
+        Mapping:
+          - {role: "system", content}            → system_instruction (returned)
+          - {role: "user", content}              → Content(role="user", parts=[text])
+          - {role: "assistant", tool_calls, ...} → Content(role="model",
+                                                    parts=[FunctionCall, ..., optional text])
+          - {role: "tool", tool_call_id, content}→ Content(role="user",
+                                                    parts=[FunctionResponse])
+                                                    (per Gemini SDK AFC convention)
+
+        Returns:
+            Tuple of (contents_list, system_instruction_string).
+            contents_list is never empty — uses a placeholder if needed.
+            system_instruction_string is empty if no system messages.
+        """
+        from google.genai import types
+
+        contents: list[types.Content] = []
+        system_parts: list[str] = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            text = msg.get("content", "") or ""
+
+            if role == "system":
+                if text:
+                    system_parts.append(text)
+                continue
+
+            if role == "tool":
+                tc_id = msg.get("tool_call_id", "") or ""
+                try:
+                    response_body = json.loads(text) if text else {}
+                    if not isinstance(response_body, dict):
+                        response_body = {"result": response_body}
+                except (json.JSONDecodeError, ValueError):
+                    response_body = {"result": text}
+                tool_name = _find_tool_name_for_id(messages, tc_id) or "unknown_tool"
+                fr = types.FunctionResponse(
+                    name=tool_name,
+                    response=response_body,
+                    id=tc_id or None,
+                )
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(function_response=fr)],
+                    )
+                )
+                continue
+
+            if role == "assistant":
+                tool_calls = msg.get("tool_calls") or []
+                parts: list[types.Part] = []
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    fn_name = fn.get("name", "") or ""
+                    fn_args_raw = fn.get("arguments", "") or "{}"
+                    try:
+                        fn_args = (
+                            json.loads(fn_args_raw)
+                            if isinstance(fn_args_raw, str)
+                            else dict(fn_args_raw)
+                        )
+                    except (json.JSONDecodeError, ValueError):
+                        fn_args = {}
+                    fc = types.FunctionCall(
+                        name=fn_name,
+                        args=fn_args,
+                        id=tc.get("id") or None,
+                    )
+
+                    # Restore Gemini-specific thought_signature when present so
+                    # the assistant history re-matches what Gemini originally
+                    # emitted. Gemini 3 thinking models reject follow-up calls
+                    # whose history contains function_call parts without the
+                    # signature, even when thinking_budget=0 is set.
+                    thought_sig: bytes | None = None
+                    metadata = tc.get("provider_metadata")
+                    if isinstance(metadata, dict):
+                        sig_b64 = metadata.get("thought_signature")
+                        if isinstance(sig_b64, str) and sig_b64:
+                            try:
+                                thought_sig = base64.b64decode(sig_b64)
+                            except (ValueError, TypeError):
+                                thought_sig = None
+
+                    if thought_sig is not None:
+                        parts.append(
+                            types.Part(
+                                function_call=fc,
+                                thought_signature=thought_sig,
+                            )
+                        )
+                    else:
+                        parts.append(types.Part(function_call=fc))
+                if text:
+                    parts.append(types.Part.from_text(text=text))
+                if parts:
+                    contents.append(types.Content(role="model", parts=parts))
+                continue
+
+            # Default: user (or any unknown role) → plain text part
+            if text:
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=text)],
+                    )
+                )
+
+        # Gemini rejects empty contents — fallback placeholder
+        if not contents:
+            contents = [
+                types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text=" ")],
+                )
+            ]
+
+        return contents, "\n\n".join(system_parts)
+
+    def _resolve_contents_and_config(
+        self, request: LLMRequest, config: dict, cached: bool
+    ) -> Any:
+        """Resolve the generate_content `contents` param and update config.
+
+        Single source of truth for what to pass as `contents`. Handles both
+        cached/non-cached and single-turn/multi-turn cases. Mutates `config`
+        in place to set `system_instruction` when appropriate.
+
+        Args:
+            request: The LLM request.
+            config: The generate_content config dict (mutated in place).
+            cached: True if cached_content is being used (system already in cache).
+
+        Returns:
+            The value to pass as `contents` — either a string (single-turn)
+            or a list of Content objects (multi-turn).
+        """
+        if request.messages:
+            contents_list, sys_instr = self._build_contents_from_messages(
+                request.messages
+            )
+            # Skip setting system_instruction when cached (cache already has it)
+            if sys_instr and not cached:
+                config["system_instruction"] = sys_instr
+            return contents_list
+
+        # Single-turn path
+        if request.system_prompt and not cached:
+            config["system_instruction"] = request.system_prompt
+        return request.user_content
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Send a request to the Google Generative AI API.
@@ -114,6 +292,13 @@ class GoogleNativeProvider(LLMProvider):
             config: dict = {
                 "max_output_tokens": request.max_tokens,
                 "temperature": request.temperature,
+                # Disable thinking by default. Gemini 3 thinking models:
+                # (a) generate thought tokens that are billed separately (cost)
+                # (b) return thought_signature on function_call parts that must be
+                #     echoed on subsequent requests, complicating multi-turn tool
+                #     loops. Disabling thinking avoids both issues. Opt-in can be
+                #     added later if debate-style games need it.
+                "thinking_config": types.ThinkingConfig(thinking_budget=0),
             }
             if request.seed is not None:
                 config["seed"] = request.seed
@@ -129,55 +314,29 @@ class GoogleNativeProvider(LLMProvider):
                     request.output_schema.get("type", "?"),
                 )
 
+            # Configure tools and caching.
+            # - Cached path: system_instruction + tools live in the cache.
+            # - Non-cached path: add tools to config directly.
             if cached_content_name:
-                # Use cached content — system prompt and tools served from cache.
-                # Do NOT add tools to config here; they are in the cache.
                 config["cached_content"] = cached_content_name
-                response = await asyncio.to_thread(
-                    self._client.models.generate_content,
-                    model=model,
-                    contents=request.user_content,
-                    config=config,
-                )
-            else:
-                # No cache — add tools to config directly.
-                if tool_objects:
-                    config["tools"] = tool_objects
-                    config["tool_config"] = tool_config_obj
+            elif tool_objects:
+                config["tools"] = tool_objects
+                config["tool_config"] = tool_config_obj
 
-                if request.messages:
-                    # Multi-turn: concatenate all message contents
-                    parts = []
-                    for msg in request.messages:
-                        role = msg.get("role", "")
-                        text = msg.get("content", "") or ""
-                        if role == "system":
-                            parts.append(text)
-                        elif role == "tool":
-                            parts.append(f"[Tool Result] {text}")
-                        elif role == "assistant":
-                            tc = msg.get("tool_calls")
-                            if tc:
-                                parts.append(
-                                    f"[Tool Call] {tc[0].get('function', {}).get('name', '')}"
-                                )
-                            elif text:
-                                parts.append(text)
-                        else:
-                            parts.append(text)
-                    prompt = "\n\n".join(parts)
-                else:
-                    prompt = (
-                        f"{request.system_prompt}\n\n{request.user_content}"
-                        if request.system_prompt
-                        else request.user_content
-                    )
-                response = await asyncio.to_thread(
-                    self._client.models.generate_content,
-                    model=model,
-                    contents=prompt,
-                    config=config,
-                )
+            # Unified contents resolution — handles both single/multi-turn for
+            # both cached and non-cached paths. Mutates config to set
+            # system_instruction when appropriate (skipped for cached path since
+            # system is already in the cache).
+            final_contents = self._resolve_contents_and_config(
+                request, config, cached=bool(cached_content_name)
+            )
+
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=model,
+                contents=final_contents,
+                config=config,
+            )
             latency = (time.monotonic() - start) * 1000
             content = response.text if response.text else ""
 
@@ -204,27 +363,39 @@ class GoogleNativeProvider(LLMProvider):
                 response = await asyncio.to_thread(
                     self._client.models.generate_content,
                     model=model,
-                    contents=prompt if not cached_content_name else request.user_content,
+                    contents=final_contents,
                     config=config,
                 )
                 content = response.text if response.text else ""
 
-            # Parse native tool calls from response
-            parsed_tool_calls = None
+            # Parse native tool calls from response.
+            # Capture thought_signature per-Part so Gemini 3 thinking models
+            # can round-trip signatures in subsequent requests; otherwise
+            # Gemini returns 400 INVALID_ARGUMENT on follow-up calls whose
+            # history contains function_call parts without the signature.
+            parsed_tool_calls: list[ToolCall] | None = None
             if hasattr(response, "candidates") and response.candidates:
+                collected: list[ToolCall] = []
                 for part in response.candidates[0].content.parts:
-                    if hasattr(part, "function_call") and part.function_call:
-                        from volnix.llm.types import ToolCall
-
-                        fc = part.function_call
-                        parsed_tool_calls = [
-                            ToolCall(
-                                name=fc.name,
-                                arguments=dict(fc.args) if fc.args else {},
-                                id=getattr(fc, "id", "") or "",
-                            )
-                        ]
-                        break
+                    if not (hasattr(part, "function_call") and part.function_call):
+                        continue
+                    fc = part.function_call
+                    sig = getattr(part, "thought_signature", None)
+                    metadata: dict[str, Any] | None = None
+                    if sig:
+                        metadata = {
+                            "thought_signature": base64.b64encode(sig).decode("ascii"),
+                        }
+                    collected.append(
+                        ToolCall(
+                            name=fc.name,
+                            arguments=dict(fc.args) if fc.args else {},
+                            id=getattr(fc, "id", "") or "",
+                            provider_metadata=metadata,
+                        )
+                    )
+                if collected:
+                    parsed_tool_calls = collected
 
             # Parse structured output when schema was requested
             parsed_structured = None

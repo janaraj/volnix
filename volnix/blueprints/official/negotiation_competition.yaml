@@ -1,0 +1,83 @@
+world:
+  name: "Supply Chain Negotiation"
+  description: >
+    A procurement negotiation where a buyer and supplier negotiate terms
+    for a bulk materials contract. Both agents communicate through Slack,
+    posting structured proposals and counteroffers. The deal covers price,
+    delivery timeline, payment terms, and warranty period. Each agent has
+    secret ideal terms and must reach a mutually acceptable agreement.
+
+  services:
+    slack: verified/slack
+
+  policies:
+    - name: "Audit all messages"
+      trigger:
+        service: slack
+      enforcement: log
+      reason: "All communication logged for negotiation scorecard"
+
+  seeds:
+    - >
+      Slack channels: one channel called "negotiations" for deal discussion,
+      one channel called "general" for announcements.
+    - >
+      Negotiation deal: one negotiation_deal entity with id "deal-001",
+      title "Q3 Steel Supply Contract", status "open",
+      parties ["buyer", "supplier"],
+      terms_template containing price (range 80-120 per ton),
+      delivery_weeks (range 2-8), payment_days (range 15-60),
+      warranty_months (range 6-24). terms should be empty dict initially.
+    - >
+      Buyer target: one negotiation_target entity with game_owner_id matching
+      the buyer agent, deal_id "deal-001",
+      ideal_terms {price: 85, delivery_weeks: 3, payment_days: 45, warranty_months: 18},
+      term_weights {price: 0.4, delivery_weeks: 0.25, payment_days: 0.15, warranty_months: 0.2},
+      term_ranges {price: [80, 120], delivery_weeks: [2, 8], payment_days: [15, 60], warranty_months: [6, 24]},
+      batna_score 25.
+    - >
+      Supplier target: one negotiation_target entity with game_owner_id matching
+      the supplier agent, deal_id "deal-001",
+      ideal_terms {price: 115, delivery_weeks: 6, payment_days: 15, warranty_months: 6},
+      term_weights {price: 0.4, delivery_weeks: 0.2, payment_days: 0.25, warranty_months: 0.15},
+      term_ranges {price: [80, 120], delivery_weeks: [2, 8], payment_days: [15, 60], warranty_months: [6, 24]},
+      batna_score 25.
+    - >
+      Scorecards: two negotiation_scorecard entities, one per player with
+      game_owner_id matching each agent. Fields: deal_score 0, efficiency_bonus 0,
+      deals_closed 0, total_points 0.
+
+  behavior: reactive
+  reality:
+    preset: messy
+    social_friction:
+      uncooperative: 40
+  mode: governed
+
+  game:
+    enabled: true
+    mode: negotiation
+    turn_protocol: independent
+    rounds:
+      count: 8
+      actions_per_turn: 3
+      simultaneous: false
+    resource_reset_per_round:
+      api_calls: 3
+    scoring:
+      metrics:
+        - name: total_points
+          source: state
+          entity_type: negotiation_scorecard
+          field: total_points
+          weight: 1.0
+      ranking: descending
+    win_conditions:
+      - type: score_threshold
+        metric: total_points
+        threshold: 0.01
+      - type: rounds_complete
+    between_rounds:
+      animator_tick: false
+      announce_scores: true
+      evaluator: negotiation
