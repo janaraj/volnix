@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProviderType(enum.StrEnum):
@@ -59,16 +59,51 @@ class LLMUsage(BaseModel, frozen=True):
     """Token usage and cost for a single LLM call.
 
     Attributes:
-        prompt_tokens: Number of tokens in the prompt.
-        completion_tokens: Number of tokens in the completion.
-        total_tokens: Total tokens consumed.
-        cost_usd: Estimated cost in US dollars.
+        prompt_tokens: Number of tokens in the prompt. None from the
+            provider is coerced to 0.
+        completion_tokens: Number of tokens in the completion. None from
+            the provider is coerced to 0.
+        total_tokens: Total tokens consumed. None from the provider is
+            coerced to 0.
+        cost_usd: Estimated cost in US dollars. None from the provider
+            is coerced to 0.0.
+
+    None-tolerance rationale: some providers (notably
+    ``gemini-3-flash-preview``) intermittently return the token-count
+    attribute set-but-null on ``usage_metadata`` rather than omitting
+    it. The Google provider's ``getattr(usage_meta, "x", 0)`` default
+    only fires when the attribute is *missing*, not when it's *None*,
+    so the ``None`` would flow into ``LLMUsage(...)`` and pydantic v2
+    would raise ValidationError on the ``int`` field. The router then
+    flagged the error non-retryable and the agency loop silently lost
+    the agent's turn. Observed during the P6.3 supply-chain live run.
+
+    These validators coerce None to the zero default at the model
+    boundary so no provider needs a defensive ``or 0`` patch and
+    future providers inherit the behavior for free. Downstream
+    consumers (budget tracker, ledger, dashboard) continue to see
+    plain ``int`` — no ``int | None`` ripple.
     """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     cost_usd: float = 0.0
+
+    @field_validator("prompt_tokens", "completion_tokens", "total_tokens", mode="before")
+    @classmethod
+    def _coerce_none_int(cls, v: Any) -> Any:
+        """Coerce None to 0 for integer token fields.
+
+        Runs in ``mode="before"`` so pydantic never sees the raw None.
+        """
+        return 0 if v is None else v
+
+    @field_validator("cost_usd", mode="before")
+    @classmethod
+    def _coerce_none_float(cls, v: Any) -> Any:
+        """Coerce None to 0.0 for the float cost field."""
+        return 0.0 if v is None else v
 
 
 class LLMRequest(BaseModel, frozen=True):
