@@ -168,10 +168,58 @@ class YAMLParser:
         }
 
     def _extract_game_config(self, raw: dict) -> Any:
-        """Extract game configuration from blueprint YAML."""
+        """Extract game configuration from blueprint YAML.
+
+        Cycle B adds validation for the event-driven fields. Legacy
+        round-based keys (``rounds`` / ``turn_protocol`` /
+        ``between_rounds`` / ``resource_reset_per_round``) are still
+        accepted during migration — :class:`GameDefinition` preserves
+        them as deprecated fields that are deleted in Cycle B.10.
+
+        Validation:
+
+        - If ``game.enabled`` is True and the Cycle B ``entities.deals``
+          block is empty AND no legacy ``rounds`` block is declared,
+          emit a warning. The orchestrator will still work but won't
+          have anything to negotiate over.
+        - Declared but empty ``entities`` collections log a warning so
+          authors catch typos early.
+        """
         game_raw = raw.get("game") or raw.get("world", {}).get("game")
         if not game_raw or not game_raw.get("enabled", False):
             return None
         from volnix.engines.game.definition import GameDefinition
+
+        # Warn if both event-driven fields AND legacy rounds are present —
+        # ambiguous intent; orchestrator follows the event-driven path.
+        has_legacy_rounds = "rounds" in game_raw
+        entities_raw = game_raw.get("entities") or {}
+        has_new_entities = bool(entities_raw.get("deals"))
+        if has_legacy_rounds and has_new_entities:
+            logger.warning(
+                "Blueprint declares BOTH legacy ``game.rounds`` and new "
+                "``game.entities.deals`` — the event-driven GameOrchestrator "
+                "will read ``game.entities``. Remove ``game.rounds`` to "
+                "silence this warning."
+            )
+
+        # Warn if enabled but no deals declared. The compile still
+        # succeeds but at runtime nothing will be negotiable.
+        if not has_new_entities and not has_legacy_rounds:
+            logger.warning(
+                "Blueprint sets ``game.enabled: true`` but declares neither "
+                "``game.entities.deals`` (new) nor ``game.rounds`` (legacy). "
+                "The GameOrchestrator will start with nothing to score."
+            )
+
+        # Warn if scoring_mode is behavioral but target_terms are declared —
+        # those are competitive-mode-only and will be silently dropped.
+        scoring_mode = str(game_raw.get("scoring_mode", "behavioral"))
+        if scoring_mode == "behavioral" and entities_raw.get("target_terms"):
+            logger.warning(
+                "Blueprint declares ``game.entities.target_terms`` in "
+                "behavioral scoring mode — these will be silently dropped "
+                "at materialization (competitive mode only)."
+            )
 
         return GameDefinition(**game_raw)
