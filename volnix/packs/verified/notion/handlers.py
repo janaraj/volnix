@@ -82,6 +82,41 @@ def _extract_title_plain_text(obj: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _infer_list_type(
+    page: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+) -> str:
+    """Infer the Notion-API `type` discriminator for a pagination response.
+
+    Cascading fallback chain, resilient to missing ``"object"`` keys and
+    non-dict items (both of which occasionally arrive from LLM-generated
+    seed data or dynamic enrichment). Order:
+
+    1. Scan the current page for the first dict item that has ``"object"``.
+       Matches the real Notion API contract — the page's type reflects
+       the type of items in that page.
+    2. Fall back to scanning the full items list for any dict item with
+       ``"object"``. This keeps the response accurate when the current
+       page happens to contain only corrupt items but other items in the
+       full list are well-formed.
+    3. Ultimate fallback to the literal ``"list"`` — Notion's own generic
+       object-discriminator for list responses. Always accurate, never
+       lies about the underlying entity type.
+
+    Scanning (rather than checking only [0]) makes the helper robust
+    against the "first item corrupt, rest well-formed" shape observed
+    in the P6.3 supply-chain live run, where auto-registered actor
+    entities occasionally lacked the "object" discriminator.
+    """
+    for item in page:
+        if isinstance(item, dict) and "object" in item:
+            return str(item["object"])
+    for item in items:
+        if isinstance(item, dict) and "object" in item:
+            return str(item["object"])
+    return "list"
+
+
 def _paginate_cursor(
     items: list[dict[str, Any]],
     input_data: dict[str, Any],
@@ -97,21 +132,25 @@ def _paginate_cursor(
     start_index = 0
     if start_cursor:
         for i, item in enumerate(items):
-            if item.get("id") == start_cursor:
+            if isinstance(item, dict) and item.get("id") == start_cursor:
                 start_index = i + 1
                 break
 
     end_index = start_index + page_size
     page = items[start_index:end_index]
     has_more = end_index < len(items)
-    next_cursor = items[end_index]["id"] if has_more else None
+    next_cursor = (
+        items[end_index]["id"]
+        if has_more and isinstance(items[end_index], dict) and "id" in items[end_index]
+        else None
+    )
 
     return {
         "object": "list",
         "results": page,
         "has_more": has_more,
         "next_cursor": next_cursor,
-        "type": page[0]["object"] if page else "page",
+        "type": _infer_list_type(page, items),
     }
 
 

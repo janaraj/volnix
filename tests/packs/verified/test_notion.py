@@ -4,6 +4,10 @@ import pytest
 
 from volnix.core.context import ResponseProposal
 from volnix.core.types import ToolName
+from volnix.packs.verified.notion.handlers import (
+    _infer_list_type,
+    _paginate_cursor,
+)
 from volnix.packs.verified.notion.pack import NotionPack
 from volnix.packs.verified.notion.schemas import (
     BLOCK_ENTITY_SCHEMA,
@@ -1332,3 +1336,195 @@ class TestNotionPackValidation:
     def test_comment_schema_identity_field(self):
         """COMMENT_ENTITY_SCHEMA x-volnix-identity is 'id'."""
         assert COMMENT_ENTITY_SCHEMA["x-volnix-identity"] == "id"
+
+
+# ---------------------------------------------------------------------------
+# _paginate_cursor / _infer_list_type regression guards
+# ---------------------------------------------------------------------------
+#
+# Regression guards for the empty-list + missing-"object"-key crash observed
+# during the P6.3 supply-chain live run (run_3cddf66b187c) where
+# handle_users_list raised KeyError: 'object' in the middle of the pipeline
+# and the agency loop silently lost the agent's turn.
+#
+# The fix is defensive introspection in _infer_list_type, with a cascading
+# fallback: page[0]["object"] -> items[0]["object"] -> literal "list".
+# Existing callers are unchanged.
+
+
+class TestPaginateCursor:
+    """Unit tests for _paginate_cursor and _infer_list_type helpers."""
+
+    def test_paginate_cursor_happy_path_page(self):
+        """Happy path: items with object=page -> response type is 'page'."""
+        items = [
+            {"id": "p1", "object": "page", "name": "Alpha"},
+            {"id": "p2", "object": "page", "name": "Beta"},
+        ]
+        result = _paginate_cursor(items, {})
+        assert result["object"] == "list"
+        assert result["type"] == "page"
+        assert len(result["results"]) == 2
+        assert result["has_more"] is False
+        assert result["next_cursor"] is None
+
+    def test_paginate_cursor_happy_path_user(self):
+        """Happy path: items with object=user -> response type is 'user'."""
+        items = [
+            {"id": "u1", "object": "user", "name": "Alice"},
+            {"id": "u2", "object": "user", "name": "Bob"},
+        ]
+        result = _paginate_cursor(items, {})
+        assert result["type"] == "user"
+        assert len(result["results"]) == 2
+
+    def test_paginate_cursor_empty_items_list(self):
+        """Empty items list -> response type falls back to the generic 'list'.
+
+        Regression guard for the new default: prior code hard-coded 'page'
+        as the empty-list fallback, which was a lie whenever the caller
+        was paginating users / blocks / comments / databases.
+        """
+        result = _paginate_cursor([], {})
+        assert result["object"] == "list"
+        assert result["type"] == "list"
+        assert result["results"] == []
+        assert result["has_more"] is False
+        assert result["next_cursor"] is None
+
+    def test_paginate_cursor_page_first_item_missing_object_key(self):
+        """First page item missing 'object' -> fall back to items[0]['object'].
+
+        This is the exact failure shape run_3cddf66b187c hit: page was
+        non-empty but the first item in that page lacked the required
+        'object' discriminator. With the fix, _infer_list_type cascades
+        to items[0] which DOES have the field.
+        """
+        items = [
+            {"id": "u1", "object": "user", "name": "Alice"},
+            {"id": "u2", "name": "Bob"},  # missing "object"
+        ]
+        # Force page_size=1 starting after u1 so page[0] is the bad u2.
+        result = _paginate_cursor(items, {"page_size": 1, "start_cursor": "u1"})
+        assert result["results"][0]["id"] == "u2"
+        # page[0] has no "object" -> fall back to items[0]["object"] = "user"
+        assert result["type"] == "user"
+
+    def test_paginate_cursor_all_items_missing_object_key(self):
+        """No item has 'object' -> ultimate fallback to literal 'list'."""
+        items = [
+            {"id": "x1", "name": "Alpha"},
+            {"id": "x2", "name": "Beta"},
+        ]
+        result = _paginate_cursor(items, {})
+        # Neither page[0] nor items[0] have "object" -> "list" fallback.
+        assert result["type"] == "list"
+        assert len(result["results"]) == 2
+
+    def test_paginate_cursor_non_dict_in_items(self):
+        """Non-dict items don't crash _paginate_cursor or _infer_list_type.
+
+        Belt-and-suspenders guard against a caller accidentally passing
+        a list containing None / strings / other non-dicts. Should
+        produce a valid response with the 'list' fallback, no crash.
+        """
+        items: list = [None, "not-a-dict", 42]
+        result = _paginate_cursor(items, {})
+        # The non-dict items are sliced into page as-is but _infer_list_type
+        # skips them and falls through to "list".
+        assert result["type"] == "list"
+        assert result["object"] == "list"
+        # results contains the raw items (caller's responsibility to validate)
+        assert len(result["results"]) == 3
+
+    def test_paginate_cursor_mixed_types_search_result(self):
+        """handle_search-style heterogeneous results -> type is first item's type.
+
+        Regression guard for handle_search which paginates mixed pages +
+        databases. The response 'type' reflects the first item in the
+        page, matching how the real Notion API discriminates.
+        """
+        items = [
+            {"id": "p1", "object": "page", "name": "Roadmap"},
+            {"id": "d1", "object": "database", "name": "Tasks DB"},
+        ]
+        result = _paginate_cursor(items, {})
+        assert result["type"] == "page"
+        assert len(result["results"]) == 2
+
+    def test_infer_list_type_prefers_page_over_items(self):
+        """_infer_list_type prefers page[0] over items[0] when both have object."""
+        items = [
+            {"id": "a", "object": "user"},
+            {"id": "b", "object": "user"},
+        ]
+        page = [{"id": "b", "object": "user"}]
+        assert _infer_list_type(page, items) == "user"
+
+    def test_infer_list_type_falls_back_to_items_when_page_first_missing(self):
+        """_infer_list_type uses items[0] when page[0] has no 'object' key."""
+        items = [
+            {"id": "a", "object": "comment"},
+            {"id": "b"},  # missing
+        ]
+        page = [{"id": "b"}]  # first in page has no "object"
+        assert _infer_list_type(page, items) == "comment"
+
+    def test_infer_list_type_falls_back_to_list_when_nothing_has_object(self):
+        """_infer_list_type returns literal 'list' as ultimate fallback."""
+        items = [{"id": "a"}, {"id": "b"}]
+        page = [{"id": "a"}]
+        assert _infer_list_type(page, items) == "list"
+
+    def test_infer_list_type_empty_inputs(self):
+        """_infer_list_type returns 'list' for empty page and empty items."""
+        assert _infer_list_type([], []) == "list"
+
+    def test_infer_list_type_skips_non_dict_items(self):
+        """_infer_list_type is safe against non-dict items in either list."""
+        assert _infer_list_type([None], [{"id": "a", "object": "block"}]) == "block"
+        assert _infer_list_type(["string"], ["string"]) == "list"
+
+
+class TestHandleUsersListRegression:
+    """End-to-end regression for the P6.3 handle_users_list crash."""
+
+    async def test_handle_users_list_with_missing_object_survives(self, notion_pack):
+        """users.list returns valid response even when a user lacks 'object'.
+
+        Reproduces the exact failure mode from run_3cddf66b187c: the state
+        contains user entities that don't strictly honor the Notion schema
+        (one is missing the 'object' discriminator). Prior to the fix,
+        _paginate_cursor would raise KeyError: 'object' mid-pipeline. With
+        the fix, _infer_list_type cascades to the well-formed second user
+        and the response is well-formed.
+        """
+        state = {
+            "users": [
+                # Missing "object" — the wire-format error that crashed run 1
+                {
+                    "id": "user-bad",
+                    "type": "person",
+                    "name": "Corrupt User",
+                },
+                # Well-formed; _infer_list_type can fall back to this
+                {
+                    "id": "user-good",
+                    "object": "user",
+                    "type": "person",
+                    "name": "Good User",
+                },
+            ],
+        }
+        proposal = await notion_pack.handle_action(
+            ToolName("users.list"),
+            {},
+            state,
+        )
+        # The critical assertion: NO exception raised.
+        body = proposal.response_body
+        assert body["object"] == "list"
+        assert len(body["results"]) == 2
+        # Fallback: first user lacks "object", second has it -> "user"
+        assert body["type"] == "user"
+        assert proposal.proposed_state_deltas == []
