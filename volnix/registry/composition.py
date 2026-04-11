@@ -24,7 +24,6 @@ def create_default_registry() -> EngineRegistry:
     from volnix.engines.animator.engine import WorldAnimatorEngine
     from volnix.engines.budget.engine import BudgetEngine
     from volnix.engines.feedback.engine import FeedbackEngine
-    from volnix.engines.game.engine import GameEngine
     from volnix.engines.game.orchestrator import GameOrchestrator
     from volnix.engines.permission.engine import PermissionEngine
     from volnix.engines.policy.engine import PolicyEngine
@@ -45,11 +44,7 @@ def create_default_registry() -> EngineRegistry:
     registry.register(FeedbackEngine())
     registry.register(WorldCompilerEngine())
     registry.register(AgencyEngine())
-    # Both game implementations coexist during the Cycle B migration:
-    # - GameEngine (key ``"game"``) services legacy round-based blueprints
-    # - GameOrchestrator (key ``"game_orchestrator"``) services event-driven
-    #   blueprints via the Cycle B.5 architecture
-    # Cycle B.10 deletes GameEngine and renames the orchestrator to ``"game"``.
-    registry.register(GameEngine())
+    # Event-driven game engine. Registered under ``"game"``; the legacy
+    # round-based ``GameEngine`` was deleted in Cycle B.10.
     registry.register(GameOrchestrator())
     return registry

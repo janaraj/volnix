@@ -1,344 +1,387 @@
-"""Tests for WinConditionEvaluator."""
+"""Tests for the event-driven win condition handlers.
+
+Exercises ``volnix/engines/game/win_conditions.py`` — the set of
+handlers that read ``GameState`` / ``state_engine``. Each handler
+tested in isolation, plus the ``WinConditionEvaluator`` filter
+behavior between behavioral and competitive modes.
+"""
 
 from __future__ import annotations
 
-from volnix.engines.game.definition import PlayerScore, RoundState, WinCondition
-from volnix.engines.game.win_conditions import WinConditionEvaluator
+from unittest.mock import AsyncMock
 
-
-def _make_score(actor_id: str, total: float = 0.0, **metrics: float) -> PlayerScore:
-    """Helper to build a PlayerScore with optional metrics."""
-    return PlayerScore(actor_id=actor_id, metrics=dict(metrics), total_score=total)
-
-
-class TestScoreThreshold:
-    def test_score_threshold_met_returns_winner(self):
-        condition = WinCondition(type="score_threshold", metric="points", threshold=100.0)
-        evaluator = WinConditionEvaluator([condition])
-
-        scores = {
-            "p1": _make_score("p1", total=120.0, points=120.0),
-            "p2": _make_score("p2", total=50.0, points=50.0),
-        }
-        round_state = RoundState(current_round=3, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "p1"
-        assert result.reason == "score_threshold"
-        assert len(result.final_standings) == 2
-
-    def test_score_threshold_not_met_returns_none(self):
-        condition = WinCondition(type="score_threshold", metric="points", threshold=100.0)
-        evaluator = WinConditionEvaluator([condition])
-
-        scores = {
-            "p1": _make_score("p1", total=50.0, points=50.0),
-            "p2": _make_score("p2", total=30.0, points=30.0),
-        }
-        round_state = RoundState(current_round=3, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-        assert result is None
-
-    def test_eliminated_player_excluded_from_threshold(self):
-        condition = WinCondition(type="score_threshold", metric="points", threshold=100.0)
-        evaluator = WinConditionEvaluator([condition])
-
-        eliminated = _make_score("p1", total=200.0, points=200.0)
-        eliminated.eliminated = True
-
-        scores = {
-            "p1": eliminated,
-            "p2": _make_score("p2", total=50.0, points=50.0),
-        }
-        round_state = RoundState(current_round=3, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-        assert result is None
-
-    def test_multiple_crossers_highest_wins(self):
-        """When multiple players cross threshold, highest scorer wins.
-
-        This is the fix for the negotiation-game bug where both parties
-        to an accepted deal cross the threshold simultaneously but the
-        old logic returned whoever was first in dict iteration order.
-        """
-        condition = WinCondition(type="score_threshold", metric="points", threshold=0.01)
-        evaluator = WinConditionEvaluator([condition])
-
-        # p1 crosses threshold with lower score; p2 with higher score
-        scores = {
-            "p1": _make_score("p1", total=41.2, points=41.2),
-            "p2": _make_score("p2", total=107.0, points=107.0),
-        }
-        round_state = RoundState(current_round=3, total_rounds=8)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "p2"  # p2 has higher score, not p1 (first in dict)
-
-    def test_multiple_crossers_highest_wins_reverse_insertion(self):
-        """Regression guard: insertion order of the lower scorer must not matter.
-
-        If the old first-in-dict logic were still in place, this test would
-        return the low scorer. The fix guarantees the highest scorer wins
-        regardless of dict order.
-        """
-        condition = WinCondition(type="score_threshold", metric="points", threshold=0.01)
-        evaluator = WinConditionEvaluator([condition])
-
-        # Low scorer FIRST, high scorer SECOND — opposite of the bug report
-        scores = {
-            "low": _make_score("low", total=5.0, points=5.0),
-            "high": _make_score("high", total=500.0, points=500.0),
-        }
-        round_state = RoundState(current_round=1, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "high"
-
-    def test_multiple_crossers_exact_tie_stable_first(self):
-        """Exact-value ties fall back to dict insertion order (via `max` stability).
-
-        This documents the tie-break semantics so future changes don't
-        accidentally regress them.
-        """
-        condition = WinCondition(type="score_threshold", metric="points", threshold=0.01)
-        evaluator = WinConditionEvaluator([condition])
-
-        scores = {
-            "first_inserted": _make_score("first_inserted", total=50.0, points=50.0),
-            "second_inserted": _make_score("second_inserted", total=50.0, points=50.0),
-        }
-        round_state = RoundState(current_round=1, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "first_inserted"
-
-    def test_multiple_crossers_eliminated_players_excluded(self):
-        """Eliminated players are excluded even in multi-crosser scenarios."""
-        condition = WinCondition(type="score_threshold", metric="points", threshold=0.01)
-        evaluator = WinConditionEvaluator([condition])
-
-        eliminated_high = _make_score("elim", total=1000.0, points=1000.0)
-        eliminated_high.eliminated = True
-
-        scores = {
-            "elim": eliminated_high,
-            "alive_low": _make_score("alive_low", total=10.0, points=10.0),
-        }
-        round_state = RoundState(current_round=1, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "alive_low"
-
-
-class TestRoundsComplete:
-    def test_rounds_complete_highest_wins(self):
-        condition = WinCondition(type="rounds_complete")
-        evaluator = WinConditionEvaluator([condition])
-
-        scores = {
-            "p1": _make_score("p1", total=80.0, points=80.0),
-            "p2": _make_score("p2", total=120.0, points=120.0),
-        }
-        round_state = RoundState(current_round=10, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "p2"
-        assert result.reason == "rounds_complete"
-
-    def test_all_eliminated(self):
-        condition = WinCondition(type="rounds_complete")
-        evaluator = WinConditionEvaluator([condition])
-
-        p1 = _make_score("p1", total=0.0)
-        p1.eliminated = True
-        p2 = _make_score("p2", total=0.0)
-        p2.eliminated = True
-
-        scores = {"p1": p1, "p2": p2}
-        round_state = RoundState(current_round=10, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner is None
-        assert result.reason == "all_eliminated"
-
-
-class TestElimination:
-    def test_elimination_below_threshold(self):
-        condition = WinCondition(type="elimination", metric="health", threshold=10.0, below=True)
-        evaluator = WinConditionEvaluator([condition])
-
-        scores = {
-            "p1": _make_score("p1", total=50.0, health=50.0),
-            "p2": _make_score("p2", total=5.0, health=5.0),
-            "p3": _make_score("p3", total=30.0, health=30.0),
-        }
-        round_state = RoundState(current_round=3, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        # p2 eliminated but 2 still alive, no winner yet
-        assert result is None
-        assert scores["p2"].eliminated is True
-
-    def test_elimination_last_standing(self):
-        condition = WinCondition(type="elimination", metric="health", threshold=10.0, below=True)
-        evaluator = WinConditionEvaluator([condition])
-
-        p2 = _make_score("p2", total=5.0, health=5.0)
-        p2.eliminated = True
-
-        scores = {
-            "p1": _make_score("p1", total=50.0, health=50.0),
-            "p2": p2,
-            "p3": _make_score("p3", total=3.0, health=3.0),
-        }
-        round_state = RoundState(current_round=5, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-
-        assert result is not None
-        assert result.winner == "p1"
-        assert result.reason == "last_standing"
-
-    def test_elimination_sets_elimination_round(self):
-        """Elimination sets elimination_round on the PlayerScore."""
-        condition = WinCondition(type="elimination", metric="health", threshold=10.0, below=True)
-        evaluator = WinConditionEvaluator([condition])
-        p1 = PlayerScore(actor_id="p1")
-        p1.metrics = {"health": 50.0}
-        p1.total_score = 50.0
-        p2 = PlayerScore(actor_id="p2")
-        p2.metrics = {"health": 5.0}
-        p2.total_score = 5.0
-        scores = {"p1": p1, "p2": p2}
-        round_state = RoundState(current_round=7, total_rounds=10)
-        evaluator.evaluate(scores, round_state)
-        assert p2.eliminated is True
-        assert p2.elimination_round == 7
-
-
-class TestEdgeCases:
-    def test_no_conditions_returns_none(self):
-        evaluator = WinConditionEvaluator([])
-        scores = {"p1": _make_score("p1", total=100.0)}
-        round_state = RoundState(current_round=5, total_rounds=10)
-
-        result = evaluator.evaluate(scores, round_state)
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
-# Registry + extensibility tests
-# ---------------------------------------------------------------------------
-
-from volnix.engines.game.protocols import WinConditionContext
+from volnix.engines.game.definition import (
+    GameState,
+    PlayerScore,
+    WinCondition,
+)
 from volnix.engines.game.win_conditions import (
     WIN_CONDITION_HANDLER_REGISTRY,
+    AllBudgetsExhaustedHandler,
+    DealClosedHandler,
+    DealRejectedHandler,
     EliminationHandler,
-    RoundsCompleteHandler,
+    MaxEventsExceededHandler,
     ScoreThresholdHandler,
-    TimeLimitHandler,
-    build_standings,
+    StalemateHandler,
+    WallClockElapsedHandler,
+    WinConditionContext,
+    WinConditionEvaluator,
 )
 
 
-class TestWinConditionHandlerRegistry:
-    def test_registry_contains_built_in_handlers(self):
-        assert "score_threshold" in WIN_CONDITION_HANDLER_REGISTRY
-        assert "rounds_complete" in WIN_CONDITION_HANDLER_REGISTRY
-        assert "elimination" in WIN_CONDITION_HANDLER_REGISTRY
-        assert "time_limit" in WIN_CONDITION_HANDLER_REGISTRY
-        assert WIN_CONDITION_HANDLER_REGISTRY["score_threshold"] is ScoreThresholdHandler
-        assert WIN_CONDITION_HANDLER_REGISTRY["rounds_complete"] is RoundsCompleteHandler
-        assert WIN_CONDITION_HANDLER_REGISTRY["elimination"] is EliminationHandler
-        assert WIN_CONDITION_HANDLER_REGISTRY["time_limit"] is TimeLimitHandler
-
-    def test_default_evaluator_uses_registry(self):
-        evaluator = WinConditionEvaluator([])
-        assert "score_threshold" in evaluator._handlers
-        assert "rounds_complete" in evaluator._handlers
-        assert "elimination" in evaluator._handlers
-
-    def test_unknown_condition_type_returns_none(self):
-        condition = WinCondition(type="unknown_type")
-        evaluator = WinConditionEvaluator([condition])
-        scores = {"p1": _make_score("p1", total=100.0)}
-        round_state = RoundState(current_round=5, total_rounds=10)
-        result = evaluator.evaluate(scores, round_state)
-        assert result is None
+def _make_scores(
+    player_ids: list[str], scores: dict[str, float] | None = None
+) -> dict[str, PlayerScore]:
+    ps_map: dict[str, PlayerScore] = {}
+    for pid in player_ids:
+        ps = PlayerScore(actor_id=pid)
+        if scores and pid in scores:
+            ps.total_score = scores[pid]
+            ps.metrics = {"total_points": scores[pid]}
+        ps_map[pid] = ps
+    return ps_map
 
 
-class TestCustomWinConditionHandler:
-    def test_custom_handler_via_constructor(self):
-        from volnix.engines.game.definition import WinResult
+def _make_ctx(
+    condition: WinCondition,
+    scores: dict[str, PlayerScore],
+    game_state: GameState | None = None,
+    state_engine: AsyncMock | None = None,
+    exhausted: set[str] | None = None,
+) -> WinConditionContext:
+    return WinConditionContext(
+        condition=condition,
+        scores=scores,
+        game_state=game_state or GameState(),
+        state_engine=state_engine or AsyncMock(query_entities=AsyncMock(return_value=[])),
+        exhausted_players=exhausted or set(),
+    )
 
-        class AlwaysWinHandler:
-            def check(self, ctx: WinConditionContext) -> WinResult | None:
-                return WinResult(winner="custom_winner", reason="custom_rule")
 
-        condition = WinCondition(type="custom_win")
-        evaluator = WinConditionEvaluator(
-            [condition],
-            handlers={"custom_win": AlwaysWinHandler()},
+class TestDealClosedHandler:
+    """Fires when any negotiation_deal reaches status=accepted."""
+
+    async def test_returns_none_when_no_deals_in_state(self):
+        handler = DealClosedHandler()
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[])
+        ctx = _make_ctx(
+            WinCondition(type="deal_closed"), _make_scores(["a", "b"]), state_engine=state
         )
-        scores = {"p1": _make_score("p1")}
-        round_state = RoundState(current_round=1, total_rounds=10)
-        result = evaluator.evaluate(scores, round_state)
+        assert await handler.check(ctx) is None
+
+    async def test_returns_none_when_deal_is_still_open(self):
+        handler = DealClosedHandler()
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[{"id": "d1", "status": "open"}])
+        ctx = _make_ctx(
+            WinCondition(type="deal_closed"), _make_scores(["a", "b"]), state_engine=state
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_fires_when_deal_is_accepted(self):
+        handler = DealClosedHandler()
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[{"id": "d1", "status": "accepted"}])
+        ctx = _make_ctx(
+            WinCondition(type="deal_closed"),
+            _make_scores(["a", "b"], {"a": 80.0, "b": 60.0}),
+            state_engine=state,
+        )
+        result = await handler.check(ctx)
         assert result is not None
-        assert result.winner == "custom_winner"
-        assert result.reason == "custom_rule"
+        assert result.reason == "deal_closed"
+        assert result.winner == "a"  # highest score
+        assert len(result.final_standings) == 2
 
-    def test_register_handler_at_runtime(self):
-        from volnix.engines.game.definition import WinResult
+    async def test_query_failure_returns_none_not_raise(self):
+        handler = DealClosedHandler()
+        state = AsyncMock()
+        state.query_entities = AsyncMock(side_effect=RuntimeError("db down"))
+        ctx = _make_ctx(
+            WinCondition(type="deal_closed"), _make_scores(["a", "b"]), state_engine=state
+        )
+        assert await handler.check(ctx) is None
 
-        class LateHandler:
-            def check(self, ctx: WinConditionContext) -> WinResult | None:
-                return WinResult(winner="late", reason="registered_late")
 
-        condition = WinCondition(type="late_type")
-        evaluator = WinConditionEvaluator([condition])
+class TestDealRejectedHandler:
+    """Fires when any negotiation_deal reaches status=rejected."""
 
-        scores = {"p1": _make_score("p1")}
-        round_state = RoundState(current_round=1, total_rounds=10)
-        result = evaluator.evaluate(scores, round_state)
+    async def test_fires_on_rejected_deal(self):
+        handler = DealRejectedHandler()
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[{"id": "d1", "status": "rejected"}])
+        ctx = _make_ctx(
+            WinCondition(type="deal_rejected"), _make_scores(["a", "b"]), state_engine=state
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.reason == "deal_rejected"
+        assert result.winner is None  # no winner on rejection
+
+
+class TestStalemateHandler:
+    """No-op on per-event checks; orchestrator drives via timer."""
+
+    async def test_always_returns_none(self):
+        handler = StalemateHandler()
+        ctx = _make_ctx(WinCondition(type="stalemate_timeout"), _make_scores(["a", "b"]))
+        assert await handler.check(ctx) is None
+
+
+class TestWallClockElapsedHandler:
+    """No-op on per-event checks; orchestrator drives via timer."""
+
+    async def test_always_returns_none(self):
+        handler = WallClockElapsedHandler()
+        ctx = _make_ctx(WinCondition(type="wall_clock_elapsed"), _make_scores(["a", "b"]))
+        assert await handler.check(ctx) is None
+
+
+class TestMaxEventsExceededHandler:
+    """Fires when game_state.event_counter >= max_events from type_config."""
+
+    async def test_does_not_fire_under_cap(self):
+        handler = MaxEventsExceededHandler()
+        ctx = _make_ctx(
+            WinCondition(type="max_events_exceeded", type_config={"max_events": 10}),
+            _make_scores(["a", "b"]),
+            game_state=GameState(event_counter=5),
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_fires_at_cap(self):
+        handler = MaxEventsExceededHandler()
+        ctx = _make_ctx(
+            WinCondition(type="max_events_exceeded", type_config={"max_events": 10}),
+            _make_scores(["a", "b"]),
+            game_state=GameState(event_counter=10),
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.reason == "max_events_exceeded"
+        assert result.winner is None
+
+    async def test_fires_above_cap(self):
+        handler = MaxEventsExceededHandler()
+        ctx = _make_ctx(
+            WinCondition(type="max_events_exceeded", type_config={"max_events": 10}),
+            _make_scores(["a", "b"]),
+            game_state=GameState(event_counter=15),
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+
+    async def test_zero_cap_disables_handler(self):
+        handler = MaxEventsExceededHandler()
+        ctx = _make_ctx(
+            WinCondition(type="max_events_exceeded", type_config={"max_events": 0}),
+            _make_scores(["a", "b"]),
+            game_state=GameState(event_counter=100),
+        )
+        assert await handler.check(ctx) is None
+
+
+class TestAllBudgetsExhaustedHandler:
+    """Fires when every game player is in exhausted_players set."""
+
+    async def test_no_exhausted_players(self):
+        handler = AllBudgetsExhaustedHandler()
+        ctx = _make_ctx(
+            WinCondition(type="all_budgets_exhausted"),
+            _make_scores(["a", "b"]),
+            exhausted=set(),
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_partial_exhaustion_does_not_fire(self):
+        handler = AllBudgetsExhaustedHandler()
+        ctx = _make_ctx(
+            WinCondition(type="all_budgets_exhausted"),
+            _make_scores(["a", "b"]),
+            exhausted={"a"},
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_full_exhaustion_fires(self):
+        handler = AllBudgetsExhaustedHandler()
+        ctx = _make_ctx(
+            WinCondition(type="all_budgets_exhausted"),
+            _make_scores(["a", "b"]),
+            exhausted={"a", "b"},
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.reason == "all_budgets_exhausted"
+        assert result.winner is None
+
+    async def test_no_scores_no_fire(self):
+        """Empty scores map — can't say everyone is exhausted if there's nobody."""
+        handler = AllBudgetsExhaustedHandler()
+        ctx = _make_ctx(
+            WinCondition(type="all_budgets_exhausted"),
+            {},
+            exhausted=set(),
+        )
+        assert await handler.check(ctx) is None
+
+
+class TestScoreThresholdHandler:
+    """Competitive-mode: winner is first player whose metric >= threshold."""
+
+    async def test_no_crossers(self):
+        handler = ScoreThresholdHandler()
+        ctx = _make_ctx(
+            WinCondition(type="score_threshold", metric="total_points", threshold=100.0),
+            _make_scores(["a", "b"], {"a": 40.0, "b": 50.0}),
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_single_crosser_wins(self):
+        handler = ScoreThresholdHandler()
+        ctx = _make_ctx(
+            WinCondition(type="score_threshold", metric="total_points", threshold=80.0),
+            _make_scores(["a", "b"], {"a": 85.0, "b": 50.0}),
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.winner == "a"
+        assert result.reason == "score_threshold"
+
+    async def test_multiple_crossers_highest_wins(self):
+        handler = ScoreThresholdHandler()
+        ctx = _make_ctx(
+            WinCondition(type="score_threshold", metric="total_points", threshold=70.0),
+            _make_scores(["a", "b", "c"], {"a": 75.0, "b": 95.0, "c": 85.0}),
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.winner == "b"  # highest
+
+    async def test_eliminated_player_skipped(self):
+        handler = ScoreThresholdHandler()
+        scores = _make_scores(["a", "b"], {"a": 100.0, "b": 50.0})
+        scores["a"].eliminated = True
+        ctx = _make_ctx(
+            WinCondition(type="score_threshold", metric="total_points", threshold=80.0),
+            scores,
+        )
+        # 'a' is eliminated so not counted; 'b' is below threshold
+        assert await handler.check(ctx) is None
+
+
+class TestEliminationHandler:
+    """Eliminate players below threshold; last standing wins."""
+
+    async def test_nobody_below_threshold(self):
+        handler = EliminationHandler()
+        ctx = _make_ctx(
+            WinCondition(type="elimination", metric="total_points", threshold=10.0, below=True),
+            _make_scores(["a", "b"], {"a": 50.0, "b": 40.0}),
+        )
+        assert await handler.check(ctx) is None
+
+    async def test_one_eliminated_other_wins(self):
+        handler = EliminationHandler()
+        scores = _make_scores(["a", "b"], {"a": 50.0, "b": 5.0})
+        ctx = _make_ctx(
+            WinCondition(type="elimination", metric="total_points", threshold=10.0, below=True),
+            scores,
+            game_state=GameState(event_counter=7),
+        )
+        result = await handler.check(ctx)
+        assert result is not None
+        assert result.winner == "a"
+        assert result.reason == "last_standing"
+        assert scores["b"].eliminated is True
+        assert scores["b"].eliminated_at_event == 7
+
+
+class TestWinConditionEvaluator:
+    """The orchestrator-facing evaluator that runs handlers in order."""
+
+    async def test_empty_conditions_returns_none(self):
+        ev = WinConditionEvaluator([], scoring_mode="behavioral")
+        result = await ev.check(
+            _make_scores(["a", "b"]),
+            GameState(),
+            AsyncMock(query_entities=AsyncMock(return_value=[])),
+        )
         assert result is None
 
-        evaluator.register_handler("late_type", LateHandler())
-        result = evaluator.evaluate(scores, round_state)
+    async def test_behavioral_mode_filters_out_score_threshold(self, caplog):
+        """Competitive-only handlers are stripped at construction in behavioral mode."""
+        conditions = [
+            WinCondition(type="score_threshold", metric="total_points", threshold=10.0),
+            WinCondition(type="deal_closed"),
+        ]
+        ev = WinConditionEvaluator(conditions, scoring_mode="behavioral")
+        # score_threshold would fire (everyone crosses zero) but it's filtered out.
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[])
+        result = await ev.check(
+            _make_scores(["a"], {"a": 100.0}),
+            GameState(),
+            state,
+        )
+        assert result is None  # score_threshold filtered; deal_closed returned None
+
+    async def test_competitive_mode_keeps_score_threshold(self):
+        """In competitive mode, score_threshold handler IS active."""
+        conditions = [
+            WinCondition(type="score_threshold", metric="total_points", threshold=80.0),
+        ]
+        ev = WinConditionEvaluator(conditions, scoring_mode="competitive")
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[])
+        result = await ev.check(
+            _make_scores(["a", "b"], {"a": 85.0, "b": 50.0}),
+            GameState(),
+            state,
+        )
         assert result is not None
-        assert result.winner == "late"
+        assert result.winner == "a"
+
+    async def test_first_match_wins(self):
+        """Multiple conditions — evaluator returns the first match."""
+        conditions = [
+            WinCondition(type="deal_closed"),
+            WinCondition(type="max_events_exceeded", type_config={"max_events": 5}),
+        ]
+        ev = WinConditionEvaluator(conditions, scoring_mode="behavioral")
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[{"id": "d1", "status": "accepted"}])
+        result = await ev.check(
+            _make_scores(["a", "b"], {"a": 80.0}),
+            GameState(event_counter=10),  # would also trip max_events
+            state,
+        )
+        assert result is not None
+        # deal_closed declared first; returned first
+        assert result.reason == "deal_closed"
+
+    async def test_unknown_condition_type_is_skipped(self, caplog):
+        conditions = [WinCondition(type="some_unknown_thing")]
+        ev = WinConditionEvaluator(conditions, scoring_mode="behavioral")
+        state = AsyncMock()
+        state.query_entities = AsyncMock(return_value=[])
+        result = await ev.check(_make_scores(["a"]), GameState(), state)
+        assert result is None
 
 
-class TestBuildStandingsUtility:
-    def test_build_standings_sorted_descending(self):
-        scores = {
-            "p1": _make_score("p1", total=50.0),
-            "p2": _make_score("p2", total=150.0),
-            "p3": _make_score("p3", total=100.0),
+class TestRegistryRegistration:
+    """Smoke check the handler registry covers all expected types."""
+
+    def test_registry_contains_all_new_types(self):
+        expected = {
+            "deal_closed",
+            "deal_rejected",
+            "stalemate_timeout",
+            "wall_clock_elapsed",
+            "max_events_exceeded",
+            "all_budgets_exhausted",
+            "score_threshold",
+            "elimination",
         }
-        standings = build_standings(scores)
-        assert standings[0]["actor_id"] == "p2"
-        assert standings[0]["rank"] == 1
-        assert standings[1]["actor_id"] == "p3"
-        assert standings[2]["actor_id"] == "p1"
-        assert standings[2]["rank"] == 3
-
-    def test_build_standings_empty(self):
-        standings = build_standings({})
-        assert standings == []
+        assert set(WIN_CONDITION_HANDLER_REGISTRY.keys()) == expected

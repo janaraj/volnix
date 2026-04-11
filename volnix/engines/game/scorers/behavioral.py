@@ -11,9 +11,6 @@ Reads events + state_engine to compute:
 - ``policy_blocks``: count of actions blocked by policy
 - ``permission_denials``: count of actions denied by permission engine
 - ``policy_compliance_pct``: 100 - (blocks+denials)/events * 100
-- ``final_terms_match_state`` (settle only): whether the final deal
-  terms are consistent with current world state (e.g. port closed →
-  freight mode air)
 
 **Critical invariant (MF3)**: BehavioralScorer NEVER reads
 ``term_weights``, ``batna_score``, ``ideal_terms``, or ``term_ranges``.
@@ -150,47 +147,17 @@ class BehavioralScorer(GameScorer):
         player_scores: dict[str, PlayerScore],
         definition: Any,
     ) -> None:
-        """On timeout, compute ``final_terms_match_state`` per player.
+        """Behavioral mode settle: no-op.
 
-        Behavioral mode never applies BATNA. Instead we compute a
-        per-player ``final_terms_match_state`` float in ``[0, 1]``
-        indicating whether the final deal terms are consistent with
-        current world state.
-
-        Current heuristic: if the port (notion page ``port_haiphong``)
-        is closed AND the deal's ``freight_mode`` isn't ``air``, score
-        0.3 (significant mismatch). Otherwise 1.0. This is intentionally
-        scenario-specific — future scenarios extend with their own
-        consistency checks.
+        Behavioral mode never applies BATNA or re-scores at termination
+        — the running metrics (``world_queries_total``, ``reactivity``,
+        ``policy_compliance_pct``) already reflect player behavior up to
+        the final event. Scenario-specific consistency checks (e.g.
+        "final terms vs current port status") live in the per-scenario
+        evaluation script (``tests/evals/*_eval.py``), not here, so
+        the scorer stays scenario-agnostic.
         """
-        for deal in open_deals:
-            terms = deal.get("terms") or {}
-            match = await self._compute_terms_match(state_engine, terms)
-            parties = deal.get("parties") or []
-            for party_role in parties:
-                for pid, ps in player_scores.items():
-                    # Match by role prefix (pid format: "nimbus_buyer-ff6dd400")
-                    if pid.startswith(party_role + "-") or ps.actor_id.startswith(party_role + "-"):
-                        ps.behavior_metrics["final_terms_match_state"] = match
         logger.info(
-            "BehavioralScorer.settle: finalized behavior metrics for %d players",
+            "BehavioralScorer.settle: noop (metrics already finalized for %d players)",
             len(player_scores),
         )
-
-    @staticmethod
-    async def _compute_terms_match(state_engine: Any, terms: dict[str, Any]) -> float:
-        """Heuristic: port status vs freight_mode consistency."""
-        if not terms:
-            return 0.0
-        try:
-            ports = await state_engine.query_entities("page", {"id": "port_haiphong"})
-        except Exception:  # noqa: BLE001
-            return 0.5
-        if not ports:
-            return 1.0
-        port = ports[0]
-        status = str(port.get("status", "")).lower()
-        freight = str(terms.get("freight_mode", "")).lower()
-        if status == "closed" and freight != "air":
-            return 0.3
-        return 1.0

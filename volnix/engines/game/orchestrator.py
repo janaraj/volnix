@@ -1,7 +1,6 @@
 """GameOrchestrator — event-driven game engine.
 
-Replaces the round-based :class:`volnix.game.runner.GameRunner` with a
-pure event-driven orchestrator that subscribes to committed game-tool
+A pure event-driven orchestrator that subscribes to committed game-tool
 events on the bus, runs the scorer incrementally, checks win
 conditions, re-activates the next player via
 :class:`volnix.core.protocols.AgencyActivationProtocol`, and manages
@@ -70,7 +69,7 @@ from volnix.engines.game.scorers import (
     GameScorer,
     ScorerContext,
 )
-from volnix.engines.game.win_conditions_v2 import EventDrivenWinConditionEvaluator
+from volnix.engines.game.win_conditions import WinConditionEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +112,7 @@ class GameOrchestrator(BaseEngine):
     dedicated handler method with a different signature.
     """
 
-    # Registered under ``"game_orchestrator"`` during Cycle B migration so
-    # both the legacy round-based :class:`GameEngine` (key ``"game"``) and
-    # this event-driven orchestrator coexist in the same registry. When
-    # Cycle B.10 deletes the legacy engine, this renames back to
-    # ``"game"``. Tests and composition root use ``"game_orchestrator"``
-    # to reach this engine.
-    engine_name: ClassVar[str] = "game_orchestrator"
+    engine_name: ClassVar[str] = "game"
     # No auto-subscriptions — we subscribe manually per-topic in _on_start
     # because different topics dispatch to different handlers.
     subscriptions: ClassVar[list[str]] = []
@@ -137,7 +130,7 @@ class GameOrchestrator(BaseEngine):
         self._role_to_actor_id: dict[str, ActorId] = {}  # built in configure()
         self._run_id: str = ""
         self._scorer: GameScorer | None = None
-        self._win_evaluator: EventDrivenWinConditionEvaluator | None = None
+        self._win_evaluator: WinConditionEvaluator | None = None
 
         # Runtime mutable state
         self._player_scores: dict[str, PlayerScore] = {}
@@ -426,7 +419,7 @@ class GameOrchestrator(BaseEngine):
             self._scorer = BehavioralScorer()
 
         # Filter win conditions to mode; drops score_threshold in behavioral
-        self._win_evaluator = EventDrivenWinConditionEvaluator(
+        self._win_evaluator = WinConditionEvaluator(
             conditions=list(definition.win_conditions),
             scoring_mode=definition.scoring_mode,
         )

@@ -1,8 +1,7 @@
 """Tests for volnix/engines/game/definition.py — event-driven models.
 
-Covers the Cycle B additions (FlowConfig, GameEntitiesConfig, GameState,
-extended GameDefinition) and confirms the legacy round-based models still
-load (they're deleted in B.10).
+Covers FlowConfig, GameEntitiesConfig, GameState, GameDefinition, and
+the runtime helper types.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ import pytest
 from pydantic import ValidationError
 
 from volnix.engines.game.definition import (
-    BetweenRoundsConfig,
     DealDecl,
     FlowConfig,
     GameDefinition,
@@ -22,9 +20,6 @@ from volnix.engines.game.definition import (
     GameState,
     PlayerBriefDecl,
     PlayerScore,
-    ResourceReset,
-    RoundConfig,
-    RoundState,
     TargetTermsDecl,
     WinCondition,
 )
@@ -167,18 +162,6 @@ class TestGameDefinition:
         assert g.entities.deals == []
         assert g.entities.player_briefs == []
 
-    def test_legacy_fields_still_present(self):
-        """Legacy rounds/turn_protocol/between_rounds still accessible.
-
-        Must stay until Cycle B.10 so that volnix/game/runner.py keeps
-        importing them during the migration.
-        """
-        g = GameDefinition()
-        assert g.rounds.count == 10
-        assert g.turn_protocol == "independent"
-        assert g.between_rounds.animator_tick is True
-        assert g.resource_reset_per_round.api_calls == 0
-
     def test_full_competitive_definition(self):
         """Full event-driven competitive GameDefinition loads from dict."""
         g = GameDefinition(
@@ -310,32 +293,28 @@ class TestGameResult:
         assert r.scoring_mode == "competitive"
 
 
-class TestLegacyModelsStillPresent:
-    """Legacy round-based models preserved for migration compat (deleted in B.10)."""
+class TestNoLegacyLeakage:
+    """Legacy round-based types must not reappear in the definition module."""
 
-    def test_round_config_still_imports(self):
-        """RoundConfig still exists (used by volnix/game/runner.py)."""
-        r = RoundConfig()
-        assert r.count == 10
+    def test_round_types_are_not_importable(self):
+        """RoundConfig/RoundState/BetweenRoundsConfig/ResourceReset are gone."""
+        import volnix.engines.game.definition as d
 
-    def test_round_state_still_imports(self):
-        """RoundState still exists with advance/end_round/complete."""
-        s = RoundState()
-        s2 = s.advance()
-        assert s2.current_round == 1
-        assert s2.phase == "in_progress"
+        assert not hasattr(d, "RoundConfig")
+        assert not hasattr(d, "RoundState")
+        assert not hasattr(d, "BetweenRoundsConfig")
+        assert not hasattr(d, "ResourceReset")
 
-    def test_between_rounds_config_still_imports(self):
-        """BetweenRoundsConfig still exists."""
-        b = BetweenRoundsConfig()
-        assert b.animator_tick is True
+    def test_game_definition_has_no_legacy_fields(self):
+        """GameDefinition no longer carries rounds/turn_protocol/between_rounds."""
+        g = GameDefinition()
+        assert not hasattr(g, "rounds")
+        assert not hasattr(g, "turn_protocol")
+        assert not hasattr(g, "between_rounds")
+        assert not hasattr(g, "resource_reset_per_round")
 
-    def test_resource_reset_still_imports(self):
-        """ResourceReset still exists."""
-        r = ResourceReset()
-        assert r.api_calls == 0
-
-    def test_legacy_rounds_field_on_game_definition(self):
-        """GameDefinition.rounds still accessible (legacy compat)."""
-        g = GameDefinition(rounds=RoundConfig(count=5))
-        assert g.rounds.count == 5
+    def test_player_score_has_no_elimination_round(self):
+        """PlayerScore.elimination_round is gone; only eliminated_at_event remains."""
+        ps = PlayerScore(actor_id="a-001")
+        assert not hasattr(ps, "elimination_round")
+        assert hasattr(ps, "eliminated_at_event")

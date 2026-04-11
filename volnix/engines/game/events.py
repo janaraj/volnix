@@ -1,4 +1,9 @@
-"""Game-specific event types."""
+"""Game-specific event types published by :class:`GameOrchestrator`.
+
+Every event is a frozen Pydantic model inheriting from
+:class:`volnix.core.events.Event`. Subscribers (reporter, CLI,
+policy gate) read these off the bus.
+"""
 
 from __future__ import annotations
 
@@ -10,72 +15,30 @@ from volnix.core.events import Event
 from volnix.core.types import ActorId
 
 
-class GameStartedEvent(Event):
-    """Game has started."""
-
-    game_mode: str
-    player_ids: list[str] = Field(default_factory=list)
-    total_rounds: int = 0
-
-
-class GameRoundStartedEvent(Event):
-    """A new round has begun."""
-
-    round_number: int
-    total_rounds: int
-
-
-class GameRoundEndedEvent(Event):
-    """A round has ended with standings."""
-
-    round_number: int
-    standings: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class GameTurnEvent(Event):
-    """A player's turn within a round."""
-
-    round_number: int
-    actor_id: ActorId
-    actions_taken: int = 0
-    actions_remaining: int = 0
-
-
 class GameScoreUpdatedEvent(Event):
-    """A player's score was updated."""
+    """Published after each committed game event for every player.
+
+    The orchestrator publishes one event per player per committed
+    game tool call so subscribers can track incremental score changes
+    without polling. Value is the player's current ``total_score``.
+    """
 
     actor_id: ActorId
-    metric: str
+    metric: str = ""
     value: float = 0.0
-    round_number: int = 0
-
-
-class GameCompletedEvent(Event):
-    """Game has finished."""
-
-    winner: str | None = None
-    final_standings: list[dict[str, Any]] = Field(default_factory=list)
-    reason: str = ""
-    total_rounds_played: int = 0
 
 
 class GameEliminationEvent(Event):
-    """A player was eliminated."""
+    """Published when a player is eliminated (budget exhausted or policy)."""
 
     actor_id: ActorId
     reason: str = ""
-    round_number: int = 0
+    event_number: int = 0
 
 
 # ---------------------------------------------------------------------------
-# Cycle B event-driven event types
+# Lifecycle events (published by GameOrchestrator)
 # ---------------------------------------------------------------------------
-#
-# New events published by GameOrchestrator in the event-driven flow.
-# These coexist with the legacy round-based events during Cycle B
-# migration. The legacy types (GameStartedEvent, GameRoundStartedEvent,
-# GameRoundEndedEvent, GameTurnEvent, GameCompletedEvent) are deleted
-# in Cycle B.10 when volnix/game/runner.py and GameEngine are removed.
 
 
 class GameKickstartEvent(Event):

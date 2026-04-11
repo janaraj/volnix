@@ -376,20 +376,20 @@ def run(
 def _is_game_runner(runner: Any) -> bool:
     """Check if a runner is a game-mode runner (vs SimulationRunner).
 
-    Matches both the legacy ``GameRunner`` (round-based) and the new
-    ``OrchestratorRunner`` (event-driven). Both return a game result
-    object from ``.run()`` with ``.reason`` + optional ``.winner``.
+    Matches :class:`OrchestratorRunner` produced by ``_setup_simulation``
+    when the blueprint has ``game.enabled: true``. Both runners return
+    different result shapes from ``.run()``, so the CLI uses this flag
+    to dispatch formatting.
     """
-    name = type(runner).__name__
-    return name in {"GameRunner", "OrchestratorRunner"}
+    return type(runner).__name__ == "OrchestratorRunner"
 
 
 def _format_run_result(result: Any, is_game: bool) -> str:
     """Format the result of runner.run() for display.
 
     SimulationRunner returns a string stop reason.
-    GameRunner / OrchestratorRunner return a GameResult object with
-    ``.reason`` and optional ``.winner``.
+    OrchestratorRunner returns a GameResult object with ``.reason``
+    and optional ``.winner``.
     """
     if is_game and hasattr(result, "reason"):
         winner = getattr(result, "winner", None)
@@ -400,14 +400,18 @@ def _format_run_result(result: Any, is_game: bool) -> str:
 
 
 async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
-    """Set up the SimulationRunner (or GameRunner) for a world with internal actors.
+    """Set up the runner for a world with internal actors.
 
     Returns (runner, event_queue, kickstart) if the world has internal
     actors, or None if no simulation is needed (external-only world).
 
-    If the blueprint has ``game.enabled: true``, returns a GameRunner instead
-    of a SimulationRunner. The GameRunner manages round-based game loops with
-    scoring and win conditions.
+    Dispatches on ``plan.game.enabled``:
+
+    - Game blueprint → :class:`OrchestratorRunner` wrapping the
+      :class:`GameOrchestrator`. The orchestrator was already configured
+      via ``app.configure_game`` and bootstraps its first activation
+      inside ``_on_start``.
+    - Non-game blueprint → :class:`SimulationRunner`.
 
     Shared between ``serve`` and ``run --serve`` to avoid duplication.
     """
@@ -458,70 +462,35 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
         agency.set_tool_executor(pipeline_executor)
 
     # --- Game blueprint detection ---
-    # If the plan has game.enabled: true, choose between:
-    #  * event-driven ``OrchestratorRunner`` (Cycle B, detected via
-    #    ``plan.game.entities.deals`` non-empty), OR
-    #  * legacy ``GameRunner`` (round-based, detected via
-    #    ``plan.game.rounds.count > 0``).
-    # Both satisfy the CLI's runner interface (``.run()`` returns a
-    # GameResult with ``.reason`` + optional ``.winner``).
+    # If the plan has ``game.enabled: true``, wrap the GameOrchestrator
+    # in an OrchestratorRunner so it satisfies the CLI's runner.run()
+    # interface. The orchestrator was already configured via
+    # ``app.configure_game`` and bootstraps its first activation inside
+    # ``_on_start``; no kickstart envelope submission is needed.
     game_def = getattr(compiled_plan, "game", None)
     if game_def and getattr(game_def, "enabled", False):
-        entities = getattr(game_def, "entities", None)
-        deals = getattr(entities, "deals", None) if entities else None
-        if deals:
-            # Cycle B event-driven path: GameOrchestrator + OrchestratorRunner.
-            from volnix.engines.game.orchestrator_runner import OrchestratorRunner
-
-            try:
-                orchestrator = volnix.registry.get("game_orchestrator")
-            except KeyError:
-                console.print("[yellow]  Game enabled but GameOrchestrator not registered[/yellow]")
-                orchestrator = None
-            if orchestrator is not None:
-                orch_runner = OrchestratorRunner(
-                    orchestrator=orchestrator,
-                    agency=agency,
-                    event_queue=event_queue,
-                )
-                mission = getattr(compiled_plan, "mission", None)
-                if mission:
-                    orch_runner.set_mission(mission)
-                console.print(
-                    f"  [green]Game mode (event-driven): {game_def.mode}, "
-                    f"scoring={game_def.scoring_mode}, "
-                    f"max_events={game_def.flow.max_events}[/green]"
-                )
-                # No kickstart envelope submission — the orchestrator
-                # bootstraps the first activation via agency directly in
-                # ``_on_start`` (called from ``app.configure_game``).
-                return orch_runner, event_queue, kickstart
-
-        # Legacy path: round-based GameRunner (deleted in B.10)
-        from volnix.game.runner import GameRunner
+        from volnix.engines.game.orchestrator_runner import OrchestratorRunner
 
         try:
-            game_engine = volnix.registry.get("game")
+            orchestrator = volnix.registry.get("game")
         except KeyError:
+            console.print("[yellow]  Game enabled but GameOrchestrator not registered[/yellow]")
+            orchestrator = None
+        if orchestrator is not None:
+            orch_runner = OrchestratorRunner(
+                orchestrator=orchestrator,
+                agency=agency,
+                event_queue=event_queue,
+            )
+            mission = getattr(compiled_plan, "mission", None)
+            if mission:
+                orch_runner.set_mission(mission)
             console.print(
-                "[yellow]  Game enabled but GameEngine not registered — falling back to SimulationRunner[/yellow]"
+                f"  [green]Game mode: {game_def.mode}, "
+                f"scoring={game_def.scoring_mode}, "
+                f"max_events={game_def.flow.max_events}[/green]"
             )
-            game_engine = None
-
-        if game_engine is not None:
-            game_runner = GameRunner(
-                game_engine=game_engine,
-                agency_engine=agency,
-                animator=volnix.registry.get("animator"),
-                budget_engine=volnix.registry.get("budget"),
-                pipeline_executor=pipeline_executor,
-                app=volnix,
-            )
-            console.print(
-                f"  [green]Game mode (legacy): {game_def.mode}, {game_def.rounds.count} rounds[/green]"
-            )
-            event_queue.submit(kickstart)
-            return game_runner, event_queue, kickstart
+            return orch_runner, event_queue, kickstart
 
     # --- Standard simulation path ---
     plan_actors = getattr(compiled_plan, "actor_specs", [])

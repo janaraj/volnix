@@ -689,32 +689,49 @@ class TestSanitizeToolParamsForGemini:
         assert _sanitize_tool_params_for_gemini(None) is None
         assert _sanitize_tool_params_for_gemini([1, 2, 3]) == [1, 2, 3]
 
-    def test_negotiation_tool_schemas_survive_sanitization(self):
-        """End-to-end: the actual NEGOTIATION_TOOLS schemas sanitize cleanly."""
-        from volnix.game.evaluators.negotiation import NEGOTIATION_TOOLS
+    def test_negotiation_like_schema_survives_sanitization(self):
+        """A realistic negotiation-tool schema sanitizes cleanly for Gemini.
 
-        for tool in NEGOTIATION_TOOLS:
-            out = _sanitize_tool_params_for_gemini(tool.parameters)
-            # No forbidden keys at top level
-            assert "additionalProperties" not in out, (
-                f"{tool.name} still has additionalProperties after sanitize"
-            )
-            # No forbidden keys in nested properties either
-            for prop_name, prop_schema in out.get("properties", {}).items():
-                if isinstance(prop_schema, dict):
-                    assert "additionalProperties" not in prop_schema, (
-                        f"{tool.name}.{prop_name} has additionalProperties"
-                    )
-            # Core structure survives
-            assert out["type"] == "object"
-            assert "required" in out
-            assert "properties" in out
-            # Propose / counter still require all five terms
-            if tool.name in ("negotiate_propose", "negotiate_counter"):
-                assert set(out["required"]) == {
-                    "deal_id",
-                    "price",
-                    "delivery_weeks",
-                    "payment_days",
-                    "warranty_months",
-                }
+        This was an end-to-end smoke against the legacy NEGOTIATION_TOOLS
+        constants in ``volnix/game/evaluators/negotiation.py``. That module
+        was deleted in Cycle B.10; the test is preserved as a structural
+        check against a representative schema instead.
+        """
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "deal_id",
+                "price",
+                "delivery_weeks",
+                "payment_days",
+                "warranty_months",
+            ],
+            "properties": {
+                "deal_id": {"type": "string"},
+                "price": {"type": "number"},
+                "delivery_weeks": {"type": "integer"},
+                "payment_days": {"type": "integer"},
+                "warranty_months": {"type": "integer"},
+                "terms": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"note": {"type": "string"}},
+                },
+            },
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "additionalProperties" not in out
+        for _, prop_schema in out.get("properties", {}).items():
+            if isinstance(prop_schema, dict):
+                assert "additionalProperties" not in prop_schema
+        assert out["type"] == "object"
+        assert "required" in out
+        assert "properties" in out
+        assert set(out["required"]) == {
+            "deal_id",
+            "price",
+            "delivery_weeks",
+            "payment_days",
+            "warranty_months",
+        }

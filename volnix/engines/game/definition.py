@@ -2,15 +2,13 @@
 
 Parsed from the ``game:`` section of blueprint YAML.
 
-**Cycle B transition note**: this module contains BOTH the new event-driven
-models (FlowConfig, GameEntitiesConfig, GameState, etc.) AND the legacy
-round-based models (RoundConfig, RoundState, BetweenRoundsConfig, ResourceReset)
-as deprecated stubs. The legacy stubs exist so that downstream callers in
-``volnix/game/runner.py`` etc. keep compiling during the migration. They are
-deleted in Cycle B.10 once all callers are rewired.
+All game config is event-driven: :class:`FlowConfig` drives wall-clock
+and event-count limits, :class:`GameEntitiesConfig` declares the deals
+and player briefs the orchestrator materializes into state, and
+:class:`GameDefinition` is the top-level container.
 
-The new event-driven model is the canonical shape. New code should only
-import FlowConfig, GameEntitiesConfig, GameState, GameDefinition.
+Mutable runtime state lives in :class:`GameState` (held by the
+orchestrator) and :class:`PlayerScore` (held per-player).
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ ActivationMode = Literal["serial", "parallel"]
 
 
 class FlowConfig(BaseModel, frozen=True):
-    """Event-driven flow configuration. Replaces RoundConfig.
+    """Event-driven flow configuration.
 
     - max_wall_clock_seconds: hard wall-clock budget for the whole game
     - max_events: hard cap on committed game tool events
@@ -177,8 +175,6 @@ class WinCondition(BaseModel, frozen=True):
     - ``all_budgets_exhausted``: every game player's world_actions budget done
     - ``score_threshold``: competitive mode only; filtered out in behavioral
     - ``elimination``: per-player elimination below a metric threshold
-    - ``rounds_complete`` (LEGACY): kept for backward compat with legacy
-      blueprints; emits a deprecation warning when used
     """
 
     type: str = "deal_closed"
@@ -189,60 +185,21 @@ class WinCondition(BaseModel, frozen=True):
 
 
 # ---------------------------------------------------------------------------
-# Legacy round-based models (deprecated; deleted in Cycle B.10)
-# ---------------------------------------------------------------------------
-
-
-class RoundConfig(BaseModel, frozen=True):
-    """DEPRECATED: Round/turn configuration.
-
-    Preserved only so legacy callers (``volnix/game/runner.py``,
-    ``volnix/engines/game/engine.py``) keep compiling during the Cycle B
-    migration. All round-based logic is replaced by :class:`FlowConfig`.
-    Deleted in Cycle B.10.
-    """
-
-    count: int = 10
-    actions_per_turn: int = 5
-    simultaneous: bool = False
-
-
-class ResourceReset(BaseModel, frozen=True):
-    """DEPRECATED: Per-round resource regeneration. Deleted in Cycle B.10."""
-
-    api_calls: int = 0
-    world_actions: int = 0
-    spend_usd: float = 0.0
-
-
-class BetweenRoundsConfig(BaseModel, frozen=True):
-    """DEPRECATED: Between-round hook configuration. Deleted in Cycle B.10."""
-
-    animator_tick: bool = True
-    announce_scores: bool = True
-    evaluator: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Top-level GameDefinition (extended, backward compat)
+# Top-level GameDefinition (event-driven)
 # ---------------------------------------------------------------------------
 
 
 class GameDefinition(BaseModel, frozen=True):
     """Complete game configuration from blueprint YAML.
 
-    Cycle B additions (event-driven):
+    Event-driven fields:
 
     - ``flow``: :class:`FlowConfig` — event-driven flow settings
-    - ``entities``: :class:`GameEntitiesConfig` — structured entity declarations
+      (wall-clock budget, max events, activation mode, reactivity window)
+    - ``entities``: :class:`GameEntitiesConfig` — structured entity
+      declarations (deals, player briefs, optional target terms)
     - ``scoring_mode``: ``"behavioral"`` (default) or ``"competitive"``
-
-    Cycle B deprecations (still present for migration compat, deleted in B.10):
-
-    - ``rounds`` (use ``flow`` instead)
-    - ``turn_protocol`` (always event-driven now)
-    - ``resource_reset_per_round`` (per-actor budget is global)
-    - ``between_rounds`` (replaced by orchestrator lifecycle hooks)
+    - ``scoring`` + ``win_conditions``: metric + termination rules
     """
 
     enabled: bool = False
@@ -250,19 +207,13 @@ class GameDefinition(BaseModel, frozen=True):
     scoring_mode: ScoringMode = "behavioral"
     type_config: dict[str, Any] = Field(default_factory=dict)
 
-    # New event-driven fields
+    # Event-driven fields
     flow: FlowConfig = Field(default_factory=FlowConfig)
     entities: GameEntitiesConfig = Field(default_factory=GameEntitiesConfig)
 
-    # Scoring + win conditions (shared across event-driven + legacy)
+    # Scoring + win conditions
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     win_conditions: list[WinCondition] = Field(default_factory=list)
-
-    # Legacy fields (deprecated, deleted in B.10)
-    turn_protocol: str = "independent"
-    rounds: RoundConfig = Field(default_factory=RoundConfig)
-    resource_reset_per_round: ResourceReset = Field(default_factory=ResourceReset)
-    between_rounds: BetweenRoundsConfig = Field(default_factory=BetweenRoundsConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -273,13 +224,13 @@ class GameDefinition(BaseModel, frozen=True):
 class PlayerScore(BaseModel):
     """Mutable per-player score tracking.
 
-    Cycle B additions:
-
+    - ``metrics``: dict[str, float] — metric values (updated by scorers)
     - ``behavior_metrics``: dict[str, float] — populated by BehavioralScorer
       (query_quality, reactivity, compliance, ...) and presented in the
       GameResult when ``scoring_mode == "behavioral"``.
-    - ``eliminated_at_event``: event counter at elimination (replaces
-      ``elimination_round`` which is kept for legacy compat).
+    - ``total_score``: weighted total (updated by CompetitiveScorer)
+    - ``eliminated`` / ``eliminated_at_event``: elimination tracking
+      (event counter at elimination time)
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -289,8 +240,7 @@ class PlayerScore(BaseModel):
     behavior_metrics: dict[str, float] = Field(default_factory=dict)
     total_score: float = 0.0
     eliminated: bool = False
-    elimination_round: int | None = None  # legacy
-    eliminated_at_event: int | None = None  # new (event-driven)
+    eliminated_at_event: int | None = None
 
     def get_metric(self, name: str) -> float:
         """Return the value of a named metric, defaulting to 0.0."""
@@ -307,8 +257,6 @@ class PlayerScore(BaseModel):
 class GameState(BaseModel):
     """Mutable in-memory game lifecycle state, held by GameOrchestrator.
 
-    Replaces :class:`RoundState`. Tracks:
-
     - ``event_counter``: total committed game tool events
     - ``started_at``: wall clock at game start
     - ``terminated``: whether the game has ended
@@ -321,47 +269,8 @@ class GameState(BaseModel):
     stalemate_deadline_tick: float = 0.0
 
 
-class RoundState(BaseModel, frozen=True):
-    """DEPRECATED: Immutable snapshot of current round state.
-
-    Preserved for legacy compat during Cycle B migration. Deleted in B.10.
-    New code uses :class:`GameState`.
-    """
-
-    current_round: int = 0
-    total_rounds: int = 10
-    phase: str = "not_started"  # not_started, in_progress, between_rounds, completed
-
-    def advance(self) -> RoundState:
-        """Return a new state with the round counter incremented."""
-        return RoundState(
-            current_round=self.current_round + 1,
-            total_rounds=self.total_rounds,
-            phase="in_progress",
-        )
-
-    def end_round(self) -> RoundState:
-        """Return a new state marking the current round as ended."""
-        return RoundState(
-            current_round=self.current_round,
-            total_rounds=self.total_rounds,
-            phase="between_rounds",
-        )
-
-    def complete(self) -> RoundState:
-        """Return a new state marking the game as completed."""
-        return RoundState(
-            current_round=self.current_round,
-            total_rounds=self.total_rounds,
-            phase="completed",
-        )
-
-
 class WinResult(BaseModel, frozen=True):
-    """Result of a win condition evaluation.
-
-    Cycle B: added ``behavior_scores`` for behavioral-mode reports.
-    """
+    """Result of a win condition evaluation."""
 
     winner: ActorId | None = None
     reason: str = ""
@@ -379,9 +288,8 @@ class GameResult(BaseModel, frozen=True):
 
     winner: ActorId | None = None
     reason: str = ""
-    total_rounds_played: int = 0  # legacy compat
-    total_events: int = 0  # new
-    wall_clock_seconds: float = 0.0  # new
+    total_events: int = 0
+    wall_clock_seconds: float = 0.0
     final_standings: list[dict[str, Any]] = Field(default_factory=list)
     behavior_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
     game_mode: str = "competition"

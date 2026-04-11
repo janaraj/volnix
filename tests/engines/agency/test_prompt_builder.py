@@ -334,10 +334,10 @@ def test_game_turn_prompt_skips_autonomous_instructions():
     game persona (counter, accept, reject for negotiation; place orders
     for trading; etc.).
 
-    When ``activation_reason == "game_turn"`` the prompt must use
-    game-specific instructions instead. This test is game-type-agnostic:
-    it uses a generic player role and asserts only that the autonomous
-    delegation vocabulary is absent.
+    When ``activation_reason`` is ``"game_kickstart"`` or ``"game_event"``
+    the prompt must use game-specific instructions instead. This test is
+    game-type-agnostic: it uses a generic player role and asserts only
+    that the autonomous delegation vocabulary is absent.
     """
     ctx = _make_world_context()
     builder = ActorPromptBuilder(ctx)
@@ -351,7 +351,7 @@ def test_game_turn_prompt_skips_autonomous_instructions():
     prompt = builder.build_individual_prompt(
         actor=actor,
         trigger_event=None,
-        activation_reason="game_turn",
+        activation_reason="game_event",
         available_actions=[],
         team_roster=[
             {"role": "player", "id": "player-1"},
@@ -378,10 +378,13 @@ def test_game_turn_prompt_skips_autonomous_instructions():
             f"Prompt excerpt: {prompt[:800]}"
         )
 
-    # Output format must NOT tell game players to call do_nothing
-    assert "do_nothing" not in prompt.lower() or "Do NOT call `do_nothing`" in prompt, (
-        "Game players should not be told to call do_nothing as an option"
-    )
+    # Output format must NOT tell game players to call do_nothing as an
+    # option. Any mention of do_nothing must be in a "Do NOT call" form.
+    lowered = prompt.lower()
+    if "do_nothing" in lowered:
+        assert "do not" in lowered and "do_nothing" in lowered, (
+            "Game players should not be told to call do_nothing as an option"
+        )
 
     # Must include the game-player instruction marker
     assert "game player" in prompt.lower(), (

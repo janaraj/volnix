@@ -1,7 +1,7 @@
-"""Tests for ``AgencyEngine.activate_for_event`` — the Cycle B unified entry.
+"""Tests for ``AgencyEngine.activate_for_event`` — the unified entry.
 
-Covers the new ``activate_for_event`` method that
-:class:`GameOrchestrator` calls directly (Option D, MF2):
+Covers the ``activate_for_event`` method that :class:`GameOrchestrator`
+calls directly (MF2):
 
 - Unknown actor returns [] without raising
 - ``state_summary`` is injected as a user message at the top of
@@ -11,14 +11,13 @@ Covers the new ``activate_for_event`` method that
   (the tool loop only forwards world events)
 - The activation reason is forwarded to ``_activate_with_tool_loop`` and
   the prompt builder picks it up on the first activation
-- Legacy ``activate_for_game_turn`` still works (deleted in B.10)
 - Agency's bus ``subscriptions`` ClassVar is empty (Fact B — never fired)
 
-Prompt builder tests verify the Cycle B additions:
-- ``game_kickstart`` / ``game_event`` / ``game_turn`` all render the
-  game-player instruction block
-- ``_build_action_history`` runs for non-autonomous actors now that the
-  guard is dropped
+Prompt builder tests verify:
+- ``game_kickstart`` / ``game_event`` both render the game-player
+  instruction block
+- ``_build_action_history`` runs for non-autonomous actors (no autonomous
+  guard)
 """
 
 from __future__ import annotations
@@ -445,8 +444,14 @@ class TestPromptBuilderGameReasons:
         assert "game player" in prompt
         assert "current state" in prompt
 
-    def test_game_turn_renders_game_instructions_legacy(self):
-        """Legacy ``game_turn`` reason still maps to game instructions."""
+    def test_game_turn_reason_does_not_render_game_instructions(self):
+        """Legacy ``game_turn`` reason is no longer recognized (deleted in B.10).
+
+        The prompt's "You are a game player" instruction block is only
+        emitted for ``game_kickstart`` / ``game_event`` reasons. The word
+        "game player" may appear elsewhere (persona, team roster) so the
+        assertion checks the specific instruction phrase instead.
+        """
         builder = self._make_builder()
         actor = _make_actor(autonomous=False)
         prompt = builder.build_individual_prompt(
@@ -455,7 +460,7 @@ class TestPromptBuilderGameReasons:
             activation_reason="game_turn",
             available_actions=[],
         )
-        assert "game player" in prompt
+        assert "moves commit immediately" not in prompt
 
     def test_non_game_reason_does_not_render_game_instructions(self):
         builder = self._make_builder()

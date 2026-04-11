@@ -881,14 +881,13 @@ class AgencyEngine(BaseEngine):
 
         Args:
             actor: The actor state to activate.
-            reason: The activation reason string (e.g. "game_turn",
-                "autonomous_work", "subscription_immediate").
+            reason: The activation reason string (e.g. "game_kickstart",
+                "game_event", "autonomous_work", "subscription_immediate").
             trigger_event: The event that caused this activation, if any.
             max_calls_override: If set, overrides
                 ``max_tool_calls_per_activation`` from config for this
-                activation only. Used by ``activate_for_game_turn`` to honor
-                the blueprint's per-turn action budget. A value of ``None``
-                (or non-positive) falls back to the global default.
+                activation only. A value of ``None`` (or non-positive)
+                falls back to the global default.
 
         Returns:
             List of ActionEnvelopes produced during this activation.
@@ -934,10 +933,9 @@ class AgencyEngine(BaseEngine):
 
             # Build messages: continue from persisted conversation or start fresh.
             #
-            # For GAME activations (``game_turn`` / ``game_kickstart`` /
-            # ``game_event``), the caller (``activate_for_event`` or legacy
-            # ``activate_for_game_turn``) has already appended a game-
-            # specific user message (round_ctx or state_summary) to
+            # For GAME activations (``game_kickstart`` / ``game_event``),
+            # the caller (``activate_for_event``) has already appended a
+            # game-specific state-summary user message to
             # ``activation_messages``. Do NOT layer the generic re-activation
             # context or autonomous lead/sub-agent instructions on top —
             # those are for delegation/monitoring workflows and will confuse
@@ -948,7 +946,7 @@ class AgencyEngine(BaseEngine):
             # Non-game re-activations (autonomous lead agents, subscription
             # triggers, etc.) still get the generic re-activation context +
             # autonomous phase instructions.
-            _GAME_REASONS = {"game_turn", "game_kickstart", "game_event"}
+            _GAME_REASONS = {"game_kickstart", "game_event"}
             if actor.activation_messages:
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
                 if reason not in _GAME_REASONS:
@@ -1819,13 +1817,9 @@ class AgencyEngine(BaseEngine):
         This is the unified entry point used by:
 
         - :class:`GameOrchestrator` for ``game_kickstart`` and ``game_event``
-          re-activations (Cycle B)
+          re-activations
         - :class:`SimulationRunner` for autonomous tick activations
         - The agent adapter for event-affected triggers
-
-        The old ``activate_for_game_turn`` method is preserved during the
-        Cycle B migration (used by legacy :class:`GameRunner`) and is
-        deleted in B.10.
 
         Args:
             actor_id: The actor to activate.
@@ -1900,85 +1894,3 @@ class AgencyEngine(BaseEngine):
                 world_trigger,
                 max_calls_override=max_calls_override,
             )
-
-    async def activate_for_game_turn(
-        self,
-        actor_id: ActorId,
-        round_number: int = 0,
-        total_rounds: int = 0,
-        standings_summary: str = "",
-        max_actions: int | None = None,
-    ) -> list[ActionEnvelope]:
-        """Activate an actor for a game turn. Public API for GameRunner.
-
-        Preserves the agent's conversation history across rounds so the LLM
-        remembers what it has already done, what other players did, and how
-        the game state has evolved. This is required for ANY turn-based
-        game: without cross-round memory, the LLM starts each round as a
-        blank slate and defaults to re-emitting its opening move. Any
-        game-type-specific decision guidance (when to counter vs accept,
-        when to bid, etc.) belongs in the agent's persona / mission, NOT
-        in this generic runtime context.
-
-        Args:
-            actor_id: The player actor to activate.
-            round_number: Current round number (1-indexed).
-            total_rounds: Total rounds in the game.
-            standings_summary: One-line summary of current standings.
-            max_actions: Blueprint-defined tool-call budget for this turn
-                (``game.rounds.actions_per_turn``). Forwarded to the tool
-                loop as the per-activation cap. ``None`` falls back to
-                ``max_tool_calls_per_activation`` from global config.
-        """
-        actor_state = self._actor_states.get(actor_id)
-        if actor_state is None:
-            return []
-
-        budget = (
-            max_actions
-            if isinstance(max_actions, int) and max_actions > 0
-            else self._typed_config.max_tool_calls_per_activation
-        )
-        # Generic, game-type-agnostic round context. Refers only to prior
-        # turns and "moves" — no negotiation-specific terminology, no
-        # trading-specific terminology. Game-type guidance lives in the
-        # agent persona / mission (loaded once at the start).
-        round_ctx = (
-            f"ROUND {round_number}/{total_rounds} — NEW ROUND. "
-            f"You have up to {budget} tool calls this turn. "
-            f"Take your turn now: call the structured tool(s) for your "
-            f"move and optionally one short chat.postMessage reaction, "
-            f"then stop. Review your prior turns above to see what you "
-            f"and the other players have already done — continue from "
-            f"that state, do NOT restart from scratch or repeat actions "
-            f"you already took."
-        )
-        if standings_summary:
-            round_ctx += f"\nCurrent standings: {standings_summary}"
-
-        # Keep the conversation across rounds so the LLM has full memory
-        # of prior moves, results, and its own reasoning. Without this,
-        # each round starts as a blank slate and the LLM defaults to
-        # re-emitting its opening move (verified in run_d5165eb40ad8:
-        # 13 negotiate_propose events, 0 counters across 8 rounds).
-        #
-        # This applies uniformly to every game type because cross-round
-        # memory is a universal requirement for turn-based play. Game-
-        # type-specific decision rules (when to counter vs accept, when
-        # to bid, etc.) live in the agent persona, not here.
-        #
-        # Round 1 still uses the fresh-start path — activation_messages
-        # is empty and goal_context renders round_ctx into the initial
-        # user prompt via the prompt builder.
-        if actor_state.activation_messages:
-            actor_state.activation_messages = list(actor_state.activation_messages)
-            actor_state.activation_messages.append({"role": "user", "content": round_ctx})
-        else:
-            actor_state.goal_context = f"{round_ctx}\n{actor_state.goal_context or ''}"
-
-        return await self._activate_with_tool_loop(
-            actor_state,
-            "game_turn",
-            None,
-            max_calls_override=max_actions,
-        )

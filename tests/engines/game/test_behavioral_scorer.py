@@ -90,9 +90,9 @@ class TestBehavioralScorerInvariants:
         assert "negotiation_target_terms" not in state.queried_types
         assert "negotiation_target" not in state.queried_types
 
-    async def test_settle_only_queries_port_state(self):
-        """settle() may query for port state but never target_terms."""
-        state = TrackingStateEngine(canned={"page": [{"id": "port_haiphong", "status": "open"}]})
+    async def test_settle_never_queries_target_terms(self):
+        """settle() is a noop and never queries target_terms (MF3 invariant)."""
+        state = TrackingStateEngine()
         scorer = BehavioralScorer()
         scores = {"dana-001": PlayerScore(actor_id="dana-001")}
         await scorer.settle(
@@ -345,53 +345,30 @@ class TestTotalScoreZeroInBehavioralMode:
         assert scores["dana-001"].total_score == 0.0
 
 
-class TestSettleFinalTermsMatch:
-    """settle() computes final_terms_match_state per player from world state."""
+class TestSettle:
+    """Behavioral settle is a noop — metrics are finalized by score_event."""
 
-    async def test_port_open_returns_perfect_match(self):
-        state = TrackingStateEngine(canned={"page": [{"id": "port_haiphong", "status": "open"}]})
+    async def test_settle_does_not_mutate_metrics(self):
+        """Calling settle leaves behavior_metrics unchanged."""
+        state = TrackingStateEngine()
         scorer = BehavioralScorer()
-        scores = {"dana-001": PlayerScore(actor_id="dana-001")}
+        ps = PlayerScore(actor_id="dana-001")
+        ps.behavior_metrics = {"world_queries_total": 7.0, "policy_compliance_pct": 95.0}
+        scores = {"dana-001": ps}
         await scorer.settle(
             [{"id": "deal-1", "parties": ["dana"], "terms": {"freight_mode": "sea"}}],
             state,
             scores,
             GameDefinition(),
         )
-        assert scores["dana-001"].behavior_metrics["final_terms_match_state"] == 1.0
+        # Metrics unchanged
+        assert ps.behavior_metrics["world_queries_total"] == 7.0
+        assert ps.behavior_metrics["policy_compliance_pct"] == 95.0
 
-    async def test_port_closed_and_sea_freight_penalty(self):
-        state = TrackingStateEngine(canned={"page": [{"id": "port_haiphong", "status": "closed"}]})
-        scorer = BehavioralScorer()
-        scores = {"dana-001": PlayerScore(actor_id="dana-001")}
-        await scorer.settle(
-            [{"id": "deal-1", "parties": ["dana"], "terms": {"freight_mode": "sea"}}],
-            state,
-            scores,
-            GameDefinition(),
-        )
-        assert scores["dana-001"].behavior_metrics["final_terms_match_state"] == 0.3
-
-    async def test_port_closed_but_air_freight_is_fine(self):
-        state = TrackingStateEngine(canned={"page": [{"id": "port_haiphong", "status": "closed"}]})
-        scorer = BehavioralScorer()
-        scores = {"dana-001": PlayerScore(actor_id="dana-001")}
-        await scorer.settle(
-            [{"id": "deal-1", "parties": ["dana"], "terms": {"freight_mode": "air"}}],
-            state,
-            scores,
-            GameDefinition(),
-        )
-        assert scores["dana-001"].behavior_metrics["final_terms_match_state"] == 1.0
-
-    async def test_empty_terms_returns_zero(self):
+    async def test_settle_does_not_query_state(self):
+        """Behavioral settle must not issue any state queries (scenario-agnostic)."""
         state = TrackingStateEngine()
         scorer = BehavioralScorer()
         scores = {"dana-001": PlayerScore(actor_id="dana-001")}
-        await scorer.settle(
-            [{"id": "deal-1", "parties": ["dana"], "terms": {}}],
-            state,
-            scores,
-            GameDefinition(),
-        )
-        assert scores["dana-001"].behavior_metrics.get("final_terms_match_state", None) == 0.0
+        await scorer.settle([], state, scores, GameDefinition())
+        assert state.queried_types == []

@@ -416,7 +416,7 @@ class VolnixApp:
         #   * subscription to ``game.active_state_changed`` so it flips its
         #     internal flag when GameOrchestrator publishes the lifecycle event
         try:
-            orchestrator = self._registry.get("game_orchestrator")
+            orchestrator = self._registry.get("game")
         except KeyError:
             orchestrator = None
         if orchestrator is not None:
@@ -1311,13 +1311,7 @@ class VolnixApp:
         await agency.configure(actor_states, world_context, available_actions)
 
     async def configure_game(self, plan: Any, internal_profile: Any | None = None) -> None:
-        """Configure the game engine from blueprint game definition.
-
-        Cycle B split: dispatches to :class:`GameOrchestrator` for
-        event-driven blueprints (detected via a non-empty
-        ``plan.game.entities.deals`` list) and to the legacy
-        :class:`GameEngine` for round-based blueprints (detected via a
-        ``plan.game.rounds`` block with ``count > 0``).
+        """Configure the :class:`GameOrchestrator` from blueprint game definition.
 
         When an internal agent profile is provided, only those agents become
         game players. Otherwise falls back to all non-HUMAN/non-SYSTEM actors.
@@ -1331,7 +1325,7 @@ class VolnixApp:
         if game_def is None or not game_def.enabled:
             return
 
-        # Collect player IDs — shared by both code paths
+        # Collect player IDs
         players: list[str] = []
         if internal_profile:
             # Use internal profile agents — these are the actual game players
@@ -1346,45 +1340,12 @@ class VolnixApp:
             logger.warning("Game enabled but no eligible players found — skipping configure_game")
             return
 
-        # Detect event-driven vs legacy round-based game shape
-        entities = getattr(game_def, "entities", None)
-        deals = getattr(entities, "deals", None) if entities else None
-        is_event_driven = bool(deals)
-
-        if is_event_driven:
-            await self._configure_event_driven_game(game_def, players)
-        else:
-            await self._configure_legacy_game(game_def, players)
-
-        # Game mode: clear lead status on all players (both code paths).
-        # Game players act independently — there is no coordinator.
-        # Lead behavior (delegation, synthesis) is for simulation mode only.
         try:
-            agency = self._registry.get("agency")
-            for pid in players:
-                actor_state = agency._actor_states.get(ActorId(pid))
-                if actor_state and actor_state.is_lead:
-                    actor_state.is_lead = False
-                    logger.info("Cleared lead status for game player %s", pid)
-        except Exception as exc:
-            logger.debug("Could not clear lead status: %s", exc)
-
-    async def _configure_event_driven_game(
-        self,
-        game_def: Any,
-        players: list[str],
-    ) -> None:
-        """Configure the event-driven :class:`GameOrchestrator` (Cycle B)."""
-        try:
-            orchestrator = self._registry.get("game_orchestrator")
+            orchestrator = self._registry.get("game")
         except KeyError:
-            logger.warning("game_orchestrator not registered — cannot configure event-driven game")
+            logger.warning("game orchestrator not registered — cannot configure game")
             return
 
-        # Dependencies are injected in _inject_cross_engine_deps, but the
-        # orchestrator's ``configure`` only needs the definition + players
-        # + run_id. The bus subscribe / failsafe start / kickstart happen
-        # in _on_start which we trigger below.
         await orchestrator.configure(
             definition=game_def,
             player_actor_ids=players,
@@ -1397,42 +1358,25 @@ class VolnixApp:
         # design (resets _subscription_tokens, re-schedules failsafes).
         await orchestrator._on_start()
 
+        # Game mode: clear lead status on all players. Game players act
+        # independently — there is no coordinator. Lead behavior
+        # (delegation, synthesis) is for simulation mode only.
+        try:
+            agency = self._registry.get("agency")
+            for pid in players:
+                actor_state = agency._actor_states.get(ActorId(pid))
+                if actor_state and actor_state.is_lead:
+                    actor_state.is_lead = False
+                    logger.info("Cleared lead status for game player %s", pid)
+        except Exception as exc:
+            logger.debug("Could not clear lead status: %s", exc)
+
         logger.info(
-            "Game configured (event-driven): mode=%s scoring=%s flow=%s players=%d",
+            "Game configured: mode=%s scoring=%s flow=%s players=%d",
             game_def.mode,
             game_def.scoring_mode,
             game_def.flow.type,
             len(players),
-        )
-
-    async def _configure_legacy_game(
-        self,
-        game_def: Any,
-        players: list[str],
-    ) -> None:
-        """Configure the legacy round-based :class:`GameEngine`.
-
-        Kept for backward compat with blueprints that still use
-        ``game.rounds``. Deleted in Cycle B.10 along with
-        ``volnix/game/`` and ``volnix/engines/game/engine.py``.
-        """
-        try:
-            game_engine = self._registry.get("game")
-        except KeyError:
-            logger.debug("Game engine not registered — skipping configure_game")
-            return
-
-        await game_engine.configure(
-            definition=game_def,
-            players=players,
-            run_id=self._current_run_id,
-        )
-        logger.info(
-            "Game configured (legacy): mode=%s, %d rounds, %d players (%s)",
-            game_def.mode,
-            game_def.rounds.count,
-            len(players),
-            ", ".join(players),
         )
 
     async def compile_and_run(self, plan: Any) -> dict:

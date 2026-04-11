@@ -142,7 +142,7 @@ class ActorPromptBuilder:
                 "You are an OBSERVER. You can READ and ANALYZE data but CANNOT "
                 "create, update, or delete anything. Only use read actions."
             )
-        elif activation_reason in {"game_turn", "game_kickstart", "game_event"}:
+        elif activation_reason in {"game_kickstart", "game_event"}:
             # Game players follow their own persona + mission (loaded from
             # the blueprint). They do NOT use autonomous lead/sub-agent
             # delegation instructions, which would contradict a game
@@ -150,14 +150,10 @@ class ActorPromptBuilder:
             # "INVESTIGATE and call do_nothing" directly conflicts with
             # "counter or accept the current terms".
             #
-            # The reason dispatch covers the three Cycle B activation
-            # reasons:
+            # Two event-driven activation reasons:
             #   - ``game_kickstart``: first activation in a game run
             #   - ``game_event``: re-activation after another player's
             #     committed game tool event
-            #   - ``game_turn``: legacy reason from the round-based
-            #     GameRunner (still present during Cycle B migration,
-            #     deleted with volnix/game/ in B.10)
             sections.append(
                 "## Instructions\n"
                 "You are a game player. The world is running; moves commit "

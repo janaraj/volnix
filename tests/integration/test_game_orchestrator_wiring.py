@@ -79,23 +79,6 @@ def _make_event_driven_plan():
     )
 
 
-def _make_legacy_plan():
-    """Build a WorldPlan using the legacy ``rounds`` shape."""
-    from volnix.engines.game.definition import RoundConfig
-    from volnix.engines.world_compiler.plan import WorldPlan
-
-    return WorldPlan(
-        name="test-legacy-game",
-        description="Legacy round-based game",
-        game=GameDefinition(
-            enabled=True,
-            mode="negotiation",
-            rounds=RoundConfig(count=3),
-            # No entities.deals — triggers legacy dispatch
-        ),
-    )
-
-
 # ---------------------------------------------------------------------------
 # Composition root wiring
 # ---------------------------------------------------------------------------
@@ -106,17 +89,19 @@ class TestCompositionRoot:
         from volnix.registry.composition import create_default_registry
 
         reg = create_default_registry()
-        assert "game_orchestrator" in reg.list_engines()
-        # Legacy game engine still registered (coexistence during B.9-B.10)
+        # GameOrchestrator is registered under ``"game"`` after B.10
+        # (the legacy GameEngine was deleted).
         assert "game" in reg.list_engines()
+        from volnix.engines.game.orchestrator import GameOrchestrator
+
+        assert isinstance(reg.get("game"), GameOrchestrator)
 
     def test_game_orchestrator_depends_on_state_and_budget(self):
         from volnix.registry.composition import create_default_registry
 
         reg = create_default_registry()
         order = reg.resolve_initialization_order()
-        # game_orchestrator must come after its declared dependencies
-        orch_idx = order.index("game_orchestrator")
+        orch_idx = order.index("game")
         assert order.index("state") < orch_idx
         assert order.index("budget") < orch_idx
 
@@ -132,8 +117,10 @@ class TestAppWiring:
     @pytest.mark.asyncio
     async def test_orchestrator_starts_cleanly(self, app_with_mock_llm):
         """Orchestrator initializes and starts without a definition (noop path)."""
-        orchestrator = app_with_mock_llm.registry.get("game_orchestrator")
-        assert orchestrator is not None
+        from volnix.engines.game.orchestrator import GameOrchestrator
+
+        orchestrator = app_with_mock_llm.registry.get("game")
+        assert isinstance(orchestrator, GameOrchestrator)
         # _on_start noops when no definition — the engine is still "started"
         assert orchestrator._started is True
         # State dependency resolved during startup path
@@ -141,12 +128,12 @@ class TestAppWiring:
 
     @pytest.mark.asyncio
     async def test_orchestrator_ledger_is_wired(self, app_with_mock_llm):
-        orchestrator = app_with_mock_llm.registry.get("game_orchestrator")
+        orchestrator = app_with_mock_llm.registry.get("game")
         assert orchestrator._config.get("_ledger") is not None
 
     @pytest.mark.asyncio
     async def test_orchestrator_agency_dependency_is_wired(self, app_with_mock_llm):
-        orchestrator = app_with_mock_llm.registry.get("game_orchestrator")
+        orchestrator = app_with_mock_llm.registry.get("game")
         assert orchestrator._dependencies.get("agency") is not None
 
     @pytest.mark.asyncio
@@ -201,7 +188,7 @@ class TestConfigureGameDispatch:
         )
         app_with_mock_llm._current_run_id = "run-wire-001"
 
-        orchestrator = app_with_mock_llm.registry.get("game_orchestrator")
+        orchestrator = app_with_mock_llm.registry.get("game")
         # Stub out the fire-and-forget kickstart so the test doesn't
         # actually call the mock LLM. ``_launch_activation`` is a sync
         # method that wraps asyncio.create_task — use MagicMock not AsyncMock.
@@ -212,30 +199,6 @@ class TestConfigureGameDispatch:
         # Orchestrator now has the definition and player scores
         assert orchestrator._definition is plan.game
         assert len(orchestrator._player_scores) == 2
-
-    @pytest.mark.asyncio
-    async def test_legacy_plan_routes_to_legacy_engine(self, app_with_mock_llm):
-        """A plan with no ``entities.deals`` uses the legacy GameEngine."""
-        plan = _make_legacy_plan()
-
-        from volnix.actors.definition import ActorDefinition
-        from volnix.core.types import ActorId, ActorType
-
-        app_with_mock_llm._actor_registry.register(
-            ActorDefinition(
-                id=ActorId("p1-001"),
-                type=ActorType.AGENT,
-                role="p1",
-                permissions={"read": [], "write": []},
-            )
-        )
-        app_with_mock_llm._current_run_id = "run-legacy-001"
-
-        orchestrator = app_with_mock_llm.registry.get("game_orchestrator")
-        # Legacy route must leave the orchestrator definition untouched
-        assert orchestrator._definition is None
-        await app_with_mock_llm.configure_game(plan)
-        assert orchestrator._definition is None  # still None
 
 
 # ---------------------------------------------------------------------------
