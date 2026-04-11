@@ -54,9 +54,14 @@ class WinConditionContextV2(BaseModel):
     - Adds ``state_engine`` for handlers that query entities
       (e.g. ``DealClosedHandler`` reads ``negotiation_deal.status``)
     - Adds ``exhausted_players`` for ``AllBudgetsExhaustedHandler``
+
+    Frozen per DESIGN_PRINCIPLES.md: value objects passed to handlers are
+    immutable. Mutable inner containers (``scores: dict``,
+    ``exhausted_players: set``) are owned by the caller (orchestrator);
+    handlers may read from them but must not replace them.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     condition: WinCondition
     scores: dict[str, PlayerScore]

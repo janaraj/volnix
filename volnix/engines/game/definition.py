@@ -20,6 +20,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from volnix.core.types import ActorId
+
 # ---------------------------------------------------------------------------
 # New event-driven models (Cycle B canonical)
 # ---------------------------------------------------------------------------
@@ -266,9 +268,7 @@ class PlayerScore(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    # actor_id is a plain str for dict-key compatibility; ActorId is a
-    # NewType(str) so they are interchangeable at runtime.
-    actor_id: str
+    actor_id: ActorId
     metrics: dict[str, float] = Field(default_factory=dict)
     behavior_metrics: dict[str, float] = Field(default_factory=dict)
     total_score: float = 0.0
@@ -347,7 +347,7 @@ class WinResult(BaseModel, frozen=True):
     Cycle B: added ``behavior_scores`` for behavioral-mode reports.
     """
 
-    winner: str | None = None
+    winner: ActorId | None = None
     reason: str = ""
     final_standings: list[dict[str, Any]] = Field(default_factory=list)
     behavior_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
@@ -361,7 +361,7 @@ class GameResult(BaseModel, frozen=True):
     ``final_standings`` ordered, ``behavior_scores`` empty.
     """
 
-    winner: str | None = None
+    winner: ActorId | None = None
     reason: str = ""
     total_rounds_played: int = 0  # legacy compat
     total_events: int = 0  # new

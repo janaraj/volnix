@@ -402,3 +402,90 @@ class TestResolvePlayerByRole:
         scores = {"buyer_v2-001": PlayerScore(actor_id="buyer_v2-001")}
         result = CompetitiveScorer._resolve_player_by_role("buyer", scores)
         assert result is None
+
+
+class TestCompetitiveScorerInvariants:
+    """MF3 mirror: CompetitiveScorer never reads or writes behavior_metrics.
+
+    Parallels ``TestBehavioralScorerInvariants`` in test_behavioral_scorer.py.
+    The two scorers must be completely independent: behavioral reads
+    behavior_metrics, competitive reads target_terms, and neither crosses
+    the line. This test asserts the second direction.
+    """
+
+    async def test_score_event_does_not_touch_behavior_metrics(self):
+        """After score_event on an accept, player_score.behavior_metrics
+        must be unchanged (empty by default).
+        """
+        state = CannedStateEngine(
+            {
+                "negotiation_deal": [
+                    {
+                        "id": "deal-q3",
+                        "status": "accepted",
+                        "terms": {"price": 85},
+                        "parties": ["buyer"],
+                    }
+                ],
+                "negotiation_target_terms": [
+                    {
+                        "actor_role": "buyer",
+                        "deal_id": "deal-q3",
+                        "ideal_terms": {"price": 85},
+                        "term_weights": {"price": 1.0},
+                        "term_ranges": {"price": [80, 120]},
+                    },
+                ],
+            }
+        )
+        scorer = CompetitiveScorer()
+        ps = PlayerScore(actor_id="buyer-001")
+        # Pre-existing behavior metrics that the behavioral scorer might have
+        # set — the competitive scorer must not touch them.
+        ps.behavior_metrics = {"pre_existing": 42.0}
+        scores = {"buyer-001": ps}
+        ctx = _make_ctx(_make_event("buyer-001", "negotiate_accept"), 1, state, scores)
+        await scorer.score_event(ctx)
+        # behavior_metrics is preserved exactly (not reset, not expanded)
+        assert scores["buyer-001"].behavior_metrics == {"pre_existing": 42.0}
+
+    async def test_settle_does_not_touch_behavior_metrics(self):
+        """On timeout settlement, BATNA goes into ``metrics``, not
+        ``behavior_metrics``. Behavioral mode owns that namespace.
+        """
+        state = CannedStateEngine(
+            {
+                "negotiation_target_terms": [
+                    {
+                        "actor_role": "buyer",
+                        "deal_id": "deal-q3",
+                        "batna_score": 45.0,
+                    },
+                ],
+            }
+        )
+        scorer = CompetitiveScorer()
+        ps = PlayerScore(actor_id="buyer-001")
+        ps.behavior_metrics = {"query_quality": 85.0}
+        scores = {"buyer-001": ps}
+        await scorer.settle(
+            [{"id": "deal-q3", "parties": ["buyer"]}],
+            state,
+            scores,
+            None,
+        )
+        # BATNA is in metrics, behavior_metrics preserved exactly
+        assert scores["buyer-001"].metrics.get("total_points") == 45.0
+        assert scores["buyer-001"].behavior_metrics == {"query_quality": 85.0}
+
+    async def test_score_event_propose_is_noop(self):
+        """Propose actions score nothing — total_score and metrics stay empty."""
+        state = CannedStateEngine({})
+        scorer = CompetitiveScorer()
+        ps = PlayerScore(actor_id="buyer-001")
+        scores = {"buyer-001": ps}
+        ctx = _make_ctx(_make_event("buyer-001", "negotiate_propose"), 1, state, scores)
+        await scorer.score_event(ctx)
+        assert scores["buyer-001"].metrics == {}
+        assert scores["buyer-001"].total_score == 0.0
+        assert scores["buyer-001"].behavior_metrics == {}

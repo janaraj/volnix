@@ -17,6 +17,10 @@ from volnix.engines.game.definition import PlayerScore
 class ScorerContext(BaseModel):
     """Context passed to the scorer on each committed game event.
 
+    Frozen per DESIGN_PRINCIPLES.md. Mutable inner containers
+    (``player_scores``) are owned by the caller — scorers mutate their
+    entries in place but must not reassign the dict reference.
+
     Attributes:
         event: The committed WorldEvent for a game tool call.
         event_number: Monotonic 1-indexed counter of committed game events
@@ -27,12 +31,12 @@ class ScorerContext(BaseModel):
             MUST NOT mutate state through this — pack handlers are the
             sole writers (MF1).
         player_scores: Mutable dict of PlayerScore — the scorer updates
-            these in place.
+            per-player entries in place.
         definition: The full GameDefinition (for reading type_config,
             flow.max_events, flow.bonus_per_event, etc.).
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     event: WorldEvent
     event_number: int

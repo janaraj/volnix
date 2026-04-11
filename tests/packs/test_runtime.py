@@ -342,3 +342,117 @@ class TestPackRuntime:
         runtime = _make_runtime(MockPackBadEntity())
         with pytest.raises(ValidationError, match="Entity schema validation failed"):
             await runtime.execute("bad_create", {})
+
+
+# ---------------------------------------------------------------------------
+# Pipeline plumbing — actor_id injection (Cycle B.4)
+# ---------------------------------------------------------------------------
+
+
+class _ActorCapturePack(ServicePack):
+    """Mock pack that records the ``_actor_id`` it received in input_data.
+
+    Used by ``TestActorIdPlumbing`` to verify the Cycle B.4 plumbing
+    change that ``PackRuntime.execute`` injects the pipeline-level
+    actor_id into ``input_data["_actor_id"]`` after schema validation.
+    """
+
+    pack_name = "actor_capture"
+    category = "test_category"
+    fidelity_tier = 1
+    last_seen_actor_id: str | None = None
+    last_seen_input_keys: tuple[str, ...] = ()
+
+    def get_tools(self):
+        return [
+            {
+                "name": "capture",
+                "description": "Records the actor_id for verification",
+                "parameters": {
+                    "type": "object",
+                    "required": ["x"],
+                    "properties": {"x": {"type": "integer"}},
+                },
+            },
+        ]
+
+    def get_entity_schemas(self):
+        return {}
+
+    def get_state_machines(self):
+        return {}
+
+    async def handle_action(self, action, input_data, state):
+        type(self).last_seen_actor_id = input_data.get("_actor_id")
+        type(self).last_seen_input_keys = tuple(sorted(input_data.keys()))
+        return ResponseProposal(response_body={"ok": True})
+
+
+class TestActorIdPlumbing:
+    """End-to-end verification of the Cycle B.4 actor_id plumbing.
+
+    The plumbing lives in two places:
+    - ``volnix/packs/runtime.py``: ``PackRuntime.execute`` accepts an
+      optional ``actor_id`` kwarg and injects it into ``input_data``
+      as ``"_actor_id"`` AFTER tool-schema validation (so the
+      underscore-prefixed key doesn't trip the validator).
+    - ``volnix/engines/responder/tier1.py``: ``Tier1Dispatcher.dispatch``
+      passes ``ctx.actor_id`` through to ``runtime.execute``.
+
+    These tests exercise the runtime half directly (the tier1 half is
+    a 1-line passthrough that's verified by the existing agency
+    integration tests).
+    """
+
+    @pytest.mark.asyncio
+    async def test_actor_id_is_injected_into_input_data(self):
+        """When ``actor_id`` is passed to execute, handlers see it."""
+        runtime = _make_runtime(_ActorCapturePack())
+        await runtime.execute(
+            action="capture",
+            input_data={"x": 1},
+            actor_id="dana-abc123",
+        )
+        assert _ActorCapturePack.last_seen_actor_id == "dana-abc123"
+
+    @pytest.mark.asyncio
+    async def test_actor_id_is_absent_when_not_passed(self):
+        """Backward compat: handlers that don't need actor_id never see ``_actor_id``."""
+        _ActorCapturePack.last_seen_actor_id = "UNSET"
+        runtime = _make_runtime(_ActorCapturePack())
+        await runtime.execute(
+            action="capture",
+            input_data={"x": 1},
+        )
+        assert _ActorCapturePack.last_seen_actor_id is None
+
+    @pytest.mark.asyncio
+    async def test_underscore_prefixed_key_bypasses_schema_validation(self):
+        """``_actor_id`` is injected AFTER schema validation.
+
+        The tool schema in ``_ActorCapturePack`` only declares ``x`` as a
+        required property. If ``_actor_id`` were injected BEFORE
+        validation, the schema validator could reject it (with strict
+        ``additionalProperties: false`` schemas). By injecting after,
+        the validator never sees the underscore key. We verify this by
+        calling with a valid input and asserting both keys end up in
+        the handler's input_data.
+        """
+        runtime = _make_runtime(_ActorCapturePack())
+        await runtime.execute(
+            action="capture",
+            input_data={"x": 42},
+            actor_id="buyer-001",
+        )
+        # Handler saw both the user key and the pipeline-injected key
+        assert "x" in _ActorCapturePack.last_seen_input_keys
+        assert "_actor_id" in _ActorCapturePack.last_seen_input_keys
+
+    @pytest.mark.asyncio
+    async def test_actor_id_does_not_leak_between_calls(self):
+        """Each execute call sees its own actor_id, not a stale one from prior."""
+        runtime = _make_runtime(_ActorCapturePack())
+        await runtime.execute(action="capture", input_data={"x": 1}, actor_id="first-actor")
+        assert _ActorCapturePack.last_seen_actor_id == "first-actor"
+        await runtime.execute(action="capture", input_data={"x": 2}, actor_id="second-actor")
+        assert _ActorCapturePack.last_seen_actor_id == "second-actor"
