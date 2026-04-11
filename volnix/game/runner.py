@@ -345,6 +345,7 @@ class GameRunner:
                 round_number=round_num,
                 total_rounds=total_rounds,
                 standings_summary=standings_summary,
+                max_actions=max_actions,
             )
             executed = len(envelopes) if envelopes else 0
             logger.info("[GAME] %s executed %d actions", player_id, executed)

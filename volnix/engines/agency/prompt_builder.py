@@ -142,6 +142,22 @@ class ActorPromptBuilder:
                 "You are an OBSERVER. You can READ and ANALYZE data but CANNOT "
                 "create, update, or delete anything. Only use read actions."
             )
+        elif activation_reason == "game_turn":
+            # Game players follow their own persona + mission (loaded from
+            # the blueprint). They do NOT use autonomous lead/sub-agent
+            # delegation instructions, which would contradict a game
+            # persona — e.g. telling a non-lead negotiator to
+            # "INVESTIGATE and call do_nothing" directly conflicts with
+            # "counter or accept the current terms".
+            sections.append(
+                "## Instructions\n"
+                "You are a game player. Follow the mission and persona "
+                "above to take your turn. Call the structured tool(s) "
+                "for your move, optionally post one short in-character "
+                "chat.postMessage reaction, then stop. Do NOT delegate, "
+                "investigate, or call do_nothing unless explicitly told "
+                "to — make your move."
+            )
         elif actor.autonomous:
             sections.append(
                 self.build_autonomous_instructions(
@@ -211,15 +227,26 @@ class ActorPromptBuilder:
             sections.append(f"## Trigger: {activation_reason}")
 
         # --- 6. Output format ---
-        sections.append(
-            "## Output\n"
-            "Call one of the available tools to take action, or call `do_nothing` to skip.\n"
-            "Include `reasoning` to explain your choice.\n"
-            "Use `intended_for` to address teammates by role (e.g. ['analyst'] or ['all']).\n"
-            "Use `state_updates` to track your progress:\n"
-            "  - `goal_context`: updated notes on what you've learned\n"
-            "  - `pending_tasks`: remaining work items"
-        )
+        if activation_reason == "game_turn":
+            sections.append(
+                "## Output\n"
+                "Call the structured tool for your move this turn. "
+                "Include `reasoning` to explain your choice privately. "
+                "Do NOT call `do_nothing` — you are a game player and "
+                "every turn is a new opportunity to act."
+            )
+        else:
+            sections.append(
+                "## Output\n"
+                "Call one of the available tools to take action, or call "
+                "`do_nothing` to skip.\n"
+                "Include `reasoning` to explain your choice.\n"
+                "Use `intended_for` to address teammates by role "
+                "(e.g. ['analyst'] or ['all']).\n"
+                "Use `state_updates` to track your progress:\n"
+                "  - `goal_context`: updated notes on what you've learned\n"
+                "  - `pending_tasks`: remaining work items"
+            )
 
         return "\n\n".join(sections)
 

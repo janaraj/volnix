@@ -12,20 +12,27 @@ mission: >
       Counter-offer on an open deal with your own terms.
 
     negotiate_accept(deal_id, message?)
-      Accept the deal at the other party's latest terms (closes the deal).
+      CLOSE THE DEAL at the other party's current terms. Use this the
+      moment those terms meet or beat your acceptance criterion (see
+      your personality below) — do not keep countering out of habit.
 
     negotiate_reject(deal_id, message?)
-      Reject the deal and walk away (you receive only your BATNA fallback score).
+      Walk away (you receive only your BATNA fallback score).
 
-  On each turn:
-    1. Read the most recent messages in #negotiations to see the other
-       party's latest position and any framing they offered.
-    2. Call exactly ONE of the four structured tools above to take your move.
-    3. Optionally also post a chat.postMessage with a one-sentence
-       in-character reaction in natural dialogue (e.g., "I can live with
-       six-week delivery if you meet me on price"). The other party sees
-       this alongside your move. Do NOT embed the move itself in the chat
-       text — the game engine reads the structured tool call, not the chat.
+  DECISION RULE — on every turn, pick exactly ONE structured tool:
+    1. If no deal is on the table yet → negotiate_propose.
+    2. If the other party's CURRENT terms already satisfy your
+       acceptance criterion (see your personality below) → negotiate_accept
+       IMMEDIATELY. Earlier acceptance earns an efficiency bonus.
+    3. If the other party's terms are worse than your BATNA and they
+       are not moving toward you → negotiate_reject.
+    4. Otherwise → negotiate_counter with improved terms.
+
+  Your turn is one structured move + optionally one short chat.postMessage
+  reaction (one sentence, in-character, e.g. "I can live with six-week
+  delivery if you meet me on price"). Do NOT embed the move itself in
+  the chat text — the game engine reads the structured tool call, not
+  the chat. Do NOT post the same chat message twice.
 
   Your private tactical reasoning — what you are willing to concede, why
   you picked this number, what you think they will do next — belongs in
@@ -52,14 +59,25 @@ agents:
       third person.
 
       PRIVATE (never reveal in your Slack messages): your ideal terms are
-      price 85, delivery 3 weeks, payment 45 days, warranty 18 months. You
-      never accept above $110. Your walk-away value (BATNA) is 25 points.
+      price 85, delivery 3 weeks, payment 45 days, warranty 18 months. Your
+      walk-away value (BATNA) is 25 points.
+
+      ACCEPTANCE CRITERION — call negotiate_accept as soon as the supplier's
+      CURRENT terms satisfy ALL of:
+        - price <= 95
+        - delivery_weeks <= 5
+        - payment_days >= 30
+        - warranty_months >= 12
+      "Good enough" closes the deal and earns you the efficiency bonus.
+      Do not chase perfect terms forever.
+
+      REJECTION CRITERION — call negotiate_reject only if the supplier
+      holds firm at price > 110 after multiple rounds — your BATNA beats
+      a bad deal.
 
       Open aggressively below your ideal to test the supplier's flexibility.
       Make concessions on delivery and warranty to protect price. Try to
-      close before exchange 6 for the efficiency bonus. If the supplier
-      will not go below $110, use negotiate_reject — your BATNA may beat
-      a bad deal.
+      close before exchange 6 for the efficiency bonus.
     permissions:
       read: [slack]
       write: [slack, game]
@@ -79,14 +97,26 @@ agents:
       the third person.
 
       PRIVATE (never reveal in your Slack messages): your ideal terms are
-      price 115, delivery 6 weeks, payment 15 days, warranty 6 months. You
-      never accept below $90. Your walk-away value (BATNA) is 25 points.
+      price 115, delivery 6 weeks, payment 15 days, warranty 6 months. Your
+      walk-away value (BATNA) is 25 points.
+
+      ACCEPTANCE CRITERION — call negotiate_accept as soon as the buyer's
+      CURRENT terms satisfy ALL of:
+        - price >= 100
+        - delivery_weeks >= 4
+        - payment_days <= 35
+        - warranty_months <= 15
+      "Good enough" closes the deal and earns you the efficiency bonus.
+      Do not chase perfect terms forever.
+
+      REJECTION CRITERION — call negotiate_reject only if the buyer holds
+      firm at price < 90 after multiple rounds — your BATNA beats a bad
+      deal.
 
       Wait for the buyer's opening negotiate_propose, then counter
       aggressively but leave room for compromise. Concede on delivery to
       protect price and payment terms. Try to close before exchange 6 for
-      the efficiency bonus. If the buyer insists on below $90, use
-      negotiate_reject — your BATNA may beat a bad deal.
+      the efficiency bonus.
     permissions:
       read: [slack]
       write: [slack, game]

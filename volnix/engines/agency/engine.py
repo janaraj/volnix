@@ -849,15 +849,30 @@ class AgencyEngine(BaseEngine):
         actor: ActorState,
         reason: str,
         trigger_event: WorldEvent | None,
+        max_calls_override: int | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an agent with a multi-turn tool-calling loop.
 
         The agent maintains a conversation (messages array) across tool calls
-        within this single activation. Each tool call goes through the full
-        governance pipeline. The loop terminates when:
+        within this single activation. Each LLM response may contain multiple
+        tool calls — all of them are executed in order (each through the full
+        governance pipeline) and each appended to the conversation history so
+        the next iteration sees the complete record. The loop terminates when:
         - Agent responds with text (findings) → auto-posted to team channel
+          (unless the agent already explicitly chat-posted this activation)
         - Agent calls do_nothing
-        - max_tool_calls_per_activation reached
+        - Total tool-call budget is exhausted
+
+        Args:
+            actor: The actor state to activate.
+            reason: The activation reason string (e.g. "game_turn",
+                "autonomous_work", "subscription_immediate").
+            trigger_event: The event that caused this activation, if any.
+            max_calls_override: If set, overrides
+                ``max_tool_calls_per_activation`` from config for this
+                activation only. Used by ``activate_for_game_turn`` to honor
+                the blueprint's per-turn action budget. A value of ``None``
+                (or non-positive) falls back to the global default.
 
         Returns:
             List of ActionEnvelopes produced during this activation.
@@ -877,7 +892,13 @@ class AgencyEngine(BaseEngine):
         from volnix.ledger.entries import ActivationCompleteEntry, ToolLoopStepEntry
 
         activation_id = str(uuid.uuid4())[:12]
-        max_calls = self._typed_config.max_tool_calls_per_activation
+        # Per-activation tool-call budget. Override (from game runner's
+        # actions_per_turn) wins when set; otherwise use the global default.
+        max_calls = (
+            max_calls_override
+            if isinstance(max_calls_override, int) and max_calls_override > 0
+            else self._typed_config.max_tool_calls_per_activation
+        )
         tool_choice = self._typed_config.tool_choice_mode
 
         async with self._llm_semaphore:
@@ -895,30 +916,45 @@ class AgencyEngine(BaseEngine):
                 simulation_progress=self._simulation_progress,
             )
 
-            # Build messages: continue from persisted conversation or start fresh
+            # Build messages: continue from persisted conversation or start fresh.
+            #
+            # For GAME TURNS, the caller (activate_for_game_turn) has
+            # already appended a game-specific round_ctx user message to
+            # activation_messages. Do NOT layer the generic re-activation
+            # context or autonomous lead/sub-agent instructions on top —
+            # those are for delegation/monitoring workflows and will
+            # confuse a game player (e.g. telling a non-lead negotiator
+            # to "INVESTIGATE/SHARE/call do_nothing" directly contradicts
+            # the game persona's instruction to counter or accept).
+            #
+            # Non-game re-activations (autonomous lead agents, subscription
+            # triggers, etc.) still get the generic re-activation context +
+            # autonomous phase instructions.
             if actor.activation_messages:
-                # Re-activation: continue prior conversation with new context
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
-                reactivation_ctx = self._build_reactivation_context(
-                    actor,
-                    trigger_event,
-                    reason,
-                )
-                # Include updated phase-aware instructions on re-activation.
-                # Lead agents get phase-specific prompts (monitor/buffer)
-                # based on activation_reason + is_reactivation.
-                if actor.autonomous:
-                    reactivation_instructions = ActorPromptBuilder.build_autonomous_instructions(
-                        actor=actor,
-                        team_roster=team_roster,
-                        activation_reason=reason,
-                        simulation_progress=self._simulation_progress,
+                if reason != "game_turn":
+                    reactivation_ctx = self._build_reactivation_context(
+                        actor,
+                        trigger_event,
+                        reason,
                     )
-                    combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
-                else:
-                    combined = reactivation_ctx
-                if combined:
-                    messages.append({"role": "user", "content": combined})
+                    # Include updated phase-aware instructions on re-activation.
+                    # Lead agents get phase-specific prompts (monitor/buffer)
+                    # based on activation_reason + is_reactivation.
+                    if actor.autonomous:
+                        reactivation_instructions = (
+                            ActorPromptBuilder.build_autonomous_instructions(
+                                actor=actor,
+                                team_roster=team_roster,
+                                activation_reason=reason,
+                                simulation_progress=self._simulation_progress,
+                            )
+                        )
+                        combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
+                    else:
+                        combined = reactivation_ctx
+                    if combined:
+                        messages.append({"role": "user", "content": combined})
             else:
                 # First activation: build from scratch
                 messages: list[dict[str, Any]] = [
@@ -928,8 +964,23 @@ class AgencyEngine(BaseEngine):
 
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
+            total_tool_calls = 0
 
-            for step_idx in range(max_calls):
+            # Outer loop: one LLM call per iteration. Each response may
+            # contain multiple tool calls (OpenAI, Anthropic, and Google
+            # Gemini all support this); we execute all of them in order,
+            # each through the governance pipeline, each recorded in the
+            # conversation history. The LLM on the next iteration sees
+            # the complete record of what happened and does not need to
+            # re-emit any "dropped" calls.
+            #
+            # Iteration cap equals max_calls as a safety rail — if the
+            # LLM only emits one call per iteration (the common pattern),
+            # the outer loop naturally limits work to the budget.
+            for iteration in range(max_calls):
+                if total_tool_calls >= max_calls:
+                    break
+
                 step_start = _time.monotonic()
 
                 request = LLMRequest(
@@ -950,111 +1001,140 @@ class AgencyEngine(BaseEngine):
                 step_latency = (_time.monotonic() - step_start) * 1000
 
                 if response.tool_calls:
-                    tc = response.tool_calls[0]
+                    # Execute ALL tool calls from this response, in order,
+                    # respecting the total budget. Build ONE assistant
+                    # message containing every executed tool_call, followed
+                    # by matching tool-result messages — this mirrors the
+                    # original LLM response structure (one model turn with
+                    # multiple function_calls) and preserves per-call
+                    # provider metadata (including Gemini thought_signatures
+                    # that Gemini 3 requires on replay).
+                    stop_outer = False
+                    executed_tc_dicts: list[dict[str, Any]] = []
+                    tool_result_msgs: list[dict[str, Any]] = []
 
-                    # do_nothing terminates the loop
-                    if tc.name == "do_nothing":
-                        terminated_by = "do_nothing"
-                        self._record_to_ledger(
-                            ToolLoopStepEntry(
-                                actor_id=actor.actor_id,
-                                activation_id=activation_id,
-                                step_index=step_idx,
-                                tool_name="do_nothing",
-                                llm_latency_ms=step_latency,
+                    for tc_index, tc in enumerate(response.tool_calls):
+                        if total_tool_calls >= max_calls:
+                            stop_outer = True
+                            break
+
+                        tc_latency = step_latency if tc_index == 0 else 0.0
+
+                        # do_nothing short-circuits the whole activation,
+                        # even if it appears mid-response. Do not record it
+                        # in the assistant history (it's a sentinel, not a
+                        # real action); just terminate.
+                        if tc.name == "do_nothing":
+                            terminated_by = "do_nothing"
+                            self._record_to_ledger(
+                                ToolLoopStepEntry(
+                                    actor_id=actor.actor_id,
+                                    activation_id=activation_id,
+                                    step_index=total_tool_calls,
+                                    tool_name="do_nothing",
+                                    llm_latency_ms=tc_latency,
+                                )
                             )
-                        )
-                        break
+                            stop_outer = True
+                            break
 
-                    # Parse tool call into ActionEnvelope
-                    env = self._parse_tool_call(actor, tc, reason, trigger_event)
-                    if env is None:
-                        terminated_by = "do_nothing"
-                        break
+                        # Parse tool call into ActionEnvelope. A bad parse is
+                        # skipped (does NOT terminate the loop) so sibling
+                        # calls in the same response still execute.
+                        env = self._parse_tool_call(actor, tc, reason, trigger_event)
+                        if env is None:
+                            continue
 
-                    # Execute through governance pipeline INLINE
-                    # Lock serializes pipeline access across parallel agents
-                    async with self._pipeline_lock:
-                        committed_event = await self._tool_executor(env)
+                        # Execute through governance pipeline INLINE.
+                        # Lock serializes pipeline access across parallel agents.
+                        async with self._pipeline_lock:
+                            committed_event = await self._tool_executor(env)
 
-                    if committed_event is None:
-                        # Pipeline blocked — tell the agent
-                        blocked_tc_id = tc.id or f"call_{step_idx}"
-                        blocked_assistant_msg: dict[str, Any] = {
-                            "role": "assistant",
-                            "tool_calls": [
-                                _build_tool_call_dict(tc, blocked_tc_id),
-                            ],
-                        }
-                        if response.provider_metadata:
-                            # Stash per-turn provider metadata (e.g., Anthropic
-                            # extended-thinking blocks) so the same provider can
-                            # echo them back on the next turn. Other providers
-                            # strip the ``_provider_metadata`` key at their
-                            # boundary — it never leaks to an unintended SDK.
-                            blocked_assistant_msg["_provider_metadata"] = response.provider_metadata
-                        messages.append(blocked_assistant_msg)
-                        messages.append(
+                        tc_id = tc.id or f"call_{iteration}_{tc_index}"
+                        executed_tc_dicts.append(_build_tool_call_dict(tc, tc_id))
+
+                        if committed_event is None:
+                            # Pipeline blocked — still record the call in
+                            # the assistant history and feed a BLOCKED
+                            # result back so the LLM sees what happened.
+                            tool_result_msgs.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc_id,
+                                    "content": (
+                                        "BLOCKED: This action was not permitted "
+                                        "by the governance pipeline."
+                                    ),
+                                }
+                            )
+                            self._record_to_ledger(
+                                ToolLoopStepEntry(
+                                    actor_id=actor.actor_id,
+                                    activation_id=activation_id,
+                                    step_index=total_tool_calls,
+                                    tool_name=tc.name,
+                                    tool_arguments=tc.arguments,
+                                    blocked=True,
+                                    llm_latency_ms=tc_latency,
+                                )
+                            )
+                            total_tool_calls += 1
+                            continue
+
+                        # Success — record envelope and append matching
+                        # tool-result message.
+                        envelopes.append(env)
+
+                        result_body = json.dumps(
+                            committed_event.response_body or {},
+                            default=str,
+                        )[:2000]
+
+                        tool_result_msgs.append(
                             {
                                 "role": "tool",
-                                "tool_call_id": blocked_tc_id,
-                                "content": "BLOCKED: This action was not permitted by the governance pipeline.",
+                                "tool_call_id": tc_id,
+                                "content": result_body,
                             }
                         )
+
                         self._record_to_ledger(
                             ToolLoopStepEntry(
                                 actor_id=actor.actor_id,
                                 activation_id=activation_id,
-                                step_index=step_idx,
+                                step_index=total_tool_calls,
                                 tool_name=tc.name,
                                 tool_arguments=tc.arguments,
-                                blocked=True,
-                                llm_latency_ms=step_latency,
+                                event_id=committed_event.event_id,
+                                llm_latency_ms=tc_latency,
+                                response_preview=result_body[:200],
                             )
                         )
-                        continue
+                        total_tool_calls += 1
 
-                    # Success — record envelope and add result to messages
-                    envelopes.append(env)
-
-                    result_body = json.dumps(
-                        committed_event.response_body or {},
-                        default=str,
-                    )[:2000]
-
-                    tc_id = tc.id or f"call_{step_idx}"
-                    success_assistant_msg: dict[str, Any] = {
-                        "role": "assistant",
-                        "tool_calls": [_build_tool_call_dict(tc, tc_id)],
-                    }
-                    if response.provider_metadata:
-                        # Stash per-turn provider metadata (e.g., Anthropic
-                        # extended-thinking blocks) so the same provider can
-                        # echo them back on the next turn. Other providers
-                        # strip the ``_provider_metadata`` key at their
-                        # boundary — it never leaks to an unintended SDK.
-                        success_assistant_msg["_provider_metadata"] = response.provider_metadata
-                    messages.append(success_assistant_msg)
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": result_body,
+                    # Commit the assistant message + tool results as a
+                    # single coherent turn in the conversation history.
+                    # One assistant message with N tool_calls, followed by
+                    # N tool results (one per executed tool_call) — this
+                    # is what Gemini, Anthropic, and OpenAI all expect
+                    # when replaying multi-call responses.
+                    if executed_tc_dicts:
+                        assistant_msg: dict[str, Any] = {
+                            "role": "assistant",
+                            "tool_calls": executed_tc_dicts,
                         }
-                    )
+                        if response.provider_metadata:
+                            assistant_msg["_provider_metadata"] = response.provider_metadata
+                        messages.append(assistant_msg)
+                        messages.extend(tool_result_msgs)
 
-                    self._record_to_ledger(
-                        ToolLoopStepEntry(
-                            actor_id=actor.actor_id,
-                            activation_id=activation_id,
-                            step_index=step_idx,
-                            tool_name=tc.name,
-                            tool_arguments=tc.arguments,
-                            event_id=committed_event.event_id,
-                            llm_latency_ms=step_latency,
-                            response_preview=result_body[:200],
-                        )
-                    )
+                    if stop_outer:
+                        break
+                    if total_tool_calls >= max_calls:
+                        terminated_by = "max_tool_calls"
+                        break
+                    # Otherwise continue to next iteration — the LLM may
+                    # have more to do after seeing all the results.
 
                 elif response.content:
                     # Text response — agent is sharing findings
@@ -1068,8 +1148,16 @@ class AgencyEngine(BaseEngine):
                     # agent sees it on re-activation and doesn't repeat itself.
                     messages.append({"role": "assistant", "content": text})
 
-                    # Auto-post findings to team channel
-                    if actor.team_channel:
+                    # Auto-post findings to team channel — ONLY if the agent
+                    # did not already explicitly chat-post during this
+                    # activation. Without this guard the same text is posted
+                    # twice: once via the agent's explicit chat.postMessage
+                    # tool call earlier in the loop, and again via this
+                    # auto-post branch.
+                    already_posted_chat = any(
+                        getattr(e, "action_type", "") == "chat.postMessage" for e in envelopes
+                    )
+                    if actor.team_channel and not already_posted_chat:
                         post_env = self._create_channel_post(
                             actor,
                             text,
@@ -1088,10 +1176,10 @@ class AgencyEngine(BaseEngine):
                     # Treat as do_nothing (agent has nothing to contribute).
                     terminated_by = "do_nothing"
                     logger.info(
-                        "[AGENCY.loop] actor=%s step=%d: empty response "
+                        "[AGENCY.loop] actor=%s iter=%d: empty response "
                         "(completion_tokens=%d), treating as do_nothing",
                         actor.actor_id,
-                        step_idx,
+                        iteration,
                         response.usage.completion_tokens if response.usage else 0,
                     )
                     break
@@ -1704,32 +1792,78 @@ class AgencyEngine(BaseEngine):
         round_number: int = 0,
         total_rounds: int = 0,
         standings_summary: str = "",
+        max_actions: int | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an actor for a game turn. Public API for GameRunner.
 
-        Injects round-specific context into the actor's goal_context so the
-        LLM knows this is a new round and should take fresh actions. The
-        prompt builder renders goal_context — no changes needed there.
+        Preserves the agent's conversation history across rounds so the LLM
+        remembers what it has already done, what other players did, and how
+        the game state has evolved. This is required for ANY turn-based
+        game: without cross-round memory, the LLM starts each round as a
+        blank slate and defaults to re-emitting its opening move. Any
+        game-type-specific decision guidance (when to counter vs accept,
+        when to bid, etc.) belongs in the agent's persona / mission, NOT
+        in this generic runtime context.
+
+        Args:
+            actor_id: The player actor to activate.
+            round_number: Current round number (1-indexed).
+            total_rounds: Total rounds in the game.
+            standings_summary: One-line summary of current standings.
+            max_actions: Blueprint-defined tool-call budget for this turn
+                (``game.rounds.actions_per_turn``). Forwarded to the tool
+                loop as the per-activation cap. ``None`` falls back to
+                ``max_tool_calls_per_activation`` from global config.
         """
         actor_state = self._actor_states.get(actor_id)
         if actor_state is None:
             return []
 
-        # Prepend round context to existing goal_context.
-        # No restore needed — _activate_with_tool_loop may update goal_context
-        # (delegation at L349, buffer at L486, findings at L1016) and we must
-        # not wipe those updates.
+        budget = (
+            max_actions
+            if isinstance(max_actions, int) and max_actions > 0
+            else self._typed_config.max_tool_calls_per_activation
+        )
+        # Generic, game-type-agnostic round context. Refers only to prior
+        # turns and "moves" — no negotiation-specific terminology, no
+        # trading-specific terminology. Game-type guidance lives in the
+        # agent persona / mission (loaded once at the start).
         round_ctx = (
             f"ROUND {round_number}/{total_rounds} — NEW ROUND. "
-            f"Your action budget has been refreshed. You MUST take actions this round. "
-            f"Do NOT repeat previous analysis — each round is a new opportunity to act."
+            f"You have up to {budget} tool calls this turn. "
+            f"Take your turn now: call the structured tool(s) for your "
+            f"move and optionally one short chat.postMessage reaction, "
+            f"then stop. Review your prior turns above to see what you "
+            f"and the other players have already done — continue from "
+            f"that state, do NOT restart from scratch or repeat actions "
+            f"you already took."
         )
         if standings_summary:
             round_ctx += f"\nCurrent standings: {standings_summary}"
-        actor_state.goal_context = f"{round_ctx}\n{actor_state.goal_context or ''}"
 
-        # Fresh conversation each game round — prevents accumulated history
-        # from causing the LLM to decide "I already did everything".
-        actor_state.activation_messages = []
+        # Keep the conversation across rounds so the LLM has full memory
+        # of prior moves, results, and its own reasoning. Without this,
+        # each round starts as a blank slate and the LLM defaults to
+        # re-emitting its opening move (verified in run_d5165eb40ad8:
+        # 13 negotiate_propose events, 0 counters across 8 rounds).
+        #
+        # This applies uniformly to every game type because cross-round
+        # memory is a universal requirement for turn-based play. Game-
+        # type-specific decision rules (when to counter vs accept, when
+        # to bid, etc.) live in the agent persona, not here.
+        #
+        # Round 1 still uses the fresh-start path — activation_messages
+        # is empty and goal_context renders round_ctx into the initial
+        # user prompt via the prompt builder.
+        if actor_state.activation_messages:
+            actor_state.activation_messages = list(actor_state.activation_messages)
+            actor_state.activation_messages.append({"role": "user", "content": round_ctx})
+        else:
+            actor_state.goal_context = f"{round_ctx}\n{actor_state.goal_context or ''}"
 
-        return await self._activate_with_tool_loop(actor_state, "game_turn", None)
+        return await self._activate_with_tool_loop(
+            actor_state,
+            "game_turn",
+            None,
+            max_calls_override=max_actions,
+        )

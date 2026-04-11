@@ -118,10 +118,12 @@ NEGOTIATION_TOOLS: list[ToolDefinition] = [
         name="negotiate_accept",
         service="game",
         description=(
-            "Accept the deal at the other party's most recent terms. "
-            "This closes the deal immediately and is scored at the "
-            "current term values. Only use this if the current terms are "
-            "acceptable — you cannot modify them by accepting."
+            "CLOSE THE DEAL. Call this the moment the other party's "
+            "current terms meet or beat your acceptance criterion. "
+            "This locks in the current terms for scoring immediately "
+            "and earns an efficiency bonus for closing early. Prefer "
+            "this over negotiate_counter once terms have converged to "
+            "something acceptable — do not keep countering out of habit."
         ),
         parameters=_CLOSE_SCHEMA,
     ),
@@ -129,9 +131,11 @@ NEGOTIATION_TOOLS: list[ToolDefinition] = [
         name="negotiate_reject",
         service="game",
         description=(
-            "Reject the deal and walk away. Use this if the terms are "
-            "worse than your BATNA (walk-away value). You will receive "
-            "your BATNA fallback score instead of a deal score."
+            "Walk away from the negotiation. Use this only if the "
+            "other party's terms are worse than your BATNA and they "
+            "refuse to move toward you. You will receive your BATNA "
+            "fallback score instead of a deal score. Prefer accept or "
+            "counter whenever possible."
         ),
         parameters=_CLOSE_SCHEMA,
     ),
