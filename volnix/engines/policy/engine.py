@@ -54,6 +54,11 @@ class PolicyEngine(BaseEngine):
         self._world_mode: str = "governed"
         self._evaluator = ConditionEvaluator()
         self._enforcement = EnforcementHandler()
+        # Built-in Python gates registered by the composition root. Each
+        # gate must implement ``async evaluate(ctx) -> StepResult``. Gates
+        # run BEFORE YAML policies and a ``DENY`` verdict short-circuits
+        # the step. See ``volnix.engines.policy.builtin`` for shipped gates.
+        self._builtin_gates: list[Any] = []
 
     # -- PipelineStep interface ------------------------------------------------
 
@@ -90,6 +95,16 @@ class PolicyEngine(BaseEngine):
                 events=[event],
                 message="Hold pre-approved — skipping policy re-evaluation",
             )
+
+        # Run built-in gates (e.g. GameActivePolicy) before YAML policies.
+        # A DENY verdict from any gate short-circuits the step — the action
+        # is rejected and the action context never reaches YAML evaluation.
+        # Gates run even when ``_policies`` is empty so game-mode
+        # enforcement works without a user-defined policy set.
+        for gate in self._builtin_gates:
+            gate_result: StepResult = await gate.evaluate(ctx)
+            if gate_result.verdict == StepVerdict.DENY:
+                return gate_result
 
         if not self._policies:
             now = datetime.now(UTC)
@@ -226,6 +241,22 @@ class PolicyEngine(BaseEngine):
         policy_def.setdefault("id", pid)
         self._policies.append(policy_def)
         return pid
+
+    def register_gate(self, gate: Any) -> None:
+        """Register a built-in policy gate that runs before YAML policies.
+
+        A gate must implement ``async evaluate(ctx: ActionContext) -> StepResult``.
+        Gates run in registration order on every ``execute`` call. A
+        ``DENY`` verdict short-circuits the step and prevents YAML
+        policies from running. An ``ALLOW`` verdict falls through to
+        the next gate (or to YAML policies if this is the last gate).
+
+        This is the single extension point for non-YAML policy logic
+        (e.g. :class:`GameActivePolicy`) that needs to track runtime
+        state the YAML condition evaluator can't express. The
+        composition root registers gates at wiring time.
+        """
+        self._builtin_gates.append(gate)
 
     async def remove_policy(self, policy_id: PolicyId) -> None:
         """Remove a policy from the active set."""
