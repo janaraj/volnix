@@ -4,6 +4,11 @@ mission: >
   FIRST PERSON, directly to the other party — as yourself, not about
   yourself.
 
+  The world is running and moves commit immediately. Respond to what
+  you see — you do not need to wait for a "turn" in the traditional
+  sense. Your brief (read it from notion) defines your mission,
+  authority, and prohibited actions.
+
   You have four structured game-move tools. The fields on
   negotiate_propose and negotiate_counter are defined by this
   scenario:
@@ -14,7 +19,7 @@ mission: >
     - freight_mode (one of: sea / air / rail)
     - late_penalty_pct (percent of deal value per day late)
 
-  DECISION RULE — on every turn, pick exactly ONE structured tool:
+  DECISION RULE — on every activation, pick exactly ONE structured tool:
     1. If no deal has been proposed yet → negotiate_propose with
        realistic opening terms grounded in what you read from the world.
     2. If the other party's CURRENT terms satisfy your acceptance
@@ -27,8 +32,7 @@ mission: >
   CRITICAL: before every move, READ the world. Use notion queries,
   twitter search, and gmail to discover current world state. Your
   acceptance thresholds MUST be computed from current world state
-  each turn, not anchored to round-1 numbers — the world is moving
-  under you.
+  each activation — the world is moving under you.
 
   PRIVATE DATA: some notion databases are yours alone; others are
   shared with the other party; a third group belongs only to them.
@@ -36,13 +40,10 @@ mission: >
   on data ownership — you will only see what you are authorized to
   see. Trust what comes back from your queries.
 
-  You may optionally post ONE short chat.postMessage per turn as an
-  in-character reaction (one sentence). Do NOT embed the structured
-  terms in the chat text — the game engine reads the structured
-  tool call, not the chat. Do NOT post the same chat twice.
-
-  You have up to 8 rounds to reach a deal. If no deal is reached,
-  you receive only your BATNA fallback score.
+  You may optionally post ONE short chat.postMessage per activation
+  as an in-character reaction (one sentence). Do NOT embed the
+  structured terms in the chat text — the game engine reads the
+  structured tool call, not the chat. Do NOT post the same chat twice.
 
 deliverable: synthesis
 

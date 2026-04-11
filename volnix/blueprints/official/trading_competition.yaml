@@ -55,34 +55,12 @@ world:
       volatility: 70
   mode: governed
 
+  # Trading competition is a simulation, not a game in the
+  # event-driven orchestrator sense — it uses alpaca ``create_order``
+  # tool calls rather than ``negotiate_*`` tool calls. The
+  # GameOrchestrator's current scorer + win conditions are specific
+  # to negotiation. Running this blueprint produces a standard
+  # SimulationRunner flow (no orchestrator), which matches the
+  # intended behavior for stock market competitions.
   game:
-    enabled: true
-    mode: competition
-    rounds:
-      count: 10
-      actions_per_turn: 5
-      simultaneous: true
-    resource_reset_per_round:
-      api_calls: 5
-    scoring:
-      metrics:
-        - name: portfolio_value
-          source: state
-          entity_type: alpaca_account
-          field: equity
-          weight: 0.7
-        - name: trade_activity
-          source: events
-          event_type: "world.create_order"
-          aggregation: count
-          weight: 0.3
-      ranking: descending
-    win_conditions:
-      - type: rounds_complete
-      - type: elimination
-        metric: portfolio_value
-        threshold: 50000
-        below: true
-    between_rounds:
-      animator_tick: true
-      announce_scores: true
+    enabled: false

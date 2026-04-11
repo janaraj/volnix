@@ -162,17 +162,19 @@ def test_animator_scheduled_events_progression(world_def):
 def test_animator_state_snapshot_excludes_game_internals(world_def):
     """Game-internal entity types must be excluded from the animator snapshot.
 
-    Ensures the organic LLM animator doesn't see private scoring state
-    (negotiation_target, negotiation_scorecard, negotiation_deal) which
-    would leak agent intent into the organic events. Also excludes
-    visibility_rule to avoid teaching the LLM about the permission model.
+    Ensures the organic LLM animator doesn't see private game state
+    (``negotiation_target_terms``, ``negotiation_proposal``,
+    ``negotiation_deal``, ``game_player_brief``) which would leak
+    player intent into the organic events. Also excludes
+    ``visibility_rule`` to avoid teaching the LLM about the
+    permission model.
     """
     exclude = world_def["animator"].get("state_snapshot_exclude", [])
     for required_exclude in (
-        "negotiation_target",
-        "negotiation_scorecard",
+        "negotiation_target_terms",
         "negotiation_proposal",
         "negotiation_deal",
+        "game_player_brief",
         "visibility_rule",
     ):
         assert required_exclude in exclude, (
@@ -226,19 +228,50 @@ def test_freight_mode_has_enum(world_def):
     assert freight.get("enum") == ["sea", "air", "rail"]
 
 
-def test_game_rounds_and_actions(world_def):
-    """8 rounds, 5 actions per turn, evaluator is negotiation."""
+def test_game_flow_and_scoring_mode(world_def):
+    """Event-driven flow with behavioral scoring mode."""
     game = world_def.get("game", {})
     assert game.get("enabled") is True
     assert game.get("mode") == "negotiation"
+    assert game.get("scoring_mode") == "behavioral"
 
-    rounds = game.get("rounds", {})
-    assert rounds.get("count") == 8
-    assert rounds.get("actions_per_turn") == 5
+    flow = game.get("flow", {})
+    assert flow.get("type") == "event_driven"
+    assert flow.get("max_events", 0) > 0
+    assert flow.get("first_mover") == "nimbus_buyer"
+    assert flow.get("activation_mode") == "serial"
 
-    between = game.get("between_rounds", {})
-    assert between.get("evaluator") == "negotiation"
-    assert between.get("animator_tick") is True
+
+def test_game_entities_declare_deal_and_briefs(world_def):
+    """game.entities declares the deal + per-player briefs."""
+    game = world_def.get("game", {})
+    entities = game.get("entities", {})
+
+    deals = entities.get("deals", [])
+    assert len(deals) == 1
+    deal = deals[0]
+    assert deal["id"] == "deal-pwr7a-2026q2"
+    assert set(deal["parties"]) == {"nimbus_buyer", "haiphong_supplier"}
+
+    briefs = entities.get("player_briefs", [])
+    assert len(briefs) == 2
+    brief_roles = {b["actor_role"] for b in briefs}
+    assert brief_roles == {"nimbus_buyer", "haiphong_supplier"}
+    for brief in briefs:
+        assert brief["deal_id"] == "deal-pwr7a-2026q2"
+        assert brief.get("brief_content"), f"Brief for {brief['actor_role']} must have content"
+
+
+def test_game_behavioral_mode_has_no_target_terms(world_def):
+    """Behavioral mode must NOT declare target_terms (MF3 invariant)."""
+    game = world_def.get("game", {})
+    entities = game.get("entities", {})
+    target_terms = entities.get("target_terms", [])
+    assert target_terms == [], (
+        "Behavioral scoring mode must not declare target_terms. "
+        "Those fields are competitive-mode-only and would be silently "
+        "dropped at materialization."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -286,13 +319,20 @@ def test_seeds_declare_public_buyer_and_supplier_scopes(world_def):
     )
 
 
-def test_seeds_declare_deal_and_targets(world_def):
-    """Deal + per-player target + scorecard entities are seeded."""
+def test_seeds_do_not_duplicate_game_entities(world_def):
+    """Game entities live in ``game.entities``, not in ``seeds``.
+
+    Cycle B moved game entity materialization from LLM-interpreted
+    seeds into structured blueprint declarations. The world compiler
+    materializes deals, player_briefs, and (competitive only)
+    target_terms directly from ``game.entities`` in B.8.
+    """
     seeds_text = "\n".join(str(s) for s in world_def.get("seeds", []))
-    assert "negotiation_deal" in seeds_text
-    assert "negotiation_target" in seeds_text
-    assert "negotiation_scorecard" in seeds_text
-    assert "deal-pwr7a-2026q2" in seeds_text
+    # Seeds should NOT declare any of these game entities — they're
+    # materialized from game.entities instead
+    assert "negotiation_deal" not in seeds_text
+    assert "negotiation_target" not in seeds_text
+    assert "negotiation_scorecard" not in seeds_text
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +406,8 @@ def test_agent_personas_are_query_driven(agents_def):
     """
     for agent in agents_def["agents"]:
         personality = agent.get("personality", "")
-        # Must mention that queries are required every turn
+        # Must mention that queries are required on every activation
         assert "query" in personality.lower()
-        assert "every turn" in personality.lower()
+        assert "every turn" in personality.lower() or "every activation" in personality.lower()
         # Must tell the agent NOT to hardcode
         assert "not hardcode" in personality.lower() or "do not hardcode" in personality.lower()

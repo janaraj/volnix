@@ -1,11 +1,12 @@
 world:
-  name: "Supply Chain Negotiation"
+  name: "Q3 Steel Supply Contract"
   description: >
-    A procurement negotiation where a buyer and supplier negotiate terms
-    for a bulk materials contract. Both agents communicate through Slack,
-    posting structured proposals and counteroffers. The deal covers price,
-    delivery timeline, payment terms, and warranty period. Each agent has
-    secret ideal terms and must reach a mutually acceptable agreement.
+    A procurement negotiation between Atlas Manufacturing (buyer) and
+    Vulcan Steel (supplier) for a Q3 bulk steel supply contract. Both
+    agents negotiate in a Slack channel via structured negotiate_*
+    tool calls. Each side has private ideal terms, term weights, and
+    a BATNA walk-away score. Competitive scoring produces a leaderboard
+    at termination.
 
   services:
     slack: verified/slack
@@ -19,65 +20,144 @@ world:
 
   seeds:
     - >
-      Slack channels: one channel called "negotiations" for deal discussion,
-      one channel called "general" for announcements.
-    - >
-      Negotiation deal: one negotiation_deal entity with id "deal-001",
-      title "Q3 Steel Supply Contract", status "open",
-      parties ["buyer", "supplier"],
-      terms_template containing price (range 80-120 per ton),
-      delivery_weeks (range 2-8), payment_days (range 15-60),
-      warranty_months (range 6-24). terms should be empty dict initially.
-    - >
-      Buyer target: one negotiation_target entity with game_owner_id matching
-      the buyer agent, deal_id "deal-001",
-      ideal_terms {price: 85, delivery_weeks: 3, payment_days: 45, warranty_months: 18},
-      term_weights {price: 0.4, delivery_weeks: 0.25, payment_days: 0.15, warranty_months: 0.2},
-      term_ranges {price: [80, 120], delivery_weeks: [2, 8], payment_days: [15, 60], warranty_months: [6, 24]},
-      batna_score 25.
-    - >
-      Supplier target: one negotiation_target entity with game_owner_id matching
-      the supplier agent, deal_id "deal-001",
-      ideal_terms {price: 115, delivery_weeks: 6, payment_days: 15, warranty_months: 6},
-      term_weights {price: 0.4, delivery_weeks: 0.2, payment_days: 0.25, warranty_months: 0.15},
-      term_ranges {price: [80, 120], delivery_weeks: [2, 8], payment_days: [15, 60], warranty_months: [6, 24]},
-      batna_score 25.
-    - >
-      Scorecards: two negotiation_scorecard entities, one per player with
-      game_owner_id matching each agent. Fields: deal_score 0, efficiency_bonus 0,
-      deals_closed 0, total_points 0.
+      Slack channels: one channel called "negotiations" for deal
+      discussion, one channel called "general" for announcements.
 
   behavior: reactive
   reality:
     preset: messy
-    social_friction:
+    friction:
       uncooperative: 40
   mode: governed
 
   game:
     enabled: true
     mode: negotiation
-    turn_protocol: independent
-    rounds:
-      count: 8
-      actions_per_turn: 3
-      simultaneous: false
-    resource_reset_per_round:
-      api_calls: 3
+    scoring_mode: competitive
+
+    # Domain schema for the negotiate_propose / negotiate_counter tools.
+    # Each field is declared once here; the game service pack builds
+    # the tool schemas dynamically at compile time.
+    type_config:
+      negotiation_fields:
+        - name: price
+          type: number
+          description: "USD per ton"
+        - name: delivery_weeks
+          type: integer
+          description: "Weeks from order confirmation to delivery"
+        - name: payment_days
+          type: integer
+          description: "NET payment terms in days"
+        - name: warranty_months
+          type: integer
+          description: "Warranty coverage in months"
+
+    flow:
+      type: event_driven
+      max_wall_clock_seconds: 900
+      max_events: 40
+      stalemate_timeout_seconds: 240
+      activation_mode: serial
+      first_mover: buyer
+      bonus_per_event: 0.35
+      reactivity_window_events: 5
+      state_summary_entity_types:
+        - negotiation_deal
+
+    entities:
+      deals:
+        - id: deal-q3-steel
+          title: "Q3 Steel Supply Contract"
+          parties: [buyer, supplier]
+          status: open
+          terms: {}
+          terms_template:
+            price: {range: [80, 120]}
+            delivery_weeks: {range: [2, 8]}
+            payment_days: {range: [15, 60]}
+            warranty_months: {range: [6, 24]}
+          consent_rule: unanimous
+
+      player_briefs:
+        - actor_role: buyer
+          deal_id: deal-q3-steel
+          brief_content: >
+            You are the procurement lead for Atlas Manufacturing. You need
+            1,000 tons of Q3 steel at the best possible price. Your CFO
+            authorized a max of $95/ton. Target $80-85 if possible.
+            Delivery must be within 4 weeks. Payment NET 45 preferred.
+            Warranty at least 12 months. Walk away if supplier holds above
+            $110/ton or delivery above 7 weeks.
+          mission: "Close the best possible deal for Atlas Manufacturing."
+          prohibited_actions: []
+
+        - actor_role: supplier
+          deal_id: deal-q3-steel
+          brief_content: >
+            You are the sales director at Vulcan Steel. Your cost floor
+            is $75/ton (below that you lose money). Target $110-115/ton.
+            You can offer 4-8 week delivery. Payment NET 15 preferred.
+            You can offer up to 24 months warranty. Walk away if buyer
+            holds below $90/ton.
+          mission: "Maximize revenue for Vulcan Steel."
+          prohibited_actions: []
+
+      target_terms:
+        - actor_role: buyer
+          deal_id: deal-q3-steel
+          ideal_terms:
+            price: 85
+            delivery_weeks: 3
+            payment_days: 45
+            warranty_months: 18
+          term_weights:
+            price: 0.4
+            delivery_weeks: 0.25
+            payment_days: 0.15
+            warranty_months: 0.2
+          term_ranges:
+            price: [80, 120]
+            delivery_weeks: [2, 8]
+            payment_days: [15, 60]
+            warranty_months: [6, 24]
+          batna_score: 25
+
+        - actor_role: supplier
+          deal_id: deal-q3-steel
+          ideal_terms:
+            price: 115
+            delivery_weeks: 6
+            payment_days: 15
+            warranty_months: 6
+          term_weights:
+            price: 0.4
+            delivery_weeks: 0.2
+            payment_days: 0.25
+            warranty_months: 0.15
+          term_ranges:
+            price: [80, 120]
+            delivery_weeks: [2, 8]
+            payment_days: [15, 60]
+            warranty_months: [6, 24]
+          batna_score: 25
+
     scoring:
       metrics:
         - name: total_points
           source: state
-          entity_type: negotiation_scorecard
+          entity_type: negotiation_target_terms
           field: total_points
           weight: 1.0
       ranking: descending
+
     win_conditions:
+      - type: deal_closed
+      - type: deal_rejected
+      - type: stalemate_timeout
+      - type: wall_clock_elapsed
+      - type: max_events_exceeded
+      - type: all_budgets_exhausted
       - type: score_threshold
         metric: total_points
-        threshold: 0.01
-      - type: rounds_complete
-    between_rounds:
-      animator_tick: false
-      announce_scores: true
-      evaluator: negotiation
+        threshold: 90

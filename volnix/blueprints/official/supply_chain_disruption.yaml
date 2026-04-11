@@ -21,7 +21,6 @@ world:
   # "public", "nimbus_buyer", or "haiphong_supplier". Per-agent
   # visibility rules (also seeded) filter query results so each
   # agent sees only the union of public + their own private data.
-  # This is the canonical Volnix pattern for per-actor data scoping.
   services:
     notion: verified/notion
     twitter: verified/twitter
@@ -266,53 +265,6 @@ world:
       qty 4000, urgency "standard", offered_price_usd 25.00,
       payment_terms_days 45, notes "price-sensitive").
 
-    # ===== GAME STATE — deal, targets, scorecards =====
-    # These are game-internal entities. Default animator exclude
-    # list already hides them from the organic LLM animator.
-
-    - >
-      Create a negotiation_deal entity with id "deal-pwr7a-2026q2",
-      title "Emergency PWR-7A Shipment — Nimbus × Haiphong",
-      status "open", parties ["nimbus_buyer", "haiphong_supplier"],
-      terms_template containing the fields {unit_price,
-      quantity_units, delivery_lead_days, payment_terms_days,
-      freight_mode, late_penalty_pct}, terms an empty dict.
-
-    - >
-      Nimbus buyer target: create a negotiation_target entity with
-      game_owner_id "nimbus_buyer", deal_id "deal-pwr7a-2026q2",
-      ideal_terms {unit_price 25, quantity_units 20000,
-      delivery_lead_days 7, payment_terms_days 60,
-      late_penalty_pct 2.0},
-      term_weights {unit_price 0.4, delivery_lead_days 0.3,
-      quantity_units 0.1, payment_terms_days 0.15,
-      late_penalty_pct 0.05},
-      term_ranges {unit_price [22, 35], delivery_lead_days [3, 21],
-      quantity_units [15000, 25000], payment_terms_days [30, 90],
-      late_penalty_pct [0.5, 5.0]},
-      batna_score 30.
-
-    - >
-      Haiphong supplier target: create a negotiation_target entity
-      with game_owner_id "haiphong_supplier",
-      deal_id "deal-pwr7a-2026q2",
-      ideal_terms {unit_price 30, quantity_units 20000,
-      delivery_lead_days 14, payment_terms_days 30,
-      late_penalty_pct 0.5},
-      term_weights {unit_price 0.45, payment_terms_days 0.2,
-      delivery_lead_days 0.15, quantity_units 0.1,
-      late_penalty_pct 0.1},
-      term_ranges {unit_price [22, 35], delivery_lead_days [3, 21],
-      quantity_units [15000, 25000], payment_terms_days [30, 90],
-      late_penalty_pct [0.5, 5.0]},
-      batna_score 30.
-
-    - >
-      Scorecards: create two negotiation_scorecard entities, one per
-      player with game_owner_id matching each agent (nimbus_buyer,
-      haiphong_supplier). Fields deal_score 0, efficiency_bonus 0,
-      deals_closed 0, total_points 0, batna_applied false.
-
     # ===== COMMUNICATION CHANNELS =====
 
     - >
@@ -365,10 +317,10 @@ world:
     # for documentation + add visibility_rule to avoid coaching the
     # LLM about the permission model.)
     state_snapshot_exclude:
-      - negotiation_target
-      - negotiation_scorecard
+      - negotiation_target_terms
       - negotiation_proposal
       - negotiation_deal
+      - game_player_brief
       - visibility_rule
 
     # Deterministic scheduled beats using the at_time format (P2).
@@ -451,11 +403,11 @@ world:
   game:
     enabled: true
     mode: negotiation
-    turn_protocol: independent
+    scoring_mode: behavioral
 
-    # Uses the generic negotiation schema (Phase P0 / prior Step 1).
-    # Each field is declared once here; the evaluator builds the
-    # negotiate_propose/counter tool schemas dynamically.
+    # Uses the generic negotiation schema — each field is declared
+    # once here; the game service pack builds the tool schemas
+    # dynamically at compile time.
     type_config:
       negotiation_fields:
         - name: unit_price
@@ -478,26 +430,76 @@ world:
           type: number
           description: "Penalty as percent of deal value per day late"
 
-    rounds:
-      count: 8
-      actions_per_turn: 5
-      simultaneous: false
-    resource_reset_per_round:
-      api_calls: 5
+    flow:
+      type: event_driven
+      max_wall_clock_seconds: 900
+      max_events: 60
+      stalemate_timeout_seconds: 240
+      activation_mode: serial
+      first_mover: nimbus_buyer
+      bonus_per_event: 0.14
+      reactivity_window_events: 5
+      state_summary_entity_types:
+        - negotiation_deal
+
+    entities:
+      deals:
+        - id: deal-pwr7a-2026q2
+          title: "Emergency PWR-7A Shipment — Nimbus × Haiphong"
+          parties: [nimbus_buyer, haiphong_supplier]
+          status: open
+          terms: {}
+          terms_template:
+            unit_price: {range: [22, 35]}
+            quantity_units: {range: [15000, 25000]}
+            delivery_lead_days: {range: [3, 21]}
+            payment_terms_days: {range: [30, 90]}
+            late_penalty_pct: {range: [0.5, 5.0]}
+          consent_rule: unanimous
+
+      player_briefs:
+        - actor_role: nimbus_buyer
+          deal_id: deal-pwr7a-2026q2
+          brief_content: >
+            You are Dana, procurement lead at Nimbus Electronics. Your
+            regular PWR-7A supplier missed a shipment and you are now
+            down to ~5 days of safety stock on your highest-burn-rate
+            line. Every day of downtime costs the company $180,000. You
+            must close an emergency purchase of 20,000 PWR-7A units
+            from a new supplier (Haiphong Precision). Read the world
+            every turn — the storm, port status, market comps, and CFO
+            authority cap are all changing. You CANNOT pay more than
+            $32/ton without board approval (which will not happen
+            before Monday).
+          mission: "Close an emergency PWR-7A purchase that restores production."
+          prohibited_actions: []
+
+        - actor_role: haiphong_supplier
+          deal_id: deal-pwr7a-2026q2
+          brief_content: >
+            You are Linh, sales director at Haiphong Precision. Your PWR-7A
+            inventory is tight (25,000 units actually available after
+            existing commitments). A typhoon is forming in the South China
+            Sea and your port may close. Your margin target is 22% and
+            your floor is the highest bid in your existing order book.
+            Read the world every turn — your competing inquiries are
+            real pressure if Dana lowballs. Weigh whether to sell to
+            Nimbus or redirect the inventory to another buyer.
+          mission: "Maximize revenue while maintaining supplier reputation."
+          prohibited_actions: []
+
+      # No target_terms block — behavioral mode evaluates player
+      # behavior (query quality, reactivity, policy compliance)
+      # rather than distance-from-ideal deal scoring.
+
     scoring:
-      metrics:
-        - name: total_points
-          source: state
-          entity_type: negotiation_scorecard
-          field: total_points
-          weight: 1.0
+      metrics: []
       ranking: descending
+
     win_conditions:
-      - type: score_threshold
-        metric: total_points
-        threshold: 0.01
-      - type: rounds_complete
-    between_rounds:
-      animator_tick: true
-      announce_scores: true
-      evaluator: negotiation
+      - type: deal_closed
+      - type: deal_rejected
+      - type: stalemate_timeout
+      - type: wall_clock_elapsed
+      - type: max_events_exceeded
+      - type: all_budgets_exhausted
