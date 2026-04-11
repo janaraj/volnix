@@ -552,6 +552,9 @@ Generate organic world events that happen between agent turns.
 ## Actors in the World
 {actors}
 
+## Current World State (entity snapshot — capped at 3 samples per type)
+{entity_snapshot}
+
 ## Recent Agent Actions
 {recent_actions}
 
@@ -576,6 +579,10 @@ Escalation on inaction: {escalation_on_inaction}
 - You MUST use action names from the Available Tools list — do NOT invent actions
 - Use the service name from the tool's "service" field as service_id
 - Reality dimensions shape what happens (messy = things go wrong, hostile = active opposition)
+- When the entity snapshot above shows specific entities, PREFER updating/extending
+  those existing entities over creating generic new ones. That keeps the world
+  coherent — e.g., if there's a weather_alert named td_18w, evolve IT rather
+  than spawning a second unrelated storm.
 - Events go through the governance pipeline — they CAN be blocked by policies
 
 Output ONLY valid JSON array.""",

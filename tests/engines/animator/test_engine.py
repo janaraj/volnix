@@ -410,3 +410,268 @@ async def test_probabilistic_events_with_zero_conditions():
 
     events = engine._generate_probabilistic_events(context, _utc())
     assert events == []
+
+
+# ---------------------------------------------------------------------------
+# _parse_at_time (P2 — one-shot scheduled event helper)
+# ---------------------------------------------------------------------------
+
+
+from volnix.engines.animator.engine import _parse_at_time  # noqa: E402
+
+
+def test_parse_at_time_relative_seconds():
+    now = datetime(2026, 4, 11, 12, 0, 0, tzinfo=UTC)
+    result = _parse_at_time("60s", now=now)
+    assert result == datetime(2026, 4, 11, 12, 1, 0, tzinfo=UTC)
+
+
+def test_parse_at_time_relative_minutes():
+    now = datetime(2026, 4, 11, 12, 0, 0, tzinfo=UTC)
+    result = _parse_at_time("5m", now=now)
+    assert result == datetime(2026, 4, 11, 12, 5, 0, tzinfo=UTC)
+
+
+def test_parse_at_time_relative_hours():
+    now = datetime(2026, 4, 11, 12, 0, 0, tzinfo=UTC)
+    result = _parse_at_time("2h", now=now)
+    assert result == datetime(2026, 4, 11, 14, 0, 0, tzinfo=UTC)
+
+
+def test_parse_at_time_absolute_iso_with_z():
+    """ISO-8601 with Z suffix is normalized to +00:00 and parsed."""
+    result = _parse_at_time("2026-04-11T00:01:30Z")
+    assert result == datetime(2026, 4, 11, 0, 1, 30, tzinfo=UTC)
+
+
+def test_parse_at_time_absolute_iso_with_offset():
+    """ISO-8601 with explicit UTC offset parses correctly."""
+    result = _parse_at_time("2026-04-11T00:01:30+00:00")
+    assert result == datetime(2026, 4, 11, 0, 1, 30, tzinfo=UTC)
+
+
+def test_parse_at_time_invalid_returns_none():
+    """Malformed strings return None instead of raising."""
+    assert _parse_at_time("not a time") is None
+    assert _parse_at_time("") is None
+    # Dict or non-string input handled defensively
+    assert _parse_at_time(None) is None  # type: ignore[arg-type]
+    assert _parse_at_time(123) is None  # type: ignore[arg-type]
+
+
+def test_parse_at_time_naive_iso_assumed_utc():
+    """ISO-8601 without timezone info is treated as UTC."""
+    result = _parse_at_time("2026-04-11T12:30:00")
+    assert result == datetime(2026, 4, 11, 12, 30, 0, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------
+# at_time scheduled events (P2 — YAML integration)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_at_time_relative_duration_registers_one_shot():
+    """YAML at_time with relative duration registers as a one-shot event.
+
+    Uses approximately-now as the reference time and asserts the fire time
+    lands ~60s in the future (with some tolerance for clock drift).
+    """
+    engine, scheduler = await _setup_engine(
+        behavior="dynamic",
+        animator_settings={
+            "scheduled_events": [
+                {
+                    "at_time": "60s",
+                    "actor_id": "test_actor",
+                    "service_id": "notion",
+                    "action": "pages.update",
+                    "input_data": {"page_ref": "test"},
+                },
+            ],
+        },
+    )
+
+    # Should have exactly 1 one-shot event registered, 0 recurring, 0 trigger.
+    assert len(scheduler._one_shot) == 1
+    assert len(scheduler._recurring) == 0
+    assert len(scheduler._triggers) == 0
+
+    # Fire time should be ~now + 60s (tolerate 5 seconds of test drift).
+    now = datetime.now(tz=UTC)
+    fire_time = scheduler._one_shot[0].fire_time
+    delta_seconds = (fire_time - now).total_seconds()
+    assert 55 <= delta_seconds <= 65, (
+        f"Expected fire_time ~60s from now, got delta={delta_seconds}s"
+    )
+
+
+@pytest.mark.asyncio
+async def test_at_time_absolute_iso_registers_one_shot():
+    """YAML at_time with absolute ISO-8601 timestamp registers correctly."""
+    future = "2030-01-01T00:00:00Z"
+    engine, scheduler = await _setup_engine(
+        behavior="dynamic",
+        animator_settings={
+            "scheduled_events": [
+                {
+                    "at_time": future,
+                    "actor_id": "scheduler_test",
+                    "service_id": "notion",
+                    "action": "pages.update",
+                    "input_data": {},
+                },
+            ],
+        },
+    )
+
+    assert len(scheduler._one_shot) == 1
+    fire_time = scheduler._one_shot[0].fire_time
+    assert fire_time == datetime(2030, 1, 1, 0, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_at_time_invalid_format_logs_warning_and_skips(caplog):
+    """Malformed at_time skips the event and logs a warning."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="volnix.engines.animator.engine"):
+        engine, scheduler = await _setup_engine(
+            behavior="dynamic",
+            animator_settings={
+                "scheduled_events": [
+                    {
+                        "at_time": "not a valid time",
+                        "actor_id": "bad_actor",
+                        "service_id": "notion",
+                        "action": "pages.update",
+                    },
+                ],
+            },
+        )
+
+    # No event registered
+    assert len(scheduler._one_shot) == 0
+    assert len(scheduler._recurring) == 0
+    # Warning was logged explaining why
+    warning_msgs = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("Invalid at_time" in msg for msg in warning_msgs), (
+        f"Expected 'Invalid at_time' warning. Got: {warning_msgs}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_at_time_event_fires_once_then_is_removed():
+    """An at_time event fires once when due, then is removed from the scheduler."""
+    past = "2020-01-01T00:00:00Z"  # in the past — will be due immediately
+    engine, scheduler = await _setup_engine(
+        behavior="dynamic",
+        animator_settings={
+            "scheduled_events": [
+                {
+                    "at_time": past,
+                    "actor_id": "past_event",
+                    "service_id": "notion",
+                    "action": "pages.update",
+                    "input_data": {},
+                },
+            ],
+        },
+    )
+    assert len(scheduler._one_shot) == 1
+
+    # First call to get_due_events fires the event and removes it.
+    due = await scheduler.get_due_events(_utc(), state_engine=None)
+    assert len(due) == 1
+    assert len(scheduler._one_shot) == 0
+
+    # Second call returns nothing — one-shot events are truly one-shot.
+    due_again = await scheduler.get_due_events(_utc(), state_engine=None)
+    assert due_again == []
+
+
+@pytest.mark.asyncio
+async def test_mixed_interval_trigger_and_at_time_events():
+    """All three scheduled-event formats can coexist in one blueprint."""
+    engine, scheduler = await _setup_engine(
+        behavior="dynamic",
+        animator_settings={
+            "scheduled_events": [
+                {"interval": "5m", "action": "recurring_check"},
+                {"trigger": "True", "action": "trigger_check"},
+                {
+                    "at_time": "60s",
+                    "action": "one_shot_event",
+                    "actor_id": "test",
+                    "service_id": "notion",
+                },
+            ],
+        },
+    )
+
+    # Each format ends up in its own scheduler bucket.
+    assert len(scheduler._recurring) == 1
+    assert len(scheduler._triggers) == 1
+    assert len(scheduler._one_shot) == 1
+    assert scheduler.pending_count == 3
+
+
+@pytest.mark.asyncio
+async def test_scheduled_event_with_no_timing_key_is_skipped(caplog):
+    """An event with none of interval/trigger/at_time is skipped with a warning.
+
+    Prevents silent drops that make blueprint debugging miserable.
+    """
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="volnix.engines.animator.engine"):
+        engine, scheduler = await _setup_engine(
+            behavior="dynamic",
+            animator_settings={
+                "scheduled_events": [
+                    {
+                        "actor_id": "orphan",
+                        "service_id": "notion",
+                        "action": "pages.update",
+                        # No interval, trigger, or at_time — orphan event
+                    },
+                ],
+            },
+        )
+
+    # Nothing registered
+    assert scheduler.pending_count == 0
+    warning_msgs = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("no interval/trigger/at_time" in msg for msg in warning_msgs), (
+        f"Expected warning about missing timing key. Got: {warning_msgs}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_at_time_static_mode_still_registers():
+    """Scheduled events are registered regardless of behavior mode.
+
+    Static mode affects the animator's tick() behavior (returns [] for
+    organic generation), but the scheduler is a shared primitive and
+    registration happens during configure() regardless of behavior. The
+    event would only fire if something else polls the scheduler; for
+    static mode the animator never does.
+
+    This test documents the current behavior — if we later decide to
+    skip registration in static mode, we'll update this test.
+    """
+    engine, scheduler = await _setup_engine(
+        behavior="static",
+        animator_settings={
+            "scheduled_events": [
+                {
+                    "at_time": "60s",
+                    "actor_id": "test",
+                    "service_id": "notion",
+                    "action": "pages.update",
+                },
+            ],
+        },
+    )
+    # Event is registered even in static mode
+    assert len(scheduler._one_shot) == 1

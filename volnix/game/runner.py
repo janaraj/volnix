@@ -140,8 +140,11 @@ class GameRunner:
         # Register structured game-move tools with the agency engine
         # before any turns start. Tools are scoped by the agent's
         # write:[game] permission — non-game agents never see them.
+        # Pass the game definition so evaluators can build domain-
+        # specific tool schemas from ``type_config`` (e.g. the
+        # ``negotiation_fields`` list per scenario).
         if self._round_evaluator is not None and self._agency is not None:
-            game_tools = self._round_evaluator.game_tools()
+            game_tools = self._round_evaluator.game_tools(definition)
             if game_tools and hasattr(self._agency, "register_game_tools"):
                 self._agency.register_game_tools(game_tools)
                 logger.info(

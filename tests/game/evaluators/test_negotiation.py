@@ -905,3 +905,636 @@ class TestBuildDeliverableExtras:
         assert titles == {"Deal One", "Deal Two"}
         statuses = {d["status"] for d in extras["deals"]}
         assert statuses == {"ACCEPTED", "REJECTED"}
+
+
+# ---------------------------------------------------------------------------
+# TestGenericNegotiationSchema — Step 1 of the supply-chain plan
+#
+# Locks in the contract that NegotiationEvaluator's tool schema is built
+# dynamically from ``game.type_config.negotiation_fields`` when a blueprint
+# declares them, and falls back to the legacy 4-field schema otherwise.
+# ---------------------------------------------------------------------------
+
+
+from volnix.engines.game.definition import GameDefinition  # noqa: E402
+from volnix.game.evaluators.negotiation import (  # noqa: E402
+    _ALLOWED_FIELD_TYPES,
+    _CLOSE_SCHEMA,
+    _LEGACY_FIELD_SPECS,
+    _LEGACY_NEGOTIATION_TOOLS,
+    NegotiationFieldSpec,
+    _build_negotiation_tools,
+    _build_terms_schema,
+)
+
+
+def _field(name: str, ftype: str, **extras) -> NegotiationFieldSpec:
+    """Build a NegotiationFieldSpec dict for tests."""
+    spec: NegotiationFieldSpec = {"name": name, "type": ftype}
+    if "description" in extras:
+        spec["description"] = extras["description"]
+    if "enum" in extras:
+        spec["enum"] = extras["enum"]
+    if "required" in extras:
+        spec["required"] = extras["required"]
+    return spec
+
+
+def _make_game_definition(
+    negotiation_fields: list[dict] | None = None,
+) -> GameDefinition:
+    """Build a minimal GameDefinition with an optional negotiation_fields config."""
+    type_config: dict = {}
+    if negotiation_fields is not None:
+        type_config["negotiation_fields"] = negotiation_fields
+    return GameDefinition(
+        enabled=True,
+        mode="negotiation",
+        type_config=type_config,
+    )
+
+
+# -- Group A — _build_terms_schema unit tests -------------------------------
+
+
+class TestBuildTermsSchema:
+    """Unit tests for _build_terms_schema — the JSON Schema builder."""
+
+    def test_build_terms_schema_empty(self):
+        schema = _build_terms_schema([])
+        # Always has deal_id (required) and message (optional)
+        assert schema["type"] == "object"
+        assert schema["additionalProperties"] is False
+        assert schema["required"] == ["deal_id"]
+        assert "deal_id" in schema["properties"]
+        assert "message" in schema["properties"]
+        # No declared fields present
+        assert len(schema["properties"]) == 2
+
+    def test_build_terms_schema_single_number(self):
+        schema = _build_terms_schema([_field("unit_price", "number", description="USD per unit")])
+        assert "unit_price" in schema["required"]
+        assert schema["properties"]["unit_price"]["type"] == "number"
+        assert schema["properties"]["unit_price"]["description"] == "USD per unit"
+
+    def test_build_terms_schema_integer_field(self):
+        schema = _build_terms_schema([_field("qty", "integer")])
+        assert schema["properties"]["qty"]["type"] == "integer"
+
+    def test_build_terms_schema_string_field(self):
+        schema = _build_terms_schema([_field("label", "string")])
+        assert schema["properties"]["label"]["type"] == "string"
+
+    def test_build_terms_schema_boolean_field(self):
+        schema = _build_terms_schema([_field("waiver", "boolean")])
+        assert schema["properties"]["waiver"]["type"] == "boolean"
+
+    def test_build_terms_schema_string_with_enum(self):
+        schema = _build_terms_schema(
+            [_field("freight_mode", "string", enum=["sea", "air", "rail"])]
+        )
+        assert schema["properties"]["freight_mode"]["enum"] == ["sea", "air", "rail"]
+
+    def test_build_terms_schema_number_with_enum_ignored(self):
+        # Enum should only be honored on string fields; other types drop it.
+        schema = _build_terms_schema([_field("unit_price", "number", enum=["1", "2", "3"])])
+        assert "enum" not in schema["properties"]["unit_price"]
+
+    def test_build_terms_schema_required_false(self):
+        schema = _build_terms_schema(
+            [
+                _field("unit_price", "number"),
+                _field("notes", "string", required=False),
+            ]
+        )
+        # unit_price is required, notes is not
+        assert "unit_price" in schema["required"]
+        assert "notes" not in schema["required"]
+        # Both still appear in properties
+        assert "unit_price" in schema["properties"]
+        assert "notes" in schema["properties"]
+
+    def test_build_terms_schema_missing_description(self):
+        schema = _build_terms_schema([_field("foo", "number")])
+        # Default description contains the field name
+        assert "foo" in schema["properties"]["foo"]["description"]
+
+    def test_build_terms_schema_missing_name_raises(self):
+        bad_spec: NegotiationFieldSpec = {"type": "number"}  # no name
+        with pytest.raises(ValueError, match="missing 'name'"):
+            _build_terms_schema([bad_spec])
+
+    def test_build_terms_schema_invalid_type_raises(self):
+        with pytest.raises(ValueError, match="unsupported type"):
+            _build_terms_schema([_field("foo", "array")])
+
+    def test_build_terms_schema_mixed_types(self):
+        schema = _build_terms_schema(
+            [
+                _field("unit_price", "number"),
+                _field("quantity", "integer"),
+                _field("mode", "string", enum=["sea", "air"]),
+                _field("waiver", "boolean"),
+            ]
+        )
+        assert schema["properties"]["unit_price"]["type"] == "number"
+        assert schema["properties"]["quantity"]["type"] == "integer"
+        assert schema["properties"]["mode"]["type"] == "string"
+        assert schema["properties"]["mode"]["enum"] == ["sea", "air"]
+        assert schema["properties"]["waiver"]["type"] == "boolean"
+        # All four plus deal_id in required
+        assert set(schema["required"]) == {
+            "deal_id",
+            "unit_price",
+            "quantity",
+            "mode",
+            "waiver",
+        }
+
+
+# -- Group B — _build_negotiation_tools unit tests --------------------------
+
+
+class TestBuildNegotiationTools:
+    """Unit tests for _build_negotiation_tools — the 4-tool builder."""
+
+    def test_build_negotiation_tools_returns_four(self):
+        tools = _build_negotiation_tools([_field("unit_price", "number")])
+        assert len(tools) == 4
+
+    def test_build_negotiation_tools_names(self):
+        tools = _build_negotiation_tools([_field("unit_price", "number")])
+        names = [t.name for t in tools]
+        assert names == [
+            "negotiate_propose",
+            "negotiate_counter",
+            "negotiate_accept",
+            "negotiate_reject",
+        ]
+
+    def test_build_negotiation_tools_propose_and_counter_share_schema(self):
+        tools = _build_negotiation_tools([_field("unit_price", "number")])
+        propose = next(t for t in tools if t.name == "negotiate_propose")
+        counter = next(t for t in tools if t.name == "negotiate_counter")
+        assert propose.parameters == counter.parameters
+
+    def test_build_negotiation_tools_accept_and_reject_use_close_schema(self):
+        tools = _build_negotiation_tools([_field("unit_price", "number")])
+        accept = next(t for t in tools if t.name == "negotiate_accept")
+        reject = next(t for t in tools if t.name == "negotiate_reject")
+        assert accept.parameters == _CLOSE_SCHEMA
+        assert reject.parameters == _CLOSE_SCHEMA
+
+    def test_build_negotiation_tools_description_lists_fields(self):
+        tools = _build_negotiation_tools(
+            [
+                _field("unit_price", "number"),
+                _field("quantity", "integer"),
+            ]
+        )
+        propose = next(t for t in tools if t.name == "negotiate_propose")
+        counter = next(t for t in tools if t.name == "negotiate_counter")
+        assert "unit_price" in propose.description
+        assert "quantity" in propose.description
+        assert "unit_price" in counter.description
+        assert "quantity" in counter.description
+
+    def test_build_negotiation_tools_empty_fields(self):
+        # Empty field list is a valid edge case — the tools still exist,
+        # they just accept no terms (a game that closes purely on
+        # deal_id, presumably).
+        tools = _build_negotiation_tools([])
+        assert len(tools) == 4
+        propose = next(t for t in tools if t.name == "negotiate_propose")
+        assert "no fields declared" in propose.description
+
+
+# -- Group C — NegotiationEvaluator.game_tools(definition) integration ------
+
+
+class TestGameToolsIntegration:
+    """Integration tests for NegotiationEvaluator.game_tools(definition)."""
+
+    def test_game_tools_no_definition_returns_legacy(self):
+        evaluator = NegotiationEvaluator()
+        tools = evaluator.game_tools(None)
+        assert tools == _LEGACY_NEGOTIATION_TOOLS
+        # Declared fields cleared
+        assert evaluator._declared_field_names == []
+
+    def test_game_tools_empty_type_config_returns_legacy(self):
+        evaluator = NegotiationEvaluator()
+        definition = _make_game_definition()
+        tools = evaluator.game_tools(definition)
+        assert tools == _LEGACY_NEGOTIATION_TOOLS
+        assert evaluator._declared_field_names == []
+
+    def test_game_tools_with_custom_fields_returns_custom(self):
+        evaluator = NegotiationEvaluator()
+        definition = _make_game_definition(
+            negotiation_fields=[
+                {"name": "unit_price", "type": "number", "description": "USD per unit"},
+                {"name": "qty", "type": "integer", "description": "Units"},
+            ]
+        )
+        tools = evaluator.game_tools(definition)
+        propose = next(t for t in tools if t.name == "negotiate_propose")
+        # Custom fields present in the schema
+        assert "unit_price" in propose.parameters["properties"]
+        assert "qty" in propose.parameters["properties"]
+        # Legacy fields NOT present
+        assert "price" not in propose.parameters["properties"]
+        assert "delivery_weeks" not in propose.parameters["properties"]
+
+    def test_game_tools_caches_declared_field_names(self):
+        evaluator = NegotiationEvaluator()
+        definition = _make_game_definition(
+            negotiation_fields=[
+                {"name": "unit_price", "type": "number"},
+                {"name": "qty", "type": "integer"},
+                {"name": "mode", "type": "string"},
+            ]
+        )
+        evaluator.game_tools(definition)
+        assert evaluator._declared_field_names == ["unit_price", "qty", "mode"]
+
+    def test_game_tools_invalid_field_type_raises_at_game_start(self):
+        evaluator = NegotiationEvaluator()
+        definition = _make_game_definition(negotiation_fields=[{"name": "bad", "type": "array"}])
+        with pytest.raises(ValueError, match="unsupported type"):
+            evaluator.game_tools(definition)
+
+    def test_game_tools_malformed_negotiation_fields_logs_warning(self, caplog):
+        """Non-list negotiation_fields logs a warning and falls back to legacy."""
+        import logging
+
+        evaluator = NegotiationEvaluator()
+        # Pass a dict instead of a list — simulates blueprint typo.
+        definition = _make_game_definition(
+            negotiation_fields={"oops": "this should be a list"}  # type: ignore[arg-type]
+        )
+
+        with caplog.at_level(logging.WARNING, logger="volnix.game.evaluators.negotiation"):
+            tools = evaluator.game_tools(definition)
+
+        # Legacy fallback applied
+        assert tools == _LEGACY_NEGOTIATION_TOOLS
+        assert evaluator._declared_field_names == []
+
+        # Warning was logged with the type name so the blueprint author
+        # knows WHY their declaration was ignored.
+        warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any(
+            "negotiation_fields" in msg and "not a list" in msg for msg in warning_messages
+        ), f"Expected a warning about negotiation_fields not being a list. Got: {warning_messages}"
+
+    def test_game_tools_empty_negotiation_fields_returns_empty_schema(self, caplog):
+        """Empty list is a valid 'pure closing' declaration, not fallback.
+
+        This is DIFFERENT from not declaring the key at all. A blueprint
+        author who writes ``negotiation_fields: []`` knows what they want:
+        zero domain fields, tools accept only deal_id + message.
+        """
+        import logging
+
+        evaluator = NegotiationEvaluator()
+        definition = _make_game_definition(negotiation_fields=[])
+
+        with caplog.at_level(logging.INFO, logger="volnix.game.evaluators.negotiation"):
+            tools = evaluator.game_tools(definition)
+
+        # Tools are dynamically built with NO declared fields (not legacy).
+        propose = next(t for t in tools if t.name == "negotiate_propose")
+        props = propose.parameters["properties"]
+        # Only deal_id + message, no domain fields
+        assert set(props.keys()) == {"deal_id", "message"}
+        # required contains only deal_id (message is optional)
+        assert propose.parameters["required"] == ["deal_id"]
+        # Legacy field names must NOT appear
+        assert "price" not in props
+        assert "delivery_weeks" not in props
+
+        # Declared field names are empty (same as legacy result, but
+        # for a different reason — intentional empty, not fallback).
+        assert evaluator._declared_field_names == []
+
+        # An info-level log explains the intentional empty state.
+        info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
+        assert any("Empty negotiation_fields" in msg for msg in info_messages), (
+            f"Expected info log about empty negotiation_fields. Got: {info_messages}"
+        )
+
+    def test_game_tools_missing_negotiation_fields_returns_legacy(self):
+        """Key absent entirely → legacy fallback.
+
+        This is the backward-compat path for existing blueprints like
+        negotiation_competition.yaml that never declared the field.
+        Distinct from empty list ([]) which is intentional.
+        """
+        evaluator = NegotiationEvaluator()
+        # type_config is present but does NOT contain negotiation_fields.
+        definition = GameDefinition(
+            enabled=True,
+            mode="negotiation",
+            type_config={"some_other_setting": "value"},
+        )
+        tools = evaluator.game_tools(definition)
+        assert tools == _LEGACY_NEGOTIATION_TOOLS
+        assert evaluator._declared_field_names == []
+
+
+# -- Group D — _parse_round_moves with declared fields ----------------------
+
+
+class TestParseRoundMovesCustomFields:
+    """_parse_round_moves iterates the declared field list correctly."""
+
+    def test_parse_round_moves_custom_fields(self):
+        evaluator = NegotiationEvaluator()
+        evaluator._declared_field_names = [
+            "unit_price",
+            "quantity_units",
+            "freight_mode",
+        ]
+        events = [
+            _make_move_event(
+                "buyer-1",
+                "negotiate_propose",
+                deal_id="d1",
+                unit_price=28.5,
+                quantity_units=20000,
+                freight_mode="sea",
+            )
+        ]
+        moves = evaluator._parse_round_moves(events)
+        assert len(moves) == 1
+        assert moves[0].terms == {
+            "unit_price": 28.5,
+            "quantity_units": 20000,
+            "freight_mode": "sea",
+        }
+
+    def test_parse_round_moves_custom_fields_partial_payload(self):
+        evaluator = NegotiationEvaluator()
+        evaluator._declared_field_names = [
+            "unit_price",
+            "quantity_units",
+            "freight_mode",
+        ]
+        # Missing freight_mode — the parser should silently omit it.
+        events = [
+            _make_move_event(
+                "buyer-1",
+                "negotiate_propose",
+                deal_id="d1",
+                unit_price=28.5,
+                quantity_units=20000,
+            )
+        ]
+        moves = evaluator._parse_round_moves(events)
+        assert len(moves) == 1
+        assert moves[0].terms == {
+            "unit_price": 28.5,
+            "quantity_units": 20000,
+        }
+
+    def test_parse_round_moves_legacy_fallback(self):
+        # Empty declared fields → falls back to legacy 4-field list
+        evaluator = NegotiationEvaluator()
+        assert evaluator._declared_field_names == []
+        events = [
+            _make_move_event(
+                "buyer-1",
+                "negotiate_propose",
+                deal_id="d1",
+                price=85,
+                delivery_weeks=4,
+                payment_days=30,
+                warranty_months=12,
+            )
+        ]
+        moves = evaluator._parse_round_moves(events)
+        assert len(moves) == 1
+        assert moves[0].terms == {
+            "price": 85,
+            "delivery_weeks": 4,
+            "payment_days": 30,
+            "warranty_months": 12,
+        }
+
+
+# -- Group E — scoring with custom fields -----------------------------------
+
+
+class TestScoringCustomFields:
+    """Scoring still works when terms use custom field names.
+
+    The scoring pipeline (_compute_deal_score) was already generic —
+    these tests verify that's true by running it with custom terms.
+    """
+
+    def test_compute_deal_score_custom_fields(self):
+        evaluator = NegotiationEvaluator()
+        target = {
+            "ideal_terms": {"unit_price": 25, "quantity_units": 20000},
+            "term_weights": {"unit_price": 0.7, "quantity_units": 0.3},
+            "term_ranges": {
+                "unit_price": [22, 35],
+                "quantity_units": [15000, 25000],
+            },
+        }
+        # Actual is slightly worse on unit_price, perfect on quantity
+        actual = {"unit_price": 28, "quantity_units": 20000}
+        score = evaluator._compute_deal_score(actual, target)
+        # Score should be positive but less than ideal (100)
+        assert 0 < score < 100
+
+    def test_compute_deal_score_perfect_custom_fields(self):
+        evaluator = NegotiationEvaluator()
+        target = {
+            "ideal_terms": {"unit_price": 25, "quantity_units": 20000},
+            "term_weights": {"unit_price": 0.5, "quantity_units": 0.5},
+            "term_ranges": {
+                "unit_price": [22, 35],
+                "quantity_units": [15000, 25000],
+            },
+        }
+        actual = {"unit_price": 25, "quantity_units": 20000}
+        score = evaluator._compute_deal_score(actual, target)
+        # Perfect match → max score (100)
+        assert score == pytest.approx(100.0, abs=0.5)
+
+
+# -- Group F — full evaluator flow with custom schema -----------------------
+
+
+class TestFullEvaluatorFlowCustomFields:
+    """End-to-end: evaluator handles a custom-schema game correctly."""
+
+    @pytest.mark.asyncio
+    async def test_full_propose_accept_flow_custom_fields(self):
+        evaluator = NegotiationEvaluator()
+        # Simulate game_tools being called at game start with a custom
+        # blueprint, which caches the field names on the evaluator.
+        definition = _make_game_definition(
+            negotiation_fields=[
+                {"name": "unit_price", "type": "number"},
+                {"name": "quantity_units", "type": "integer"},
+            ]
+        )
+        evaluator.game_tools(definition)
+        assert evaluator._declared_field_names == [
+            "unit_price",
+            "quantity_units",
+        ]
+
+        # Set up minimal state with deal + buyer target + buyer scorecard.
+        # The deal starts with terms ALREADY populated (as if a proposal
+        # had been processed in a prior round) — this lets the test
+        # focus on the custom-field accept path, not the mock-store
+        # internal plumbing. The "already proposed" setup mirrors how
+        # the evaluator's two-pass logic works: terms are committed in
+        # pass 1, then accept is processed in pass 2.
+        deal = {
+            "id": "deal-pwr7a",
+            "title": "PWR-7A Emergency Shipment",
+            "status": "countered",
+            "parties": ["buyer", "supplier"],
+            "terms": {"unit_price": 27, "quantity_units": 20000},
+            "terms_template": {},
+            "last_proposed_by": "buyer-1",
+        }
+        buyer_target = {
+            "id": "tgt-buyer",
+            "game_owner_id": "buyer-1",
+            "deal_id": "deal-pwr7a",
+            "ideal_terms": {"unit_price": 25, "quantity_units": 20000},
+            "term_weights": {"unit_price": 0.7, "quantity_units": 0.3},
+            "term_ranges": {
+                "unit_price": [22, 35],
+                "quantity_units": [15000, 25000],
+            },
+            "batna_score": 30,
+        }
+        supplier_target = {
+            "id": "tgt-supplier",
+            "game_owner_id": "supplier-1",
+            "deal_id": "deal-pwr7a",
+            "ideal_terms": {"unit_price": 30, "quantity_units": 20000},
+            "term_weights": {"unit_price": 0.7, "quantity_units": 0.3},
+            "term_ranges": {
+                "unit_price": [22, 35],
+                "quantity_units": [15000, 25000],
+            },
+            "batna_score": 30,
+        }
+        buyer_sc = {
+            "id": "sc-buyer",
+            "game_owner_id": "buyer-1",
+            "deal_score": 0,
+            "efficiency_bonus": 0,
+            "deals_closed": 0,
+            "total_points": 0,
+        }
+        supplier_sc = {
+            "id": "sc-supplier",
+            "game_owner_id": "supplier-1",
+            "deal_score": 0,
+            "efficiency_bonus": 0,
+            "deals_closed": 0,
+            "total_points": 0,
+        }
+
+        state = _make_mock_state(
+            deals=[deal],
+            targets=[buyer_target, supplier_target],
+            scorecards=[buyer_sc, supplier_sc],
+        )
+
+        # Round 3: supplier accepts the buyer's last counter (already
+        # populated on the deal above). This tests the custom-field
+        # scoring path end-to-end.
+        events = [
+            _make_move_event(
+                "supplier-1",
+                "negotiate_accept",
+                deal_id="deal-pwr7a",
+            ),
+        ]
+        round_state = RoundState(current_round=3, total_rounds=8)
+        # Populate player_scores with both players so _process_accept can
+        # resolve targets via player IDs (_resolve_targets_via_deals
+        # iterates player_scores.keys()).
+        player_scores: dict[str, PlayerScore] = {
+            "buyer-1": PlayerScore(actor_id="buyer-1"),
+            "supplier-1": PlayerScore(actor_id="supplier-1"),
+        }
+
+        await evaluator.evaluate(state, events, round_state, player_scores)
+
+        # Deal should be marked accepted via a state update call.
+        update_calls = state._store.update.call_args_list
+        # Filter to deal updates
+        deal_updates = [
+            call
+            for call in update_calls
+            if len(call.args) >= 1 and call.args[0] == "negotiation_deal"
+        ]
+        assert len(deal_updates) >= 1, (
+            f"Expected at least one negotiation_deal update, got: {update_calls}"
+        )
+        # At least one update should set status to "accepted"
+        accepted_updates = [call for call in deal_updates if "accepted" in str(call)]
+        assert len(accepted_updates) >= 1, (
+            f"Expected an update with 'accepted' status. All deal updates: {deal_updates}"
+        )
+
+        # Scorecard should also have been updated for both players
+        scorecard_updates = [
+            call
+            for call in update_calls
+            if len(call.args) >= 1 and call.args[0] == "negotiation_scorecard"
+        ]
+        assert len(scorecard_updates) >= 1, "Expected scorecard updates after deal acceptance"
+
+
+# -- Group G — regression / backward compatibility --------------------------
+
+
+class TestBackwardCompat:
+    """Existing Q3 Steel blueprint must work identically after the refactor."""
+
+    def test_legacy_field_specs_match_hardcoded_names(self):
+        """_LEGACY_FIELD_SPECS preserves the original 4 field names."""
+        names = [s["name"] for s in _LEGACY_FIELD_SPECS]
+        assert names == [
+            "price",
+            "delivery_weeks",
+            "payment_days",
+            "warranty_months",
+        ]
+
+    def test_legacy_tools_match_public_negotiation_tools(self):
+        """The public NEGOTIATION_TOOLS alias still points at legacy."""
+        assert NEGOTIATION_TOOLS is _LEGACY_NEGOTIATION_TOOLS
+
+    def test_legacy_tools_have_correct_schema(self):
+        """Legacy tools still accept the original Q3 steel field names."""
+        propose = next(t for t in _LEGACY_NEGOTIATION_TOOLS if t.name == "negotiate_propose")
+        props = propose.parameters["properties"]
+        assert "price" in props
+        assert "delivery_weeks" in props
+        assert "payment_days" in props
+        assert "warranty_months" in props
+        # And the required list preserves the original fields
+        assert "price" in propose.parameters["required"]
+
+    def test_allowed_field_types_constant(self):
+        """Primitive types match what Gemini's sanitizer accepts."""
+        assert "number" in _ALLOWED_FIELD_TYPES
+        assert "integer" in _ALLOWED_FIELD_TYPES
+        assert "string" in _ALLOWED_FIELD_TYPES
+        assert "boolean" in _ALLOWED_FIELD_TYPES
+        # Not allowed:
+        assert "array" not in _ALLOWED_FIELD_TYPES
+        assert "object" not in _ALLOWED_FIELD_TYPES

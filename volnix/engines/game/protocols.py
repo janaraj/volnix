@@ -17,6 +17,7 @@ from typing import Any, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from volnix.engines.game.definition import (
+    GameDefinition,
     PlayerScore,
     RoundState,
     ScoringMetric,
@@ -123,7 +124,7 @@ class RoundEvaluator(Protocol):
         """
         return {}
 
-    def game_tools(self) -> list[Any]:
+    def game_tools(self, definition: GameDefinition | None = None) -> list[Any]:
         """Return the structured game-move tools for this game type.
 
         The runner registers these with the agency engine at game start so
@@ -136,5 +137,13 @@ class RoundEvaluator(Protocol):
         Typed as ``list[Any]`` at the Protocol boundary to avoid a forward
         import of ``ToolDefinition`` into ``engines/game/`` — concrete
         evaluators return properly typed ``list[ToolDefinition]``.
+
+        Args:
+            definition: The game definition for this run. Concrete
+                evaluators can read ``definition.type_config`` to build
+                domain-specific tool schemas dynamically per scenario
+                (e.g. the ``negotiation_fields`` list). ``None`` is
+                passed when the runner has no definition available —
+                evaluators should return a sensible default.
         """
         return []

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 from volnix.core import BaseEngine, Event
@@ -51,6 +51,89 @@ def _parse_duration(duration_str: str) -> float:
         return float(duration_str)
     except ValueError:
         return 60.0  # Default to 1 minute
+
+
+def _parse_at_time(
+    at_time_str: str,
+    now: datetime | None = None,
+) -> datetime | None:
+    """Parse an ``at_time`` value into an absolute fire datetime.
+
+    Supports two formats for blueprint-declared one-shot scheduled events:
+
+    1. **Relative duration**: ``"60s"``, ``"2m"``, ``"1h"`` — interpreted
+       as an offset from ``now``. Uses :func:`_parse_duration`.
+    2. **Absolute ISO-8601 timestamp**: ``"2026-04-11T00:01:30Z"`` — used
+       as-is (converted to timezone-aware UTC).
+
+    Returns ``None`` on any parse failure so the caller can log and skip
+    gracefully — we never want a malformed blueprint entry to raise and
+    break the whole animator startup.
+
+    Args:
+        at_time_str: The string value from the YAML ``at_time`` field.
+        now: Optional "now" for deterministic tests. Defaults to UTC now.
+
+    Returns:
+        The absolute fire datetime (timezone-aware UTC), or ``None`` if
+        the string could not be parsed as either format.
+    """
+    if not isinstance(at_time_str, str):
+        return None
+    at_time_str = at_time_str.strip()
+    if not at_time_str:
+        return None
+    if now is None:
+        now = datetime.now(tz=UTC)
+
+    # Heuristic: any string containing 'T' OR multiple hyphens is treated
+    # as an ISO-8601 candidate first. Relative durations never contain 'T'
+    # and never contain hyphens (suffixes are s/m/h/d).
+    looks_iso = "T" in at_time_str or at_time_str.count("-") >= 2
+    if looks_iso:
+        try:
+            # ``datetime.fromisoformat`` accepts '+00:00' but not 'Z' in
+            # Python < 3.11, so normalize first.
+            iso = at_time_str.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(iso)
+            # Ensure timezone-aware (assume UTC if naive)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed
+        except ValueError:
+            # Fall through to relative-duration attempt only if ISO failed.
+            pass
+
+    # Relative duration (e.g. "60s", "2m")
+    try:
+        seconds = _parse_duration(at_time_str)
+        # _parse_duration returns 60.0 on failure — distinguish that case
+        # by re-trying a strict parse.
+        if at_time_str.strip() not in {"60", "60.0"}:
+            # If _parse_duration would have fallen back to 60.0 and the
+            # input wasn't literally "60", treat as parse failure.
+            if seconds == 60.0:
+                # Strict re-parse to confirm
+                stripped = at_time_str.strip()
+                suffixes = {"s", "m", "h", "d"}
+                suffix_ok = any(
+                    stripped.endswith(suffix) and _is_numeric(stripped[:-1]) for suffix in suffixes
+                )
+                bare_ok = _is_numeric(stripped)
+                if not (suffix_ok or bare_ok):
+                    return None
+        return now + timedelta(seconds=seconds)
+    except Exception:
+        return None
+
+
+def _is_numeric(s: str) -> bool:
+    """Return True if ``s`` parses as a float."""
+    try:
+        float(s)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 class WorldAnimatorEngine(BaseEngine):
@@ -103,10 +186,43 @@ class WorldAnimatorEngine(BaseEngine):
             **{k: v for k, v in settings.items() if k in AnimatorConfig.model_fields}
         )
 
-        # Build AnimatorContext (reuses WorldGenerationContext pattern)
-        self._context = AnimatorContext(plan, available_tools=self._available_tools)
+        # Build an optional state reader for the AnimatorContext (P3).
+        # When state is available, the organic LLM animator gets a
+        # capped snapshot of the current world entities so it can
+        # generate contextually-relevant events that reference real
+        # existing entities (e.g. escalating a specific weather_alert
+        # instead of inventing a generic new one). Backward compat: if
+        # no state engine is wired, the reader is None and the context
+        # renders a placeholder in the prompt.
+        state_engine = self._dependencies.get("state") if self._dependencies else None
+        state_reader = self._build_state_reader(state_engine) if state_engine is not None else None
 
-        # Register scheduled events from YAML animator settings
+        # Optional blueprint override of which entity types to exclude
+        # from the snapshot (defaults exclude game-internal types like
+        # negotiation_target/scorecard to avoid leaking private game
+        # state into the organic animator).
+        snapshot_exclude_raw = settings.get("state_snapshot_exclude")
+        snapshot_exclude: list[str] | None = None
+        if isinstance(snapshot_exclude_raw, list):
+            snapshot_exclude = [str(e) for e in snapshot_exclude_raw]
+
+        # Build AnimatorContext (reuses WorldGenerationContext pattern)
+        self._context = AnimatorContext(
+            plan,
+            available_tools=self._available_tools,
+            state_reader=state_reader,
+            state_snapshot_exclude=snapshot_exclude,
+        )
+
+        # Register scheduled events from YAML animator settings.
+        #
+        # Three formats are supported:
+        # - ``interval: "60s"``   → recurring, fires every N seconds
+        # - ``trigger: "<expr>"`` → fires when a condition is met
+        # - ``at_time: "60s"`` or ISO-8601 → one-shot, fires once at T+N
+        #
+        # Events with none of these keys are skipped with a warning —
+        # silent drops make blueprint debugging miserable.
         for event_config in settings.get("scheduled_events", []):
             if "interval" in event_config:
                 scheduler.register_recurring(
@@ -119,6 +235,26 @@ class WorldAnimatorEngine(BaseEngine):
                     condition=event_config["trigger"],
                     event_def=event_config,
                     source="animator",
+                )
+            elif "at_time" in event_config:
+                at_time_val = event_config["at_time"]
+                fire_time = _parse_at_time(str(at_time_val))
+                if fire_time is None:
+                    logger.warning(
+                        "Invalid at_time %r in scheduled_events — skipping event: %s",
+                        at_time_val,
+                        event_config,
+                    )
+                    continue
+                scheduler.register_event(
+                    fire_time=fire_time,
+                    event_def=event_config,
+                    source="animator",
+                )
+            else:
+                logger.warning(
+                    "Scheduled event has no interval/trigger/at_time — skipping: %s",
+                    event_config,
                 )
 
         # Create organic generator if LLM available and not static
@@ -139,6 +275,55 @@ class WorldAnimatorEngine(BaseEngine):
             self._typed_config.creativity,
             self._typed_config.creativity_budget_per_tick,
         )
+
+    @staticmethod
+    def _build_state_reader(state_engine: Any) -> Any:
+        """Build an async callable that returns a compact entity snapshot.
+
+        The returned callable is passed to :class:`AnimatorContext` which
+        invokes it each tick inside ``for_organic_generation``. It reads
+        all entity types from the state engine and returns a dict keyed
+        by entity_type. AnimatorContext itself handles capping, field
+        selection, and exclusion of game-internal types.
+
+        If the state engine does not expose the expected methods
+        (``list_entity_types`` + ``query_entities``), the reader logs a
+        warning once and returns an empty dict thereafter.
+        """
+
+        async def read_snapshot() -> dict[str, list[dict[str, Any]]]:
+            try:
+                entity_types = await state_engine.list_entity_types()
+            except AttributeError:
+                logger.warning(
+                    "Animator state reader: state_engine has no "
+                    "list_entity_types() — snapshot disabled."
+                )
+                return {}
+            except Exception as exc:
+                logger.warning(
+                    "Animator state reader: list_entity_types raised %s "
+                    "— returning empty snapshot.",
+                    exc,
+                )
+                return {}
+
+            snapshot: dict[str, list[dict[str, Any]]] = {}
+            for entity_type in entity_types:
+                try:
+                    rows = await state_engine.query_entities(entity_type)
+                except Exception as exc:
+                    logger.debug(
+                        "Animator state reader: query_entities(%s) failed: %s",
+                        entity_type,
+                        exc,
+                    )
+                    continue
+                if rows:
+                    snapshot[entity_type] = rows
+            return snapshot
+
+        return read_snapshot
 
     async def tick(self, world_time: datetime) -> list[dict[str, Any]]:
         """Advance the animator by one logical tick and return generated actions.

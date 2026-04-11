@@ -8,9 +8,12 @@ implement game-type-specific logic in evaluate().
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from volnix.core.types import EntityId
+
+if TYPE_CHECKING:
+    from volnix.engines.game.definition import GameDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ class BaseRoundEvaluator:
         """
         return {}
 
-    def game_tools(self) -> list[Any]:
+    def game_tools(self, definition: GameDefinition | None = None) -> list[Any]:
         """Default: no structured game-move tools.
 
         Override in subclasses to declare tools like ``negotiate_propose``,
@@ -46,6 +49,14 @@ class BaseRoundEvaluator:
         the agency engine at game start so the LLM sees them as first-class
         structured tool calls, and the evaluator reads their committed
         events directly from ``round_events`` — no text parsing required.
+
+        Args:
+            definition: The game definition for this run. Subclasses can
+                read ``definition.type_config`` to build domain-specific
+                tool schemas dynamically per scenario (e.g. the
+                ``negotiation_fields`` list for negotiation games).
+                ``None`` is passed when the runner has no definition
+                available — subclasses should return a sensible default.
         """
         return []
 

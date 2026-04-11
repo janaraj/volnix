@@ -21,58 +21,115 @@ Entity types created by this evaluator:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from volnix.engines.game.definition import PlayerScore, RoundState
 from volnix.game.evaluators.base import BaseRoundEvaluator
 from volnix.llm.types import ToolDefinition
 
+if TYPE_CHECKING:
+    from volnix.engines.game.definition import GameDefinition
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Structured game-move tool schemas
+# Generic negotiation field specs
 # ---------------------------------------------------------------------------
 
-_TERMS_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": [
-        "deal_id",
-        "price",
-        "delivery_weeks",
-        "payment_days",
-        "warranty_months",
-    ],
-    "properties": {
+
+class NegotiationFieldSpec(TypedDict, total=False):
+    """Blueprint-declared negotiation field spec.
+
+    Read from ``game.type_config.negotiation_fields`` in the world YAML.
+    Each spec declares one term the agents can propose, counter, and be
+    scored on. If a blueprint declares no specs, the evaluator falls
+    back to the legacy hardcoded four-field schema for backward compat.
+
+    Fields:
+        name: the JSON key used in tool calls (e.g. "unit_price").
+        type: one of "number", "integer", "string", "boolean".
+        description: human-readable description rendered into the tool
+            schema for the LLM to read.
+        enum: optional list of allowed values (string fields only).
+        required: optional; defaults to True.
+    """
+
+    name: str
+    type: str
+    description: str
+    enum: list[str]
+    required: bool
+
+
+# JSON Schema primitive type set that Gemini's function-declaration API
+# accepts (verified against the sanitizer in
+# volnix/llm/providers/google.py:_sanitize_tool_params_for_gemini).
+_ALLOWED_FIELD_TYPES: frozenset[str] = frozenset({"number", "integer", "string", "boolean"})
+
+
+def _build_terms_schema(
+    field_specs: list[NegotiationFieldSpec],
+) -> dict[str, Any]:
+    """Build a JSON Schema for negotiate_propose/counter from field specs.
+
+    The schema always includes ``deal_id`` (string, required) and
+    ``message`` (optional string). Declared fields are added as required
+    properties unless ``required: false`` is set on the spec. Enum values
+    are propagated only for string fields (other types silently drop
+    enum — Gemini's sanitizer would reject the schema otherwise).
+
+    Raises ``ValueError`` if a spec has an empty name or unsupported
+    type — we want that to fail loudly at game startup, not silently
+    generate a broken tool schema.
+    """
+    properties: dict[str, dict[str, Any]] = {
         "deal_id": {
             "type": "string",
-            "description": "ID of the deal you are negotiating (e.g., 'deal-001').",
+            "description": ("ID of the deal you are negotiating (e.g., 'deal-001')."),
         },
-        "price": {
-            "type": "number",
-            "description": "Price per unit, in the deal's currency.",
-        },
-        "delivery_weeks": {
-            "type": "integer",
-            "description": "Delivery timeline in weeks.",
-        },
-        "payment_days": {
-            "type": "integer",
-            "description": "Payment terms in days.",
-        },
-        "warranty_months": {
-            "type": "integer",
-            "description": "Warranty period in months.",
-        },
-        "message": {
-            "type": "string",
-            "description": (
-                "Optional one-sentence in-character framing for this move "
-                "(e.g., 'Here's my opening offer')."
-            ),
-        },
-    },
-    "additionalProperties": False,
-}
+    }
+    required: list[str] = ["deal_id"]
+
+    for spec in field_specs:
+        name = spec.get("name", "")
+        ftype = spec.get("type", "")
+        if not name:
+            raise ValueError("negotiation_field missing 'name'")
+        if ftype not in _ALLOWED_FIELD_TYPES:
+            raise ValueError(
+                f"negotiation_field {name!r} has unsupported type "
+                f"{ftype!r}. Allowed: {sorted(_ALLOWED_FIELD_TYPES)}"
+            )
+
+        prop: dict[str, Any] = {
+            "type": ftype,
+            "description": spec.get("description", f"{name} value"),
+        }
+
+        # Enum only applies to string fields. Silently ignore on others —
+        # Gemini's sanitizer would drop it anyway, and the LLM gets no
+        # useful signal from a number field with an enum.
+        enum_values = spec.get("enum")
+        if ftype == "string" and enum_values:
+            prop["enum"] = list(enum_values)
+
+        properties[name] = prop
+
+        if spec.get("required", True):
+            required.append(name)
+
+    properties["message"] = {
+        "type": "string",
+        "description": ("Optional one-sentence in-character framing for this move."),
+    }
+
+    return {
+        "type": "object",
+        "required": required,
+        "properties": properties,
+        "additionalProperties": False,
+    }
+
 
 _CLOSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -90,56 +147,112 @@ _CLOSE_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-NEGOTIATION_TOOLS: list[ToolDefinition] = [
-    ToolDefinition(
-        name="negotiate_propose",
-        service="game",
-        description=(
-            "Put an opening proposal on the table. Use this to make the "
-            "first offer of the negotiation. Specify all four terms "
-            "(price, delivery_weeks, payment_days, warranty_months). "
-            "This creates a visible proposal record the other party can "
-            "counter, accept, or reject."
+
+def _build_negotiation_tools(
+    field_specs: list[NegotiationFieldSpec],
+) -> list[ToolDefinition]:
+    """Build the four negotiate_* tool definitions from field specs.
+
+    ``negotiate_propose`` and ``negotiate_counter`` share the same
+    dynamically-built terms schema. ``negotiate_accept`` and
+    ``negotiate_reject`` always take only ``deal_id`` + optional
+    ``message`` — they don't reference any domain-specific fields.
+
+    The tool descriptions explicitly list the declared field names so
+    the LLM knows exactly what it must specify. This matters: with
+    a static description, the LLM would not know which fields are
+    relevant to this scenario.
+    """
+    terms_schema = _build_terms_schema(field_specs)
+
+    field_names = [spec["name"] for spec in field_specs if spec.get("name")]
+    fields_str = ", ".join(field_names) if field_names else "no fields declared"
+
+    return [
+        ToolDefinition(
+            name="negotiate_propose",
+            service="game",
+            description=(
+                f"Put an opening proposal on the table. Specify all "
+                f"declared terms ({fields_str}). This creates a visible "
+                f"proposal the other party can counter, accept, or reject."
+            ),
+            parameters=terms_schema,
         ),
-        parameters=_TERMS_SCHEMA,
-    ),
-    ToolDefinition(
-        name="negotiate_counter",
-        service="game",
-        description=(
-            "Counter-offer on an open deal. Use this to respond to the "
-            "other party's proposal with your own terms. Specify all four "
-            "terms — any term you don't repeat will be reset to your "
-            "counter values."
+        ToolDefinition(
+            name="negotiate_counter",
+            service="game",
+            description=(
+                f"Counter-offer on an open deal. Specify all declared "
+                f"terms ({fields_str}) — any term you don't repeat will "
+                f"be reset to your counter values."
+            ),
+            parameters=terms_schema,
         ),
-        parameters=_TERMS_SCHEMA,
-    ),
-    ToolDefinition(
-        name="negotiate_accept",
-        service="game",
-        description=(
-            "CLOSE THE DEAL. Call this the moment the other party's "
-            "current terms meet or beat your acceptance criterion. "
-            "This locks in the current terms for scoring immediately "
-            "and earns an efficiency bonus for closing early. Prefer "
-            "this over negotiate_counter once terms have converged to "
-            "something acceptable — do not keep countering out of habit."
+        ToolDefinition(
+            name="negotiate_accept",
+            service="game",
+            description=(
+                "CLOSE THE DEAL. Call this the moment the other party's "
+                "current terms meet or beat your acceptance criterion. "
+                "This locks in the current terms for scoring immediately "
+                "and earns an efficiency bonus for closing early. Prefer "
+                "this over negotiate_counter once terms have converged "
+                "to something acceptable — do not keep countering out of "
+                "habit."
+            ),
+            parameters=_CLOSE_SCHEMA,
         ),
-        parameters=_CLOSE_SCHEMA,
-    ),
-    ToolDefinition(
-        name="negotiate_reject",
-        service="game",
-        description=(
-            "Walk away from the negotiation. Use this only if the "
-            "other party's terms are worse than your BATNA and they "
-            "refuse to move toward you. You will receive your BATNA "
-            "fallback score instead of a deal score. Prefer accept or "
-            "counter whenever possible."
+        ToolDefinition(
+            name="negotiate_reject",
+            service="game",
+            description=(
+                "Walk away from the negotiation. Use this only if the "
+                "other party's terms are worse than your BATNA and they "
+                "refuse to move toward you. You will receive your BATNA "
+                "fallback score instead of a deal score. Prefer accept "
+                "or counter whenever possible."
+            ),
+            parameters=_CLOSE_SCHEMA,
         ),
-        parameters=_CLOSE_SCHEMA,
-    ),
+    ]
+
+
+# Legacy hardcoded field specs used when a blueprint does NOT declare
+# ``game.type_config.negotiation_fields``. Preserves the original Q3
+# Steel Supply contract negotiation as a backward-compat path. New
+# scenarios should declare their own field specs instead of relying
+# on these.
+_LEGACY_FIELD_SPECS: list[NegotiationFieldSpec] = [
+    {
+        "name": "price",
+        "type": "number",
+        "description": "Price per unit, in the deal's currency.",
+    },
+    {
+        "name": "delivery_weeks",
+        "type": "integer",
+        "description": "Delivery timeline in weeks.",
+    },
+    {
+        "name": "payment_days",
+        "type": "integer",
+        "description": "Payment terms in days.",
+    },
+    {
+        "name": "warranty_months",
+        "type": "integer",
+        "description": "Warranty period in months.",
+    },
 ]
+
+_LEGACY_NEGOTIATION_TOOLS: list[ToolDefinition] = _build_negotiation_tools(_LEGACY_FIELD_SPECS)
+
+# Public alias used by older tests and any external callers that still
+# import the module constant. New code should call
+# ``NegotiationEvaluator.game_tools(definition)`` which builds the tool
+# list from the blueprint's declared fields.
+NEGOTIATION_TOOLS: list[ToolDefinition] = _LEGACY_NEGOTIATION_TOOLS
 
 # Action-type set for fast membership checks in the evaluator
 _NEGOTIATE_PROPOSAL_ACTIONS: frozenset[str] = frozenset({"negotiate_propose", "negotiate_counter"})
@@ -189,10 +302,96 @@ class NegotiationEvaluator(BaseRoundEvaluator):
     def __init__(self) -> None:
         super().__init__()
         self._proposal_counter: int = 0  # per-round sequence counter
+        # Field names declared by the current blueprint — populated by
+        # game_tools(definition) at game start. Used by _parse_round_moves
+        # to extract the right keys from committed move payloads. Empty
+        # list means "fall back to the legacy 4-field schema".
+        self._declared_field_names: list[str] = []
 
-    def game_tools(self) -> list[ToolDefinition]:
-        """Return the four structured negotiation tools."""
-        return NEGOTIATION_TOOLS
+    def game_tools(self, definition: GameDefinition | None = None) -> list[ToolDefinition]:
+        """Return the four structured negotiation tools for this blueprint.
+
+        Reads ``definition.type_config.negotiation_fields`` to build a
+        domain-specific schema dynamically. Three possible blueprint
+        states are distinguished:
+
+        1. ``definition`` is ``None`` OR ``negotiation_fields`` key is
+           absent entirely → return the legacy four-field tools
+           (backward compat with ``negotiation_competition.yaml``).
+        2. ``negotiation_fields`` is an empty list ``[]`` →
+           **intentional** "pure closing" negotiation: tools accept
+           only ``deal_id`` + optional ``message``. Different from (1).
+        3. ``negotiation_fields`` is a non-empty list → build tools
+           dynamically from the declared specs.
+
+        Malformed values (not a list, not a dict inside the list, bad
+        types) log a warning and fall back to legacy — we want loud
+        debuggability, not silent surprises for blueprint authors.
+        """
+        if definition is None:
+            self._declared_field_names = []
+            return _LEGACY_NEGOTIATION_TOOLS
+
+        # Explicit sentinel — the key was not declared at all.
+        _MISSING = object()
+        raw_specs = definition.type_config.get("negotiation_fields", _MISSING)
+
+        if raw_specs is _MISSING:
+            # Case 1: legacy fallback (key not declared).
+            self._declared_field_names = []
+            return _LEGACY_NEGOTIATION_TOOLS
+
+        if not isinstance(raw_specs, list):
+            # Malformed — log and fall back to legacy.
+            logger.warning(
+                "game.type_config.negotiation_fields is present but not a "
+                "list (got %s) — falling back to legacy 4-field schema. "
+                "Check your blueprint YAML.",
+                type(raw_specs).__name__,
+            )
+            self._declared_field_names = []
+            return _LEGACY_NEGOTIATION_TOOLS
+
+        if not raw_specs:
+            # Case 2: intentional empty declaration → "pure closing"
+            # negotiation with only deal_id + message. This is DIFFERENT
+            # from not declaring the key at all (which falls back to
+            # legacy). Empty list means the blueprint author knows what
+            # they want: zero domain fields.
+            logger.info(
+                "Empty negotiation_fields declared — tools will accept only "
+                "deal_id and optional message (pure closing negotiation)."
+            )
+            self._declared_field_names = []
+            return _build_negotiation_tools([])
+
+        # Case 3: non-empty declared specs. Coerce each raw spec dict
+        # (read from YAML) into a NegotiationFieldSpec. We copy through
+        # dict rather than trusting the raw YAML shape.
+        field_specs: list[NegotiationFieldSpec] = []
+        for s in raw_specs:
+            if not isinstance(s, dict):
+                logger.warning(
+                    "negotiation_fields contains non-dict entry (got %s) — skipping: %r",
+                    type(s).__name__,
+                    s,
+                )
+                continue
+            spec: NegotiationFieldSpec = {
+                "name": str(s.get("name", "")),
+                "type": str(s.get("type", "")),
+                "description": str(s.get("description", "")),
+                "required": bool(s.get("required", True)),
+            }
+            enum_val = s.get("enum")
+            if enum_val:
+                spec["enum"] = [str(v) for v in enum_val]
+            field_specs.append(spec)
+
+        # Cache declared field-name list for _parse_round_moves.
+        self._declared_field_names = [s["name"] for s in field_specs if s.get("name")]
+
+        return _build_negotiation_tools(field_specs)
 
     async def evaluate(
         self,
@@ -280,16 +479,12 @@ class NegotiationEvaluator(BaseRoundEvaluator):
 
             if action in _NEGOTIATE_PROPOSAL_ACTIONS:
                 deal_id = str(payload.get("deal_id") or "")
-                terms = {
-                    k: payload[k]
-                    for k in (
-                        "price",
-                        "delivery_weeks",
-                        "payment_days",
-                        "warranty_months",
-                    )
-                    if k in payload
-                }
+                # Use the field list declared by the blueprint (cached on
+                # the evaluator by game_tools()). Fall back to the legacy
+                # field names so existing blueprints that never called
+                # game_tools(definition) still parse correctly.
+                field_names = self._declared_field_names or [s["name"] for s in _LEGACY_FIELD_SPECS]
+                terms = {k: payload[k] for k in field_names if k in payload}
                 if not deal_id or not terms:
                     continue
                 moves.append(

@@ -290,6 +290,153 @@ class TestVisibilityHarness:
         assert hasattr(PermissionEngine, "has_visibility_rules")
         assert hasattr(PermissionEngine, "_resolve_self_ref")
 
+    def test_supply_chain_pattern_buyer_sees_public_and_own(self):
+        """P5 gate test: the supply chain scenario visibility pattern.
+
+        Two agents share a single pack (notion) but need hard data
+        separation. Pattern: every seeded entity has an ``owner_role``
+        field set to "public", "nimbus_buyer", or "haiphong_supplier".
+        Per-agent visibility rules produce a UNION of own-private + public.
+
+        This test proves the mechanism works end-to-end for the supply
+        chain scenario BEFORE the live run. It's the gate for Phase P5
+        of the Clean Rewrite plan.
+        """
+        import asyncio
+
+        # Two visibility rules for nimbus_buyer: own-private + public
+        rules = [
+            {
+                "id": "vr_buyer_page_own",
+                "actor_role": "nimbus_buyer",
+                "target_entity_type": "page",
+                "filter_field": "owner_role",
+                "filter_value": "nimbus_buyer",
+            },
+            {
+                "id": "vr_buyer_page_public",
+                "actor_role": "nimbus_buyer",
+                "target_entity_type": "page",
+                "filter_field": "owner_role",
+                "filter_value": "public",
+            },
+        ]
+
+        pages = [
+            # Public pages — visible to everyone
+            {"id": "port_haiphong", "owner_role": "public", "status": "open"},
+            {"id": "weather_td_18w", "owner_role": "public", "severity": "TD"},
+            {"id": "market_comp_day30", "owner_role": "public", "price": 26},
+            # Buyer-private pages — only Dana
+            {"id": "prod_schedule_a1", "owner_role": "nimbus_buyer", "days_remaining": 5.4},
+            {"id": "cfo_authority_pwr7a", "owner_role": "nimbus_buyer", "ceiling": 32},
+            # Supplier-private pages — only Linh, MUST NOT leak to Dana
+            {
+                "id": "haiphong_inventory_pwr7a",
+                "owner_role": "haiphong_supplier",
+                "available": 25000,
+            },
+            {"id": "order_book_megagadget", "owner_role": "haiphong_supplier", "qty": 15000},
+        ]
+
+        engine = _make_permission_engine(
+            actor_role="nimbus_buyer",
+            visibility_rules=rules,
+            entities={"page": pages},
+        )
+
+        result = asyncio.run(engine.get_visible_entities(ActorId("nimbus_buyer"), "page"))
+
+        # Dana sees the 3 public pages + 2 buyer-private = 5 pages
+        visible_ids = {str(eid) for eid in result}
+        assert "port_haiphong" in visible_ids
+        assert "weather_td_18w" in visible_ids
+        assert "market_comp_day30" in visible_ids
+        assert "prod_schedule_a1" in visible_ids
+        assert "cfo_authority_pwr7a" in visible_ids
+        # And must NOT see either supplier-private page
+        assert "haiphong_inventory_pwr7a" not in visible_ids
+        assert "order_book_megagadget" not in visible_ids
+        assert len(visible_ids) == 5
+
+    def test_supply_chain_pattern_supplier_sees_public_and_own(self):
+        """P5 gate test (symmetric): supplier sees only public + supplier-private.
+
+        Mirror of ``test_supply_chain_pattern_buyer_sees_public_and_own``.
+        Asserts that nimbus_buyer private data does NOT leak to the
+        supplier when the visibility rules are properly set up.
+        """
+        import asyncio
+
+        rules = [
+            {
+                "id": "vr_supplier_page_own",
+                "actor_role": "haiphong_supplier",
+                "target_entity_type": "page",
+                "filter_field": "owner_role",
+                "filter_value": "haiphong_supplier",
+            },
+            {
+                "id": "vr_supplier_page_public",
+                "actor_role": "haiphong_supplier",
+                "target_entity_type": "page",
+                "filter_field": "owner_role",
+                "filter_value": "public",
+            },
+        ]
+
+        pages = [
+            {"id": "port_haiphong", "owner_role": "public"},
+            {"id": "weather_td_18w", "owner_role": "public"},
+            {"id": "prod_schedule_a1", "owner_role": "nimbus_buyer"},
+            {"id": "cfo_authority_pwr7a", "owner_role": "nimbus_buyer"},
+            {"id": "haiphong_inventory_pwr7a", "owner_role": "haiphong_supplier"},
+            {"id": "order_book_megagadget", "owner_role": "haiphong_supplier"},
+        ]
+
+        engine = _make_permission_engine(
+            actor_role="haiphong_supplier",
+            visibility_rules=rules,
+            entities={"page": pages},
+        )
+
+        result = asyncio.run(engine.get_visible_entities(ActorId("haiphong_supplier"), "page"))
+
+        visible_ids = {str(eid) for eid in result}
+        # Public (2) + supplier-private (2) = 4
+        assert "port_haiphong" in visible_ids
+        assert "weather_td_18w" in visible_ids
+        assert "haiphong_inventory_pwr7a" in visible_ids
+        assert "order_book_megagadget" in visible_ids
+        # Buyer-private must NOT leak
+        assert "prod_schedule_a1" not in visible_ids
+        assert "cfo_authority_pwr7a" not in visible_ids
+        assert len(visible_ids) == 4
+
+    def test_supply_chain_pattern_no_rules_means_no_filtering(self):
+        """Regression guard: if visibility_rule entities are missing from
+        the seed, the engine falls through to returning all entities.
+
+        This is documented backward-compat behavior — the blueprint MUST
+        seed visibility_rule entities for the pattern to enforce
+        separation. A missing seed would silently expose all data.
+        The compile smoke test in Phase P6.1 must verify the seeds exist.
+        """
+        import asyncio
+
+        engine = _make_permission_engine(
+            actor_role="nimbus_buyer",
+            visibility_rules=[],  # no rules seeded
+            entities={"page": [{"id": "p1"}, {"id": "p2"}]},
+        )
+
+        # With no rules, get_visible_entities returns [] (meaning
+        # "no filtering" to the caller). _query_with_visibility in
+        # the responder then returns all entities. That's backward
+        # compat — blueprint authors must remember to seed the rules.
+        result = asyncio.run(engine.get_visible_entities(ActorId("nimbus_buyer"), "page"))
+        assert result == []
+
     def test_visibility_rule_type_exists(self):
         from volnix.core.types import VisibilityRule
 
