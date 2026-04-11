@@ -142,21 +142,30 @@ class ActorPromptBuilder:
                 "You are an OBSERVER. You can READ and ANALYZE data but CANNOT "
                 "create, update, or delete anything. Only use read actions."
             )
-        elif activation_reason == "game_turn":
+        elif activation_reason in {"game_turn", "game_kickstart", "game_event"}:
             # Game players follow their own persona + mission (loaded from
             # the blueprint). They do NOT use autonomous lead/sub-agent
             # delegation instructions, which would contradict a game
             # persona — e.g. telling a non-lead negotiator to
             # "INVESTIGATE and call do_nothing" directly conflicts with
             # "counter or accept the current terms".
+            #
+            # The reason dispatch covers the three Cycle B activation
+            # reasons:
+            #   - ``game_kickstart``: first activation in a game run
+            #   - ``game_event``: re-activation after another player's
+            #     committed game tool event
+            #   - ``game_turn``: legacy reason from the round-based
+            #     GameRunner (still present during Cycle B migration,
+            #     deleted with volnix/game/ in B.10)
             sections.append(
                 "## Instructions\n"
-                "You are a game player. Follow the mission and persona "
-                "above to take your turn. Call the structured tool(s) "
-                "for your move, optionally post one short in-character "
-                "chat.postMessage reaction, then stop. Do NOT delegate, "
-                "investigate, or call do_nothing unless explicitly told "
-                "to — make your move."
+                "You are a game player. The world is running; moves commit "
+                "immediately; respond to what you see. Call the structured "
+                "tool(s) for your move, optionally post one short "
+                "in-character chat.postMessage reaction, then stop. Do NOT "
+                "delegate, investigate, or call do_nothing unless explicitly "
+                "told to — make your move based on current state."
             )
         elif actor.autonomous:
             sections.append(
@@ -209,9 +218,13 @@ class ActorPromptBuilder:
                 task_lines.append(f"{i}. {task}")
             context_parts.append("\n".join(task_lines))
 
-        # Action history (anti-repetition: shows what agent already did)
-        if actor.autonomous:
-            context_parts.append(self._build_action_history(actor, available_actions))
+        # Action history (anti-repetition: shows what agent already did).
+        # Unconditionally rendered in Cycle B — game players benefit from
+        # seeing their own moves as a compact list without scanning back
+        # through the rolling conversation window. The helper is generic
+        # (works from ``actor.recent_interactions``) and emits a
+        # "No actions taken yet." placeholder on first activation.
+        context_parts.append(self._build_action_history(actor, available_actions))
 
         # Recent activity (what the team has been doing)
         if actor.recent_interactions:
@@ -366,7 +379,15 @@ class ActorPromptBuilder:
             a.get("name", ""): a.get("http_method", "POST").upper() for a in available_actions
         }
 
-        own = [r for r in actor.recent_interactions if r.source == "self"]
+        # Filter to structured InteractionRecord entries with source == "self".
+        # Legacy code paths occasionally inject plain strings into
+        # recent_interactions (backward compat); skip those — they surface
+        # via ``_build_recent_activity`` instead.
+        own = [
+            r
+            for r in actor.recent_interactions
+            if isinstance(r, InteractionRecord) and r.source == "self"
+        ]
         if not own and not actor.pending_actions:
             return "### Your Action History\nNo actions taken yet."
 

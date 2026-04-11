@@ -56,7 +56,14 @@ class AgencyEngine(BaseEngine):
     """Manages internal actor lifecycle: activation, action generation, state updates."""
 
     engine_name: ClassVar[str] = "agency"
-    subscriptions: ClassVar[list[str]] = ["world", "simulation"]
+    # Agency is NOT driven by bus fanout. The legacy ``["world", "simulation"]``
+    # subscriptions never actually matched any published event types
+    # (events are published as ``world.negotiate_propose`` etc, not ``world``),
+    # so ``_handle_event`` never fired for them. SimulationRunner and
+    # GameOrchestrator both call agency methods directly (SimulationRunner
+    # via ``notify``, orchestrator via ``activate_for_event``). Cleared to
+    # ``[]`` in Cycle B.7 to make the contract explicit.
+    subscriptions: ClassVar[list[str]] = []
     dependencies: ClassVar[list[str]] = ["state"]
 
     async def _on_initialize(self) -> None:
@@ -918,21 +925,24 @@ class AgencyEngine(BaseEngine):
 
             # Build messages: continue from persisted conversation or start fresh.
             #
-            # For GAME TURNS, the caller (activate_for_game_turn) has
-            # already appended a game-specific round_ctx user message to
-            # activation_messages. Do NOT layer the generic re-activation
+            # For GAME activations (``game_turn`` / ``game_kickstart`` /
+            # ``game_event``), the caller (``activate_for_event`` or legacy
+            # ``activate_for_game_turn``) has already appended a game-
+            # specific user message (round_ctx or state_summary) to
+            # ``activation_messages``. Do NOT layer the generic re-activation
             # context or autonomous lead/sub-agent instructions on top —
-            # those are for delegation/monitoring workflows and will
-            # confuse a game player (e.g. telling a non-lead negotiator
-            # to "INVESTIGATE/SHARE/call do_nothing" directly contradicts
-            # the game persona's instruction to counter or accept).
+            # those are for delegation/monitoring workflows and will confuse
+            # a game player (e.g. telling a non-lead negotiator to
+            # "INVESTIGATE/SHARE/call do_nothing" directly contradicts the
+            # game persona's instruction to counter or accept).
             #
             # Non-game re-activations (autonomous lead agents, subscription
             # triggers, etc.) still get the generic re-activation context +
             # autonomous phase instructions.
+            _GAME_REASONS = {"game_turn", "game_kickstart", "game_event"}
             if actor.activation_messages:
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
-                if reason != "game_turn":
+                if reason not in _GAME_REASONS:
                     reactivation_ctx = self._build_reactivation_context(
                         actor,
                         trigger_event,
@@ -1785,6 +1795,89 @@ class AgencyEngine(BaseEngine):
     def get_all_states(self) -> list[ActorState]:
         """Return all actor states managed by this engine."""
         return list(self._actor_states.values())
+
+    async def activate_for_event(
+        self,
+        actor_id: ActorId,
+        reason: str,
+        trigger_event: Event | None = None,
+        max_calls_override: int | None = None,
+        state_summary: str | None = None,
+    ) -> list[ActionEnvelope]:
+        """Activate an actor for one multi-turn tool-loop iteration.
+
+        Implements :class:`volnix.core.protocols.AgencyActivationProtocol`.
+        This is the unified entry point used by:
+
+        - :class:`GameOrchestrator` for ``game_kickstart`` and ``game_event``
+          re-activations (Cycle B)
+        - :class:`SimulationRunner` for autonomous tick activations
+        - The agent adapter for event-affected triggers
+
+        The old ``activate_for_game_turn`` method is preserved during the
+        Cycle B migration (used by legacy :class:`GameRunner`) and is
+        deleted in B.10.
+
+        Args:
+            actor_id: The actor to activate.
+            reason: Activation reason string. One of ``"game_kickstart"``,
+                ``"game_event"``, ``"subscription_match"``,
+                ``"event_affected"``, ``"autonomous_tick"``, or any other
+                string the caller wants to tag this activation with. Game-
+                reason values drive the prompt shape via the prompt
+                builder's ``_GAME_REASONS`` check.
+            trigger_event: The committed world event that caused this
+                activation, if any. ``None`` for kickstarts. Passed through
+                to :meth:`_activate_with_tool_loop` if the event is a
+                :class:`WorldEvent`.
+            max_calls_override: Override the per-activation tool-call
+                budget. ``None`` falls back to
+                ``max_tool_calls_per_activation`` from global agency config.
+            state_summary: Optional compact game-state summary string.
+                Injected as a fresh user message at the top of the actor's
+                rolling conversation (``activation_messages``). Used for
+                game re-activations so the LLM sees ground truth from state
+                without replaying full history. Trimmed to a rolling
+                window of ``K`` recent entries to cap prompt size.
+
+        Returns:
+            List of :class:`ActionEnvelope` objects produced during the
+            activation. Empty list if the actor is unknown.
+        """
+        actor_state = self._actor_states.get(actor_id)
+        if actor_state is None:
+            logger.warning(
+                "activate_for_event: unknown actor_id %s, ignoring activation",
+                actor_id,
+            )
+            return []
+
+        # Inject state_summary as a fresh user message at the top of the
+        # rolling conversation so the LLM sees ground truth without replaying
+        # full history. Trim to a bounded window so long games don't blow
+        # up the prompt.
+        if state_summary:
+            msg = {"role": "user", "content": f"[game state update]\n{state_summary}"}
+            actor_state.activation_messages = list(actor_state.activation_messages)
+            actor_state.activation_messages.append(msg)
+            _MAX_ACTIVATION_MESSAGES = 20  # ~10 exchanges
+            if len(actor_state.activation_messages) > _MAX_ACTIVATION_MESSAGES:
+                actor_state.activation_messages = actor_state.activation_messages[
+                    -_MAX_ACTIVATION_MESSAGES:
+                ]
+
+        # Only WorldEvent triggers are forwarded to the tool-loop; other
+        # event types (lifecycle, policy, etc.) flow through as ``None``.
+        world_trigger: WorldEvent | None = (
+            trigger_event if isinstance(trigger_event, WorldEvent) else None
+        )
+
+        return await self._activate_with_tool_loop(
+            actor_state,
+            reason,
+            world_trigger,
+            max_calls_override=max_calls_override,
+        )
 
     async def activate_for_game_turn(
         self,
