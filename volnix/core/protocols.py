@@ -334,6 +334,58 @@ class AgencyEngineProtocol(Protocol):
         ...
 
 
+@runtime_checkable
+class AgencyActivationProtocol(Protocol):
+    """Structural contract for activating an actor via the agency engine.
+
+    Used by ``GameOrchestrator`` (Cycle B) to kickstart and re-activate
+    game players without depending on the concrete :class:`AgencyEngine`
+    class. Preserves the "no cross-engine imports" rule from
+    DESIGN_PRINCIPLES.md — the composition root wires the concrete
+    agency engine as a dependency that satisfies this Protocol.
+
+    Concrete :class:`AgencyEngine` implements this by providing
+    ``activate_for_event`` in Cycle B.7; the orchestrator never
+    imports the concrete class.
+    """
+
+    async def activate_for_event(
+        self,
+        actor_id: Any,  # ActorId — Any to avoid circular import with core.types
+        reason: str,
+        trigger_event: Event | None = None,
+        max_calls_override: int | None = None,
+        state_summary: str | None = None,
+    ) -> list[Any]:
+        """Activate an actor for one multi-turn tool-loop iteration.
+
+        Args:
+            actor_id: The actor to activate.
+            reason: Activation reason string. One of
+                ``"game_kickstart"``, ``"game_event"``,
+                ``"subscription_match"``, ``"event_affected"``,
+                ``"autonomous_tick"``. Drives prompt shape in the
+                prompt builder.
+            trigger_event: The committed world event that caused this
+                activation, if any. ``None`` for kickstart.
+            max_calls_override: Override the per-activation tool-call
+                budget. ``None`` falls back to
+                ``max_tool_calls_per_activation`` from global agency
+                config.
+            state_summary: Optional compact game-state summary string
+                that the caller (orchestrator) injects as a fresh user
+                message at the top of the agent's rolling conversation.
+                Used for game re-activations so the LLM sees ground
+                truth from state without replaying full history.
+
+        Returns:
+            List of ActionEnvelope objects produced during the
+            activation. Typed as ``list[Any]`` in the Protocol to
+            avoid forward-importing ActionEnvelope into core.
+        """
+        ...
+
+
 # ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
