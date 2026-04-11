@@ -180,3 +180,30 @@ class GameTerminatedEvent(Event):
     total_events: int = 0
     wall_clock_seconds: float = 0.0
     scoring_mode: str = "behavioral"
+
+
+class GameEngineErrorEvent(Event):
+    """Published when the orchestrator's scorer / win evaluator / settlement raises.
+
+    The game continues on failure (a single scorer hiccup shouldn't kill
+    an entire run), but subscribers (reporter, CLI progress UI, alerting)
+    need a bus signal to react to. This is the observability companion
+    for the broad ``except Exception`` guards in the orchestrator that
+    would otherwise only emit a ``logger.exception`` stack trace.
+
+    Fields:
+        source: Which orchestrator operation raised. One of
+            ``"score_event"``, ``"win_check"``, ``"settle"``,
+            ``"state_query"``, ``"state_summary"``.
+        event_number: The orchestrator's event counter at the time of
+            failure. Zero for failures outside per-event handling.
+        message: Human-readable error string (the exception's ``str()``).
+        exception_type: Fully-qualified exception class name.
+        run_id: The run this applies to.
+    """
+
+    source: str = ""
+    event_number: int = 0
+    message: str = ""
+    exception_type: str = ""
+    run_id: str = ""

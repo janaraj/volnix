@@ -254,6 +254,83 @@ class TestReactivity:
         assert scores["dana-001"].behavior_metrics["reactions_to_animator"] == 0.0
 
 
+class TestReactivityWindowConfig:
+    """Reactivity window comes from FlowConfig, not a hardcoded constant."""
+
+    async def test_custom_window_of_2_excludes_event_5_after_animator_at_1(self):
+        from volnix.engines.game.definition import FlowConfig, GameDefinition
+
+        state = TrackingStateEngine()
+        scorer = BehavioralScorer()
+        scores = {"dana-001": PlayerScore(actor_id="dana-001")}
+        definition = GameDefinition(
+            enabled=True,
+            scoring_mode="behavioral",
+            flow=FlowConfig(reactivity_window_events=2),
+        )
+
+        def _ctx(event, event_number):
+            return ScorerContext(
+                event=event,
+                event_number=event_number,
+                state_engine=state,
+                player_scores=scores,
+                definition=definition,
+            )
+
+        # Animator event at event 1
+        animator_event = _make_event("animator-actor", "pages.update", service_id="notion")
+        await scorer.score_event(_ctx(animator_event, 1))
+        # Dana's game move at event 5 — outside the 2-event window
+        game_event = _make_event(
+            "dana-001",
+            "negotiate_propose",
+            service_id="game",
+            event_type="world.negotiate_propose",
+        )
+        await scorer.score_event(_ctx(game_event, 5))
+        assert scores["dana-001"].behavior_metrics["reactions_to_animator"] == 0.0
+
+    async def test_custom_window_of_10_includes_event_7(self):
+        from volnix.engines.game.definition import FlowConfig, GameDefinition
+
+        state = TrackingStateEngine()
+        scorer = BehavioralScorer()
+        scores = {"dana-001": PlayerScore(actor_id="dana-001")}
+        definition = GameDefinition(
+            enabled=True,
+            scoring_mode="behavioral",
+            flow=FlowConfig(reactivity_window_events=10),
+        )
+
+        def _ctx(event, event_number):
+            return ScorerContext(
+                event=event,
+                event_number=event_number,
+                state_engine=state,
+                player_scores=scores,
+                definition=definition,
+            )
+
+        animator_event = _make_event("animator-actor", "pages.update", service_id="notion")
+        await scorer.score_event(_ctx(animator_event, 5))
+        game_event = _make_event(
+            "dana-001",
+            "negotiate_counter",
+            service_id="game",
+            event_type="world.negotiate_counter",
+        )
+        # Event 12 is 7 events after animator → inside the 10-event window
+        await scorer.score_event(_ctx(game_event, 12))
+        assert scores["dana-001"].behavior_metrics["reactions_to_animator"] == 1.0
+
+    async def test_default_window_is_5(self):
+        """Default FlowConfig gives the original 5-event window."""
+        from volnix.engines.game.definition import FlowConfig
+
+        assert FlowConfig().reactivity_window_events == 5
+
+
 class TestTotalScoreZeroInBehavioralMode:
     """Behavioral mode has no leaderboard — total_score must stay 0."""
 

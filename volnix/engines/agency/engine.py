@@ -80,6 +80,15 @@ class AgencyEngine(BaseEngine):
         self._tool_to_service: dict[str, str] = {}  # sanitized API name → service name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
         self._pipeline_lock = asyncio.Lock()  # Serializes pipeline execution across parallel agents
+        # Per-actor locks serialize same-actor activations. Prevents the
+        # feedback-loop race where GameOrchestrator re-activates a player
+        # whose previous activation is still inside _activate_with_tool_loop
+        # (Player A commits → bus → orchestrator activates Player B → B
+        # commits → bus → orchestrator activates A *again*). Without the
+        # lock, two concurrent activations mutate actor_state.activation_messages
+        # interleaved. The lock is lazy — only created on first activation
+        # for a given actor.
+        self._actor_activation_locks: dict[ActorId, asyncio.Lock] = {}
         self._tool_executor: Any = None
         self._simulation_progress: tuple[int, int] | None = None  # (current_events, max_events)
 
@@ -1852,32 +1861,45 @@ class AgencyEngine(BaseEngine):
             )
             return []
 
-        # Inject state_summary as a fresh user message at the top of the
-        # rolling conversation so the LLM sees ground truth without replaying
-        # full history. Trim to a bounded window so long games don't blow
-        # up the prompt.
-        if state_summary:
-            msg = {"role": "user", "content": f"[game state update]\n{state_summary}"}
-            actor_state.activation_messages = list(actor_state.activation_messages)
-            actor_state.activation_messages.append(msg)
-            _MAX_ACTIVATION_MESSAGES = 20  # ~10 exchanges
-            if len(actor_state.activation_messages) > _MAX_ACTIVATION_MESSAGES:
-                actor_state.activation_messages = actor_state.activation_messages[
-                    -_MAX_ACTIVATION_MESSAGES:
-                ]
+        # Per-actor lock serializes same-actor activations. The orchestrator
+        # feedback loop can request a re-activation while the previous one
+        # is still mid-tool-loop (see class docstring above), which races
+        # on ``actor_state.activation_messages`` mutation. Lazy-create the
+        # lock on first use so unused actors don't pay the cost.
+        actor_lock = self._actor_activation_locks.get(actor_id)
+        if actor_lock is None:
+            actor_lock = asyncio.Lock()
+            self._actor_activation_locks[actor_id] = actor_lock
 
-        # Only WorldEvent triggers are forwarded to the tool-loop; other
-        # event types (lifecycle, policy, etc.) flow through as ``None``.
-        world_trigger: WorldEvent | None = (
-            trigger_event if isinstance(trigger_event, WorldEvent) else None
-        )
+        async with actor_lock:
+            # Inject state_summary as a fresh user message at the top of the
+            # rolling conversation so the LLM sees ground truth without replaying
+            # full history. Trim to a bounded window so long games don't blow
+            # up the prompt. Window size comes from AgencyConfig — do NOT
+            # hardcode.
+            if state_summary:
+                msg = {
+                    "role": "user",
+                    "content": f"[game state update]\n{state_summary}",
+                }
+                actor_state.activation_messages = list(actor_state.activation_messages)
+                actor_state.activation_messages.append(msg)
+                cap = self._typed_config.max_activation_messages
+                if len(actor_state.activation_messages) > cap:
+                    actor_state.activation_messages = actor_state.activation_messages[-cap:]
 
-        return await self._activate_with_tool_loop(
-            actor_state,
-            reason,
-            world_trigger,
-            max_calls_override=max_calls_override,
-        )
+            # Only WorldEvent triggers are forwarded to the tool-loop; other
+            # event types (lifecycle, policy, etc.) flow through as ``None``.
+            world_trigger: WorldEvent | None = (
+                trigger_event if isinstance(trigger_event, WorldEvent) else None
+            )
+
+            return await self._activate_with_tool_loop(
+                actor_state,
+                reason,
+                world_trigger,
+                max_calls_override=max_calls_override,
+            )
 
     async def activate_for_game_turn(
         self,

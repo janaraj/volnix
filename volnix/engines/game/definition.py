@@ -44,6 +44,15 @@ class FlowConfig(BaseModel, frozen=True):
       for activation_mode='serial'. Ignored for 'parallel'.
     - bonus_per_event: competitive-mode efficiency bonus per event saved.
       ``efficiency_bonus = max(0, (max_events - event_num) * bonus_per_event)``
+    - reactivity_window_events: BehavioralScorer counts a player move as
+      "reacting to an animator event" if it happens within this many
+      committed events of the last animator/environment event. Tunable
+      per scenario (tick-heavy worlds may need a wider window).
+    - state_summary_entity_types: list of entity types the orchestrator
+      queries when building the re-activation state_summary. Defaults to
+      ``negotiation_deal`` (the only game-state entity the current
+      negotiation game type writes). New game types (auction, debate)
+      will add their own entity types here.
     """
 
     type: FlowType = "event_driven"
@@ -53,8 +62,15 @@ class FlowConfig(BaseModel, frozen=True):
     activation_mode: ActivationMode = "serial"
     first_mover: str | None = None
     bonus_per_event: float = 0.14
+    reactivity_window_events: int = 5
+    state_summary_entity_types: list[str] = Field(default_factory=lambda: ["negotiation_deal"])
 
-    @field_validator("max_wall_clock_seconds", "max_events", "stalemate_timeout_seconds")
+    @field_validator(
+        "max_wall_clock_seconds",
+        "max_events",
+        "stalemate_timeout_seconds",
+        "reactivity_window_events",
+    )
     @classmethod
     def _positive(cls, v: int) -> int:
         if v <= 0:

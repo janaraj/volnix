@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
@@ -57,6 +58,7 @@ from volnix.engines.game.definition import (
 )
 from volnix.engines.game.events import (
     GameActiveStateChangedEvent,
+    GameEngineErrorEvent,
     GameKickstartEvent,
     GameScoreUpdatedEvent,
     GameTerminatedEvent,
@@ -90,6 +92,18 @@ def _now_timestamp() -> Timestamp:
     return Timestamp(world_time=now, wall_time=now, tick=0)
 
 
+def _unique_suffix() -> str:
+    """Short random suffix for collision-proof event IDs.
+
+    Several orchestrator event IDs were previously deterministic
+    (``evt-score-{counter}-{pid}``, ``evt-game-terminated-{run_id}``, etc).
+    Any re-entry, replay, or rapid sequence of failsafes produced
+    colliding IDs which the bus rejects. A 12-hex suffix gives us
+    collision resistance without noisy IDs.
+    """
+    return uuid.uuid4().hex[:12]
+
+
 class GameOrchestrator(BaseEngine):
     """Event-driven game orchestrator. The Cycle B keystone.
 
@@ -114,6 +128,7 @@ class GameOrchestrator(BaseEngine):
         # Game config (set in configure)
         self._definition: GameDefinition | None = None
         self._player_ids: list[ActorId] = []
+        self._role_to_actor_id: dict[str, ActorId] = {}  # built in configure()
         self._run_id: str = ""
         self._scorer: GameScorer | None = None
         self._win_evaluator: EventDrivenWinConditionEvaluator | None = None
@@ -132,6 +147,11 @@ class GameOrchestrator(BaseEngine):
         # Activation tasks (fire-and-forget asyncio.create_task; collected
         # for graceful shutdown)
         self._activation_tasks: set[asyncio.Task[Any]] = set()
+
+        # Bus subscription tokens (topic, callback) tuples registered in
+        # _on_start; used by _on_stop to cleanly unsubscribe so re-start
+        # within the same process doesn't double-register handlers.
+        self._subscription_tokens: list[tuple[str, Any]] = []
 
     # ---------------------------------------------------------------
     # BaseEngine lifecycle hooks
@@ -182,12 +202,18 @@ class GameOrchestrator(BaseEngine):
 
         # 1. Subscribe to game tool committed events (one subscription per
         # event_type string — bus fanout keys exactly on event_type).
+        # Track every subscription so _on_stop can unsubscribe cleanly and
+        # restart-in-same-process doesn't accumulate duplicate handlers.
+        self._subscription_tokens = []
         for event_type in GAME_TOOL_EVENT_TYPES:
             await self._bus.subscribe(event_type, self._handle_game_event)
+            self._subscription_tokens.append((event_type, self._handle_game_event))
 
         # 2. Subscribe to budget.exhausted and our own game.timeout events
         await self._bus.subscribe("budget.exhausted", self._handle_budget_exhausted)
+        self._subscription_tokens.append(("budget.exhausted", self._handle_budget_exhausted))
         await self._bus.subscribe("game.timeout", self._handle_timeout)
+        self._subscription_tokens.append(("game.timeout", self._handle_timeout))
 
         # 3. Mark game start time + result future
         self._game_state = GameState(started_at=datetime.now(UTC))
@@ -210,7 +236,7 @@ class GameOrchestrator(BaseEngine):
         # 6. Publish kickstart event + activate first mover
         first_mover = self._resolve_first_mover()
         kickstart_event = GameKickstartEvent(
-            event_id=EventId(f"evt-game-kickstart-{self._run_id}"),
+            event_id=EventId(f"evt-game-kickstart-{self._run_id}-{_unique_suffix()}"),
             event_type="game.kickstart",
             timestamp=_now_timestamp(),
             run_id=self._run_id,
@@ -218,6 +244,16 @@ class GameOrchestrator(BaseEngine):
             num_players=len(self._player_ids),
         )
         await self._bus.publish(kickstart_event)
+        await self._record_lifecycle_entry(
+            "started",
+            {
+                "run_id": self._run_id,
+                "num_players": len(self._player_ids),
+                "scoring_mode": self._definition.scoring_mode,
+                "flow_type": self._definition.flow.type,
+                "first_mover": str(first_mover) if first_mover else "",
+            },
+        )
         logger.info(
             "GameOrchestrator started: run_id=%s players=%s scoring=%s flow=%s",
             self._run_id,
@@ -247,6 +283,21 @@ class GameOrchestrator(BaseEngine):
         if self._activation_tasks:
             await asyncio.gather(*self._activation_tasks, return_exceptions=True)
             self._activation_tasks.clear()
+
+        # Unsubscribe every handler we registered in _on_start. Without
+        # this, a restart in the same process (composition root rewire,
+        # test suite reuse, etc.) accumulates duplicate handlers and each
+        # bus event fires _handle_game_event N times.
+        for topic, callback in self._subscription_tokens:
+            try:
+                await self._bus.unsubscribe(topic, callback)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "GameOrchestrator._on_stop: failed to unsubscribe %s: %s",
+                    topic,
+                    exc,
+                )
+        self._subscription_tokens = []
         # Resolve result future if still pending (so CLI doesn't hang)
         if self._result_future is not None and not self._result_future.done():
             self._result_future.set_result(
@@ -299,6 +350,21 @@ class GameOrchestrator(BaseEngine):
         self._terminated = False
         self._exhausted_players = set()
 
+        # Build role → actor_id map for O(1) first-mover / next-player
+        # resolution. Actor IDs follow the convention "{role}-{hash}", so
+        # a role matches when an actor_id starts with "{role}-". Each role
+        # maps to the first actor declared with that role; subsequent
+        # actors with the same role are still reachable via the player_ids
+        # list iteration in next-player routing.
+        self._role_to_actor_id = {}
+        for pid in self._player_ids:
+            pid_str = str(pid)
+            if "-" in pid_str:
+                role = pid_str.rsplit("-", 1)[0]
+                self._role_to_actor_id.setdefault(role, pid)
+            # Also allow exact actor_id lookup
+            self._role_to_actor_id.setdefault(pid_str, pid)
+
         # Select scorer by scoring_mode (the ONE place this dispatch happens)
         if definition.scoring_mode == "competitive":
             self._scorer = CompetitiveScorer(bonus_per_event=definition.flow.bonus_per_event)
@@ -347,27 +413,46 @@ class GameOrchestrator(BaseEngine):
         if self._definition is None or self._scorer is None or self._win_evaluator is None:
             return
 
-        # 1. Advance counters
-        self._game_state.event_counter += 1
-        self._refresh_stalemate_deadline()
+        # 1. Compute the tentative next event number BEFORE scoring. The
+        # counter is only advanced after we've successfully scored — if
+        # the scorer raises, the counter stays at N so the next event
+        # gets number N+1 (not N+2). This protects competitive mode's
+        # event-count-based efficiency bonus from drifting on transient
+        # scoring failures.
+        event_number = self._game_state.event_counter + 1
 
         # 2. Score the event (scorer reads state but never writes — MF1)
         ctx = ScorerContext(
             event=event,
-            event_number=self._game_state.event_counter,
+            event_number=event_number,
             state_engine=self._state,
             player_scores=self._player_scores,
             definition=self._definition,
         )
+        scored_ok = True
         try:
             await self._scorer.score_event(ctx)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            scored_ok = False
             logger.exception("Scorer.score_event raised; skipping this event's scoring")
+            await self._publish_engine_error(
+                source="score_event",
+                event_number=event_number,
+                exc=exc,
+            )
 
-        # 3. Publish incremental score updates
+        # 3. Commit the counter advance + refresh stalemate deadline only
+        # after scoring resolved (success or handled error). This keeps
+        # event_number stable across successive events even on failures.
+        self._game_state.event_counter = event_number
+        self._refresh_stalemate_deadline()
+
+        # 4. Publish incremental score updates. Append a UUID suffix to
+        # every event_id so repeated or interleaved handler calls produce
+        # unique IDs (the bus persists by ID and collisions would error).
         for pid, ps in self._player_scores.items():
             score_event = GameScoreUpdatedEvent(
-                event_id=EventId(f"evt-score-{self._game_state.event_counter}-{pid}"),
+                event_id=EventId(f"evt-score-{event_number}-{pid}-{_unique_suffix()}"),
                 event_type="game.score_updated",
                 timestamp=_now_timestamp(),
                 actor_id=ActorId(pid),
@@ -376,7 +461,7 @@ class GameOrchestrator(BaseEngine):
             )
             await self._bus.publish(score_event)
 
-        # 4. Check win conditions (Path A: natural win)
+        # 5. Check win conditions (Path A: natural win)
         try:
             win_result = await self._win_evaluator.check(
                 scores=self._player_scores,
@@ -384,15 +469,20 @@ class GameOrchestrator(BaseEngine):
                 state_engine=self._state,
                 exhausted_players=self._exhausted_players,
             )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Win condition check raised; game continues")
             win_result = None
+            await self._publish_engine_error(
+                source="win_check",
+                event_number=event_number,
+                exc=exc,
+            )
 
         if win_result is not None:
             await self._terminate_natural(win_result)
             return
 
-        # 5. Determine next player and re-activate (Option D: direct call)
+        # 6. Determine next player and re-activate (Option D: direct call)
         next_player = self._next_player_for(event)
         if next_player is not None:
             state_summary = await self._build_state_summary()
@@ -402,6 +492,7 @@ class GameOrchestrator(BaseEngine):
                 trigger_event=event,
                 state_summary=state_summary,
             )
+        _ = scored_ok  # retained for future observability hook
 
     async def _handle_budget_exhausted(self, event: Event) -> None:
         """Track per-actor budget exhaustion; fire all_budgets timeout when all done."""
@@ -430,7 +521,7 @@ class GameOrchestrator(BaseEngine):
         if len(self._exhausted_players) >= len(self._player_scores):
             # All players out — publish timeout
             timeout_event = GameTimeoutEvent(
-                event_id=EventId(f"evt-all-budgets-{self._run_id}"),
+                event_id=EventId(f"evt-all-budgets-{self._run_id}-{_unique_suffix()}"),
                 event_type="game.timeout",
                 timestamp=_now_timestamp(),
                 reason="all_budgets",
@@ -449,17 +540,35 @@ class GameOrchestrator(BaseEngine):
         self._game_state.terminated = True
         self._cancel_failsafe_timers()
 
-        # Query open deals for settlement
+        # Query open deals for settlement. The query entity types come
+        # from FlowConfig.state_summary_entity_types so future game types
+        # can settle over their own entity shapes without code changes.
         open_deals: list[dict[str, Any]] = []
+        entity_types = list(self._definition.flow.state_summary_entity_types)
         try:
-            all_deals = await self._state.query_entities("negotiation_deal")
-            open_deals = [
-                d
-                for d in all_deals
-                if str(d.get("status", "")).lower() in {"open", "proposed", "countered"}
-            ]
-        except Exception:
-            logger.exception("Failed to query negotiation_deal for settlement")
+            for entity_type in entity_types:
+                try:
+                    rows = await self._state.query_entities(entity_type)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Failed to query %s for settlement", entity_type)
+                    await self._publish_engine_error(
+                        source="state_query",
+                        event_number=self._game_state.event_counter,
+                        exc=exc,
+                    )
+                    continue
+                open_deals.extend(
+                    d
+                    for d in rows
+                    if str(d.get("status", "")).lower() in {"open", "proposed", "countered"}
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Unexpected error in settlement query loop")
+            await self._publish_engine_error(
+                source="state_query",
+                event_number=self._game_state.event_counter,
+                exc=exc,
+            )
 
         try:
             await self._scorer.settle(
@@ -468,8 +577,13 @@ class GameOrchestrator(BaseEngine):
                 player_scores=self._player_scores,
                 definition=self._definition,
             )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Scorer.settle raised; proceeding to termination")
+            await self._publish_engine_error(
+                source="settle",
+                event_number=self._game_state.event_counter,
+                exc=exc,
+            )
 
         # Flip game_active = False + publish terminated
         await self._publish_active_state(active=False)
@@ -479,6 +593,15 @@ class GameOrchestrator(BaseEngine):
             final_standings=_serialize_standings(self._player_scores),
             behavior_scores={
                 pid: dict(s.behavior_metrics) for pid, s in self._player_scores.items()
+            },
+        )
+        await self._record_lifecycle_entry(
+            "timed_out",
+            {
+                "run_id": self._run_id,
+                "reason": reason,
+                "total_events": self._game_state.event_counter,
+                "open_deals_settled": len(open_deals),
             },
         )
         await self._publish_terminated(win_result, reason=reason)
@@ -495,6 +618,16 @@ class GameOrchestrator(BaseEngine):
         self._game_state.terminated = True
         self._cancel_failsafe_timers()
         await self._publish_active_state(active=False)
+        await self._record_lifecycle_entry(
+            "terminated",
+            {
+                "run_id": self._run_id,
+                "path": "natural",
+                "reason": win_result.reason,
+                "winner": str(win_result.winner) if win_result.winner else None,
+                "total_events": self._game_state.event_counter,
+            },
+        )
         await self._publish_terminated(win_result, reason=win_result.reason)
 
     async def _publish_terminated(self, win_result: WinResult, reason: str) -> None:
@@ -503,7 +636,7 @@ class GameOrchestrator(BaseEngine):
             return
         wall_clock_s = self._elapsed_seconds()
         terminated_event = GameTerminatedEvent(
-            event_id=EventId(f"evt-game-terminated-{self._run_id}"),
+            event_id=EventId(f"evt-game-terminated-{self._run_id}-{_unique_suffix()}"),
             event_type="game.terminated",
             timestamp=_now_timestamp(),
             winner=win_result.winner,
@@ -536,15 +669,74 @@ class GameOrchestrator(BaseEngine):
     async def _publish_active_state(self, active: bool) -> None:
         """Flip the game_active flag via bus (read by GameActivePolicy)."""
         state_event = GameActiveStateChangedEvent(
-            event_id=EventId(
-                f"evt-game-active-{active}-{self._run_id}-{self._game_state.event_counter}"
-            ),
+            event_id=EventId(f"evt-game-active-{active}-{self._run_id}-{_unique_suffix()}"),
             event_type="game.active_state_changed",
             timestamp=_now_timestamp(),
             active=active,
             run_id=self._run_id,
         )
         await self._bus.publish(state_event)
+
+    async def _publish_engine_error(
+        self,
+        source: str,
+        event_number: int,
+        exc: BaseException,
+    ) -> None:
+        """Publish a ``GameEngineErrorEvent`` for observability (M2 review).
+
+        Called from every broad ``except Exception`` guard in the
+        orchestrator. Keeps the continue-on-failure semantics (a single
+        transient error shouldn't kill the game) but gives downstream
+        subscribers (reporter, CLI, alerting) a bus signal to react to.
+        """
+        if self._bus is None:
+            return
+        try:
+            err_event = GameEngineErrorEvent(
+                event_id=EventId(f"evt-game-error-{source}-{_unique_suffix()}"),
+                event_type="game.engine_error",
+                timestamp=_now_timestamp(),
+                source=source,
+                event_number=event_number,
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                run_id=self._run_id,
+            )
+            await self._bus.publish(err_event)
+        except Exception:  # noqa: BLE001
+            # Error publication must never itself kill the orchestrator.
+            logger.exception("Failed to publish GameEngineErrorEvent")
+
+    async def _record_lifecycle_entry(
+        self,
+        event_type: str,
+        details: dict[str, Any],
+    ) -> None:
+        """Append an :class:`EngineLifecycleEntry` to the ledger.
+
+        Covers the M4 review finding (ledger writes missing for game
+        lifecycle transitions). Uses the shared ledger entry type so we
+        don't fork the ledger schema for a single engine.
+        """
+        ledger = self._config.get("_ledger") if self._config else None
+        if ledger is None:
+            return
+        try:
+            from volnix.ledger.entries import EngineLifecycleEntry
+
+            entry = EngineLifecycleEntry(
+                engine_name="game",
+                event_type=event_type,
+                details=details,
+            )
+            await ledger.append(entry)
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "GameOrchestrator: ledger append failed for %s",
+                event_type,
+                exc_info=True,
+            )
 
     # ---------------------------------------------------------------
     # Failsafe timer tasks
@@ -561,7 +753,7 @@ class GameOrchestrator(BaseEngine):
         if self._terminated:
             return
         timeout_event = GameTimeoutEvent(
-            event_id=EventId(f"evt-wall-clock-{self._run_id}"),
+            event_id=EventId(f"evt-wall-clock-{self._run_id}-{_unique_suffix()}"),
             event_type="game.timeout",
             timestamp=_now_timestamp(),
             reason="wall_clock",
@@ -585,7 +777,7 @@ class GameOrchestrator(BaseEngine):
         if self._terminated:
             return
         timeout_event = GameTimeoutEvent(
-            event_id=EventId(f"evt-stalemate-{self._run_id}"),
+            event_id=EventId(f"evt-stalemate-{self._run_id}-{_unique_suffix()}"),
             event_type="game.timeout",
             timestamp=_now_timestamp(),
             reason="stalemate",
@@ -617,25 +809,25 @@ class GameOrchestrator(BaseEngine):
     def _resolve_first_mover(self) -> ActorId | None:
         """Resolve ``flow.first_mover`` (role or actor_id) to an ActorId.
 
-        If ``first_mover`` is a role name (e.g. ``"buyer"``), matches
-        the first player whose actor_id starts with ``"{role}-"``.
-        Falls back to the first player in the list.
+        Uses the ``_role_to_actor_id`` map built in ``configure()`` for
+        O(1) lookup (supports both role name ``"buyer"`` and exact
+        actor_id ``"buyer-001"``). Falls back to the first player in
+        the declared list when nothing matches.
         """
         if self._definition is None or not self._player_ids:
             return None
         first_mover = self._definition.flow.first_mover or ""
         if first_mover:
-            for pid in self._player_ids:
-                pid_str = str(pid)
-                if pid_str == first_mover or pid_str.startswith(first_mover + "-"):
-                    return pid
+            resolved = self._role_to_actor_id.get(first_mover)
+            if resolved is not None:
+                return resolved
         return self._player_ids[0]
 
     def _next_player_for(self, event: WorldEvent) -> ActorId | None:
         """Given a just-committed event, return the actor to activate next.
 
-        Serial mode: the OTHER player (not the mover). None if there's
-        no other player.
+        Serial mode: the first non-mover, non-eliminated player in
+        registration order. None if there's no such player.
 
         Parallel mode: ``None`` (all players active concurrently; no
         re-activation needed — each acts on their own LLM loop).
@@ -646,11 +838,13 @@ class GameOrchestrator(BaseEngine):
             return None
         mover = str(event.actor_id)
         for pid in self._player_ids:
-            if (
-                str(pid) != mover
-                and not self._player_scores.get(str(pid), PlayerScore(actor_id=pid)).eliminated
-            ):
-                return pid
+            pid_str = str(pid)
+            if pid_str == mover:
+                continue
+            score = self._player_scores.get(pid_str)
+            if score is not None and score.eliminated:
+                continue
+            return pid
         return None
 
     def _launch_activation(
@@ -703,22 +897,37 @@ class GameOrchestrator(BaseEngine):
         Rendered at the top of the agent's rolling conversation on
         re-activation so the LLM sees ground truth without replaying
         full history. Format is compact and human-readable.
+
+        Entity types come from ``FlowConfig.state_summary_entity_types``
+        so future game types (auction, debate) can opt in without
+        touching this method.
         """
-        if self._state is None:
+        if self._state is None or self._definition is None:
             return ""
         parts: list[str] = [f"Game state at event #{self._game_state.event_counter}:"]
-        try:
-            deals = await self._state.query_entities("negotiation_deal")
-            for deal in deals:
-                status = deal.get("status", "?")
-                terms = deal.get("terms") or {}
-                last_by = deal.get("last_proposed_by") or "?"
+        entity_types = list(self._definition.flow.state_summary_entity_types)
+        for entity_type in entity_types:
+            try:
+                rows = await self._state.query_entities(entity_type)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("State summary query failed for entity_type=%s", entity_type)
+                await self._publish_engine_error(
+                    source="state_summary",
+                    event_number=self._game_state.event_counter,
+                    exc=exc,
+                )
+                continue
+            for row in rows:
+                # Generic rendering — show id + status + any top-level
+                # scalar fields that look like game-state attributes.
+                row_id = row.get("id", "?")
+                status = row.get("status", "?")
+                terms = row.get("terms") or {}
+                last_by = row.get("last_proposed_by") or "?"
                 parts.append(
-                    f"- deal {deal.get('id', '?')}: status={status}, "
+                    f"- {entity_type} {row_id}: status={status}, "
                     f"last_proposed_by={last_by}, terms={terms}"
                 )
-        except Exception:
-            logger.exception("State summary query failed")
         return "\n".join(parts)
 
     # ---------------------------------------------------------------

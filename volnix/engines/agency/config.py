@@ -68,3 +68,8 @@ class AgencyConfig(BaseModel):
     max_tool_calls_per_activation: int = 10
     # LLM tool_choice mode for agent activations: "auto" allows text responses.
     tool_choice_mode: str = "auto"
+    # Max entries retained in an actor's rolling ``activation_messages``
+    # window after a ``state_summary`` is injected by GameOrchestrator
+    # re-activations (roughly ``max_activation_messages / 2`` exchanges).
+    # Caps prompt size for long games.
+    max_activation_messages: int = 20

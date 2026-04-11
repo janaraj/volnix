@@ -508,6 +508,198 @@ class TestPromptBuilderActionHistory:
         )
         assert "No actions taken yet" in prompt
 
+
+# ---------------------------------------------------------------------------
+# B3 — max_activation_messages comes from AgencyConfig
+# ---------------------------------------------------------------------------
+
+
+class TestMaxActivationMessagesConfig:
+    """The rolling window cap is read from AgencyConfig, not hardcoded."""
+
+    @pytest.mark.asyncio
+    async def test_custom_cap_respected(self):
+        """Injecting ``max_activation_messages=5`` trims to 5."""
+        import asyncio as _asyncio
+
+        from volnix.core.types import ActorId
+        from volnix.engines.agency.engine import AgencyEngine
+
+        engine = AgencyEngine()
+        bus = AsyncMock()
+        bus.subscribe = AsyncMock()
+        await engine.initialize({"max_activation_messages": 5}, bus)
+        ctx = _make_world_context()
+        await engine.configure([_make_actor()], ctx, ctx.available_services)
+
+        actor = engine._actor_states[ActorId("buyer-001")]
+        actor.activation_messages = [{"role": "user", "content": f"m-{i}"} for i in range(10)]
+
+        captured_len: list[int] = []
+
+        async def fake_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+            captured_len.append(len(_actor.activation_messages))
+            return []
+
+        engine._activate_with_tool_loop = fake_loop  # type: ignore[assignment]
+        await engine.activate_for_event(
+            ActorId("buyer-001"),
+            reason="game_event",
+            trigger_event=None,
+            state_summary="truth",
+        )
+        assert captured_len == [5]
+        _ = _asyncio  # silence unused-import warning
+
+    @pytest.mark.asyncio
+    async def test_default_cap_is_20(self):
+        """Default AgencyConfig.max_activation_messages is 20."""
+        from volnix.engines.agency.config import AgencyConfig
+
+        assert AgencyConfig().max_activation_messages == 20
+
+
+# ---------------------------------------------------------------------------
+# B1 — Per-actor lock prevents concurrent same-actor activations
+# ---------------------------------------------------------------------------
+
+
+class TestPerActorActivationLock:
+    """Two concurrent activate_for_event calls on the same actor serialize.
+
+    This protects against the GameOrchestrator feedback-loop race where
+    Player A's activation is still in _activate_with_tool_loop when the
+    orchestrator fires another activation for Player A.
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_same_actor_activations_serialize(self):
+        import asyncio as _asyncio
+
+        engine = await _create_engine()
+        order: list[str] = []
+        release_first = _asyncio.Event()
+
+        async def slow_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+            order.append("enter")
+            await release_first.wait()
+            order.append("exit")
+            return []
+
+        engine._activate_with_tool_loop = slow_loop  # type: ignore[assignment]
+
+        task1 = _asyncio.create_task(
+            engine.activate_for_event(
+                ActorId("buyer-001"),
+                reason="game_event",
+                trigger_event=None,
+            )
+        )
+        task2 = _asyncio.create_task(
+            engine.activate_for_event(
+                ActorId("buyer-001"),
+                reason="game_event",
+                trigger_event=None,
+            )
+        )
+        # Let task1 reach the slow section
+        await _asyncio.sleep(0.01)
+        # Both tasks are scheduled but only one should be inside the loop
+        assert order == ["enter"]
+        # Release the first task
+        release_first.set()
+        await _asyncio.gather(task1, task2)
+        # Second task ran AFTER the first exited — strict ordering
+        assert order == ["enter", "exit", "enter", "exit"]
+
+    @pytest.mark.asyncio
+    async def test_different_actors_run_concurrently(self):
+        """Per-actor locks must not serialize across actors."""
+        import asyncio as _asyncio
+
+        engine = await _create_engine(
+            actors=[
+                _make_actor(actor_id="buyer-001", role="buyer"),
+                _make_actor(actor_id="supplier-001", role="supplier"),
+            ]
+        )
+
+        inside: set[str] = set()
+        max_concurrent = {"v": 0}
+        release = _asyncio.Event()
+
+        async def slow_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+            inside.add(str(_actor.actor_id))
+            max_concurrent["v"] = max(max_concurrent["v"], len(inside))
+            await release.wait()
+            inside.discard(str(_actor.actor_id))
+            return []
+
+        engine._activate_with_tool_loop = slow_loop  # type: ignore[assignment]
+
+        t1 = _asyncio.create_task(
+            engine.activate_for_event(ActorId("buyer-001"), reason="game_event", trigger_event=None)
+        )
+        t2 = _asyncio.create_task(
+            engine.activate_for_event(
+                ActorId("supplier-001"), reason="game_event", trigger_event=None
+            )
+        )
+        await _asyncio.sleep(0.01)
+        assert max_concurrent["v"] == 2  # both actors inside simultaneously
+        release.set()
+        await _asyncio.gather(t1, t2)
+
+    @pytest.mark.asyncio
+    async def test_lock_released_on_exception(self):
+        """If the tool loop raises, the per-actor lock is released."""
+        import asyncio as _asyncio
+
+        engine = await _create_engine()
+
+        async def raising_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+            raise RuntimeError("boom")
+
+        engine._activate_with_tool_loop = raising_loop  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await engine.activate_for_event(
+                ActorId("buyer-001"),
+                reason="game_event",
+                trigger_event=None,
+            )
+
+        # Second call should succeed — lock is released
+        calls = {"n": 0}
+
+        async def ok_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+            calls["n"] += 1
+            return []
+
+        engine._activate_with_tool_loop = ok_loop  # type: ignore[assignment]
+        await engine.activate_for_event(
+            ActorId("buyer-001"),
+            reason="game_event",
+            trigger_event=None,
+        )
+        assert calls["n"] == 1
+        _ = _asyncio  # silence unused-import warning
+
+    @pytest.mark.asyncio
+    async def test_lock_is_lazy_created(self):
+        """The first activation creates the lock; subsequent reuse the same one."""
+        engine = await _create_engine()
+        assert engine._actor_activation_locks == {}
+        engine._activate_with_tool_loop = AsyncMock(return_value=[])  # type: ignore[assignment]
+        await engine.activate_for_event(
+            ActorId("buyer-001"), reason="game_event", trigger_event=None
+        )
+        first_lock = engine._actor_activation_locks[ActorId("buyer-001")]
+        await engine.activate_for_event(
+            ActorId("buyer-001"), reason="game_event", trigger_event=None
+        )
+        assert engine._actor_activation_locks[ActorId("buyer-001")] is first_lock
+
     def test_autonomous_actor_still_gets_action_history(self):
         """Autonomous actor continues to render the block (no regression)."""
         builder = ActorPromptBuilder(world_context=_make_world_context())

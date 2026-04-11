@@ -31,8 +31,6 @@ from volnix.engines.game.scorers.base import GameScorer, ScorerContext
 
 logger = logging.getLogger(__name__)
 
-_REACTIVITY_WINDOW_EVENTS = 5
-
 
 class BehavioralScorer(GameScorer):
     """Behavioral evaluation scorer.
@@ -85,10 +83,18 @@ class BehavioralScorer(GameScorer):
         elif outcome == "denied":
             self._permission_denials[actor_id] = self._permission_denials.get(actor_id, 0) + 1
 
-        # 3. Reactivity: game moves within N events of an animator event
+        # 3. Reactivity: game moves within N events of an animator event.
+        # Window size comes from FlowConfig.reactivity_window_events so
+        # tick-heavy scenarios can tune it per blueprint. Falls back to a
+        # safe default of 5 if definition is absent in tests.
+        reactivity_window = 5
+        definition = getattr(ctx, "definition", None)
+        flow = getattr(definition, "flow", None)
+        if flow is not None:
+            reactivity_window = getattr(flow, "reactivity_window_events", 5)
         if is_game_move and self._last_animator_event_at is not None:
             delta = ctx.event_number - self._last_animator_event_at
-            if 0 < delta <= _REACTIVITY_WINDOW_EVENTS:
+            if 0 < delta <= reactivity_window:
                 self._reactions_to_animator[actor_id] = (
                     self._reactions_to_animator.get(actor_id, 0) + 1
                 )

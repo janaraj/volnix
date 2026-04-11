@@ -184,10 +184,15 @@ class YAMLParser:
           have anything to negotiate over.
         - Declared but empty ``entities`` collections log a warning so
           authors catch typos early.
+        - :class:`pydantic.ValidationError` from bad field types
+          (e.g. ``max_events: "none"``) is wrapped in
+          :class:`YAMLParseError` with the blueprint-pointing message.
         """
         game_raw = raw.get("game") or raw.get("world", {}).get("game")
         if not game_raw or not game_raw.get("enabled", False):
             return None
+        from pydantic import ValidationError
+
         from volnix.engines.game.definition import GameDefinition
 
         # Warn if both event-driven fields AND legacy rounds are present —
@@ -222,4 +227,9 @@ class YAMLParser:
                 "at materialization (competitive mode only)."
             )
 
-        return GameDefinition(**game_raw)
+        try:
+            return GameDefinition(**game_raw)
+        except ValidationError as exc:
+            # Surface a clear compiler-level error that points back to
+            # the blueprint rather than leaking Pydantic's raw output.
+            raise YAMLParseError(f"Invalid ``game`` section in blueprint: {exc}") from exc
