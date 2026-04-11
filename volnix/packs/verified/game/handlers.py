@@ -55,8 +55,17 @@ def _extract_terms(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _find_deal(state: dict[str, Any], deal_id: str) -> dict[str, Any] | None:
-    """Look up a negotiation_deal by id from the pack runtime's state dict."""
-    deals = state.get("negotiation_deal") or []
+    """Look up a negotiation_deal by id from the pack runtime's state dict.
+
+    The responder's ``_build_state_for_pack`` stores entities under
+    pluralized keys (``negotiation_deal`` → ``negotiation_deals``) per
+    the pack-state convention used by slack, notion, twitter, etc. We
+    also accept the singular key as a fallback for tests that invoke
+    handlers directly with a pre-built state dict.
+    """
+    deals = state.get("negotiation_deals")
+    if deals is None:
+        deals = state.get("negotiation_deal") or []
     for deal in deals:
         if isinstance(deal, dict) and deal.get("id") == deal_id:
             return deal

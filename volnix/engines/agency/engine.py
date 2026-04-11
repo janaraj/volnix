@@ -1866,12 +1866,23 @@ class AgencyEngine(BaseEngine):
             self._actor_activation_locks[actor_id] = actor_lock
 
         async with actor_lock:
-            # Inject state_summary as a fresh user message at the top of the
-            # rolling conversation so the LLM sees ground truth without replaying
-            # full history. Trim to a bounded window so long games don't blow
-            # up the prompt. Window size comes from AgencyConfig — do NOT
-            # hardcode.
-            if state_summary:
+            # Inject state_summary as a fresh user message at the top of
+            # the rolling conversation so the LLM sees ground truth
+            # without replaying full history. Trim to a bounded window
+            # so long games don't blow up the prompt. Window size comes
+            # from AgencyConfig — do NOT hardcode.
+            #
+            # CRITICAL: only inject when there is already conversation
+            # history. For a first activation, ``activation_messages``
+            # is empty and the tool loop builds fresh messages from
+            # ``system_prompt`` + ``user_prompt`` (which carry role,
+            # persona, mission). Appending a state_summary to an empty
+            # ``activation_messages`` would make ``_activate_with_tool_loop``
+            # read it as the full messages list — dropping the system
+            # + user prompt entirely and leaving the LLM with no role
+            # context. The state summary is a RE-activation hint, not
+            # a replacement for the initial prompt.
+            if state_summary and actor_state.activation_messages:
                 msg = {
                     "role": "user",
                     "content": f"[game state update]\n{state_summary}",

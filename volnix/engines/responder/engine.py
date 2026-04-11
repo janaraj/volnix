@@ -125,42 +125,19 @@ class WorldResponderEngine(BaseEngine):
         """Execute the responder pipeline step.
 
         Dispatch order:
-        0. Game actions (service_id == "game"): short-circuit to a minimal
-           "recorded" response. Game moves have no external service to
-           simulate — the commit itself is the action.
-        1. Tier 1 pack (verified, deterministic)
+        1. Tier 1 pack (verified, deterministic) — this includes the
+           ``game`` service pack which writes ``negotiation_deal`` /
+           ``negotiation_proposal`` state deltas atomically (MF1).
+           Prior to Cycle B a legacy short-circuit returned an empty
+           ``{"status": "recorded"}`` proposal for ``service_id == "game"``
+           because the old round-based game engine read committed events
+           directly instead of state. Cycle B's GameOrchestrator reads
+           STATE (``negotiation_deal.status == "accepted"`` drives
+           :class:`DealClosedHandler`), so the game pack handlers MUST
+           run to apply the deltas. The short-circuit was removed.
         2. Tier 2 profile (LLM-constrained by profile)
         3. Error: no handler
         """
-        # Game actions have no real external service to simulate — the
-        # commit itself IS the action. Return a minimal "recorded"
-        # response and skip the Tier 1 / Tier 2 lookup entirely. The
-        # evaluator reads the committed event's payload directly, so the
-        # response body just needs to be a valid dict for the commit step.
-        if str(ctx.service_id or "") == "game":
-            ctx.response_proposal = ResponseProposal(
-                response_body={"status": "recorded", "action": ctx.action},
-            )
-            from datetime import UTC, datetime
-
-            from volnix.core.types import Timestamp
-
-            now = datetime.now(UTC)
-            dispatch_event = ResponderDispatchEvent(
-                event_type="responder.dispatch",
-                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
-                actor_id=ctx.actor_id,
-                action=ctx.action,
-                fidelity_tier=0,
-                service_id="game",
-            )
-            return StepResult(
-                step_name="responder",
-                verdict=StepVerdict.ALLOW,
-                events=[dispatch_event],
-                metadata={"fidelity_tier": 0, "game_action": True},
-            )
-
         # Tier 1: check pack — resolve by service_id first (handles tool name
         # collisions like "search" in both notion and reddit), then by tool name.
         has_pack = False
