@@ -406,6 +406,39 @@ class VolnixApp:
         feedback._config["_profile_loader"] = getattr(responder, "_profile_loader", None)
         feedback._config["_run_manager"] = self._run_manager
 
+        # --- Cycle B: GameOrchestrator + GameActivePolicy wiring ---
+        # The orchestrator needs:
+        #   * ``state`` dependency (already resolved via inject_dependencies)
+        #   * ``agency`` dependency (cross-engine injection)
+        #   * ``_ledger`` in config (for lifecycle entries)
+        # The GameActivePolicy gate needs:
+        #   * registration on the PolicyEngine gate list
+        #   * subscription to ``game.active_state_changed`` so it flips its
+        #     internal flag when GameOrchestrator publishes the lifecycle event
+        try:
+            orchestrator = self._registry.get("game_orchestrator")
+        except KeyError:
+            orchestrator = None
+        if orchestrator is not None:
+            orchestrator._dependencies["agency"] = agency
+            orchestrator._config["_ledger"] = self._ledger
+
+        # Register the GameActivePolicy gate on the PolicyEngine. The gate
+        # defaults to ``is_active=False`` which denies ``negotiate_*`` tool
+        # calls until the orchestrator publishes
+        # ``GameActiveStateChangedEvent(active=True)`` at game start. For
+        # non-game runs, the gate is effectively a no-op (no negotiate_*
+        # actions are ever issued).
+        from volnix.engines.policy.builtin.game_active import GameActivePolicy
+
+        self._game_active_gate = GameActivePolicy()
+        policy_engine.register_gate(self._game_active_gate)
+        if self._bus is not None:
+            await self._bus.subscribe(
+                "game.active_state_changed",
+                self._game_active_gate.on_event,
+            )
+
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
         self._escalation_handler = None
@@ -1280,6 +1313,12 @@ class VolnixApp:
     async def configure_game(self, plan: Any, internal_profile: Any | None = None) -> None:
         """Configure the game engine from blueprint game definition.
 
+        Cycle B split: dispatches to :class:`GameOrchestrator` for
+        event-driven blueprints (detected via a non-empty
+        ``plan.game.entities.deals`` list) and to the legacy
+        :class:`GameEngine` for round-based blueprints (detected via a
+        ``plan.game.rounds`` block with ``count > 0``).
+
         When an internal agent profile is provided, only those agents become
         game players. Otherwise falls back to all non-HUMAN/non-SYSTEM actors.
 
@@ -1292,13 +1331,7 @@ class VolnixApp:
         if game_def is None or not game_def.enabled:
             return
 
-        try:
-            game_engine = self._registry.get("game")
-        except KeyError:
-            logger.debug("Game engine not registered — skipping configure_game")
-            return
-
-        # Collect player IDs
+        # Collect player IDs — shared by both code paths
         players: list[str] = []
         if internal_profile:
             # Use internal profile agents — these are the actual game players
@@ -1313,12 +1346,17 @@ class VolnixApp:
             logger.warning("Game enabled but no eligible players found — skipping configure_game")
             return
 
-        await game_engine.configure(
-            definition=game_def,
-            players=players,
-            run_id=self._current_run_id,
-        )
-        # Game mode: clear lead status on all players.
+        # Detect event-driven vs legacy round-based game shape
+        entities = getattr(game_def, "entities", None)
+        deals = getattr(entities, "deals", None) if entities else None
+        is_event_driven = bool(deals)
+
+        if is_event_driven:
+            await self._configure_event_driven_game(game_def, players)
+        else:
+            await self._configure_legacy_game(game_def, players)
+
+        # Game mode: clear lead status on all players (both code paths).
         # Game players act independently — there is no coordinator.
         # Lead behavior (delegation, synthesis) is for simulation mode only.
         try:
@@ -1331,8 +1369,66 @@ class VolnixApp:
         except Exception as exc:
             logger.debug("Could not clear lead status: %s", exc)
 
+    async def _configure_event_driven_game(
+        self,
+        game_def: Any,
+        players: list[str],
+    ) -> None:
+        """Configure the event-driven :class:`GameOrchestrator` (Cycle B)."""
+        try:
+            orchestrator = self._registry.get("game_orchestrator")
+        except KeyError:
+            logger.warning("game_orchestrator not registered — cannot configure event-driven game")
+            return
+
+        # Dependencies are injected in _inject_cross_engine_deps, but the
+        # orchestrator's ``configure`` only needs the definition + players
+        # + run_id. The bus subscribe / failsafe start / kickstart happen
+        # in _on_start which we trigger below.
+        await orchestrator.configure(
+            definition=game_def,
+            player_actor_ids=players,
+            run_id=self._current_run_id,
+        )
+
+        # The orchestrator's _on_start was called once during wire_engines
+        # but noop'd because configure hadn't been called yet. Call it again
+        # now that the definition is set — the method is idempotent by
+        # design (resets _subscription_tokens, re-schedules failsafes).
+        await orchestrator._on_start()
+
         logger.info(
-            "Game configured: mode=%s, %d rounds, %d players (%s)",
+            "Game configured (event-driven): mode=%s scoring=%s flow=%s players=%d",
+            game_def.mode,
+            game_def.scoring_mode,
+            game_def.flow.type,
+            len(players),
+        )
+
+    async def _configure_legacy_game(
+        self,
+        game_def: Any,
+        players: list[str],
+    ) -> None:
+        """Configure the legacy round-based :class:`GameEngine`.
+
+        Kept for backward compat with blueprints that still use
+        ``game.rounds``. Deleted in Cycle B.10 along with
+        ``volnix/game/`` and ``volnix/engines/game/engine.py``.
+        """
+        try:
+            game_engine = self._registry.get("game")
+        except KeyError:
+            logger.debug("Game engine not registered — skipping configure_game")
+            return
+
+        await game_engine.configure(
+            definition=game_def,
+            players=players,
+            run_id=self._current_run_id,
+        )
+        logger.info(
+            "Game configured (legacy): mode=%s, %d rounds, %d players (%s)",
             game_def.mode,
             game_def.rounds.count,
             len(players),

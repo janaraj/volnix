@@ -188,29 +188,57 @@ def _make_committed_event(
 
 
 class TestOnInitialize:
-    """Dependency wiring happens in _on_initialize."""
+    """Dependency wiring is deferred to _on_start under the Cycle B.9 lifecycle.
+
+    ``wire_engines`` populates ``_dependencies`` AFTER ``_on_initialize``
+    returns, so ``_on_initialize`` is tolerant of missing deps. The real
+    validation (and hard failures) happen in ``_on_start`` which is
+    called AFTER ``inject_dependencies`` has run.
+
+    Tests that pre-populate ``_dependencies`` before ``initialize()``
+    (i.e. bypassing ``wire_engines``) still get opportunistic resolution
+    at init time — this matches the test harness pattern.
+    """
 
     @pytest.mark.asyncio
-    async def test_initialize_wires_state_and_agency(self):
+    async def test_initialize_resolves_pre_populated_deps(self):
         o = GameOrchestrator()
         bus = _make_bus()
         state = CannedStateEngine()
         agency = FakeAgency()
         o._dependencies = {"state": state, "agency": agency}
         await o.initialize({}, bus)
+        # Opportunistic resolution when deps are already present
         assert o._bus is bus
         assert o._state is state
         assert o._agency is agency
 
     @pytest.mark.asyncio
-    async def test_initialize_without_state_raises(self):
+    async def test_initialize_tolerant_of_missing_state(self):
+        """Empty _dependencies at init time is OK (wire_engines path)."""
         o = GameOrchestrator()
-        o._dependencies = {"agency": FakeAgency()}
+        o._dependencies = {}
+        await o.initialize({}, _make_bus())
+        # State is still None — resolved on _on_start
+        assert o._state is None
+
+    @pytest.mark.asyncio
+    async def test_on_start_raises_when_state_still_missing(self):
+        """_on_start IS the hard-fail point for missing state."""
+        o = GameOrchestrator()
+        o._dependencies = {}  # never populated
+        await o.initialize({}, _make_bus())
+        await o.configure(
+            _make_def(),
+            player_actor_ids=["buyer-001", "supplier-001"],
+            run_id="run-test",
+        )
         with pytest.raises(RuntimeError, match="state"):
-            await o.initialize({}, _make_bus())
+            await o._on_start()
 
     @pytest.mark.asyncio
     async def test_initialize_without_bus_raises(self):
+        """Missing bus is always a hard error — the bus is mandatory."""
         o = GameOrchestrator()
         o._dependencies = {"state": CannedStateEngine(), "agency": FakeAgency()}
         with pytest.raises(RuntimeError, match="bus"):
@@ -218,7 +246,7 @@ class TestOnInitialize:
 
     @pytest.mark.asyncio
     async def test_initialize_with_bad_agency_raises(self):
-        """Agency must implement AgencyActivationProtocol (have activate_for_event)."""
+        """Agency must implement AgencyActivationProtocol when present."""
         o = GameOrchestrator()
 
         class NotAnAgency:
@@ -235,6 +263,20 @@ class TestOnInitialize:
         o._dependencies = {"state": CannedStateEngine()}
         await o.initialize({}, _make_bus())
         assert o._agency is None
+
+    @pytest.mark.asyncio
+    async def test_on_start_raises_when_agency_missing_at_configure_time(self):
+        """Configured game with no agency → hard fail at _on_start."""
+        o = GameOrchestrator()
+        o._dependencies = {"state": CannedStateEngine()}
+        await o.initialize({}, _make_bus())
+        await o.configure(
+            _make_def(),
+            player_actor_ids=["buyer-001", "supplier-001"],
+            run_id="run-test",
+        )
+        with pytest.raises(RuntimeError, match="agency"):
+            await o._on_start()
 
 
 class TestConfigure:

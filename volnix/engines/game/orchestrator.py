@@ -113,7 +113,13 @@ class GameOrchestrator(BaseEngine):
     dedicated handler method with a different signature.
     """
 
-    engine_name: ClassVar[str] = "game"
+    # Registered under ``"game_orchestrator"`` during Cycle B migration so
+    # both the legacy round-based :class:`GameEngine` (key ``"game"``) and
+    # this event-driven orchestrator coexist in the same registry. When
+    # Cycle B.10 deletes the legacy engine, this renames back to
+    # ``"game"``. Tests and composition root use ``"game_orchestrator"``
+    # to reach this engine.
+    engine_name: ClassVar[str] = "game_orchestrator"
     # No auto-subscriptions — we subscribe manually per-topic in _on_start
     # because different topics dispatch to different handlers.
     subscriptions: ClassVar[list[str]] = []
@@ -158,47 +164,95 @@ class GameOrchestrator(BaseEngine):
     # ---------------------------------------------------------------
 
     async def _on_initialize(self) -> None:
-        """Wire state + agency dependencies. Bus is injected by ``initialize``."""
+        """Validate the bus and opportunistically resolve dependencies.
+
+        When called through the standard ``wire_engines`` flow,
+        ``_dependencies`` is empty at this point (it's populated by
+        :func:`volnix.registry.wiring.inject_dependencies` AFTER
+        ``_on_initialize`` returns). The dependency reads are therefore
+        best-effort: they populate the cached ``_state`` and ``_agency``
+        attributes if ``_dependencies`` is already set (as in tests that
+        bypass wiring) and defer to ``_on_start`` otherwise.
+
+        ``_on_start`` always re-resolves, so the two code paths end up
+        in the same place.
+        """
         if self._bus is None:
             raise RuntimeError("GameOrchestrator requires a bus (injected by initialize)")
+        # Opportunistic resolve (safe to call with empty _dependencies)
+        if self._dependencies.get("state") is not None:
+            self._resolve_state_dependency()
+        if self._dependencies.get("agency") is not None:
+            self._resolve_agency_dependency()
+        logger.info("GameOrchestrator initialized")
+
+    def _resolve_state_dependency(self) -> None:
+        """Read + validate the ``state`` dependency from ``_dependencies``.
+
+        Called from ``_on_start`` (the earliest lifecycle point at which
+        ``_dependencies`` is guaranteed populated) and from tests that
+        bypass the wiring path and inject ``_dependencies`` directly.
+        """
         self._state = self._dependencies.get("state")
         if self._state is None:
             raise RuntimeError("GameOrchestrator requires 'state' dependency")
+
+    def _resolve_agency_dependency(self) -> None:
+        """Read + validate the ``agency`` dependency from ``_dependencies``.
+
+        Optional during wiring: composition root injects the agency in
+        :meth:`app._inject_cross_engine_deps` AFTER ``wire_engines``
+        runs, so agency may be absent during the initial ``_on_start``
+        noop path (when no game is configured yet). The second
+        ``_on_start`` call (from ``app.configure_game``) must succeed;
+        at that point agency is guaranteed wired.
+        """
         agency = self._dependencies.get("agency")
         if agency is None:
-            # agency may be injected later by the composition root in B.9
-            # (we don't fail hard here — configure() is the latest reasonable point)
             logger.debug(
-                "GameOrchestrator: 'agency' dependency not set at _on_initialize; "
+                "GameOrchestrator: 'agency' dependency not set yet; "
                 "expected to be injected before configure()"
             )
-        elif not isinstance(agency, AgencyActivationProtocol):
+            return
+        if not isinstance(agency, AgencyActivationProtocol):
             raise RuntimeError(
                 "GameOrchestrator: 'agency' dependency does not implement "
                 "AgencyActivationProtocol (missing activate_for_event method)"
             )
-        else:
-            self._agency = agency
-        logger.info("GameOrchestrator initialized")
+        self._agency = agency
 
     async def _on_start(self) -> None:
         """Subscribe to bus, start failsafes, kickstart first mover.
 
         Only runs if ``configure()`` was called first — otherwise this is
         a no-op (engine not in use for this run).
+
+        Called twice in the normal lifecycle:
+        1. Once by ``wire_engines`` (``_definition is None`` → early noop)
+        2. Once by :meth:`app._configure_event_driven_game` after
+           ``configure()`` sets the definition; this is when the real
+           subscribe + kickstart work happens.
+
+        Dependencies are resolved here (not in ``_on_initialize``)
+        because ``wire_engines`` populates ``_dependencies`` AFTER
+        ``_on_initialize`` runs.
         """
+        # Resolve deps on every _on_start call — cheap and idempotent
+        if self._state is None:
+            self._resolve_state_dependency()
+
         if self._definition is None:
             logger.info("GameOrchestrator._on_start: no definition, noop")
             return
+
+        # Agency is required when a game is actually configured.
+        self._resolve_agency_dependency()
         if self._agency is None:
-            # Agency must be wired by now via self._dependencies["agency"]
-            agency = self._dependencies.get("agency")
-            if agency is None or not isinstance(agency, AgencyActivationProtocol):
-                raise RuntimeError(
-                    "GameOrchestrator._on_start: agency dependency missing. "
-                    "Composition root must inject an AgencyActivationProtocol."
-                )
-            self._agency = agency
+            raise RuntimeError(
+                "GameOrchestrator._on_start: agency dependency missing. "
+                "Composition root must inject an AgencyActivationProtocol "
+                "before configure()."
+            )
 
         # 1. Subscribe to game tool committed events (one subscription per
         # event_type string — bus fanout keys exactly on event_type).

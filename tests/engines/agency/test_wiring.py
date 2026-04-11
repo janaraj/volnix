@@ -62,8 +62,9 @@ def test_default_registry_engine_count():
 
     Previous count was 10 (state, policy, permission, budget, responder,
     adapter, animator, reporter, feedback, world_compiler). Then 11 with
-    agency, now 12 with game.
+    agency, 12 with game, and 13 with Cycle B's game_orchestrator
+    (coexists with legacy game until B.10).
     """
     registry = create_default_registry()
     names = registry.list_engines()
-    assert len(names) == 12
+    assert len(names) == 13
