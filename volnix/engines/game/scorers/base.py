@@ -32,8 +32,9 @@ class ScorerContext(BaseModel):
             sole writers (MF1).
         player_scores: Mutable dict of PlayerScore — the scorer updates
             per-player entries in place.
-        definition: The full GameDefinition (for reading type_config,
-            flow.max_events, flow.bonus_per_event, etc.).
+        definition: The full GameDefinition (for reading
+            flow.max_events, flow.bonus_per_event, negotiation_fields,
+            and other game-wide config).
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)

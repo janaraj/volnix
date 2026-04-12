@@ -9,7 +9,7 @@ Entity schemas + static tool definitions live in ``schemas.py``.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from volnix.core.context import ResponseProposal
 from volnix.core.types import ToolName
@@ -70,7 +70,7 @@ class GamePack(ServicePack):
         "negotiate_reject": handle_negotiate_reject,
     }
 
-    def get_tools(self) -> list[dict]:
+    def get_tools(self) -> list[dict[str, Any]]:
         """Return the static fallback tool manifest.
 
         The static shape (``deal_id`` + ``message`` only) is used for
@@ -84,7 +84,7 @@ class GamePack(ServicePack):
         """
         return list(GAME_TOOL_DEFINITIONS)
 
-    def get_entity_schemas(self) -> dict:
+    def get_entity_schemas(self) -> dict[str, dict[str, Any]]:
         """Return schemas for the four entity types owned by this pack."""
         return {
             "negotiation_deal": NEGOTIATION_DEAL_SCHEMA,
@@ -93,7 +93,7 @@ class GamePack(ServicePack):
             "negotiation_target_terms": NEGOTIATION_TARGET_TERMS_SCHEMA,
         }
 
-    def get_state_machines(self) -> dict:
+    def get_state_machines(self) -> dict[str, dict[str, Any]]:
         """Return state machines — the deal lifecycle is enforced here.
 
         Simple forward-only state machine:
@@ -115,8 +115,8 @@ class GamePack(ServicePack):
     async def handle_action(
         self,
         action: ToolName,
-        input_data: dict,
-        state: dict,
+        input_data: dict[str, Any],
+        state: dict[str, Any],
     ) -> ResponseProposal:
         """Dispatch to the matching handler via the ServicePack base dispatcher."""
         return await self.dispatch_action(action, input_data, state)

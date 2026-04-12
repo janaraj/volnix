@@ -96,13 +96,13 @@ class DealClosedHandler:
         return None
 
     @staticmethod
-    def _resolve_winner(scores: dict[str, PlayerScore]) -> str | None:
+    def _resolve_winner(scores: dict[str, PlayerScore]) -> ActorId | None:
         alive = [(pid, s) for pid, s in scores.items() if not s.eliminated]
         if not alive:
             return None
         # Highest total_score wins. Ties broken by dict insertion order.
         top_pid, _ = max(alive, key=lambda pair: pair[1].total_score)
-        return top_pid
+        return ActorId(top_pid)
 
 
 class DealRejectedHandler:
@@ -223,7 +223,7 @@ class ScoreThresholdHandler:
             return None
         winner_pid, _ = max(crossers, key=lambda pair: pair[1])
         return WinResult(
-            winner=winner_pid,
+            winner=ActorId(winner_pid),
             reason="score_threshold",
             final_standings=_standings(ctx.scores),
             behavior_scores={pid: dict(s.behavior_metrics) for pid, s in ctx.scores.items()},
