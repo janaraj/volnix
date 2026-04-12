@@ -476,11 +476,9 @@ class GameOrchestrator(BaseEngine):
             player_scores=self._player_scores,
             definition=self._definition,
         )
-        scored_ok = True
         try:
             await self._scorer.score_event(ctx)
         except Exception as exc:  # noqa: BLE001
-            scored_ok = False
             logger.exception("Scorer.score_event raised; skipping this event's scoring")
             await self._publish_engine_error(
                 source="score_event",
@@ -539,7 +537,6 @@ class GameOrchestrator(BaseEngine):
                 trigger_event=event,
                 state_summary=state_summary,
             )
-        _ = scored_ok  # retained for future observability hook
 
     async def _handle_budget_exhausted(self, event: Event) -> None:
         """Track per-actor budget exhaustion; fire all_budgets timeout when all done."""

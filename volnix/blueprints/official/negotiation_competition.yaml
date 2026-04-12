@@ -90,7 +90,6 @@ world:
             Warranty at least 12 months. Walk away if supplier holds above
             $110/ton or delivery above 7 weeks.
           mission: "Close the best possible deal for Atlas Manufacturing."
-          prohibited_actions: []
 
         - actor_role: supplier
           deal_id: deal-q3-steel
@@ -101,7 +100,6 @@ world:
             You can offer up to 24 months warranty. Walk away if buyer
             holds below $90/ton.
           mission: "Maximize revenue for Vulcan Steel."
-          prohibited_actions: []
 
       target_terms:
         - actor_role: buyer
@@ -141,15 +139,6 @@ world:
             payment_days: [15, 60]
             warranty_months: [6, 24]
           batna_score: 25
-
-    scoring:
-      metrics:
-        - name: total_points
-          source: state
-          entity_type: negotiation_target_terms
-          field: total_points
-          weight: 1.0
-      ranking: descending
 
     win_conditions:
       - type: deal_closed

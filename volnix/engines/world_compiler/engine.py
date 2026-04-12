@@ -952,7 +952,6 @@ class WorldCompilerEngine(BaseEngine):
                     },
                     "content": brief.brief_content,
                     "mission": brief.mission,
-                    "prohibited_actions": list(brief.prohibited_actions),
                 }
             )
             gpb_id = f"gpb-{brief.actor_role}-{brief.deal_id}"
@@ -964,7 +963,6 @@ class WorldCompilerEngine(BaseEngine):
                     "owner_role": brief.actor_role,
                     "brief_content": brief.brief_content,
                     "mission": brief.mission,
-                    "prohibited_actions": list(brief.prohibited_actions),
                     "notion_page_id": notion_page_id,
                 }
             )

@@ -81,7 +81,6 @@ GAME_PLAYER_BRIEF_SCHEMA: dict[str, Any] = {
         "owner_role": {"type": "string"},  # visibility rule target
         "brief_content": {"type": "string"},
         "mission": {"type": "string"},
-        "prohibited_actions": {"type": "array", "items": {"type": "string"}},
         "notion_page_id": {"type": "string"},
     },
 }

@@ -108,7 +108,6 @@ class PlayerBriefDecl(BaseModel, frozen=True):
     deal_id: str
     brief_content: str  # rendered into notion page body
     mission: str = ""  # short one-liner
-    prohibited_actions: list[str] = Field(default_factory=list)
 
 
 class TargetTermsDecl(BaseModel, frozen=True):
@@ -140,27 +139,8 @@ class GameEntitiesConfig(BaseModel, frozen=True):
 
 
 # ---------------------------------------------------------------------------
-# Scoring + win conditions (new WinCondition shape with type literals)
+# Win conditions
 # ---------------------------------------------------------------------------
-
-
-class ScoringMetric(BaseModel, frozen=True):
-    """A single scoring metric definition."""
-
-    name: str
-    source: str = "state"
-    entity_type: str = ""
-    field: str = ""
-    event_type: str = ""
-    aggregation: str = "last"
-    weight: float = 1.0
-
-
-class ScoringConfig(BaseModel, frozen=True):
-    """Scoring configuration."""
-
-    metrics: list[ScoringMetric] = Field(default_factory=list)
-    ranking: str = "descending"
 
 
 class WinCondition(BaseModel, frozen=True):
@@ -227,8 +207,7 @@ class GameDefinition(BaseModel, frozen=True):
     flow: FlowConfig = Field(default_factory=FlowConfig)
     entities: GameEntitiesConfig = Field(default_factory=GameEntitiesConfig)
 
-    # Scoring + win conditions
-    scoring: ScoringConfig = Field(default_factory=ScoringConfig)
+    # Win conditions evaluated on every game event by the orchestrator.
     win_conditions: list[WinCondition] = Field(default_factory=list)
 
 

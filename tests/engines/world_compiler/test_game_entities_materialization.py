@@ -207,7 +207,7 @@ class TestPlayerBriefMaterialization:
                     actor_role="supplier",
                     deal_id="deal-q3",
                     brief_content="You are Linh.",
-                    prohibited_actions=["negotiate_accept"],
+                    mission="Maximize revenue",
                 )
             ]
         )
@@ -221,8 +221,10 @@ class TestPlayerBriefMaterialization:
         assert gpb["deal_id"] == "deal-q3"
         assert gpb["owner_role"] == "supplier"
         assert gpb["brief_content"] == "You are Linh."
-        assert gpb["prohibited_actions"] == ["negotiate_accept"]
+        assert gpb["mission"] == "Maximize revenue"
         assert gpb["notion_page_id"] == "brief-supplier-deal-q3"
+        # NF4: prohibited_actions field was removed in B-cleanup.2
+        assert "prohibited_actions" not in gpb
 
     @pytest.mark.asyncio
     async def test_brief_creates_two_visibility_rules(self):

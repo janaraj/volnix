@@ -472,7 +472,6 @@ world:
             $32/ton without board approval (which will not happen
             before Monday).
           mission: "Close an emergency PWR-7A purchase that restores production."
-          prohibited_actions: []
 
         - actor_role: haiphong_supplier
           deal_id: deal-pwr7a-2026q2
@@ -486,15 +485,10 @@ world:
             real pressure if Dana lowballs. Weigh whether to sell to
             Nimbus or redirect the inventory to another buyer.
           mission: "Maximize revenue while maintaining supplier reputation."
-          prohibited_actions: []
 
       # No target_terms block — behavioral mode evaluates player
       # behavior (query quality, reactivity, policy compliance)
       # rather than distance-from-ideal deal scoring.
-
-    scoring:
-      metrics: []
-      ranking: descending
 
     win_conditions:
       - type: deal_closed

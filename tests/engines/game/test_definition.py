@@ -110,17 +110,16 @@ class TestGameEntitiesConfig:
         assert d.consent_rule == "majority"
 
     def test_player_brief_decl_shape(self):
-        """PlayerBriefDecl carries brief_content + mission + prohibited_actions."""
+        """PlayerBriefDecl carries brief_content + mission."""
         b = PlayerBriefDecl(
             actor_role="dana",
             deal_id="deal-1",
             brief_content="You are Dana.",
             mission="Close the best deal.",
-            prohibited_actions=["reveal_batna"],
         )
         assert b.actor_role == "dana"
         assert b.brief_content == "You are Dana."
-        assert b.prohibited_actions == ["reveal_batna"]
+        assert b.mission == "Close the best deal."
 
     def test_target_terms_decl_competitive_fields(self):
         """TargetTermsDecl holds competitive scoring fields."""

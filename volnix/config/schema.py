@@ -16,7 +16,6 @@ from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.animator.config import AnimatorConfig
 from volnix.engines.budget.config import BudgetConfig
 from volnix.engines.feedback.config import FeedbackConfig
-from volnix.engines.game.config import GameConfig
 from volnix.engines.permission.config import PermissionConfig
 from volnix.engines.policy.config import PolicyConfig
 from volnix.engines.reporter.config import ReporterConfig
@@ -120,4 +119,3 @@ class VolnixConfig(BaseModel):
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     worlds: WorldsConfig = Field(default_factory=WorldsConfig)
-    game: GameConfig = Field(default_factory=GameConfig)
