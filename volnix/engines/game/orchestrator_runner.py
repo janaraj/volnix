@@ -5,13 +5,13 @@ The CLI's runner protocol expects an object with:
 - ``async run()`` that blocks until the game terminates and returns a
   result object with ``.reason`` and optional ``.winner`` attributes
 - ``set_mission(mission)`` no-op method for compatibility with the
-  ``SimulationRunner`` / legacy ``GameRunner`` interface
+  ``SimulationRunner`` interface
 
 :class:`GameOrchestrator` does not itself expose ``run()`` because it
 lives in the event-driven world and is driven entirely by the bus —
 ``_on_start`` triggers the first activation, and the bus fanout drives
-every subsequent move. The CLI, however, needs a blocking handle to wait
-on until termination.
+every subsequent move. The CLI, however, needs a blocking handle to
+wait on until termination.
 
 This wrapper is the narrow compatibility shim that lets us plug the
 orchestrator into the existing CLI ``_setup_simulation`` / ``runner.run()``
@@ -19,8 +19,10 @@ flow without changing upstream code. It delegates to
 :meth:`GameOrchestrator.await_result` which resolves when the
 :class:`GameTerminatedEvent` is published.
 
-Deleted in Cycle B.10 when the legacy ``volnix/game/runner.py`` is
-removed along with the dual-runner CLI detection.
+Historical note: the legacy round-based ``volnix/game/runner.py`` and
+the CLI's dual-runner detection were deleted in Cycle B.10. This file
+is the event-driven replacement; it lives on indefinitely as the CLI
+compatibility shim.
 """
 
 from __future__ import annotations
@@ -43,8 +45,9 @@ class OrchestratorRunner:
 
     Attributes:
         _orchestrator: The configured :class:`GameOrchestrator` instance.
-        _agency: The agency engine reference (passed for symmetry with
-            legacy runners; currently unused but kept for future hooks).
+        _agency: The agency engine reference (passed by the CLI for
+            symmetry with :class:`SimulationRunner`; currently unused
+            here but kept for future hooks).
         _event_queue: The simulation event queue (unused in event-driven
             mode; kept so the CLI can continue passing it).
     """
