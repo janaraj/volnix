@@ -19,6 +19,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from volnix.core.types import ActorId
+from volnix.packs.verified.game.tool_schema import NegotiationField
 
 # ---------------------------------------------------------------------------
 # New event-driven models (Cycle B canonical)
@@ -184,6 +185,15 @@ class WinCondition(BaseModel, frozen=True):
     type_config: dict[str, Any] = Field(default_factory=dict)
 
 
+# ``NegotiationField`` (imported at top of module from
+# ``volnix.packs.verified.game.tool_schema``) is re-exported here so
+# existing engine-side callers can continue to do
+# ``from volnix.engines.game.definition import NegotiationField``. The
+# class lives in the pack because
+# ``tests/architecture/test_source_guards.py`` forbids verified packs
+# from importing from ``volnix.engines``.
+
+
 # ---------------------------------------------------------------------------
 # Top-level GameDefinition (event-driven)
 # ---------------------------------------------------------------------------
@@ -205,7 +215,18 @@ class GameDefinition(BaseModel, frozen=True):
     enabled: bool = False
     mode: str = "competition"
     scoring_mode: ScoringMode = "behavioral"
+    # Legacy generic bag for game-type-specific config. Kept during the
+    # NF1 transition (B-cleanup.1a is additive); B-cleanup.1b removes
+    # this field and flattens the blueprint YAML to the top-level
+    # ``negotiation_fields`` key below.
     type_config: dict[str, Any] = Field(default_factory=dict)
+
+    # Dynamic negotiation tool schema (NF1). When non-empty, the game
+    # pack's ``build_negotiation_tools`` builds typed tool parameters
+    # (price, delivery_weeks, ...) and ``agency.register_game_tools``
+    # wires them at configure time. When empty, the static pure-closing
+    # fallback (``deal_id`` + ``message``) is used instead.
+    negotiation_fields: list[NegotiationField] = Field(default_factory=list)
 
     # Event-driven fields
     flow: FlowConfig = Field(default_factory=FlowConfig)

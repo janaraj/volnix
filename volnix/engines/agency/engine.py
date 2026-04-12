@@ -240,30 +240,103 @@ class AgencyEngine(BaseEngine):
         )
         return tools
 
-    def register_game_tools(self, tools: list[ToolDefinition]) -> None:
-        """Register structured game-move tools for the active game.
+    def register_game_tools(self, actions: list[dict[str, Any]]) -> None:
+        """Register structured game-move tools for the active game (NF1).
 
-        Called by the GameRunner at game setup time. Tools are appended to
-        the agency's tool list and mapped in the name→action / name→service
-        lookup tables so that ``_parse_tool_call`` can resolve them when
-        the LLM calls them natively.
+        Called by :meth:`volnix.app.VolnixApp.configure_game` after
+        :meth:`GameOrchestrator.configure` and before the orchestrator's
+        ``_on_start``. The actions come from
+        ``volnix.packs.verified.game.tool_schema.build_negotiation_tools``
+        and have the same shape as entries in ``self._available_actions``
+        — raw action dicts with ``name``, ``service``, ``description``,
+        ``parameters``, and ``http_method`` keys.
 
-        Idempotent: registering the same tool name twice replaces the prior
-        entry (safe for reloads). Tools registered here are naturally
-        filtered by the existing ``_get_tools_for_actor`` permission logic —
-        only agents with ``write: [game]`` in their profile will see them.
-        The ``method_lookup.get(name, "POST")`` fallback in the filter
-        classifies unknown-service tools as write, so no change to the
-        filter is needed.
+        This method layers the shared agency meta_params (``reasoning``,
+        ``intended_for``, ``state_updates``) onto each action's
+        parameters — matching :meth:`_build_tool_definitions` exactly —
+        so the LLM sees a uniform tool interface. ``reasoning`` is always
+        required. Parameter schemas are sanitized for provider
+        compatibility (bare ``object`` types get empty ``properties``,
+        bare ``array`` types get ``items: {type: string}``).
+
+        Idempotent: registering the same tool ``name`` twice replaces
+        the prior entry (safe for reloads). Tools registered here are
+        naturally filtered by :meth:`_get_tools_for_actor` — only
+        actors with ``write: [game]`` in their permissions see them.
         """
-        for tool in tools:
-            # Replace any existing entry with the same name (idempotent reload)
-            self._tool_definitions = [t for t in self._tool_definitions if t.name != tool.name]
+        meta_params: dict[str, Any] = {
+            "reasoning": {
+                "type": "string",
+                "description": "Why you chose this action",
+            },
+            "intended_for": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Teammate roles to address (e.g. ['analyst', 'researcher']). "
+                    "Use specific roles, not 'all'."
+                ),
+            },
+            "state_updates": {
+                "type": "object",
+                "properties": {
+                    "goal_context": {
+                        "type": "string",
+                        "description": "Updated progress notes",
+                    },
+                    "pending_tasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Remaining tasks",
+                    },
+                },
+            },
+        }
+
+        for action in actions:
+            name = action.get("name", "")
+            if not name:
+                logger.warning("register_game_tools: skipping action with no name: %s", action)
+                continue
+            service = action.get("service", "")
+            params = action.get("parameters") or {}
+            raw_properties = {**params.get("properties", {}), **meta_params}
+            required = list(params.get("required", [])) + ["reasoning"]
+
+            # Sanitize for provider compatibility (matches _build_tool_definitions).
+            properties: dict[str, Any] = {}
+            for pname, pdef in raw_properties.items():
+                if isinstance(pdef, dict):
+                    pdef = dict(pdef)
+                    if pdef.get("type") == "object" and "properties" not in pdef:
+                        pdef["properties"] = {}
+                    if pdef.get("type") == "array" and "items" not in pdef:
+                        pdef["items"] = {"type": "string"}
+                properties[pname] = pdef
+
+            tool = ToolDefinition(
+                name=name,
+                service=service,
+                description=action.get("description", ""),
+                parameters={
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            )
+
+            # Idempotent replace by name
+            self._tool_definitions = [t for t in self._tool_definitions if t.name != name]
             self._tool_definitions.append(tool)
             # Identity mapping: tool name == action type
-            self._tool_name_map[tool.name] = tool.name
-            self._tool_to_service[tool.name] = tool.service
-            logger.info("Registered game tool %s (service=%s)", tool.name, tool.service)
+            self._tool_name_map[name] = name
+            self._tool_to_service[name] = service
+            logger.info(
+                "Registered game tool %s (service=%s, %d params)",
+                name,
+                service,
+                len(properties),
+            )
 
     def _get_tools_for_actor(self, actor_id: str) -> list[ToolDefinition]:
         """Filter tool definitions by actor's service permissions.

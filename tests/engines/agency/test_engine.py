@@ -1512,92 +1512,160 @@ class TestScheduledActionsList:
 
 
 class TestRegisterGameTools:
-    """Validate that GameRunner can register per-game-type tools with agency.
+    """Validate NF1 dynamic game-tool registration.
 
-    The registration feeds `_tool_definitions`, `_tool_name_map`, and
-    `_tool_to_service` so that `_parse_tool_call` can resolve game moves,
-    and `_get_tools_for_actor` can filter them by permissions.
+    ``register_game_tools`` takes raw action dicts (the shape produced
+    by ``build_negotiation_tools``) and internally layers meta_params
+    (reasoning, intended_for, state_updates) before wrapping in
+    ``ToolDefinition``. Tests assert:
+
+    - meta_params are layered on every tool
+    - ``reasoning`` is always required
+    - ``_tool_definitions`` / ``_tool_name_map`` / ``_tool_to_service``
+      are updated consistently with the pack-backed tool path
+    - Idempotent replacement by name
+    - Integration with ``build_negotiation_tools`` (empty + typed)
     """
 
-    async def test_register_appends_to_tool_definitions(self):
-        from volnix.llm.types import ToolDefinition
-
+    async def test_register_typed_tool_adds_meta_params(self):
         engine = await _create_engine([])
-        tool = ToolDefinition(
-            name="negotiate_propose",
-            service="game",
-            description="Opening proposal",
-            parameters={"type": "object", "required": []},
-        )
-        engine.register_game_tools([tool])
+        actions = [
+            {
+                "name": "negotiate_propose",
+                "service": "game",
+                "description": "Propose",
+                "parameters": {
+                    "type": "object",
+                    "required": ["deal_id", "price"],
+                    "properties": {
+                        "deal_id": {"type": "string"},
+                        "price": {"type": "number", "description": "USD"},
+                    },
+                },
+                "http_method": "POST",
+            }
+        ]
+        engine.register_game_tools(actions)
 
-        names = [t.name for t in engine._tool_definitions]
-        assert "negotiate_propose" in names
+        tool = next(t for t in engine._tool_definitions if t.name == "negotiate_propose")
+        props = tool.parameters["properties"]
+        # Original fields preserved
+        assert props["deal_id"]["type"] == "string"
+        assert props["price"]["type"] == "number"
+        # Meta params layered on
+        assert "reasoning" in props
+        assert "intended_for" in props
+        assert "state_updates" in props
+        # reasoning is always required
+        assert "reasoning" in tool.parameters["required"]
+        # Original required keys preserved
+        assert "deal_id" in tool.parameters["required"]
+        assert "price" in tool.parameters["required"]
 
     async def test_register_updates_name_and_service_maps(self):
-        from volnix.llm.types import ToolDefinition
-
         engine = await _create_engine([])
-        tool = ToolDefinition(
-            name="negotiate_counter",
-            service="game",
-            description="Counter offer",
-            parameters={"type": "object", "required": []},
+        engine.register_game_tools(
+            [
+                {
+                    "name": "negotiate_counter",
+                    "service": "game",
+                    "description": "Counter",
+                    "parameters": {
+                        "type": "object",
+                        "required": [],
+                        "properties": {},
+                    },
+                    "http_method": "POST",
+                }
+            ]
         )
-        engine.register_game_tools([tool])
-
         assert engine._tool_name_map["negotiate_counter"] == "negotiate_counter"
         assert engine._tool_to_service["negotiate_counter"] == "game"
 
     async def test_register_idempotent_same_name_replaces(self):
-        """Registering the same tool twice keeps exactly one entry."""
-        from volnix.llm.types import ToolDefinition
-
+        """Registering the same tool name twice keeps exactly one entry."""
         engine = await _create_engine([])
-        tool_v1 = ToolDefinition(
-            name="negotiate_accept",
-            service="game",
-            description="v1",
-            parameters={"type": "object"},
-        )
-        tool_v2 = ToolDefinition(
-            name="negotiate_accept",
-            service="game",
-            description="v2",
-            parameters={"type": "object"},
-        )
-        engine.register_game_tools([tool_v1])
-        engine.register_game_tools([tool_v2])
+        v1 = {
+            "name": "negotiate_accept",
+            "service": "game",
+            "description": "v1",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "http_method": "POST",
+        }
+        v2 = {**v1, "description": "v2"}
+        engine.register_game_tools([v1])
+        engine.register_game_tools([v2])
 
         matching = [t for t in engine._tool_definitions if t.name == "negotiate_accept"]
         assert len(matching) == 1
         assert matching[0].description == "v2"
 
     async def test_register_multiple_tools_in_one_call(self):
-        from volnix.llm.types import ToolDefinition
-
         engine = await _create_engine([])
-        tools = [
-            ToolDefinition(
-                name="negotiate_propose",
-                service="game",
-                description="Propose",
-                parameters={"type": "object"},
-            ),
-            ToolDefinition(
-                name="negotiate_counter",
-                service="game",
-                description="Counter",
-                parameters={"type": "object"},
-            ),
+        actions = [
+            {
+                "name": "negotiate_propose",
+                "service": "game",
+                "description": "Propose",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+                "http_method": "POST",
+            },
+            {
+                "name": "negotiate_counter",
+                "service": "game",
+                "description": "Counter",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+                "http_method": "POST",
+            },
         ]
-        engine.register_game_tools(tools)
-
+        engine.register_game_tools(actions)
         names = [t.name for t in engine._tool_definitions]
         assert "negotiate_propose" in names
         assert "negotiate_counter" in names
-        assert engine._tool_to_service["negotiate_propose"] == "game"
-        assert engine._tool_to_service["negotiate_counter"] == "game"
+
+    async def test_register_with_no_fields_via_builder(self):
+        """End-to-end: build_negotiation_tools([]) → register_game_tools."""
+        from volnix.packs.verified.game.tool_schema import build_negotiation_tools
+
+        engine = await _create_engine([])
+        engine.register_game_tools(build_negotiation_tools([]))
+        names = {t.name for t in engine._tool_definitions}
+        assert {
+            "negotiate_propose",
+            "negotiate_counter",
+            "negotiate_accept",
+            "negotiate_reject",
+        }.issubset(names)
+        propose = next(t for t in engine._tool_definitions if t.name == "negotiate_propose")
+        props = propose.parameters["properties"]
+        # Static shape: deal_id + message + meta_params (but no domain fields)
+        assert {"deal_id", "message", "reasoning"}.issubset(set(props.keys()))
+
+    async def test_register_with_typed_fields_via_builder(self):
+        """End-to-end: typed NegotiationFields → registered tools carry typed props."""
+        from volnix.engines.game.definition import NegotiationField
+        from volnix.packs.verified.game.tool_schema import build_negotiation_tools
+
+        engine = await _create_engine([])
+        fields = [
+            NegotiationField(name="price", type="number"),
+            NegotiationField(name="delivery_weeks", type="integer"),
+        ]
+        engine.register_game_tools(build_negotiation_tools(fields))
+
+        propose = next(t for t in engine._tool_definitions if t.name == "negotiate_propose")
+        props = propose.parameters["properties"]
+        assert props["price"]["type"] == "number"
+        assert props["delivery_weeks"]["type"] == "integer"
+        # Propose requires all declared fields + deal_id + reasoning
+        required = set(propose.parameters["required"])
+        assert {"price", "delivery_weeks", "deal_id", "reasoning"}.issubset(required)
+
+        # Accept/reject have NO term fields
+        accept = next(t for t in engine._tool_definitions if t.name == "negotiate_accept")
+        accept_props = accept.parameters["properties"]
+        assert "price" not in accept_props
+        assert "delivery_weeks" not in accept_props
 
 
 # ---------------------------------------------------------------------------
