@@ -160,6 +160,14 @@ async def handle_negotiate_counter(
         return _error(f"deal {deal_id} not found")
 
     actor_id = _extract_actor_id(input_data)
+
+    # Self-counter guard: you can't counter your own proposal.
+    # Exact actor_id match — not role-based, so different actors with
+    # the same role CAN counter each other in N-party scenarios.
+    last_proposed_by = str(deal.get("last_proposed_by") or "")
+    if last_proposed_by and actor_id == last_proposed_by:
+        return _error("Cannot counter your own proposal. Wait for the other party.")
+
     terms = _extract_terms(input_data)
     proposal_id = _new_proposal_id()
     now_iso = _now_iso()
@@ -225,6 +233,13 @@ async def handle_negotiate_accept(
         return _error(f"deal {deal_id} not found")
 
     actor_id = _extract_actor_id(input_data)
+
+    # Self-acceptance guard: you can't accept your own proposal.
+    # Exact actor_id match (not role-based).
+    last_proposed_by = str(deal.get("last_proposed_by") or "")
+    if last_proposed_by and actor_id == last_proposed_by:
+        return _error("Cannot accept your own proposal. Wait for the other party.")
+
     parties = list(deal.get("parties") or [])
     now_iso = _now_iso()
 

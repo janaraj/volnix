@@ -941,6 +941,7 @@ class AgencyEngine(BaseEngine):
         reason: str,
         trigger_event: WorldEvent | None,
         max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an agent with a multi-turn tool-calling loop.
 
@@ -1004,14 +1005,15 @@ class AgencyEngine(BaseEngine):
             # external) are completely unaffected.
             _GAME_ACTIVATION_REASONS = {"game_kickstart", "game_event"}
             if reason in _GAME_ACTIVATION_REASONS:
-                # 5b: restrict text-prompt tool listing to game tools
-                # only. The agent still sees Slack via native function-
-                # calling, but the TEXT prompt focuses on negotiate_*.
+                # Research-then-move model: game players keep their full
+                # permission-filtered toolset (can read Notion, Slack,
+                # market data BEFORE making a game move). The TEXT prompt
+                # focuses on game tools only so the LLM knows the game
+                # move is the goal. do_nothing is removed — game players
+                # MUST make a move. The turn-ending detection in the
+                # tool loop (Step 3b below) stops the loop after the
+                # game move commits — no budget hack needed.
                 allowed_services: set[str] | None = {"game"}
-                # 5c: remove do_nothing from the tool list. Game players
-                # MUST make a move — there's no "skip turn" in a
-                # negotiation. Without this, the agent calls do_nothing
-                # when confused, which stalls the game.
                 actor_tools = [t for t in actor_tools if t.name != "do_nothing"]
             else:
                 # Non-game: show all services in text prompt (existing behavior)
@@ -1090,9 +1092,33 @@ class AgencyEngine(BaseEngine):
             # Iteration cap equals max_calls as a safety rail — if the
             # LLM only emits one call per iteration (the common pattern),
             # the outer loop naturally limits work to the budget.
+            # Track non-game (read) tool calls for game activations.
+            # When the read budget is exhausted, inject a nudge message.
+            _read_call_count = 0
+            _read_call_limit = max_read_calls or 0
+
             for iteration in range(max_calls):
                 if total_tool_calls >= max_calls:
                     break
+
+                # Step 3c: if game activation has exhausted its read
+                # budget without making a game move, nudge the agent.
+                if (
+                    reason in _GAME_ACTIVATION_REASONS
+                    and _read_call_limit > 0
+                    and _read_call_count >= _read_call_limit
+                ):
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "[You have used your research budget. "
+                                "Make your negotiation move NOW — call "
+                                "negotiate_propose, negotiate_counter, "
+                                "negotiate_accept, or negotiate_reject.]"
+                            ),
+                        }
+                    )
 
                 step_start = _time.monotonic()
 
@@ -1225,6 +1251,12 @@ class AgencyEngine(BaseEngine):
                         )
                         total_tool_calls += 1
 
+                        # Track non-game calls for the read-budget rail.
+                        if reason in _GAME_ACTIVATION_REASONS and not tc.name.startswith(
+                            "negotiate_"
+                        ):
+                            _read_call_count += 1
+
                     # Commit the assistant message + tool results as a
                     # single coherent turn in the conversation history.
                     # One assistant message with N tool_calls, followed by
@@ -1240,6 +1272,25 @@ class AgencyEngine(BaseEngine):
                             assistant_msg["_provider_metadata"] = response.provider_metadata
                         messages.append(assistant_msg)
                         messages.extend(tool_result_msgs)
+
+                    # Step 3b: turn-ending action detection for game
+                    # activations. If any tool call in this response
+                    # committed a game-service event (negotiate_*), the
+                    # turn is over — yield to the other player. Non-game
+                    # tool calls (Notion reads, Slack reads, chat posts)
+                    # do NOT end the turn — they're research preparation.
+                    if reason in _GAME_ACTIVATION_REASONS:
+                        game_move_this_response = (
+                            any(
+                                getattr(e, "action_type", "").startswith("negotiate_")
+                                for e in envelopes[-len(executed_tc_dicts) :]
+                            )
+                            if executed_tc_dicts
+                            else False
+                        )
+                        if game_move_this_response:
+                            terminated_by = "game_move"
+                            stop_outer = True
 
                     if stop_outer:
                         break
@@ -1905,6 +1956,7 @@ class AgencyEngine(BaseEngine):
         reason: str,
         trigger_event: Event | None = None,
         max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
         state_summary: str | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an actor for one multi-turn tool-loop iteration.
@@ -1987,7 +2039,14 @@ class AgencyEngine(BaseEngine):
                 actor_state.activation_messages.append(msg)
                 cap = self._typed_config.max_activation_messages
                 if len(actor_state.activation_messages) > cap:
-                    actor_state.activation_messages = actor_state.activation_messages[-cap:]
+                    # Pin the system + user prompt (first 2 messages =
+                    # identity + persona + instructions). Only truncate
+                    # the rolling conversation tail. Without this, after
+                    # ~5 turns the system prompt gets dropped and the
+                    # agent loses its persona mid-game.
+                    pinned = actor_state.activation_messages[:2]
+                    rolling = actor_state.activation_messages[2:]
+                    actor_state.activation_messages = pinned + rolling[-(cap - 2) :]
 
             # Only WorldEvent triggers are forwarded to the tool-loop; other
             # event types (lifecycle, policy, etc.) flow through as ``None``.
@@ -2000,4 +2059,5 @@ class AgencyEngine(BaseEngine):
                 reason,
                 world_trigger,
                 max_calls_override=max_calls_override,
+                max_read_calls=max_read_calls,
             )

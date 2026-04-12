@@ -355,6 +355,7 @@ class AgencyActivationProtocol(Protocol):
         reason: str,
         trigger_event: Event | None = None,
         max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
         state_summary: str | None = None,
     ) -> list[Any]:
         """Activate an actor for one multi-turn tool-loop iteration.

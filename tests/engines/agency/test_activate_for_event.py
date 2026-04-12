@@ -185,13 +185,13 @@ class TestActivateForEventBasics:
 
     @pytest.mark.asyncio
     async def test_max_calls_override_forwarded(self):
-        """The override is respected by the inner tool loop cap."""
-        # 5 tool responses, but cap at 2
+        """For game activations, the turn-ending model stops after the
+        first game move commits (service_id='game'). The max_calls_override
+        is a safety ceiling, not the turn structure.
+        """
         router = _make_router(
             _make_tool_response("negotiate_propose", {"deal_id": "deal-q3", "price": 80}),
             _make_tool_response("negotiate_propose", {"deal_id": "deal-q3", "price": 82}),
-            _make_tool_response("negotiate_propose", {"deal_id": "deal-q3", "price": 84}),
-            _make_tool_response("negotiate_propose", {"deal_id": "deal-q3", "price": 86}),
         )
         engine = await _create_engine()
         engine._llm_router = router
@@ -203,8 +203,9 @@ class TestActivateForEventBasics:
             trigger_event=_make_world_event(),
             max_calls_override=2,
         )
-        # Exactly 2 executed, not 4
-        assert len(envelopes) == 2
+        # Turn-ending: first negotiate_propose commits → turn ends.
+        # Only 1 envelope, not 2, because the game move terminates the turn.
+        assert len(envelopes) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -259,22 +260,25 @@ class TestStateSummaryInjection:
 
     @pytest.mark.asyncio
     async def test_state_summary_trimmed_to_bounded_window(self):
-        """Pre-activation trim caps activation_messages to the rolling window.
+        """Pre-activation trim caps activation_messages with pinned system/user prompt.
 
-        Monkey-patches ``_activate_with_tool_loop`` so we can observe
-        ``activation_messages`` immediately after state_summary injection,
-        before the tool loop grows it further.
+        Step 1 (P6.3-fix.6) pins the first 2 messages (system + user
+        prompt) so the agent never loses its identity. The rolling
+        window truncation only drops entries from position 2 onwards.
         """
         engine = await _create_engine()
 
         actor = engine._actor_states[ActorId("buyer-001")]
-        # Stuff 30 entries in — the cap is 20; we expect it to be trimmed.
+        # Stuff 30 entries in — the cap is 20; we expect it to be trimmed
+        # with the first 2 pinned.
         actor.activation_messages = [{"role": "user", "content": f"old-{i}"} for i in range(30)]
 
         captured_len: list[int] = []
         captured_contents: list[list[str]] = []
 
-        async def fake_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def fake_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_len.append(len(_actor.activation_messages))
             captured_contents.append([m["content"] for m in _actor.activation_messages])
             return []
@@ -289,10 +293,13 @@ class TestStateSummaryInjection:
         )
         assert captured_len == [20]  # Exactly the cap
         contents = captured_contents[0]
-        # With 30 original + 1 summary = 31, trimmed to last 20.
-        # So first kept entry is old-11, last 19 originals are old-11..old-29,
-        # and the 20th entry is the state_summary.
-        assert contents[0] == "old-11"
+        # With pinned messages: first 2 entries (old-0, old-1) survive.
+        # Rolling entries 2..30 (29 items) + 1 state_summary = 30.
+        # Trim rolling to 18 (cap - 2 pinned): old-13..old-29 (17) + summary (1) = 18.
+        # Total: old-0, old-1, old-13..old-29, state_summary = 20.
+        assert contents[0] == "old-0"  # Pinned (system prompt preserved)
+        assert contents[1] == "old-1"  # Pinned (user prompt preserved)
+        assert contents[2] == "old-13"  # Oldest surviving rolling entry
         assert contents[-2] == "old-29"
         assert "[game state update]" in contents[-1]
         assert "new ground truth" in contents[-1]
@@ -311,7 +318,9 @@ class TestTriggerEventFiltering:
 
         captured_triggers: list = []
 
-        async def fake_loop(actor, reason, trigger_event, max_calls_override=None):
+        async def fake_loop(
+            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_triggers.append(trigger_event)
             return []
 
@@ -330,7 +339,9 @@ class TestTriggerEventFiltering:
         engine = await _create_engine()
         captured_triggers: list = []
 
-        async def fake_loop(actor, reason, trigger_event, max_calls_override=None):
+        async def fake_loop(
+            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_triggers.append(trigger_event)
             return []
 
@@ -348,7 +359,9 @@ class TestTriggerEventFiltering:
         engine = await _create_engine()
         captured_triggers: list = []
 
-        async def fake_loop(actor, reason, trigger_event, max_calls_override=None):
+        async def fake_loop(
+            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_triggers.append(trigger_event)
             return []
 
@@ -372,7 +385,9 @@ class TestReasonForwarding:
         engine = await _create_engine()
         captured_reasons: list[str] = []
 
-        async def fake_loop(actor, reason, trigger_event, max_calls_override=None):
+        async def fake_loop(
+            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_reasons.append(reason)
             return []
 
@@ -442,7 +457,8 @@ class TestPromptBuilderGameReasons:
             available_actions=[],
         )
         assert "game player" in prompt
-        assert "current state" in prompt
+        assert "MOVE" in prompt  # research-then-move model
+        assert "negotiate_propose" in prompt
 
     def test_game_turn_reason_does_not_render_game_instructions(self):
         """Legacy ``game_turn`` reason is no longer recognized (deleted in B.10).
@@ -542,7 +558,9 @@ class TestMaxActivationMessagesConfig:
 
         captured_len: list[int] = []
 
-        async def fake_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def fake_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             captured_len.append(len(_actor.activation_messages))
             return []
 
@@ -585,7 +603,9 @@ class TestPerActorActivationLock:
         order: list[str] = []
         release_first = _asyncio.Event()
 
-        async def slow_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def slow_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             order.append("enter")
             await release_first.wait()
             order.append("exit")
@@ -633,7 +653,9 @@ class TestPerActorActivationLock:
         max_concurrent = {"v": 0}
         release = _asyncio.Event()
 
-        async def slow_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def slow_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             inside.add(str(_actor.actor_id))
             max_concurrent["v"] = max(max_concurrent["v"], len(inside))
             await release.wait()
@@ -662,7 +684,9 @@ class TestPerActorActivationLock:
 
         engine = await _create_engine()
 
-        async def raising_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def raising_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             raise RuntimeError("boom")
 
         engine._activate_with_tool_loop = raising_loop  # type: ignore[assignment]
@@ -677,7 +701,9 @@ class TestPerActorActivationLock:
         # Second call should succeed — lock is released
         calls = {"n": 0}
 
-        async def ok_loop(_actor, _reason, _trigger_event, max_calls_override=None):
+        async def ok_loop(
+            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+        ):
             calls["n"] += 1
             return []
 

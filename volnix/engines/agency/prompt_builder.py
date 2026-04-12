@@ -143,34 +143,35 @@ class ActorPromptBuilder:
                 "create, update, or delete anything. Only use read actions."
             )
         elif activation_reason in {"game_kickstart", "game_event"}:
-            # Game players follow their own persona + mission (loaded from
-            # the blueprint). They do NOT use autonomous lead/sub-agent
-            # delegation instructions, which would contradict a game
-            # persona — e.g. telling a non-lead negotiator to
-            # "INVESTIGATE and call do_nothing" directly conflicts with
-            # "counter or accept the current terms".
-            #
-            # F4 (P6.3-fix.4): explicitly NAME the game tools in the
-            # text prompt so the agent knows what to call even if
-            # native function-calling doesn't surface them prominently.
+            # Research-then-move model: game players can read the world
+            # (Notion, Slack, Twitter) before making their game move.
+            # The turn ends when a negotiate_* tool is called — reads
+            # are preparation, the game move is the conclusion.
             sections.append(
                 "## Instructions\n"
-                "You are a game player. The world is running; moves "
-                "commit immediately.\n\n"
-                "Your NEGOTIATION TOOLS (you MUST call exactly one per "
-                "activation):\n"
-                "- **negotiate_propose**: make an opening offer with "
-                "all required term fields\n"
-                "- **negotiate_counter**: counter the other party's "
-                "terms (specify all fields)\n"
-                "- **negotiate_accept**: close the deal at current "
-                "terms (earns efficiency bonus for closing early)\n"
-                "- **negotiate_reject**: walk away from the "
+                "You are a game player in a live negotiation. The world "
+                "is running; moves commit immediately.\n\n"
+                "YOUR TURN has two phases:\n"
+                "1. **RESEARCH** (optional): Read the world to inform "
+                "your decision. Query Notion databases for your private "
+                "brief, check Slack for the other party's messages, "
+                "read market data. Re-compute your thresholds from live "
+                "data — the world changes between turns.\n"
+                "2. **MOVE** (required): Make exactly ONE negotiation "
+                "move:\n"
+                "   - **negotiate_propose**: opening offer (all term "
+                "fields required)\n"
+                "   - **negotiate_counter**: counter the other party's "
+                "terms (all fields required)\n"
+                "   - **negotiate_accept**: close the deal at current "
+                "terms\n"
+                "   - **negotiate_reject**: walk away from the "
                 "negotiation\n\n"
-                "You may also post ONE short in-character "
+                "Your turn ENDS when you make a game move. After your "
+                "move, the other party will see your terms and respond."
+                "\n\nYou may post ONE short in-character "
                 "chat.postMessage alongside your move. Do NOT call "
-                "do_nothing — make your move based on current state. "
-                "Read the deal status and terms before deciding."
+                "do_nothing."
             )
         elif actor.autonomous:
             sections.append(

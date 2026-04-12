@@ -998,11 +998,15 @@ class GameOrchestrator(BaseEngine):
             )
             return
         self._pending_activation_players.add(actor_str)
-        # Read max_tool_calls_per_move from FlowConfig so the agency
-        # limits tool calls to the blueprint-configured value (default 3)
-        # instead of the global max_tool_calls_per_activation (default 10).
+        # Read flow config values for the activation budget.
+        # max_tool_calls_per_move is a safety ceiling (turn-ending
+        # detection handles the actual termination). max_read_calls
+        # prevents infinite Slack/Notion reading loops.
         max_calls = (
             self._definition.flow.max_tool_calls_per_move if self._definition is not None else None
+        )
+        max_reads = (
+            self._definition.flow.max_read_calls_per_move if self._definition is not None else None
         )
         task = asyncio.create_task(
             self._agency.activate_for_event(
@@ -1011,6 +1015,7 @@ class GameOrchestrator(BaseEngine):
                 trigger_event=trigger_event,
                 state_summary=state_summary,
                 max_calls_override=max_calls,
+                max_read_calls=max_reads,
             ),
             name=f"game_activation_{actor_id}_{reason}",
         )
@@ -1071,6 +1076,32 @@ class GameOrchestrator(BaseEngine):
                     f"- {entity_type} {row_id}: status={status}, "
                     f"last_proposed_by={last_by}, terms={terms}"
                 )
+
+        # Proposal chain — the full history of propose/counter moves
+        # so the agent can see how terms evolved, not just the current
+        # state. Grouped by deal_id, sorted chronologically.
+        try:
+            proposals = await self._state.query_entities("negotiation_proposal")
+        except Exception:  # noqa: BLE001
+            proposals = []
+
+        if proposals:
+            from collections import defaultdict
+
+            by_deal: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for p in proposals:
+                by_deal[p.get("deal_id", "")].append(p)
+
+            for deal_id, deal_props in by_deal.items():
+                sorted_props = sorted(deal_props, key=lambda p: p.get("created_at", ""))
+                parts.append(f"  Proposal history for {deal_id}:")
+                for i, p in enumerate(sorted_props, 1):
+                    parts.append(
+                        f"    {i}. {p.get('proposed_by', '?')} "
+                        f"{p.get('msg_type', '?')}: "
+                        f"terms={p.get('terms', {})}"
+                    )
+
         return "\n".join(parts)
 
     # ---------------------------------------------------------------

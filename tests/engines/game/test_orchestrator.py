@@ -86,6 +86,7 @@ class FakeAgency:
         reason: str,
         trigger_event: Any = None,
         max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
         state_summary: str | None = None,
     ) -> list[Any]:
         self.calls.append(
@@ -95,6 +96,7 @@ class FakeAgency:
                 "trigger_event": trigger_event,
                 "state_summary": state_summary,
                 "max_calls_override": max_calls_override,
+                "max_read_calls": max_read_calls,
             }
         )
         return []

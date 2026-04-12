@@ -385,9 +385,20 @@ class TestScriptedGameEndToEnd:
         # knows when to terminate the per-activation inner loop — we
         # return the tool call on iteration N and an empty response on
         # iteration N+1, which terminates the loop naturally.
+        # With the turn-ending action model, each game move commits
+        # and then the turn ends immediately. The scripted router's
+        # entries are consumed one per route() call. Each activation
+        # produces exactly 1 game move (negotiate_*), which triggers
+        # the turn-ending break. Text-only responses on subsequent
+        # activations (if the script cursor lands there) terminate
+        # the activation as text_response.
+        #
+        # Sequence: buyer proposes → supplier counters → buyer accepts.
+        # Each agent gets 1 game move per activation.
         scripted = ScriptedLLMRouter(
             scripts={
                 "buyer": [
+                    # Activation 1 (game_kickstart): propose
                     (
                         {
                             "name": "negotiate_propose",
@@ -401,7 +412,7 @@ class TestScriptedGameEndToEnd:
                         },
                         "",
                     ),
-                    (None, "Opening terms on the table."),
+                    # Activation 2 (game_event after supplier's counter): accept
                     (
                         {
                             "name": "negotiate_accept",
@@ -409,9 +420,9 @@ class TestScriptedGameEndToEnd:
                         },
                         "",
                     ),
-                    (None, "Deal accepted."),
                 ],
                 "supplier": [
+                    # Activation 1 (game_event after buyer's propose): counter
                     (
                         {
                             "name": "negotiate_counter",
@@ -425,7 +436,6 @@ class TestScriptedGameEndToEnd:
                         },
                         "",
                     ),
-                    (None, "Counteroffer posted."),
                 ],
             }
         )

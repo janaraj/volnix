@@ -69,6 +69,7 @@ class FakeAgency:
         reason: str,
         trigger_event: Any = None,
         max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
         state_summary: str | None = None,
     ) -> list[Any]:
         self.calls.append(
