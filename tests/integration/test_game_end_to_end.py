@@ -469,8 +469,15 @@ class TestScriptedGameEndToEnd:
 
         await app.configure_game(plan, internal_profile=profile)
 
-        # ---- Await orchestrator termination via its result future ----
+        # Start the orchestrator AFTER configure_game + tool_executor
+        # wiring. configure_game no longer calls _on_start() because
+        # the CLI's set_tool_executor runs after configure_game returns
+        # (startup ordering fix). In tests, we wire the executor above
+        # via _wire_pipeline_executor, so _on_start is safe to call now.
         orchestrator = app.registry.get("game")
+        await orchestrator._on_start()
+
+        # ---- Await orchestrator termination via its result future ----
         result = await orchestrator.await_result()
 
         # ---- Assertions ----
@@ -590,7 +597,11 @@ class TestScriptedGameEndToEnd:
 
         await app.configure_game(plan, internal_profile=profile)
 
+        # Start orchestrator after tool_executor is wired (same pattern
+        # as the deal_closed test above — see startup ordering fix).
         orchestrator = app.registry.get("game")
+        await orchestrator._on_start()
+
         result = await orchestrator.await_result()
 
         # Stalemate (or wall_clock if stalemate = wall_clock, but we

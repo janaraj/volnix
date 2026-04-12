@@ -1392,11 +1392,19 @@ class VolnixApp:
                 "negotiation tool registration."
             )
 
-        # The orchestrator's _on_start was called once during wire_engines
-        # but noop'd because configure hadn't been called yet. Call it again
-        # now that the definition is set — the method is idempotent by
-        # design (resets _subscription_tokens, re-schedules failsafes).
-        await orchestrator._on_start()
+        # NOTE: ``orchestrator._on_start()`` is NOT called here anymore.
+        # The orchestrator's ``_on_start`` launches the first activation
+        # task (kickstart), which requires ``agency.set_tool_executor``
+        # to be set FIRST. In the CLI serve/run flow, ``set_tool_executor``
+        # is called in ``_setup_simulation`` AFTER ``configure_game``
+        # returns. Calling ``_on_start`` here would race: the activation
+        # task would fire before the executor is wired, and the agent
+        # would bail with "No tool_executor set". Instead,
+        # ``_setup_simulation`` calls ``_on_start`` after wiring the
+        # executor (see cli.py::_setup_simulation).
+        #
+        # For tests that bypass the CLI, ``_on_start`` must be called
+        # explicitly after ``configure`` + ``set_tool_executor``.
 
         # Game mode: clear lead status on all players. Game players act
         # independently — there is no coordinator. Lead behavior

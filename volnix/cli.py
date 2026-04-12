@@ -465,8 +465,10 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
     # If the plan has ``game.enabled: true``, wrap the GameOrchestrator
     # in an OrchestratorRunner so it satisfies the CLI's runner.run()
     # interface. The orchestrator was already configured via
-    # ``app.configure_game`` and bootstraps its first activation inside
-    # ``_on_start``; no kickstart envelope submission is needed.
+    # ``app.configure_game``, but ``_on_start`` was NOT called there
+    # (see configure_game's note about tool_executor ordering). We call
+    # it HERE, after ``set_tool_executor``, so the first activation
+    # task (kickstart) can actually execute tool calls.
     game_def = getattr(compiled_plan, "game", None)
     if game_def and getattr(game_def, "enabled", False):
         from volnix.engines.game.orchestrator_runner import OrchestratorRunner
@@ -477,6 +479,11 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
             console.print("[yellow]  Game enabled but GameOrchestrator not registered[/yellow]")
             orchestrator = None
         if orchestrator is not None:
+            # Start the orchestrator NOW — after tool_executor is wired.
+            # This triggers bus subscriptions, failsafe timers, and the
+            # first-mover activation (kickstart).
+            await orchestrator._on_start()
+
             orch_runner = OrchestratorRunner(
                 orchestrator=orchestrator,
                 agency=agency,
