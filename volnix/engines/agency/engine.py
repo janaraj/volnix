@@ -325,9 +325,11 @@ class AgencyEngine(BaseEngine):
                 },
             )
 
-            # Idempotent replace by name
-            self._tool_definitions = [t for t in self._tool_definitions if t.name != name]
-            self._tool_definitions.append(tool)
+            # Idempotent replace by name. PREPEND game tools so they
+            # appear before Slack/service tools in the LLM's tool list.
+            # LLMs (especially flash models) tend to prefer tools listed
+            # first — prepending makes negotiate_* the default choice.
+            self._tool_definitions = [tool] + [t for t in self._tool_definitions if t.name != name]
             # Identity mapping: tool name == action type
             self._tool_name_map[name] = name
             self._tool_to_service[name] = service
@@ -995,15 +997,26 @@ class AgencyEngine(BaseEngine):
                 {"role": a.role, "id": str(a.actor_id)} for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
-            # F4 (P6.3-fix.4): pass allowed_services so the prompt
-            # builder includes textual tool descriptions as a fallback.
-            # Without this, game players see "Call the structured
-            # tool(s)" in the prompt but the text never names WHICH
-            # tools are available — the agent must rely entirely on
-            # native function-calling. If the LLM's function-calling
-            # degrades (Gemini flash edge cases), the agent has no way
-            # to discover the negotiate_* tools.
-            allowed_services = {t.service for t in actor_tools if t.service}
+
+            # F4 (P6.3-fix.5): game-specific tool constraints.
+            # These are gated on _GAME_REASONS so non-game activations
+            # (subscription_match, event_affected, scheduled, autonomous,
+            # external) are completely unaffected.
+            _GAME_ACTIVATION_REASONS = {"game_kickstart", "game_event"}
+            if reason in _GAME_ACTIVATION_REASONS:
+                # 5b: restrict text-prompt tool listing to game tools
+                # only. The agent still sees Slack via native function-
+                # calling, but the TEXT prompt focuses on negotiate_*.
+                allowed_services: set[str] | None = {"game"}
+                # 5c: remove do_nothing from the tool list. Game players
+                # MUST make a move — there's no "skip turn" in a
+                # negotiation. Without this, the agent calls do_nothing
+                # when confused, which stalls the game.
+                actor_tools = [t for t in actor_tools if t.name != "do_nothing"]
+            else:
+                # Non-game: show all services in text prompt (existing behavior)
+                allowed_services = {t.service for t in actor_tools if t.service}
+
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,

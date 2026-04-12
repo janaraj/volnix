@@ -998,12 +998,19 @@ class GameOrchestrator(BaseEngine):
             )
             return
         self._pending_activation_players.add(actor_str)
+        # Read max_tool_calls_per_move from FlowConfig so the agency
+        # limits tool calls to the blueprint-configured value (default 3)
+        # instead of the global max_tool_calls_per_activation (default 10).
+        max_calls = (
+            self._definition.flow.max_tool_calls_per_move if self._definition is not None else None
+        )
         task = asyncio.create_task(
             self._agency.activate_for_event(
                 actor_id=actor_id,
                 reason=reason,
                 trigger_event=trigger_event,
                 state_summary=state_summary,
+                max_calls_override=max_calls,
             ),
             name=f"game_activation_{actor_id}_{reason}",
         )

@@ -63,6 +63,14 @@ class FlowConfig(BaseModel, frozen=True):
     bonus_per_event: float = 0.14
     reactivity_window_events: int = 5
     state_summary_entity_types: list[str] = Field(default_factory=lambda: ["negotiation_deal"])
+    # Maximum tool calls per game-player activation. Passed as
+    # ``max_calls_override`` to ``activate_for_event`` so the agency's
+    # tool loop doesn't burn the full ``max_tool_calls_per_activation``
+    # budget (default 10) on Slack reads and chat posts. 3 is enough
+    # for: 1 negotiate_* move + 1 optional chat.postMessage + 1 margin.
+    # Blueprint authors can raise this for game types that need more
+    # tool calls per move (e.g., auction with research-then-bid pattern).
+    max_tool_calls_per_move: int = 3
 
     @field_validator(
         "max_wall_clock_seconds",
