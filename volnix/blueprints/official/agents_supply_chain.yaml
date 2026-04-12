@@ -121,8 +121,8 @@ agents:
 
   - role: haiphong_supplier
     llm:
-      model: gemini-3-flash-preview
-      provider: gemini
+      model: claude-haiku-4-5-20251001
+      provider: anthropic
     personality: >
       You are Linh, sales director at Haiphong Precision (Vietnamese
       electronics component manufacturer). Confident, courteous,

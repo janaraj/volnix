@@ -65,6 +65,7 @@ class VolnixApp:
         self._started = False
         self._last_action_time: datetime | None = None
         self._idle_watcher_task: Any = None
+        self._animator_tick_task: Any = None
         # F2 (P6.3-fix.3): game player actor IDs, populated by
         # configure_game. The animator bridge uses this to only trigger
         # on player actions (not NPC/animator-generated actions).
@@ -460,6 +461,9 @@ class VolnixApp:
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
         self._escalation_handler = None
+        if self._animator_tick_task and not self._animator_tick_task.done():
+            self._animator_tick_task.cancel()
+            self._animator_tick_task = None
         if self._hold_expiry_task and not self._hold_expiry_task.done():
             self._hold_expiry_task.cancel()
             self._hold_expiry_task = None
@@ -1663,9 +1667,11 @@ class VolnixApp:
             self._idle_watcher_task = asyncio.create_task(
                 self._idle_watcher(run_id, timeout_seconds=300)
             )
-            # Start animator bridge for reactive/dynamic behavior
+            # Start animator bridge for reactive/dynamic behavior.
+            # Reactive: ticks on player events only (bus subscriber).
+            # Dynamic: ticks independently on tick_interval + on player events.
             plan_behavior = world_def.get("behavior", "static")
-            if plan_behavior == "reactive" and self._bus:
+            if plan_behavior in ("reactive", "dynamic") and self._bus:
                 await self._start_animator_bridge(plan_behavior)
 
         return run_id
@@ -1851,6 +1857,50 @@ class VolnixApp:
                 logger.warning("Animator bridge tick failed: %s", exc)
 
         await self._bus.subscribe("*", _on_committed_event)
+
+        # Dynamic mode: add an independent tick loop so the animator
+        # fires scheduled events (storm, port closure, etc.) and
+        # organic events on its own schedule — not just when players
+        # act. Without this, at_time events pile up silently until
+        # the next player action triggers a bus event.
+        #
+        # Reactive mode: no independent tick needed — the bus
+        # subscriber above is sufficient (animator only fires when
+        # players act).
+        #
+        # Non-game impact: NONE — this code path only runs when
+        # has_internal=False (compile_plan has no actor_specs),
+        # which happens exclusively for game-mode serve and
+        # external-only serve. SimulationRunner handles its own
+        # ticking independently via its main loop.
+        if behavior == "dynamic":
+            tick_interval = getattr(animator, "_typed_config", None)
+            tick_secs = (
+                getattr(tick_interval, "tick_interval_seconds", 45.0) if tick_interval else 45.0
+            )
+
+            async def _dynamic_tick_loop() -> None:
+                """Independent tick for dynamic behavior mode."""
+                while True:
+                    try:
+                        await asyncio.sleep(tick_secs)
+                    except asyncio.CancelledError:
+                        return
+                    try:
+                        results = await animator.tick(datetime.now(UTC))
+                        if results:
+                            logger.info(
+                                "Animator dynamic tick: %d events",
+                                len(results),
+                            )
+                    except Exception as exc:
+                        logger.warning("Animator dynamic tick failed: %s", exc)
+
+            self._animator_tick_task = asyncio.create_task(
+                _dynamic_tick_loop(),
+                name="animator_dynamic_tick",
+            )
+
         logger.info("Animator bridge started (behavior=%s)", behavior)
 
     async def _idle_watcher(self, run_id: RunId, timeout_seconds: int = 300) -> None:

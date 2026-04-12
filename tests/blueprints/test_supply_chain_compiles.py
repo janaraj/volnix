@@ -350,23 +350,27 @@ def test_agents_declares_buyer_and_supplier(agents_def):
     assert roles == {"nimbus_buyer", "haiphong_supplier"}
 
 
-def test_agents_use_gemini_3_flash_preview(agents_def):
-    """Both agents use gemini-3-flash-preview (latest Gemini Flash).
+def test_agents_use_expected_models(agents_def):
+    """Cross-provider: buyer uses Gemini Flash, supplier uses Claude Haiku.
 
-    Rationale: for the demo audience, using the latest model matters more
-    than stability — people only pay attention to state-of-the-art. The
-    multi-turn loop fix (prior PR 8a5cb43) addressed the tool-call
-    dropping behavior we saw in earlier runs. Preview-model rate-limit
-    flakiness is accepted as a trade-off.
+    This validates the system's cross-provider capability — different
+    agents can use different LLM providers in the same game. The buyer
+    uses Gemini's function-calling, the supplier uses Anthropic's.
     """
+    expected = {
+        "nimbus_buyer": "gemini-3-flash-preview",
+        "haiphong_supplier": "claude-haiku-4-5-20251001",
+    }
     for agent in agents_def["agents"]:
+        role = agent["role"]
         model = agent["llm"]["model"]
-        assert model == "gemini-3-flash-preview", (
-            f"Agent {agent['role']} uses {model}, expected "
-            f"gemini-3-flash-preview (the latest Gemini Flash — "
-            f"the scenario is a public-facing demo)."
+        assert model == expected.get(role, model), (
+            f"Agent {role} uses {model}, expected {expected.get(role)}"
         )
-        assert agent["llm"]["provider"] == "gemini"
+    # Cross-provider: buyer=gemini, supplier=anthropic
+    providers = {a["role"]: a["llm"]["provider"] for a in agents_def["agents"]}
+    assert providers["nimbus_buyer"] == "gemini"
+    assert providers["haiphong_supplier"] == "anthropic"
 
 
 def test_agents_have_scoped_permissions(agents_def):

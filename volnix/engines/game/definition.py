@@ -72,7 +72,7 @@ class FlowConfig(BaseModel, frozen=True):
     # Maximum non-game (read) tool calls before nudging the agent to
     # make its game move. Prevents infinite Slack/Notion reading loops.
     # When reached, a user message is injected: "make your move NOW."
-    max_read_calls_per_move: int = 6
+    max_read_calls_per_move: int = 8
 
     @field_validator(
         "max_wall_clock_seconds",
