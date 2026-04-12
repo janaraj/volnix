@@ -995,12 +995,22 @@ class AgencyEngine(BaseEngine):
                 {"role": a.role, "id": str(a.actor_id)} for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
+            # F4 (P6.3-fix.4): pass allowed_services so the prompt
+            # builder includes textual tool descriptions as a fallback.
+            # Without this, game players see "Call the structured
+            # tool(s)" in the prompt but the text never names WHICH
+            # tools are available — the agent must rely entirely on
+            # native function-calling. If the LLM's function-calling
+            # degrades (Gemini flash edge cases), the agent has no way
+            # to discover the negotiate_* tools.
+            allowed_services = {t.service for t in actor_tools if t.service}
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
+                allowed_services=allowed_services,
                 simulation_progress=self._simulation_progress,
             )
 

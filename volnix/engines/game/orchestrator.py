@@ -147,6 +147,12 @@ class GameOrchestrator(BaseEngine):
         # for graceful shutdown)
         self._activation_tasks: set[asyncio.Task[Any]] = set()
 
+        # F5 (P6.3-fix.2): track which players have a pending activation
+        # task. _launch_activation skips if the player is already in this
+        # set — prevents duplicate re-activations that produce empty LLM
+        # responses on stale context. Cleaned up in _on_activation_done.
+        self._pending_activation_players: set[str] = set()
+
         # Bus subscription tokens (topic, callback) tuples registered in
         # _on_start; used by _on_stop to cleanly unsubscribe so re-start
         # within the same process doesn't double-register handlers.
@@ -330,6 +336,7 @@ class GameOrchestrator(BaseEngine):
         if self._activation_tasks:
             await asyncio.gather(*self._activation_tasks, return_exceptions=True)
             self._activation_tasks.clear()
+        self._pending_activation_players.clear()
 
         # Unsubscribe every handler we registered in _on_start. Without
         # this, a restart in the same process (composition root rewire,
@@ -973,13 +980,24 @@ class GameOrchestrator(BaseEngine):
     ) -> None:
         """Launch an activation as a fire-and-forget asyncio task.
 
-        The task is added to ``self._activation_tasks`` so it can be
-        cancelled on shutdown. Errors are logged via the done
-        callback.
+        F5 (P6.3-fix.2): if the player already has a pending activation
+        (tracked in ``_pending_activation_players``), skip. The
+        agency's per-actor lock would serialize the second activation,
+        but by the time it runs the context is stale and the LLM
+        returns empty — wasting an API call and confusing the
+        conversation history.
         """
         if self._agency is None:
             logger.warning("GameOrchestrator: no agency, cannot activate %s", actor_id)
             return
+        actor_str = str(actor_id)
+        if actor_str in self._pending_activation_players:
+            logger.debug(
+                "GameOrchestrator: skipping duplicate activation for %s (already pending)",
+                actor_str,
+            )
+            return
+        self._pending_activation_players.add(actor_str)
         task = asyncio.create_task(
             self._agency.activate_for_event(
                 actor_id=actor_id,
@@ -990,11 +1008,12 @@ class GameOrchestrator(BaseEngine):
             name=f"game_activation_{actor_id}_{reason}",
         )
         self._activation_tasks.add(task)
-        task.add_done_callback(self._on_activation_done)
+        task.add_done_callback(lambda t: self._on_activation_done(t, actor_str))
 
-    def _on_activation_done(self, task: asyncio.Task[Any]) -> None:
-        """Cleanup activation task; log errors."""
+    def _on_activation_done(self, task: asyncio.Task[Any], actor_str: str = "") -> None:
+        """Cleanup activation task + pending-player guard."""
         self._activation_tasks.discard(task)
+        self._pending_activation_players.discard(actor_str)
         if task.cancelled():
             return
         exc = task.exception()

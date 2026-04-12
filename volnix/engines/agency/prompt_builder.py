@@ -150,18 +150,27 @@ class ActorPromptBuilder:
             # "INVESTIGATE and call do_nothing" directly conflicts with
             # "counter or accept the current terms".
             #
-            # Two event-driven activation reasons:
-            #   - ``game_kickstart``: first activation in a game run
-            #   - ``game_event``: re-activation after another player's
-            #     committed game tool event
+            # F4 (P6.3-fix.4): explicitly NAME the game tools in the
+            # text prompt so the agent knows what to call even if
+            # native function-calling doesn't surface them prominently.
             sections.append(
                 "## Instructions\n"
-                "You are a game player. The world is running; moves commit "
-                "immediately; respond to what you see. Call the structured "
-                "tool(s) for your move, optionally post one short "
-                "in-character chat.postMessage reaction, then stop. Do NOT "
-                "delegate, investigate, or call do_nothing unless explicitly "
-                "told to — make your move based on current state."
+                "You are a game player. The world is running; moves "
+                "commit immediately.\n\n"
+                "Your NEGOTIATION TOOLS (you MUST call exactly one per "
+                "activation):\n"
+                "- **negotiate_propose**: make an opening offer with "
+                "all required term fields\n"
+                "- **negotiate_counter**: counter the other party's "
+                "terms (specify all fields)\n"
+                "- **negotiate_accept**: close the deal at current "
+                "terms (earns efficiency bonus for closing early)\n"
+                "- **negotiate_reject**: walk away from the "
+                "negotiation\n\n"
+                "You may also post ONE short in-character "
+                "chat.postMessage alongside your move. Do NOT call "
+                "do_nothing — make your move based on current state. "
+                "Read the deal status and terms before deciding."
             )
         elif actor.autonomous:
             sections.append(
