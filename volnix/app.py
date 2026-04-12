@@ -415,17 +415,10 @@ class VolnixApp:
         #   * registration on the PolicyEngine gate list
         #   * subscription to ``game.active_state_changed`` so it flips its
         #     internal flag when GameOrchestrator publishes the lifecycle event
-        try:
-            orchestrator = self._registry.get("game")
-        except KeyError:
-            orchestrator = None
-        if orchestrator is not None:
-            orchestrator._dependencies["agency"] = agency
-            orchestrator._config["_ledger"] = self._ledger
-
-        # Register the GameActivePolicy gate on the PolicyEngine. The gate
-        # defaults to ``is_active=False`` which denies ``negotiate_*`` tool
-        # calls until the orchestrator publishes
+        # Build the GameActivePolicy gate FIRST so we can inject it into
+        # the orchestrator's dependencies alongside the agency. The gate
+        # defaults to ``is_active=False`` which denies ``negotiate_*``
+        # tool calls until the orchestrator publishes
         # ``GameActiveStateChangedEvent(active=True)`` at game start. For
         # non-game runs, the gate is effectively a no-op (no negotiate_*
         # actions are ever issued).
@@ -434,10 +427,31 @@ class VolnixApp:
         self._game_active_gate = GameActivePolicy()
         policy_engine.register_gate(self._game_active_gate)
         if self._bus is not None:
+            # The bus subscription is kept as a secondary mechanism so
+            # any other publisher of ``game.active_state_changed`` (e.g.
+            # a future replay / test harness / external coordinator) can
+            # still flip the gate. The primary mechanism for the
+            # in-process orchestrator is the direct ``set_active`` call
+            # via the injected dependency below (M3).
             await self._bus.subscribe(
                 "game.active_state_changed",
                 self._game_active_gate.on_event,
             )
+
+        try:
+            orchestrator = self._registry.get("game")
+        except KeyError:
+            orchestrator = None
+        if orchestrator is not None:
+            orchestrator._dependencies["agency"] = agency
+            # M3 (B-cleanup.3): inject the gate so the orchestrator can
+            # call ``gate.set_active(True/False)`` DIRECTLY inside
+            # ``_publish_active_state`` instead of relying exclusively on
+            # async bus delivery. This eliminates the FIFO-``_ready``
+            # ordering dependency that the Cycle B audit flagged as
+            # "correct but fragile" (see §3 M3 in the cleanup plan).
+            orchestrator._dependencies["game_active_gate"] = self._game_active_gate
+            orchestrator._config["_ledger"] = self._ledger
 
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""

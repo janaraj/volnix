@@ -328,3 +328,108 @@ class TestGameConfigValidation:
         assert plan.game.enabled is True
         assert plan.game.flow.reactivity_window_events == 3
         assert plan.game.flow.max_events == 50
+
+
+class TestLegacyRoundKeysRejected:
+    """NF8 (B-cleanup.3): legacy round-based keys raise YAMLParseError.
+
+    Cycle B plan §3.3 mandated hard-reject on the legacy round-based
+    keys (``rounds`` / ``turn_protocol`` / ``between_rounds`` /
+    ``resource_reset_per_round``). The initial implementation shipped a
+    soft-warn instead; B-cleanup.3 flipped it to the hard-reject per
+    the plan.
+    """
+
+    @pytest.mark.asyncio
+    async def test_rounds_key_raises(self, condition_expander):
+        parser = YAMLParser(condition_expander)
+        world_def = {
+            "world": {
+                "name": "legacy",
+                "services": {},
+                "actors": [],
+                "game": {
+                    "enabled": True,
+                    "rounds": {"count": 8, "actions_per_turn": 3},
+                    "entities": {"deals": [{"id": "d1", "parties": ["a", "b"]}]},
+                },
+            }
+        }
+        with pytest.raises(YAMLParseError, match="legacy round-based keys"):
+            await parser.parse_from_dicts(world_def)
+
+    @pytest.mark.asyncio
+    async def test_turn_protocol_key_raises(self, condition_expander):
+        parser = YAMLParser(condition_expander)
+        world_def = {
+            "world": {
+                "name": "legacy",
+                "services": {},
+                "actors": [],
+                "game": {
+                    "enabled": True,
+                    "turn_protocol": "round_robin",
+                    "entities": {"deals": [{"id": "d1", "parties": ["a", "b"]}]},
+                },
+            }
+        }
+        with pytest.raises(YAMLParseError, match="legacy round-based keys"):
+            await parser.parse_from_dicts(world_def)
+
+    @pytest.mark.asyncio
+    async def test_between_rounds_key_raises(self, condition_expander):
+        parser = YAMLParser(condition_expander)
+        world_def = {
+            "world": {
+                "name": "legacy",
+                "services": {},
+                "actors": [],
+                "game": {
+                    "enabled": True,
+                    "between_rounds": {"announce_scores": True},
+                    "entities": {"deals": [{"id": "d1", "parties": ["a", "b"]}]},
+                },
+            }
+        }
+        with pytest.raises(YAMLParseError, match="legacy round-based keys"):
+            await parser.parse_from_dicts(world_def)
+
+    @pytest.mark.asyncio
+    async def test_resource_reset_per_round_key_raises(self, condition_expander):
+        parser = YAMLParser(condition_expander)
+        world_def = {
+            "world": {
+                "name": "legacy",
+                "services": {},
+                "actors": [],
+                "game": {
+                    "enabled": True,
+                    "resource_reset_per_round": {"api_calls": 3},
+                    "entities": {"deals": [{"id": "d1", "parties": ["a", "b"]}]},
+                },
+            }
+        }
+        with pytest.raises(YAMLParseError, match="legacy round-based keys"):
+            await parser.parse_from_dicts(world_def)
+
+    @pytest.mark.asyncio
+    async def test_error_message_lists_all_rejected_keys(self, condition_expander):
+        parser = YAMLParser(condition_expander)
+        world_def = {
+            "world": {
+                "name": "legacy",
+                "services": {},
+                "actors": [],
+                "game": {
+                    "enabled": True,
+                    "rounds": {"count": 8},
+                    "turn_protocol": "round_robin",
+                    "entities": {"deals": [{"id": "d1", "parties": ["a", "b"]}]},
+                },
+            }
+        }
+        with pytest.raises(YAMLParseError) as excinfo:
+            await parser.parse_from_dicts(world_def)
+        # Error should mention both rejected keys for actionable migration
+        assert "rounds" in str(excinfo.value)
+        assert "turn_protocol" in str(excinfo.value)

@@ -850,14 +850,27 @@ class TestHandleTimeout:
 
     @pytest.mark.asyncio
     async def test_timeout_filters_to_open_deals(self):
-        """Settle receives only deals with status in {open, proposed, countered}."""
+        """Settle receives only deals with status in {open, proposed, countered}.
+
+        Note: this test uses only non-closed deal statuses because M2
+        (B-cleanup.3) added a natural-win priority check at the top of
+        ``_handle_timeout``. An ``accepted`` or ``rejected`` deal would
+        trigger the natural-win path via ``DealClosedHandler`` /
+        ``DealRejectedHandler`` and delegate to ``_terminate_natural``,
+        skipping settlement entirely. The ``countered`` status is also
+        passed through to settle.
+        """
         state = CannedStateEngine(
             {
                 "negotiation_deal": [
                     {"id": "deal-a", "status": "open", "parties": ["buyer", "supplier"]},
-                    {"id": "deal-b", "status": "accepted", "parties": ["buyer", "supplier"]},
-                    {"id": "deal-c", "status": "proposed", "parties": ["buyer", "supplier"]},
-                    {"id": "deal-d", "status": "rejected", "parties": ["buyer", "supplier"]},
+                    {"id": "deal-b", "status": "proposed", "parties": ["buyer", "supplier"]},
+                    {"id": "deal-c", "status": "countered", "parties": ["buyer", "supplier"]},
+                    {
+                        "id": "deal-d",
+                        "status": "random_unknown",
+                        "parties": ["buyer", "supplier"],
+                    },
                 ]
             }
         )
@@ -885,7 +898,8 @@ class TestHandleTimeout:
         )
         assert len(captured_open_deals) == 1
         deal_ids = {d["id"] for d in captured_open_deals[0]}
-        assert deal_ids == {"deal-a", "deal-c"}  # open + proposed only
+        # open + proposed + countered pass through; random_unknown is filtered
+        assert deal_ids == {"deal-a", "deal-b", "deal-c"}
 
     @pytest.mark.asyncio
     async def test_timeout_publishes_game_terminated_with_reason(self):
@@ -992,6 +1006,224 @@ class TestHandleTimeout:
         )
         assert o._terminated is True
         assert o._result_future is not None and o._result_future.done()
+
+
+# ---------------------------------------------------------------------------
+# M3 (B-cleanup.3): direct gate.set_active defense-in-depth
+# ---------------------------------------------------------------------------
+
+
+class TestGateFlipDirectInjection:
+    """_publish_active_state calls ``gate.set_active`` directly AND via bus.
+
+    M3 (B-cleanup.3): the orchestrator's gate flip used to rely
+    exclusively on ``game.active_state_changed`` bus delivery to reach
+    the :class:`GameActivePolicy` subscriber. That delivery path is
+    correct-by-FIFO-ready-ordering but fragile — any future reorder
+    could break it. B-cleanup.3 adds a direct injected-reference call
+    to ``gate.set_active`` as the primary mechanism so the flag flips
+    synchronously inside the same coroutine, with the bus publish as
+    a secondary fan-out for other subscribers.
+    """
+
+    @pytest.mark.asyncio
+    async def test_publish_active_state_calls_gate_set_active_directly(self):
+        from volnix.engines.policy.builtin.game_active import GameActivePolicy
+
+        o, _, _, _ = await _init_orchestrator()
+        gate = GameActivePolicy()
+        o._dependencies["game_active_gate"] = gate
+
+        # Gate starts inactive
+        assert gate.is_active is False
+
+        await o._publish_active_state(active=True)
+        # Gate flipped SYNCHRONOUSLY via the direct call (not via bus)
+        assert gate.is_active is True
+
+        await o._publish_active_state(active=False)
+        assert gate.is_active is False
+
+    @pytest.mark.asyncio
+    async def test_publish_active_state_still_emits_bus_event(self):
+        """Secondary mechanism: bus event is still published for other subscribers."""
+        from volnix.engines.policy.builtin.game_active import GameActivePolicy
+
+        o, bus, _, _ = await _init_orchestrator()
+        o._dependencies["game_active_gate"] = GameActivePolicy()
+        bus.publish.reset_mock()
+
+        await o._publish_active_state(active=True)
+
+        state_events = [
+            call.args[0]
+            for call in bus.publish.call_args_list
+            if isinstance(call.args[0], GameActiveStateChangedEvent)
+        ]
+        assert len(state_events) == 1
+        assert state_events[0].active is True
+
+    @pytest.mark.asyncio
+    async def test_publish_active_state_works_without_injected_gate(self):
+        """Absence of the gate dep is not fatal — bus is still the fallback."""
+        o, bus, _, _ = await _init_orchestrator()
+        # Explicitly ensure the gate is not injected
+        o._dependencies.pop("game_active_gate", None)
+        bus.publish.reset_mock()
+
+        await o._publish_active_state(active=True)
+        # Bus event is still published (GameActivePolicy would flip via bus)
+        state_events = [
+            call.args[0]
+            for call in bus.publish.call_args_list
+            if isinstance(call.args[0], GameActiveStateChangedEvent)
+        ]
+        assert len(state_events) == 1
+
+
+# ---------------------------------------------------------------------------
+# M2 (B-cleanup.3): natural-win priority in _handle_timeout
+# ---------------------------------------------------------------------------
+
+
+class TestNaturalWinPriorityOnTimeout:
+    """When a timeout event arrives but a natural win is already met.
+
+    M2 (B-cleanup.3): if a ``world.negotiate_accept`` commits and a
+    wall-clock / stalemate timer fires on different bus consumer tasks
+    in the same event-loop tick, the orchestrator's ``_handle_timeout``
+    must check win conditions first and delegate to
+    ``_terminate_natural`` with the deal_closed reason — otherwise the
+    game misreports the real outcome as a timeout.
+    """
+
+    @pytest.mark.asyncio
+    async def test_timeout_with_accepted_deal_reports_deal_closed(self):
+        """An accepted deal at timeout time → reason='deal_closed', not the timeout reason."""
+        state = CannedStateEngine(
+            {
+                "negotiation_deal": [
+                    {
+                        "id": "deal-q3",
+                        "status": "accepted",  # natural win condition met
+                        "parties": ["buyer", "supplier"],
+                    }
+                ]
+            }
+        )
+        o, bus, _, _ = await _init_orchestrator(state_engine=state)
+        await o._on_start()
+        bus.publish.reset_mock()
+
+        from volnix.engines.game.events import GameTimeoutEvent
+
+        now = datetime.now(UTC)
+        await o._handle_timeout(
+            GameTimeoutEvent(
+                event_id=EventId("evt-timeout"),
+                event_type="game.timeout",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                reason="wall_clock",  # timeout trying to claim the win
+            )
+        )
+
+        terminated_events = [
+            call.args[0]
+            for call in bus.publish.call_args_list
+            if isinstance(call.args[0], GameTerminatedEvent)
+        ]
+        assert len(terminated_events) == 1
+        # Reason is the NATURAL win, not the timeout reason
+        assert terminated_events[0].reason == "deal_closed"
+
+    @pytest.mark.asyncio
+    async def test_timeout_with_rejected_deal_reports_deal_rejected(self):
+        """Same pattern for the rejected-deal natural-win path."""
+        state = CannedStateEngine(
+            {
+                "negotiation_deal": [
+                    {
+                        "id": "deal-q3",
+                        "status": "rejected",
+                        "parties": ["buyer", "supplier"],
+                    }
+                ]
+            }
+        )
+        # Must register ``deal_rejected`` win condition explicitly
+        # (_make_def's default only registers ``deal_closed``).
+        o, bus, _, _ = await _init_orchestrator(
+            state_engine=state,
+            definition=_make_def(
+                win_conditions=[
+                    WinCondition(type="deal_closed"),
+                    WinCondition(type="deal_rejected"),
+                ]
+            ),
+        )
+        await o._on_start()
+        bus.publish.reset_mock()
+
+        from volnix.engines.game.events import GameTimeoutEvent
+
+        now = datetime.now(UTC)
+        await o._handle_timeout(
+            GameTimeoutEvent(
+                event_id=EventId("evt-timeout"),
+                event_type="game.timeout",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                reason="stalemate",
+            )
+        )
+        terminated_events = [
+            call.args[0]
+            for call in bus.publish.call_args_list
+            if isinstance(call.args[0], GameTerminatedEvent)
+        ]
+        assert len(terminated_events) == 1
+        assert terminated_events[0].reason == "deal_rejected"
+
+    @pytest.mark.asyncio
+    async def test_timeout_without_natural_win_still_reports_timeout_reason(self):
+        """When no win condition is met, the timeout reason still wins.
+
+        Regression guard: the M2 priority check must NOT swallow the
+        timeout path when there's no actual natural win available.
+        """
+        state = CannedStateEngine(
+            {
+                "negotiation_deal": [
+                    {
+                        "id": "deal-q3",
+                        "status": "proposed",  # not yet closed
+                        "parties": ["buyer", "supplier"],
+                    }
+                ]
+            }
+        )
+        o, bus, _, _ = await _init_orchestrator(state_engine=state)
+        await o._on_start()
+        bus.publish.reset_mock()
+
+        from volnix.engines.game.events import GameTimeoutEvent
+
+        now = datetime.now(UTC)
+        await o._handle_timeout(
+            GameTimeoutEvent(
+                event_id=EventId("evt-timeout"),
+                event_type="game.timeout",
+                timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                reason="wall_clock",
+            )
+        )
+        terminated_events = [
+            call.args[0]
+            for call in bus.publish.call_args_list
+            if isinstance(call.args[0], GameTerminatedEvent)
+        ]
+        assert len(terminated_events) == 1
+        # Reason IS the timeout reason because no natural win is available
+        assert terminated_events[0].reason == "wall_clock"
 
 
 # ---------------------------------------------------------------------------

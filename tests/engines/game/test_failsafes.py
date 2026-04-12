@@ -499,8 +499,19 @@ class TestFailsafeIdempotency:
         assert terminated_events[0].reason == "wall_clock"
 
     @pytest.mark.asyncio
-    async def test_timeout_then_natural_win_only_timeout_fires(self):
-        """If timeout fires first, natural win path is short-circuited."""
+    async def test_timeout_with_accepted_deal_reports_natural_win(self):
+        """When a timeout arrives but a natural win condition is already met.
+
+        M2 (B-cleanup.3): ``_handle_timeout`` now runs the win evaluator
+        first. If an ``accepted`` deal exists, the timeout delegates to
+        ``_terminate_natural`` with reason ``deal_closed`` rather than
+        the racing timer's reason. This gives a legitimate deal closure
+        the reporting it deserves even when a timeout fires on the same
+        tick.
+
+        Idempotency: subsequent calls (another timeout, a late game
+        event) are noops because ``_terminated`` is already set.
+        """
         state = CannedStateEngine(
             {
                 "negotiation_deal": [
@@ -512,7 +523,7 @@ class TestFailsafeIdempotency:
         await o._on_start()
         bus.publish.reset_mock()
 
-        # Timeout first
+        # Timeout arrives with natural win already satisfied
         now = datetime.now(UTC)
         await o._handle_timeout(
             GameTimeoutEvent(
@@ -522,7 +533,7 @@ class TestFailsafeIdempotency:
                 reason="wall_clock",
             )
         )
-        # Then a game event tries to trigger natural win
+        # Then a late game event arrives (idempotent noop)
         await o._handle_game_event(_make_game_event(action="negotiate_accept"))
 
         terminated_events = [
@@ -531,7 +542,8 @@ class TestFailsafeIdempotency:
             if isinstance(c.args[0], GameTerminatedEvent)
         ]
         assert len(terminated_events) == 1
-        assert terminated_events[0].reason == "wall_clock"
+        # M2: reason reflects the real outcome, not the racing timer
+        assert terminated_events[0].reason == "deal_closed"
 
     @pytest.mark.asyncio
     async def test_natural_win_then_timeout_only_natural_fires(self):

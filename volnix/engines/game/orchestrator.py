@@ -574,11 +574,47 @@ class GameOrchestrator(BaseEngine):
             await self._bus.publish(timeout_event)
 
     async def _handle_timeout(self, event: Event) -> None:
-        """Path B termination: settle open deals + publish game_terminated."""
+        """Path B termination: settle open deals + publish game_terminated.
+
+        M2 (B-cleanup.3): before committing to the Path B settlement
+        flow, run the win evaluator one more time. If a natural win
+        condition (e.g. ``deal_closed``) is satisfied at this moment —
+        which can happen if a winning ``world.negotiate_accept`` event
+        and a timeout event arrive on different bus consumer tasks in
+        the same event-loop tick — delegate to :meth:`_terminate_natural`
+        so the reported reason reflects the real outcome instead of the
+        racing timer. Without this guard the game would misreport a
+        legitimate ``deal_closed`` as ``wall_clock`` / ``stalemate``
+        / etc. when the race happens.
+        """
         if self._terminated:
             return
         if self._definition is None or self._scorer is None:
             return
+
+        # M2: natural-win priority check. If a win condition is met
+        # right now, the timeout lost the race — report the natural
+        # outcome via _terminate_natural instead of settling.
+        if self._win_evaluator is not None:
+            try:
+                natural_result = await self._win_evaluator.check(
+                    scores=self._player_scores,
+                    game_state=self._game_state,
+                    state_engine=self._state,
+                    exhausted_players=self._exhausted_players,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Win check during timeout raised; proceeding with timeout path")
+                natural_result = None
+                await self._publish_engine_error(
+                    source="win_check_on_timeout",
+                    event_number=self._game_state.event_counter,
+                    exc=exc,
+                )
+            if natural_result is not None:
+                await self._terminate_natural(natural_result)
+                return
+
         reason = str(getattr(event, "reason", "unknown"))
         self._terminated = True
         self._game_state.terminated = True
@@ -711,7 +747,36 @@ class GameOrchestrator(BaseEngine):
         )
 
     async def _publish_active_state(self, active: bool) -> None:
-        """Flip the game_active flag via bus (read by GameActivePolicy)."""
+        """Flip the ``game_active`` flag — direct call + bus publish.
+
+        M3 (B-cleanup.3) defense-in-depth: this method flips the gate
+        via TWO mechanisms to eliminate the FIFO-``_ready`` ordering
+        dependency the audit flagged.
+
+        1. **Direct call** (primary): calls ``gate.set_active(active)``
+           on the :class:`GameActivePolicy` instance injected via
+           ``_dependencies["game_active_gate"]`` by the composition
+           root. This flips the flag *synchronously* inside this
+           coroutine before any ``await`` yields control back to the
+           event loop. Any activation task launched after this call
+           will observe the new gate state.
+
+        2. **Bus publish** (secondary): publishes
+           :class:`GameActiveStateChangedEvent` so any OTHER subscriber
+           (reporter, dashboard, test harness) also sees the flip.
+           :class:`GameActivePolicy` is still subscribed to the bus
+           event as a back-channel fallback — harmless because
+           ``set_active`` is idempotent.
+        """
+        # Direct (primary): flip the gate synchronously.
+        gate = self._dependencies.get("game_active_gate")
+        if gate is not None:
+            try:
+                gate.set_active(active)
+            except Exception:  # noqa: BLE001
+                logger.exception("Direct gate.set_active failed; relying on bus delivery")
+
+        # Bus publish (secondary): fan out to other subscribers.
         state_event = GameActiveStateChangedEvent(
             event_id=EventId(f"evt-game-active-{active}-{self._run_id}-{_unique_suffix()}"),
             event_type="game.active_state_changed",
