@@ -615,6 +615,14 @@ class GameOrchestrator(BaseEngine):
                 await self._terminate_natural(natural_result)
                 return
 
+        # Re-check after the await: a concurrent _handle_game_event on
+        # a different bus consumer task may have set _terminated=True
+        # (via _terminate_natural) during the win evaluator's await.
+        # Without this re-check, both handlers would proceed to publish
+        # their own GameTerminatedEvent — producing a double-publish.
+        if self._terminated:
+            return
+
         reason = str(getattr(event, "reason", "unknown"))
         self._terminated = True
         self._game_state.terminated = True
