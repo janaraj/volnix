@@ -1352,6 +1352,32 @@ class VolnixApp:
             run_id=self._current_run_id,
         )
 
+        # NF1: build the negotiation tool schema from the blueprint's
+        # ``negotiation_fields`` (typed parameters) and register them on
+        # the agency BEFORE the orchestrator starts listening for events.
+        # When ``negotiation_fields`` is empty, the builder returns the
+        # static fallback (``deal_id`` + ``message`` only), preserving
+        # the pre-NF1 behavior for minimal blueprints.
+        try:
+            agency_for_tools = self._registry.get("agency")
+        except KeyError:
+            agency_for_tools = None
+        if agency_for_tools is not None:
+            from volnix.packs.verified.game.tool_schema import build_negotiation_tools
+
+            game_actions = build_negotiation_tools(list(game_def.negotiation_fields))
+            agency_for_tools.register_game_tools(game_actions)
+            logger.info(
+                "Registered %d negotiation tools on agency (%d typed fields)",
+                len(game_actions),
+                len(game_def.negotiation_fields),
+            )
+        else:
+            logger.warning(
+                "configure_game: no 'agency' engine registered; skipping "
+                "negotiation tool registration."
+            )
+
         # The orchestrator's _on_start was called once during wire_engines
         # but noop'd because configure hadn't been called yet. Call it again
         # now that the definition is set — the method is idempotent by

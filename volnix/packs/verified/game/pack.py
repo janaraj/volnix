@@ -32,10 +32,22 @@ from volnix.packs.verified.game.schemas import (
 class GamePack(ServicePack):
     """Verified pack for the ``game`` service.
 
-    Handles the structured negotiation tool surface. Tool schemas can
-    be extended dynamically by the world compiler at compile time when
-    the blueprint declares ``game.type_config.negotiation_fields``, but
-    the four tool NAMES (propose, counter, accept, reject) are fixed.
+    Handles the four fixed structured negotiation tools. The tool
+    parameter schema is one of two shapes:
+
+    - **Static fallback** (``deal_id`` + optional ``message`` with
+      ``additionalProperties: True``) — used when the blueprint
+      declares no ``game.negotiation_fields``. Returned by
+      :meth:`get_tools` for pack-registry discovery and listed in
+      :data:`GAME_TOOL_DEFINITIONS`.
+    - **Dynamic typed schema** — built at game configure time by
+      :func:`volnix.packs.verified.game.tool_schema.build_negotiation_tools`
+      from the blueprint's top-level ``game.negotiation_fields`` and
+      registered on the agency via
+      :meth:`volnix.engines.agency.engine.AgencyEngine.register_game_tools`.
+      This is the live code path for any blueprint that declares typed
+      negotiation fields. See NF1 in ``internal_docs/game/`` for the
+      migration history.
 
     Tools: negotiate_propose, negotiate_counter, negotiate_accept,
     negotiate_reject.
@@ -59,12 +71,16 @@ class GamePack(ServicePack):
     }
 
     def get_tools(self) -> list[dict]:
-        """Return the static tool manifest (legacy pure-closing schemas).
+        """Return the static fallback tool manifest.
 
-        Dynamic schemas from ``game.type_config.negotiation_fields`` are
-        built by the orchestrator at configure time and registered
-        alongside these via the agency engine's ``register_game_tools``
-        path.
+        The static shape (``deal_id`` + ``message`` only) is used for
+        pack-registry discovery so the responder can route the four
+        tool names to this pack. The parameter schema surfaced to LLMs
+        is overridden at game configure time by
+        :meth:`AgencyEngine.register_game_tools`, which calls
+        :func:`volnix.packs.verified.game.tool_schema.build_negotiation_tools`
+        on the blueprint's ``game.negotiation_fields`` to build the
+        typed dynamic schema.
         """
         return list(GAME_TOOL_DEFINITIONS)
 

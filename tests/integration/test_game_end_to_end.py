@@ -34,6 +34,7 @@ from volnix.engines.game.definition import (
     FlowConfig,
     GameDefinition,
     GameEntitiesConfig,
+    NegotiationField,
     PlayerBriefDecl,
     WinCondition,
 )
@@ -141,14 +142,12 @@ def _make_plan() -> WorldPlan:
             enabled=True,
             mode="negotiation",
             scoring_mode="behavioral",
-            type_config={
-                "negotiation_fields": [
-                    {"name": "price", "type": "number"},
-                    {"name": "delivery_weeks", "type": "integer"},
-                    {"name": "payment_days", "type": "integer"},
-                    {"name": "warranty_months", "type": "integer"},
-                ]
-            },
+            negotiation_fields=[
+                NegotiationField(name="price", type="number"),
+                NegotiationField(name="delivery_weeks", type="integer"),
+                NegotiationField(name="payment_days", type="integer"),
+                NegotiationField(name="warranty_months", type="integer"),
+            ],
             flow=FlowConfig(
                 type="event_driven",
                 # Short timers so the test fails fast when wiring breaks.
@@ -510,6 +509,52 @@ class TestScriptedGameEndToEnd:
         deals = await state.query_entities("negotiation_deal", {"id": "deal-q3-steel"})
         assert len(deals) == 1
         assert str(deals[0].get("status", "")).lower() == "accepted"
+
+        # NF1: verify the dynamic tool schema landed on the agency
+        # correctly. ``configure_game`` should have called
+        # ``build_negotiation_tools`` + ``register_game_tools`` with the
+        # plan's 4 typed negotiation fields, and the agency's
+        # ``_tool_definitions`` should now carry ``negotiate_propose``
+        # with typed ``price`` / ``delivery_weeks`` / ``payment_days`` /
+        # ``warranty_months`` parameters plus meta_params
+        # (``reasoning`` required).
+        agency = app.registry.get("agency")
+        propose_tool = next(
+            (t for t in agency._tool_definitions if t.name == "negotiate_propose"),
+            None,
+        )
+        assert propose_tool is not None, "negotiate_propose not registered on agency"
+        props = propose_tool.parameters["properties"]
+        assert props["price"]["type"] == "number"
+        assert props["delivery_weeks"]["type"] == "integer"
+        assert props["payment_days"]["type"] == "integer"
+        assert props["warranty_months"]["type"] == "integer"
+        # Meta_params layered on
+        assert "reasoning" in props
+        assert "intended_for" in props
+        required = set(propose_tool.parameters["required"])
+        assert {
+            "deal_id",
+            "price",
+            "delivery_weeks",
+            "payment_days",
+            "warranty_months",
+            "reasoning",
+        }.issubset(required)
+
+        # Accept/reject are terminal — no term field parameters
+        accept_tool = next(
+            (t for t in agency._tool_definitions if t.name == "negotiate_accept"),
+            None,
+        )
+        assert accept_tool is not None
+        accept_props = accept_tool.parameters["properties"]
+        assert "price" not in accept_props
+        assert "delivery_weeks" not in accept_props
+        # But accept DOES carry deal_id + message + meta_params
+        assert "deal_id" in accept_props
+        assert "message" in accept_props
+        assert "reasoning" in accept_props
 
     @pytest.mark.asyncio
     async def test_stalemate_timeout_terminates_when_no_moves_committed(self, app_with_mock_llm):

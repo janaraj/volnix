@@ -184,15 +184,14 @@ def test_animator_state_snapshot_excludes_game_internals(world_def):
 
 
 # ---------------------------------------------------------------------------
-# Negotiation type_config — generic schema from Phase P1
+# Negotiation fields — generic schema (NF1, flattened to top-level)
 # ---------------------------------------------------------------------------
 
 
 def test_negotiation_fields_declared(world_def):
-    """game.type_config.negotiation_fields declares the domain schema."""
+    """game.negotiation_fields declares the domain schema (flattened in NF1)."""
     game = world_def.get("game", {})
-    type_config = game.get("type_config", {})
-    fields = type_config.get("negotiation_fields", [])
+    fields = game.get("negotiation_fields", [])
 
     assert len(fields) == 6, f"Expected 6 fields, got {len(fields)}: {fields}"
 
@@ -210,7 +209,7 @@ def test_negotiation_fields_declared(world_def):
 
 def test_negotiation_fields_have_correct_types(world_def):
     """Each declared field has the correct JSON Schema primitive type."""
-    fields = world_def["game"]["type_config"]["negotiation_fields"]
+    fields = world_def["game"]["negotiation_fields"]
     type_by_name = {f["name"]: f["type"] for f in fields}
 
     assert type_by_name["unit_price"] == "number"
@@ -223,9 +222,14 @@ def test_negotiation_fields_have_correct_types(world_def):
 
 def test_freight_mode_has_enum(world_def):
     """freight_mode is a string enum with the three shipping modes."""
-    fields = world_def["game"]["type_config"]["negotiation_fields"]
+    fields = world_def["game"]["negotiation_fields"]
     freight = next(f for f in fields if f["name"] == "freight_mode")
     assert freight.get("enum") == ["sea", "air", "rail"]
+
+
+def test_no_legacy_type_config_block(world_def):
+    """NF1 (B-cleanup.1b): ``type_config`` removed in favor of flattened ``negotiation_fields``."""
+    assert "type_config" not in world_def.get("game", {})
 
 
 def test_game_flow_and_scoring_mode(world_def):

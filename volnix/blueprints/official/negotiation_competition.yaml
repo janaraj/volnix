@@ -36,22 +36,22 @@ world:
     scoring_mode: competitive
 
     # Domain schema for the negotiate_propose / negotiate_counter tools.
-    # Each field is declared once here; the game service pack builds
-    # the tool schemas dynamically at compile time.
-    type_config:
-      negotiation_fields:
-        - name: price
-          type: number
-          description: "USD per ton"
-        - name: delivery_weeks
-          type: integer
-          description: "Weeks from order confirmation to delivery"
-        - name: payment_days
-          type: integer
-          description: "NET payment terms in days"
-        - name: warranty_months
-          type: integer
-          description: "Warranty coverage in months"
+    # Each field becomes a typed, REQUIRED parameter on the tool schemas
+    # at game configure time (NF1) via
+    # ``volnix.packs.verified.game.tool_schema.build_negotiation_tools``.
+    negotiation_fields:
+      - name: price
+        type: number
+        description: "USD per ton"
+      - name: delivery_weeks
+        type: integer
+        description: "Weeks from order confirmation to delivery"
+      - name: payment_days
+        type: integer
+        description: "NET payment terms in days"
+      - name: warranty_months
+        type: integer
+        description: "Warranty coverage in months"
 
     flow:
       type: event_driven

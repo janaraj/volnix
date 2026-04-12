@@ -74,7 +74,7 @@ class TestGameConfig:
 
     def test_negotiation_fields(self, world_def):
         """Domain schema: price, delivery_weeks, payment_days, warranty_months."""
-        fields = world_def["game"]["type_config"]["negotiation_fields"]
+        fields = world_def["game"]["negotiation_fields"]
         field_names = {f["name"] for f in fields}
         assert field_names == {
             "price",
@@ -82,6 +82,10 @@ class TestGameConfig:
             "payment_days",
             "warranty_months",
         }
+
+    def test_no_legacy_type_config_block(self, world_def):
+        """NF1 (B-cleanup.1b): ``type_config`` removed in favor of flattened ``negotiation_fields``."""
+        assert "type_config" not in world_def["game"]
 
     def test_no_legacy_round_keys(self, world_def):
         """Legacy ``rounds`` / ``between_rounds`` / ``turn_protocol`` must be absent."""

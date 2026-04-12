@@ -215,11 +215,6 @@ class GameDefinition(BaseModel, frozen=True):
     enabled: bool = False
     mode: str = "competition"
     scoring_mode: ScoringMode = "behavioral"
-    # Legacy generic bag for game-type-specific config. Kept during the
-    # NF1 transition (B-cleanup.1a is additive); B-cleanup.1b removes
-    # this field and flattens the blueprint YAML to the top-level
-    # ``negotiation_fields`` key below.
-    type_config: dict[str, Any] = Field(default_factory=dict)
 
     # Dynamic negotiation tool schema (NF1). When non-empty, the game
     # pack's ``build_negotiation_tools`` builds typed tool parameters

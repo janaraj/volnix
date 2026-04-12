@@ -405,30 +405,30 @@ world:
     mode: negotiation
     scoring_mode: behavioral
 
-    # Uses the generic negotiation schema — each field is declared
-    # once here; the game service pack builds the tool schemas
-    # dynamically at compile time.
-    type_config:
-      negotiation_fields:
-        - name: unit_price
-          type: number
-          description: "USD per unit"
-        - name: quantity_units
-          type: integer
-          description: "Total units in this shipment"
-        - name: delivery_lead_days
-          type: integer
-          description: "Days from order confirmation to buyer receipt"
-        - name: payment_terms_days
-          type: integer
-          description: "NET payment terms in days"
-        - name: freight_mode
-          type: string
-          enum: [sea, air, rail]
-          description: "Shipping mode — sea is cheapest, air is fastest, rail is middle"
-        - name: late_penalty_pct
-          type: number
-          description: "Penalty as percent of deal value per day late"
+    # Domain schema — each field becomes a typed, REQUIRED parameter
+    # on the negotiate_propose / negotiate_counter tools at configure
+    # time (NF1) via
+    # ``volnix.packs.verified.game.tool_schema.build_negotiation_tools``.
+    negotiation_fields:
+      - name: unit_price
+        type: number
+        description: "USD per unit"
+      - name: quantity_units
+        type: integer
+        description: "Total units in this shipment"
+      - name: delivery_lead_days
+        type: integer
+        description: "Days from order confirmation to buyer receipt"
+      - name: payment_terms_days
+        type: integer
+        description: "NET payment terms in days"
+      - name: freight_mode
+        type: string
+        enum: [sea, air, rail]
+        description: "Shipping mode — sea is cheapest, air is fastest, rail is middle"
+      - name: late_penalty_pct
+        type: number
+        description: "Penalty as percent of deal value per day late"
 
     flow:
       type: event_driven

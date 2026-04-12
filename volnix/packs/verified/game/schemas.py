@@ -1,13 +1,21 @@
-"""Entity schemas + tool definitions for the game service pack.
+"""Entity schemas + static fallback tool definitions for the game service pack.
 
-Tool definitions are the *legacy fallback* schemas — they are the
-"pure closing" shape (``deal_id`` + optional ``message``). When a
-blueprint declares ``game.type_config.negotiation_fields``, the
-orchestrator registers *dynamic* tool definitions built from those
-declared fields via the P1 ``_build_negotiation_tools`` helper
-(relocated to ``tool_schema.py`` in this pack). The legacy static
-definitions here are used only when no ``negotiation_fields`` are
-declared (e.g. Q3 Steel's original minimal negotiation).
+The tool definitions here (``GAME_TOOL_DEFINITIONS``) are the static
+pure-closing fallback shape — ``deal_id`` + optional ``message`` with
+``additionalProperties: True``. They are used in two places:
+
+- :meth:`GamePack.get_tools` returns them so the pack registry can
+  discover the four tool names at startup (needed by the responder's
+  dispatcher).
+- :func:`volnix.packs.verified.game.tool_schema.build_negotiation_tools`
+  returns copies of them when a blueprint declares no
+  ``game.negotiation_fields`` (backward-compatible path).
+
+When a blueprint DOES declare ``game.negotiation_fields``, the agency
+receives a typed dynamic schema at game configure time via
+``build_negotiation_tools`` + ``AgencyEngine.register_game_tools``,
+which overrides the surface visible to LLMs. See NF1 in the Cycle B
+cleanup plan for details.
 """
 
 from __future__ import annotations
@@ -118,9 +126,8 @@ GAME_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "negotiate_propose",
         "service": "game",
         "description": (
-            "Put an opening proposal on the table. Specify all declared "
-            "negotiation fields — they come from the blueprint's "
-            "game.type_config.negotiation_fields."
+            "Put an opening proposal on the table. Specify terms in the "
+            "message (static fallback schema)."
         ),
         "parameters": _DEAL_ID_SCHEMA,
         "http_method": "POST",
@@ -129,9 +136,7 @@ GAME_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "negotiate_counter",
         "service": "game",
         "description": (
-            "Counter-offer on an open deal. Specify all declared "
-            "negotiation fields — any term you don't repeat will be "
-            "reset to your counter values."
+            "Counter-offer on an open deal. Specify terms in the message (static fallback schema)."
         ),
         "parameters": _DEAL_ID_SCHEMA,
         "http_method": "POST",

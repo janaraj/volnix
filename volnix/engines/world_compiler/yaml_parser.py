@@ -208,6 +208,32 @@ class YAMLParser:
                 "silence this warning."
             )
 
+        # NF1 migration: the nested ``game.type_config.negotiation_fields``
+        # shape was flattened to top-level ``game.negotiation_fields`` in
+        # B-cleanup.1b. ``GameDefinition.type_config`` no longer exists and
+        # Pydantic's default ``extra="ignore"`` would silently drop the
+        # nested key. Pop it here with a warning and auto-migrate the
+        # contained negotiation_fields list so out-of-tree blueprints keep
+        # working for one release before authors migrate.
+        if "type_config" in game_raw:
+            tc = game_raw.pop("type_config") or {}
+            if (
+                isinstance(tc, dict)
+                and "negotiation_fields" in tc
+                and "negotiation_fields" not in game_raw
+            ):
+                logger.warning(
+                    "Blueprint uses legacy ``game.type_config.negotiation_fields``. "
+                    "Migrate to flattened ``game.negotiation_fields``. "
+                    "Auto-migrating for this run."
+                )
+                game_raw["negotiation_fields"] = tc["negotiation_fields"]
+            else:
+                logger.warning(
+                    "Blueprint declares ``game.type_config`` but this field "
+                    "was removed in NF1 (B-cleanup.1b). Ignoring."
+                )
+
         # Warn if enabled but no deals declared. The compile still
         # succeeds but at runtime nothing will be negotiable.
         if not has_new_entities and not has_legacy_rounds:
