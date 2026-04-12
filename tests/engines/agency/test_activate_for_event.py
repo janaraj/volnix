@@ -277,7 +277,7 @@ class TestStateSummaryInjection:
         captured_contents: list[list[str]] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_len.append(len(_actor.activation_messages))
             captured_contents.append([m["content"] for m in _actor.activation_messages])
@@ -319,7 +319,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -340,7 +340,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -360,7 +360,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -386,7 +386,7 @@ class TestReasonForwarding:
         captured_reasons: list[str] = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, max_read_calls=None
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_reasons.append(reason)
             return []
@@ -398,7 +398,14 @@ class TestReasonForwarding:
                 reason=reason,
                 trigger_event=None,
             )
-        assert captured_reasons == ["game_kickstart", "game_event", "autonomous_tick"]
+        # Two-phase: with max_read_calls=None (default), research_budget=0
+        # → Phase 1 skipped, only game_move fires.
+        # autonomous_tick → single call (unchanged)
+        assert captured_reasons == [
+            "game_move",  # from game_kickstart (research skipped, budget=0)
+            "game_move",  # from game_event (same)
+            "autonomous_tick",  # non-game, single-phase
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +566,7 @@ class TestMaxActivationMessagesConfig:
         captured_len: list[int] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             captured_len.append(len(_actor.activation_messages))
             return []
@@ -604,7 +611,7 @@ class TestPerActorActivationLock:
         release_first = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             order.append("enter")
             await release_first.wait()
@@ -654,7 +661,7 @@ class TestPerActorActivationLock:
         release = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             inside.add(str(_actor.actor_id))
             max_concurrent["v"] = max(max_concurrent["v"], len(inside))
@@ -685,7 +692,7 @@ class TestPerActorActivationLock:
         engine = await _create_engine()
 
         async def raising_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             raise RuntimeError("boom")
 
@@ -702,7 +709,7 @@ class TestPerActorActivationLock:
         calls = {"n": 0}
 
         async def ok_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, max_read_calls=None
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
         ):
             calls["n"] += 1
             return []

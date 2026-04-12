@@ -941,7 +941,7 @@ class AgencyEngine(BaseEngine):
         reason: str,
         trigger_event: WorldEvent | None,
         max_calls_override: int | None = None,
-        max_read_calls: int | None = None,
+        append_closure: bool = True,
     ) -> list[ActionEnvelope]:
         """Activate an agent with a multi-turn tool-calling loop.
 
@@ -991,6 +991,13 @@ class AgencyEngine(BaseEngine):
             else self._typed_config.max_tool_calls_per_activation
         )
         tool_choice = self._typed_config.tool_choice_mode
+        # Phase 2 (game_move): force the LLM to return a tool call.
+        # "required" is supported by all providers (Gemini=ANY,
+        # Anthropic={"type":"any"}, OpenAI="required"). This is the
+        # clean way to ensure the agent makes a game move — no retry
+        # loops, no nudge messages, no special-case handlers.
+        if reason == "game_move":
+            tool_choice = "required"
 
         async with self._llm_semaphore:
             system_prompt = self._prompt_builder.build_system_prompt()
@@ -999,22 +1006,26 @@ class AgencyEngine(BaseEngine):
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
 
-            # F4 (P6.3-fix.5): game-specific tool constraints.
-            # These are gated on _GAME_REASONS so non-game activations
-            # (subscription_match, event_affected, scheduled, autonomous,
-            # external) are completely unaffected.
-            _GAME_ACTIVATION_REASONS = {"game_kickstart", "game_event"}
+            # Two-phase game activation: research (game_research) uses
+            # full tools, move (game_move) uses game-only tools.
+            # activate_for_event dispatches the phases; this block just
+            # configures the tool list for whichever phase we're in.
+            _GAME_ACTIVATION_REASONS = {
+                "game_kickstart",
+                "game_event",
+                "game_research",
+                "game_move",
+            }
             if reason in _GAME_ACTIVATION_REASONS:
-                # Research-then-move model: game players keep their full
-                # permission-filtered toolset (can read Notion, Slack,
-                # market data BEFORE making a game move). The TEXT prompt
-                # focuses on game tools only so the LLM knows the game
-                # move is the goal. do_nothing is removed — game players
-                # MUST make a move. The turn-ending detection in the
-                # tool loop (Step 3b below) stops the loop after the
-                # game move commits — no budget hack needed.
-                allowed_services: set[str] | None = {"game"}
-                actor_tools = [t for t in actor_tools if t.name != "do_nothing"]
+                if reason == "game_move":
+                    # Phase 2: game tools ONLY — force the negotiate move
+                    allowed_services: set[str] | None = {"game"}
+                    actor_tools = [t for t in actor_tools if t.service == "game"]
+                else:
+                    # Phase 1 (game_research) or legacy (game_kickstart/event):
+                    # full tool set for research, text prompt focuses on game
+                    allowed_services = {"game"}
+                    actor_tools = [t for t in actor_tools if t.name != "do_nothing"]
             else:
                 # Non-game: show all services in text prompt (existing behavior)
                 allowed_services = {t.service for t in actor_tools if t.service}
@@ -1044,7 +1055,7 @@ class AgencyEngine(BaseEngine):
             # Non-game re-activations (autonomous lead agents, subscription
             # triggers, etc.) still get the generic re-activation context +
             # autonomous phase instructions.
-            _GAME_REASONS = {"game_kickstart", "game_event"}
+            _GAME_REASONS = {"game_kickstart", "game_event", "game_research", "game_move"}
             if actor.activation_messages:
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
                 if reason not in _GAME_REASONS:
@@ -1092,33 +1103,9 @@ class AgencyEngine(BaseEngine):
             # Iteration cap equals max_calls as a safety rail — if the
             # LLM only emits one call per iteration (the common pattern),
             # the outer loop naturally limits work to the budget.
-            # Track non-game (read) tool calls for game activations.
-            # When the read budget is exhausted, inject a nudge message.
-            _read_call_count = 0
-            _read_call_limit = max_read_calls or 0
-
             for iteration in range(max_calls):
                 if total_tool_calls >= max_calls:
                     break
-
-                # Step 3c: if game activation has exhausted its read
-                # budget without making a game move, nudge the agent.
-                if (
-                    reason in _GAME_ACTIVATION_REASONS
-                    and _read_call_limit > 0
-                    and _read_call_count >= _read_call_limit
-                ):
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "[You have used your research budget. "
-                                "Make your negotiation move NOW — call "
-                                "negotiate_propose, negotiate_counter, "
-                                "negotiate_accept, or negotiate_reject.]"
-                            ),
-                        }
-                    )
 
                 step_start = _time.monotonic()
 
@@ -1251,12 +1238,6 @@ class AgencyEngine(BaseEngine):
                         )
                         total_tool_calls += 1
 
-                        # Track non-game calls for the read-budget rail.
-                        if reason in _GAME_ACTIVATION_REASONS and not tc.name.startswith(
-                            "negotiate_"
-                        ):
-                            _read_call_count += 1
-
                     # Commit the assistant message + tool results as a
                     # single coherent turn in the conversation history.
                     # One assistant message with N tool_calls, followed by
@@ -1364,9 +1345,11 @@ class AgencyEngine(BaseEngine):
                 closure = "[Nothing to do. Activation complete.]"
             else:
                 closure = f"[Activation ended: {terminated_by}.]"
-            messages.append({"role": "user", "content": closure})
+            if append_closure:
+                messages.append({"role": "user", "content": closure})
 
-            # Persist conversation for future re-activations
+            # Persist conversation for future re-activations (always,
+            # even without closure — Phase 1 persists so Phase 2 sees it)
             actor.activation_messages = messages
 
             # Record activation completion
@@ -2054,10 +2037,69 @@ class AgencyEngine(BaseEngine):
                 trigger_event if isinstance(trigger_event, WorldEvent) else None
             )
 
-            return await self._activate_with_tool_loop(
-                actor_state,
-                reason,
-                world_trigger,
-                max_calls_override=max_calls_override,
-                max_read_calls=max_read_calls,
-            )
+            # Two-phase game activation: research → move.
+            # Phase 1 (research): full tools, read the world.
+            # Phase 2 (move): game tools only, make exactly 1 negotiate call.
+            # The agent decides whether to research — if it calls a
+            # negotiate tool in Phase 1, turn-ending fires and Phase 2
+            # is skipped. If max_read_calls=0, Phase 1 is skipped entirely.
+            if reason in {"game_kickstart", "game_event"}:
+                research_budget = max_read_calls or 0
+
+                # Phase 1: Research (optional)
+                if research_budget > 0:
+                    research_envelopes = await self._activate_with_tool_loop(
+                        actor_state,
+                        "game_research",
+                        world_trigger,
+                        max_calls_override=research_budget,
+                        append_closure=False,
+                    )
+                else:
+                    research_envelopes = []
+
+                # Short-circuit: if Phase 1 already made a game move
+                # (turn-ending fired in research phase), skip Phase 2.
+                phase1_made_game_move = any(
+                    getattr(e, "action_type", "").startswith("negotiate_")
+                    for e in research_envelopes
+                )
+                if phase1_made_game_move:
+                    return research_envelopes
+
+                # Bridge message: tell the LLM research is done.
+                # Only injected when Phase 1 actually ran (budget > 0).
+                if research_budget > 0:
+                    actor_state.activation_messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "[Research phase complete. Based on what "
+                                "you just read, make your negotiation "
+                                "move now. You can only call "
+                                "negotiate_propose, negotiate_counter, "
+                                "negotiate_accept, or negotiate_reject.]"
+                            ),
+                        }
+                    )
+
+                # Phase 2: Move (required). Budget of 4 allows retries
+                # Phase 2 uses tool_choice="required" so the LLM MUST
+                # return a tool call. No retries needed.
+                move_envelopes = await self._activate_with_tool_loop(
+                    actor_state,
+                    "game_move",
+                    world_trigger,
+                    max_calls_override=2,  # 1 game move + 1 margin
+                    append_closure=True,
+                )
+                return research_envelopes + move_envelopes
+
+            else:
+                # Non-game: single-phase (unchanged)
+                return await self._activate_with_tool_loop(
+                    actor_state,
+                    reason,
+                    world_trigger,
+                    max_calls_override=max_calls_override,
+                )
