@@ -3,8 +3,9 @@
 Reads a completed run's events via the HTTP API and computes the
 behavioral metrics declared in the Clean Rewrite plan (Phase P6.2):
 
-- ``world_queries_per_turn``: did each agent actually read the world,
-  or did they anchor to persona numbers?
+- ``world_queries_per_move``: did each agent actually read the world,
+  or did they anchor to persona numbers? (NF5: ``per_move`` replaces
+  the pre-Cycle-B ``per_turn`` metric.)
 - ``unique_services_queried``: more than just slack?
 - ``response_to_animator_events``: did the agent's proposal shift
   meaningfully after a scheduled animator beat (e.g. the port closure)?
@@ -35,7 +36,7 @@ from urllib.request import Request, urlopen
 
 # Terms that are NEVER read (they're the negotiate_* structured tool
 # calls, not world reads). We filter them out when counting "world
-# queries per turn".
+# queries per move".
 _NEGOTIATE_ACTIONS: frozenset[str] = frozenset(
     {
         "negotiate_propose",
@@ -50,19 +51,25 @@ _NEGOTIATE_ACTIONS: frozenset[str] = frozenset(
 _COMMUNICATION_SERVICES: frozenset[str] = frozenset({"slack", "game"})
 
 # Minimum thresholds that a "passing" run must meet.
-_THRESHOLD_WORLD_QUERIES_PER_TURN: float = 2.0
+_THRESHOLD_WORLD_QUERIES_PER_MOVE: float = 2.0
 _THRESHOLD_UNIQUE_SERVICES: int = 3
 _THRESHOLD_CORRELATION: float = 0.5
 
 
 @dataclass
 class ActorMetrics:
-    """Per-actor behavioral evaluation metrics."""
+    """Per-actor behavioral evaluation metrics.
+
+    NF5 (B-cleanup.5): ``turns_taken`` was renamed to
+    ``game_moves_made`` because Cycle B's event-driven model does not
+    have rounds or turns. A game "move" is any committed
+    ``world.negotiate_*`` event by this actor.
+    """
 
     actor_id: str
-    turns_taken: int = 0
+    game_moves_made: int = 0
     world_queries_total: int = 0
-    world_queries_per_turn: float = 0.0
+    world_queries_per_move: float = 0.0
     unique_services_queried: int = 0
     unique_entity_types_touched: int = 0
     private_queries: int = 0  # own-private database queries
@@ -72,10 +79,17 @@ class ActorMetrics:
 
 @dataclass
 class RunMetrics:
-    """Whole-run behavioral evaluation metrics."""
+    """Whole-run behavioral evaluation metrics.
+
+    NF5 (B-cleanup.5): ``rounds_played`` was replaced with
+    ``total_game_events`` — total committed ``world.negotiate_*``
+    events across all players. The round concept doesn't exist in
+    Cycle B's event-driven model; the equivalent duration metric is
+    the number of committed game moves.
+    """
 
     run_id: str
-    rounds_played: int = 0
+    total_game_events: int = 0
     deal_closed: bool = False
     winner: str | None = None
     final_terms: dict[str, Any] | None = None
@@ -87,7 +101,7 @@ class RunMetrics:
         """Render to JSON-serializable dict."""
         return {
             "run_id": self.run_id,
-            "rounds_played": self.rounds_played,
+            "total_game_events": self.total_game_events,
             "deal_closed": self.deal_closed,
             "winner": self.winner,
             "final_terms": self.final_terms,
@@ -255,19 +269,30 @@ def compute_metrics(run_id: str, events: list[dict[str, Any]]) -> RunMetrics:
         ):
             metrics.animator_event_count += 1
 
-    # Determine rounds played — look for game.round_started events
-    round_events = [ev for ev in events if ev.get("event_type") == "game.round_started"]
-    metrics.rounds_played = len(round_events)
+    # NF5 (B-cleanup.5): total_game_events is the count of committed
+    # ``world.negotiate_*`` events. This replaces the pre-Cycle-B
+    # ``rounds_played`` metric that searched for ``game.round_started``
+    # events (no longer emitted in the event-driven model).
+    _GAME_MOVE_EVENT_TYPES = (
+        "world.negotiate_propose",
+        "world.negotiate_counter",
+        "world.negotiate_accept",
+        "world.negotiate_reject",
+    )
+    game_move_events = [ev for ev in events if ev.get("event_type") in _GAME_MOVE_EVENT_TYPES]
+    metrics.total_game_events = len(game_move_events)
 
-    # Deal closed + winner (from game.completed)
-    completed = [ev for ev in events if ev.get("event_type") == "game.completed"]
-    if completed:
-        comp = completed[0]
-        metrics.winner = comp.get("winner")
-        # If a winner exists AND at least one negotiate_accept was
-        # committed, the deal was genuinely closed
+    # Deal closed + winner (from game.terminated). The pre-Cycle-B
+    # ``game.completed`` event type was replaced by ``game.terminated``
+    # in B.5, which carries the same winner + reason fields.
+    terminated = [ev for ev in events if ev.get("event_type") == "game.terminated"]
+    if terminated:
+        term = terminated[0]
+        metrics.winner = term.get("winner")
+        # The deal was genuinely closed if the termination reason is
+        # ``deal_closed`` AND at least one negotiate_accept was committed.
         accepts = [ev for ev in events if ev.get("event_type") == "world.negotiate_accept"]
-        metrics.deal_closed = bool(accepts)
+        metrics.deal_closed = bool(accepts) and term.get("reason") == "deal_closed"
         # Final terms = last committed propose/counter before acceptance
         propose_or_counter = [
             _extract_negotiate_terms(ev)
@@ -300,14 +325,19 @@ def compute_metrics(run_id: str, events: list[dict[str, Any]]) -> RunMetrics:
 
         am = ActorMetrics(actor_id=actor_id)
 
-        # Turns taken — count game.turn events for this actor
-        am.turns_taken = sum(1 for ev in actor_ev_list if ev.get("event_type") == "game.turn")
+        # NF5: game moves made — count committed negotiate_* events by
+        # this actor. Replaces the legacy ``turns_taken`` which counted
+        # ``game.turn`` events (no longer emitted in the event-driven
+        # model).
+        am.game_moves_made = sum(
+            1 for ev in actor_ev_list if ev.get("event_type") in _GAME_MOVE_EVENT_TYPES
+        )
 
         # World queries — reads against non-comm services
         world_reads = [ev for ev in actor_ev_list if _is_world_read(ev)]
         am.world_queries_total = len(world_reads)
-        if am.turns_taken > 0:
-            am.world_queries_per_turn = am.world_queries_total / am.turns_taken
+        if am.game_moves_made > 0:
+            am.world_queries_per_move = am.world_queries_total / am.game_moves_made
 
         services = {ev.get("service_id", "") for ev in world_reads if ev.get("service_id")}
         am.unique_services_queried = len(services)
@@ -429,10 +459,10 @@ def check_thresholds(metrics: RunMetrics) -> tuple[bool, list[str]]:
         failures.append("No actor metrics computed — no player events found")
 
     for actor_id, am in metrics.actor_metrics.items():
-        if am.world_queries_per_turn < _THRESHOLD_WORLD_QUERIES_PER_TURN:
+        if am.world_queries_per_move < _THRESHOLD_WORLD_QUERIES_PER_MOVE:
             failures.append(
-                f"{actor_id}: world_queries_per_turn={am.world_queries_per_turn:.2f} "
-                f"< threshold {_THRESHOLD_WORLD_QUERIES_PER_TURN}"
+                f"{actor_id}: world_queries_per_move={am.world_queries_per_move:.2f} "
+                f"< threshold {_THRESHOLD_WORLD_QUERIES_PER_MOVE}"
             )
         if am.unique_services_queried < _THRESHOLD_UNIQUE_SERVICES:
             failures.append(
@@ -458,7 +488,7 @@ def _render_table(metrics: RunMetrics) -> str:
     """Human-readable summary table."""
     lines = [
         f"=== Run {metrics.run_id} ===",
-        f"  Rounds played: {metrics.rounds_played}",
+        f"  Total game events: {metrics.total_game_events}",
         f"  Deal closed: {metrics.deal_closed}",
         f"  Winner: {metrics.winner or '(none)'}",
         f"  Final terms: {metrics.final_terms or '(none)'}",
@@ -469,9 +499,9 @@ def _render_table(metrics: RunMetrics) -> str:
     ]
     for actor_id, am in metrics.actor_metrics.items():
         lines.append(f"  {actor_id}:")
-        lines.append(f"    turns_taken: {am.turns_taken}")
+        lines.append(f"    game_moves_made: {am.game_moves_made}")
         lines.append(
-            f"    world_queries_per_turn: {am.world_queries_per_turn:.2f}"
+            f"    world_queries_per_move: {am.world_queries_per_move:.2f}"
             f" (total {am.world_queries_total})"
         )
         lines.append(f"    unique_services_queried: {am.unique_services_queried}")

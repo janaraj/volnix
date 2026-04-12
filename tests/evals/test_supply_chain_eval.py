@@ -76,12 +76,17 @@ def _accept(actor_id: str) -> dict:
     }
 
 
-def _round_started(n: int) -> dict:
-    return {"event_type": "game.round_started", "actor_id": "", "round_number": n}
-
-
-def _turn(actor_id: str, n: int) -> dict:
-    return {"event_type": "game.turn", "actor_id": actor_id, "round_number": n}
+def _terminated(winner: str | None = None, reason: str = "deal_closed") -> dict:
+    """NF5: ``game.terminated`` is the event-driven replacement for
+    the pre-Cycle-B ``game.completed`` event. Carries the same
+    winner + reason fields that the eval script reads.
+    """
+    return {
+        "event_type": "game.terminated",
+        "actor_id": "",
+        "winner": winner,
+        "reason": reason,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -211,30 +216,30 @@ def test_terms_delta_empty_when_no_change():
 # ---------------------------------------------------------------------------
 
 
-def test_compute_metrics_counts_rounds_and_turns():
+def test_compute_metrics_counts_game_moves_made():
+    """NF5: replaces ``rounds_played`` / ``turns_taken`` with
+    ``total_game_events`` / ``game_moves_made``. Each committed
+    ``world.negotiate_*`` event counts as a game move.
+    """
     events = [
-        _round_started(1),
-        _turn("nimbus_buyer_1", 1),
-        _turn("haiphong_supplier_1", 1),
-        _round_started(2),
-        _turn("nimbus_buyer_1", 2),
-        _turn("haiphong_supplier_1", 2),
+        _negotiate_propose("nimbus_buyer_1", unit_price=25.0),
+        _negotiate_propose("haiphong_supplier_1", unit_price=30.0),
+        _negotiate_propose("nimbus_buyer_1", unit_price=26.0),
+        _negotiate_propose("haiphong_supplier_1", unit_price=28.0),
     ]
     metrics = compute_metrics("run-1", events)
-    assert metrics.rounds_played == 2
-    assert metrics.actor_metrics["nimbus_buyer_1"].turns_taken == 2
-    assert metrics.actor_metrics["haiphong_supplier_1"].turns_taken == 2
+    assert metrics.total_game_events == 4
+    assert metrics.actor_metrics["nimbus_buyer_1"].game_moves_made == 2
+    assert metrics.actor_metrics["haiphong_supplier_1"].game_moves_made == 2
 
 
-def test_compute_metrics_world_queries_per_turn():
-    """Dana makes 4 queries across 2 turns → 2.0 queries/turn (at threshold)."""
+def test_compute_metrics_world_queries_per_move():
+    """Dana makes 4 world queries across 2 game moves → 2.0 queries/move."""
     events = [
-        _round_started(1),
-        _turn("nimbus_buyer_1", 1),
+        _negotiate_propose("nimbus_buyer_1"),
         _notion_read("nimbus_buyer_1", database_id="cfo_authority_db"),
         _notion_read("nimbus_buyer_1", database_id="ports_db"),
-        _round_started(2),
-        _turn("nimbus_buyer_1", 2),
+        _negotiate_propose("nimbus_buyer_1"),
         _notion_read("nimbus_buyer_1", database_id="weather_alerts_db"),
         {
             "event_type": "world.twitter.search_recent",
@@ -247,14 +252,13 @@ def test_compute_metrics_world_queries_per_turn():
     metrics = compute_metrics("run-2", events)
     dana = metrics.actor_metrics["nimbus_buyer_1"]
     assert dana.world_queries_total == 4
-    assert dana.world_queries_per_turn == 2.0
+    assert dana.world_queries_per_move == 2.0
     assert dana.unique_services_queried == 2  # notion + twitter
 
 
 def test_compute_metrics_detects_private_queries():
     events = [
-        _round_started(1),
-        _turn("nimbus_buyer_1", 1),
+        _negotiate_propose("nimbus_buyer_1"),
         _notion_read("nimbus_buyer_1", database_id="cfo_authority_db"),
         _notion_read("nimbus_buyer_1", database_id="production_schedule_db"),
         _notion_read("nimbus_buyer_1", database_id="ports_db"),
@@ -268,8 +272,7 @@ def test_compute_metrics_detects_private_queries():
 def test_compute_metrics_flags_opponent_private_leak():
     """If a buyer queries supplier's private db, the eval flags it."""
     events = [
-        _round_started(1),
-        _turn("nimbus_buyer_1", 1),
+        _negotiate_propose("nimbus_buyer_1"),
         _notion_read("nimbus_buyer_1", database_id="haiphong_inventory_db"),
     ]
     metrics = compute_metrics("run-leak", events)
@@ -282,23 +285,30 @@ def test_compute_metrics_flags_opponent_private_leak():
 
 
 def test_compute_metrics_deal_closed_with_final_terms():
+    """NF5: uses ``game.terminated`` (event-driven) instead of
+    pre-Cycle-B ``game.completed``.
+    """
     events = [
-        _round_started(1),
-        _turn("nimbus_buyer_1", 1),
         _negotiate_propose("nimbus_buyer_1", unit_price=26.0, freight_mode="sea"),
         _accept("haiphong_supplier_1"),
-        {
-            "event_type": "game.completed",
-            "actor_id": "",
-            "winner": "nimbus_buyer_1",
-            "reason": "score_threshold",
-        },
+        _terminated(winner="nimbus_buyer_1", reason="deal_closed"),
     ]
     metrics = compute_metrics("run-closed", events)
     assert metrics.deal_closed is True
     assert metrics.winner == "nimbus_buyer_1"
     assert metrics.final_terms is not None
     assert metrics.final_terms["unit_price"] == 26.0
+
+
+def test_compute_metrics_deal_not_closed_on_timeout():
+    """NF5 regression: termination with reason!=deal_closed → deal_closed=False."""
+    events = [
+        _negotiate_propose("nimbus_buyer_1"),
+        _terminated(winner=None, reason="wall_clock"),
+    ]
+    metrics = compute_metrics("run-timeout", events)
+    assert metrics.deal_closed is False
+    assert metrics.winner is None
 
 
 def test_check_thresholds_passing_run():
@@ -309,18 +319,18 @@ def test_check_thresholds_passing_run():
     metrics.final_terms_match_state = 0.7
     metrics.actor_metrics["nimbus_buyer_1"] = ActorMetrics(
         actor_id="nimbus_buyer_1",
-        turns_taken=3,
+        game_moves_made=3,
         world_queries_total=9,
-        world_queries_per_turn=3.0,
+        world_queries_per_move=3.0,
         unique_services_queried=3,
         private_queries=3,
         opponent_private_queries=0,
     )
     metrics.actor_metrics["haiphong_supplier_1"] = ActorMetrics(
         actor_id="haiphong_supplier_1",
-        turns_taken=3,
+        game_moves_made=3,
         world_queries_total=6,
-        world_queries_per_turn=2.0,
+        world_queries_per_move=2.0,
         unique_services_queried=3,
         private_queries=2,
         opponent_private_queries=0,
@@ -335,9 +345,9 @@ def test_check_thresholds_failing_run_insufficient_queries():
     metrics = RunMetrics(run_id="run-thin")
     metrics.actor_metrics["nimbus_buyer_1"] = ActorMetrics(
         actor_id="nimbus_buyer_1",
-        turns_taken=3,
+        game_moves_made=3,
         world_queries_total=3,
-        world_queries_per_turn=1.0,  # below threshold of 2.0
+        world_queries_per_move=1.0,  # below threshold of 2.0
         unique_services_queried=2,  # below threshold of 3
         private_queries=0,
         opponent_private_queries=0,
