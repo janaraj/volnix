@@ -115,6 +115,7 @@ class ReportGeneratorEngine(BaseEngine):
                     "id": str(a.id),
                     "type": str(a.type),
                     "role": getattr(a, "role", ""),
+                    "budget": getattr(a, "budget", None) or {},
                 }
                 for a in actors
                 if str(a.type) != "human"

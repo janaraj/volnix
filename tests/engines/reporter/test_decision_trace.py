@@ -105,6 +105,42 @@ async def test_governance_blocked_action() -> None:
     assert action["governance"]["policy"] == "block"
 
 
+async def test_governance_summary_pressure_rates() -> None:
+    actors = [{"id": "agent1", "type": "agent", "role": "buyer", "budget": {"world_actions": 10}}]
+    events = [
+        _make_event("world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion"),
+        _make_event("world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion"),
+        {
+            **_make_event("policy.flag", "agent1"),
+            "event_type": "policy.flag",
+        },
+        {
+            **_make_event("budget.deduction", "agent1"),
+            "event_type": "budget.deduction",
+            "budget_type": "world_actions",
+            "amount": 2,
+        },
+        _make_event("permission.denied", "agent1"),
+        _make_event("permission.denied", "agent1"),
+        {
+            **_make_event("permission.allow", "agent1"),
+            "event_type": "permission.allow",
+        },
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=actors, state_engine=None)
+    gov = trace["governance_summary"]["agent1"]
+    assert gov["total_world_actions"] == 2
+    assert gov["policies_triggered"] == 1
+    assert gov["policy_pressure_rate"] == 0.5  # 1 / 2
+    assert gov["permissions_denied"] == 2
+    assert gov["permissions_checked"] == 3
+    assert gov["permission_rejection_rate"] == round(2 / 3, 3)
+    assert gov["budget_consumed"] == 2
+    assert gov["budget_total"] == 10
+    assert gov["budget_utilization"] == 0.2  # 2 / 10
+
+
 async def test_multi_actor_turn_grouping() -> None:
     actors = [
         {"id": "buyer", "type": "agent", "role": "buyer"},

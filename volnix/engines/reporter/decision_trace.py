@@ -514,12 +514,16 @@ class DecisionTraceBuilder:
         agent_ids: list[str],
         actors: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Per-actor governance aggregate counts."""
+        """Per-actor governance aggregate counts with pressure rates."""
         result: dict[str, Any] = {}
         for actor_id in agent_ids:
             actor_events = [
                 e for e in events if _get_str(e, "actor_id") == actor_id
             ]
+            total_world_actions = sum(
+                1 for e in actor_events
+                if _get_str(e, "event_type").startswith("world.")
+            )
             perms_checked = sum(
                 1 for e in actor_events
                 if _get_str(e, "event_type").startswith("permission.")
@@ -536,21 +540,45 @@ class DecisionTraceBuilder:
                 1 for e in actor_events
                 if _get_str(e, "event_type") == "policy.block"
             )
+            # Budget: sum world_actions-type deductions only (1 per world action)
             budget_consumed = sum(
                 int(_get_val(e, "amount", 0))
                 for e in actor_events
                 if _get_str(e, "event_type") == "budget.deduction"
+                and _get_str(e, "budget_type") in ("world_actions", "")
             )
             actor_meta = next(
                 (a for a in actors if str(a.get("id", "")) == actor_id), {}
             )
+            budget_cfg = actor_meta.get("budget") or {}
+            budget_total: int = int(budget_cfg.get("world_actions", 0))
+            budget_utilization: float | None = (
+                round(budget_consumed / budget_total, 3)
+                if budget_total > 0
+                else None
+            )
+            # Derived pressure rates
+            policy_pressure_rate: float | None = (
+                round(policies_triggered / total_world_actions, 3)
+                if total_world_actions > 0
+                else None
+            )
+            rejection_rate: float | None = (
+                round(perms_denied / perms_checked, 3)
+                if perms_checked > 0
+                else None
+            )
             result[actor_id] = {
                 "role": actor_meta.get("role", actor_id),
+                "total_world_actions": total_world_actions,
                 "permissions_checked": perms_checked,
                 "permissions_denied": perms_denied,
+                "permission_rejection_rate": rejection_rate,
                 "policies_triggered": policies_triggered,
                 "policies_blocked": policies_blocked,
+                "policy_pressure_rate": policy_pressure_rate,
                 "budget_consumed": budget_consumed,
-                "budget_utilization": None,  # requires total budget from actor config
+                "budget_total": budget_total if budget_total > 0 else None,
+                "budget_utilization": budget_utilization,
             }
         return result
