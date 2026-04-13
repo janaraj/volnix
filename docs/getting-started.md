@@ -59,19 +59,20 @@ You'll see blueprints like `customer_support`, `incident_response`, `open_sandbo
 Internal agents are LLM-powered actors that collaborate within the world without external input. This is the fastest way to see Volnix in action:
 
 ```bash
-uv run volnix serve demo_support_escalation \
-  --internal volnix/blueprints/official/agents_support_team.yaml \
-  --port 8080
+# Run a 3-agent support team — compiles the world and runs immediately
+uv run volnix run demo_support_escalation \
+  --internal volnix/blueprints/official/agents_support_team.yaml
 ```
 
-This compiles the `demo_support_escalation` blueprint and runs a 3-agent team (supervisor, senior-agent, triage-agent). They collaborate via Slack, investigate tickets, process refunds, and produce a deliverable. The run takes about 60-120 seconds depending on your LLM provider.
+This compiles the `demo_support_escalation` blueprint, runs a 3-agent team (supervisor, senior-agent, triage-agent), and prints a report when they finish. They collaborate via Slack, investigate tickets, process refunds, and produce a deliverable. The run takes about 60-120 seconds depending on your LLM provider.
+
+Add `--serve --port 8080` to also expose MCP/HTTP endpoints while the simulation runs (useful for connecting additional observers or external tools).
 
 You can also run with a dynamic world where NPC customers generate new events:
 
 ```bash
-uv run volnix serve dynamic_support_center \
-  --internal volnix/blueprints/official/agents_dynamic_support.yaml \
-  --port 8080
+uv run volnix run dynamic_support_center \
+  --internal volnix/blueprints/official/agents_dynamic_support.yaml
 ```
 
 See [internal-agents.md](internal-agents.md) for the full guide on agent teams, lead coordination, and deliverables.
@@ -95,13 +96,32 @@ The agent fetches tools from Volnix in its native format and interacts with the 
 
 ## 5. View Results
 
-### Terminal report
+### Terminal report (printed automatically after `volnix run`)
+
+The CLI prints a governance scorecard after every run. To re-read any past run:
 
 ```bash
 uv run volnix report last
 ```
 
-This prints a governance scorecard showing actions taken, policies triggered, budget usage, and capability gaps.
+### Run artifacts
+
+Every run saves artifacts to `~/.volnix/runs/<run_id>/`:
+
+| File | Contents |
+|------|----------|
+| `report.json` | Full report: scorecard, gap log, condition analysis |
+| `scorecard.json` | Per-actor behavioral scores |
+| `decision_trace.json` | Activation timeline — what each agent did, why governance intervened, what committed, information coverage |
+| `event_log.json` | Raw event log in chronological order |
+| `config.json` | Blueprint config snapshot for this run |
+
+The decision trace is the most informative artifact for understanding agent behavior:
+
+```bash
+# Inspect the decision trace for the last run
+cat ~/.volnix/runs/$(ls -t ~/.volnix/runs | head -1)/decision_trace.json | python3 -m json.tool | head -60
+```
 
 ### Dashboard
 
@@ -128,7 +148,7 @@ volnix create "An e-commerce customer service team using Zendesk for tickets, \
 This generates a YAML world definition. Review and customize it, then run:
 
 ```bash
-volnix run my_world.yaml --serve --port 8080
+volnix run my_world.yaml
 ```
 
 ### From YAML directly
