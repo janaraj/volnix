@@ -333,6 +333,18 @@ class ReportGeneratorEngine(BaseEngine):
         if actors is None:
             actors = self._get_actors()
         state = self._get_state_engine()
+        # Auto-detect negotiation game and instantiate interpreter when not provided
+        if interpreter is None:
+            has_negotiate = any(
+                str(e.get("event_type", "") if isinstance(e, dict)
+                    else getattr(e, "event_type", "")).startswith("world.game.negotiate_")
+                for e in events
+            )
+            if has_negotiate:
+                from volnix.engines.reporter.interpreters.negotiation import (
+                    NegotiationInterpreter,
+                )
+                interpreter = NegotiationInterpreter()
         return await self._trace_builder.build(
             events=events,
             actors=actors,
