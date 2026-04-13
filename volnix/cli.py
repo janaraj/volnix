@@ -664,12 +664,29 @@ async def _run_impl(
                 else:
                     console.print("[bold]Step 4/4: Waiting for external agents...[/bold]")
             else:
-                console.print(
-                    "[bold]Step 3/4: Skipping server start (use --serve to enable)[/bold]"
-                )
-                console.print(
-                    "[bold]Step 4/4: Simulation ready for programmatic interaction[/bold]"
-                )
+                # No external servers — still run any internal simulation (game or autonomous)
+                console.print("[bold]Step 3/4: Local run (no network servers)[/bold]")
+                sim = await _setup_simulation(volnix, sim_plan)
+                if sim is not None:
+                    runner, _, _ = sim
+                    is_game = _is_game_runner(runner)
+                    label = "game" if is_game else "simulation"
+                    console.print(f"[bold]Step 4/4: Running {label}...[/bold]")
+                    run_result = await runner.run()
+                    stop_reason = _format_run_result(run_result, is_game)
+                    console.print(f"  {label.capitalize()} stopped: [yellow]{stop_reason}[/yellow]")
+                    if getattr(runner, "deliverable_produced", False) and getattr(
+                        runner, "deliverable_content", None
+                    ):
+                        await volnix.artifact_store.save_deliverable(
+                            run_id,
+                            runner.deliverable_content,
+                        )
+                        console.print("  [green]Deliverable saved[/green]")
+                else:
+                    console.print(
+                        "[bold]Step 4/4: No internal agents — use --serve to expose endpoints[/bold]"
+                    )
 
             # End run + report
             console.print("[bold]Generating report...[/bold]")
