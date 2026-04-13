@@ -387,12 +387,13 @@ class TestRealisticBlueprint:
         )
         all_entities: dict = {}
         count = engine._materialize_game_entities(plan, all_entities)
-        # 1 deal + 2×(page + gpb + 2 visibility rules) + 2 target_terms
-        assert count == 1 + 8 + 2
+        # 1 deal + 2×(page + gpb + 2 visibility rules + 2 blocks) + 2 target_terms
+        assert count == 1 + 12 + 2
         assert len(all_entities["negotiation_deal"]) == 1
         assert len(all_entities["page"]) == 2
         assert len(all_entities["game_player_brief"]) == 2
         assert len(all_entities["visibility_rule"]) == 4
+        assert len(all_entities["block"]) == 4  # 2 blocks per brief
         assert len(all_entities["negotiation_target_terms"]) == 2
 
     @pytest.mark.asyncio
@@ -417,5 +418,5 @@ class TestRealisticBlueprint:
         )
         all_entities: dict = {}
         count = engine._materialize_game_entities(plan, all_entities)
-        assert count == 1 + 8  # 1 deal + 2 briefs × 4
+        assert count == 1 + 12  # 1 deal + 2 briefs × (4 + 2 blocks)
         assert "negotiation_target_terms" not in all_entities

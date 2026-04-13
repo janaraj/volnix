@@ -70,6 +70,7 @@ class VolnixApp:
         # configure_game. The animator bridge uses this to only trigger
         # on player actions (not NPC/animator-generated actions).
         self._game_player_actor_ids: set[str] = set()
+        self._game_terminated: bool = False
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -1845,6 +1846,8 @@ class VolnixApp:
         )
 
         async def _on_committed_event(event: Any) -> None:
+            if self._game_terminated:
+                return
             event_type = getattr(event, "event_type", "")
             if not event_type.startswith("world."):
                 return
@@ -1886,6 +1889,7 @@ class VolnixApp:
             event_type = getattr(event, "event_type", "")
             if event_type == "game.terminated":
                 logger.info("Animator bridge: game terminated, stopping animator")
+                self._game_terminated = True
                 if self._animator_tick_task and not self._animator_tick_task.done():
                     self._animator_tick_task.cancel()
                     self._animator_tick_task = None

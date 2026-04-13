@@ -63,6 +63,10 @@ class FlowConfig(BaseModel, frozen=True):
     bonus_per_event: float = 0.14
     reactivity_window_events: int = 5
     state_summary_entity_types: list[str] = Field(default_factory=lambda: ["negotiation_deal"])
+    # Include recent animator-generated world events (port alerts,
+    # supply disruptions, etc.) in the state summary so agents see
+    # what's happening without needing to query specific Slack channels.
+    state_summary_include_world_events: bool = True
     # Safety ceiling for total tool calls per game-player activation.
     # The turn-ending action model (Step 3b) stops the loop when a
     # game move (negotiate_*) commits — so this is a ceiling, not the

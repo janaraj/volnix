@@ -52,6 +52,130 @@ def _build_tool_call_dict(tc: ToolCall, tc_id: str) -> dict[str, Any]:
     return entry
 
 
+# -- history sanitisation for two-phase game activation ----------------
+
+_HISTORY_SANITIZE_CHAR_LIMIT = 8000
+
+
+def _sanitize_history_for_game_move(
+    messages: list[dict[str, Any]],
+    game_tool_names: frozenset[str],
+) -> list[dict[str, Any]]:
+    """Replace non-game tool-call history with a text research summary.
+
+    Phase 1 (``game_research``) leaves assistant messages containing
+    ``tool_calls`` for non-game tools (``databases.retrieve``,
+    ``pages.retrieve``, ``conversations.list``, etc.).  When Phase 2
+    (``game_move``) replays this history, weaker models hallucinate
+    calls to those tool names even though only game tools are in the
+    ``tools`` parameter.
+
+    This function:
+
+    * Preserves system / user messages (identity, prompts, state updates)
+    * Preserves assistant messages whose tool_calls are ALL game tools
+    * Preserves text-only assistant messages
+    * Replaces non-game (assistant + tool result) blocks with a single
+      text-only assistant message containing the research findings
+
+    Args:
+        messages: The conversation history (OpenAI-format dicts).
+        game_tool_names: Tool names registered under ``service="game"``
+            (e.g. ``{"negotiate_propose", "negotiate_counter", …}``).
+            Derived by the caller from ``_get_tools_for_actor`` so the
+            function is game-type agnostic.
+
+    Returns:
+        A **new** list — the input is not mutated.
+    """
+    if len(messages) < 2:
+        return list(messages)
+
+    # -- Pre-pass: collect tool_call IDs that belong to game tools ------
+    game_tc_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                fn_name = (tc.get("function") or {}).get("name", "")
+                if fn_name in game_tool_names:
+                    game_tc_ids.add(tc.get("id", ""))
+
+    # -- Main pass: keep / skip / collect --------------------------------
+    research_findings: list[str] = []
+    result: list[dict[str, Any]] = []
+    insert_pos: int | None = None  # where the first removed msg was
+
+    for msg in messages:
+        role = msg.get("role", "")
+
+        # System and user messages are always preserved.
+        if role in ("system", "user"):
+            result.append(msg)
+            continue
+
+        if role == "assistant":
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                all_game = all(
+                    (tc.get("function") or {}).get("name", "") in game_tool_names
+                    for tc in tool_calls
+                )
+                any_game = any(
+                    (tc.get("function") or {}).get("name", "") in game_tool_names
+                    for tc in tool_calls
+                )
+                if all_game:
+                    result.append(msg)
+                elif any_game:
+                    # Mixed game + non-game in one response — shouldn't
+                    # happen (game calls trigger short-circuit in Phase 1)
+                    # but preserve to avoid orphaned tool results.
+                    logger.warning(
+                        "_sanitize_history_for_game_move: mixed game/"
+                        "non-game tool_calls in one assistant message, "
+                        "preserving as-is",
+                    )
+                    result.append(msg)
+                else:
+                    # All non-game: skip, mark insertion position.
+                    if insert_pos is None:
+                        insert_pos = len(result)
+            else:
+                # Text-only assistant message: preserve.
+                result.append(msg)
+            continue
+
+        if role == "tool":
+            tc_id = msg.get("tool_call_id", "")
+            if tc_id in game_tc_ids:
+                result.append(msg)
+            else:
+                content = msg.get("content", "")
+                if content:
+                    research_findings.append(content)
+            continue
+
+        # Unknown role: preserve defensively.
+        result.append(msg)
+
+    # -- Inject research summary at the first-removed position ----------
+    if research_findings:
+        joined = "\n\n".join(research_findings)
+        if len(joined) > _HISTORY_SANITIZE_CHAR_LIMIT:
+            joined = joined[:_HISTORY_SANITIZE_CHAR_LIMIT] + "\n[...truncated]"
+        summary_msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": (
+                "[I gathered the following information during research.]\n\n"
+                + joined
+            ),
+        }
+        pos = insert_pos if insert_pos is not None else min(2, len(result))
+        result.insert(pos, summary_msg)
+
+    return result
+
+
 class AgencyEngine(BaseEngine):
     """Manages internal actor lifecycle: activation, action generation, state updates."""
 
@@ -942,6 +1066,7 @@ class AgencyEngine(BaseEngine):
         trigger_event: WorldEvent | None,
         max_calls_override: int | None = None,
         append_closure: bool = True,
+        state_summary: str | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an agent with a multi-turn tool-calling loop.
 
@@ -1087,6 +1212,17 @@ class AgencyEngine(BaseEngine):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ]
+
+            # Inject state summary — works on BOTH first activation
+            # (messages just built from system+user) and re-activation
+            # (messages loaded from activation_messages). Game state
+            # (deal IDs, proposal history, world events) is visible
+            # from the very first activation, not just re-activations.
+            if state_summary:
+                messages.append({
+                    "role": "user",
+                    "content": f"[game state update]\n{state_summary}",
+                })
 
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
@@ -1997,36 +2133,14 @@ class AgencyEngine(BaseEngine):
             self._actor_activation_locks[actor_id] = actor_lock
 
         async with actor_lock:
-            # Inject state_summary as a fresh user message at the top of
-            # the rolling conversation so the LLM sees ground truth
-            # without replaying full history. Trim to a bounded window
-            # so long games don't blow up the prompt. Window size comes
-            # from AgencyConfig — do NOT hardcode.
-            #
-            # CRITICAL: only inject when there is already conversation
-            # history. For a first activation, ``activation_messages``
-            # is empty and the tool loop builds fresh messages from
-            # ``system_prompt`` + ``user_prompt`` (which carry role,
-            # persona, mission). Appending a state_summary to an empty
-            # ``activation_messages`` would make ``_activate_with_tool_loop``
-            # read it as the full messages list — dropping the system
-            # + user prompt entirely and leaving the LLM with no role
-            # context. The state summary is a RE-activation hint, not
-            # a replacement for the initial prompt.
-            if state_summary and actor_state.activation_messages:
-                msg = {
-                    "role": "user",
-                    "content": f"[game state update]\n{state_summary}",
-                }
-                actor_state.activation_messages = list(actor_state.activation_messages)
-                actor_state.activation_messages.append(msg)
+            # Rolling-window trim — cap activation_messages to prevent
+            # unbounded prompt growth. Pins first 2 messages (system +
+            # user prompt) so the agent never loses identity mid-game.
+            # State summary injection moved to _activate_with_tool_loop
+            # so it works on both first activation and re-activation.
+            if actor_state.activation_messages:
                 cap = self._typed_config.max_activation_messages
                 if len(actor_state.activation_messages) > cap:
-                    # Pin the system + user prompt (first 2 messages =
-                    # identity + persona + instructions). Only truncate
-                    # the rolling conversation tail. Without this, after
-                    # ~5 turns the system prompt gets dropped and the
-                    # agent loses its persona mid-game.
                     pinned = actor_state.activation_messages[:2]
                     rolling = actor_state.activation_messages[2:]
                     actor_state.activation_messages = pinned + rolling[-(cap - 2) :]
@@ -2054,6 +2168,7 @@ class AgencyEngine(BaseEngine):
                         world_trigger,
                         max_calls_override=research_budget,
                         append_closure=False,
+                        state_summary=state_summary,
                     )
                 else:
                     research_envelopes = []
@@ -2066,6 +2181,26 @@ class AgencyEngine(BaseEngine):
                 )
                 if phase1_made_game_move:
                     return research_envelopes
+
+                # Sanitize Phase 1 history: replace non-game tool-call
+                # messages with a text research summary so Phase 2 doesn't
+                # see non-game tool names in the conversation. Without this,
+                # weaker models (Haiku) hallucinate tool calls from history
+                # even though only game tools are in Phase 2's tool list.
+                if research_budget > 0:
+                    game_tool_names = frozenset(
+                        t.name
+                        for t in self._get_tools_for_actor(
+                            str(actor_state.actor_id),
+                        )
+                        if t.service == "game"
+                    )
+                    actor_state.activation_messages = (
+                        _sanitize_history_for_game_move(
+                            actor_state.activation_messages,
+                            game_tool_names,
+                        )
+                    )
 
                 # Bridge message: tell the LLM research is done.
                 # Only injected when Phase 1 actually ran (budget > 0).
@@ -2086,12 +2221,16 @@ class AgencyEngine(BaseEngine):
                 # Phase 2: Move (required). Budget of 4 allows retries
                 # Phase 2 uses tool_choice="required" so the LLM MUST
                 # return a tool call. No retries needed.
+                # State summary: if Phase 1 ran, it's already in the
+                # persisted conversation. If Phase 1 was skipped
+                # (budget=0), Phase 2 needs it directly.
                 move_envelopes = await self._activate_with_tool_loop(
                     actor_state,
                     "game_move",
                     world_trigger,
                     max_calls_override=2,  # 1 game move + 1 margin
                     append_closure=True,
+                    state_summary=state_summary if research_budget == 0 else None,
                 )
                 return research_envelopes + move_envelopes
 
@@ -2102,4 +2241,5 @@ class AgencyEngine(BaseEngine):
                     reason,
                     world_trigger,
                     max_calls_override=max_calls_override,
+                    state_summary=state_summary,
                 )

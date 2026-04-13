@@ -82,19 +82,19 @@ class TwitterPack(ServicePack):
         return list(TWITTER_TOOL_DEFINITIONS)
 
     def get_entity_schemas(self) -> dict:
-        """Return entity schemas (tweet, user, follow, like)."""
+        """Return entity schemas (tweet, twitter_user, follow, like)."""
         return {
             "tweet": TWEET_ENTITY_SCHEMA,
-            "user": TWITTER_USER_ENTITY_SCHEMA,
+            "twitter_user": TWITTER_USER_ENTITY_SCHEMA,
             "follow": TWITTER_FOLLOW_ENTITY_SCHEMA,
             "like": TWITTER_LIKE_ENTITY_SCHEMA,
         }
 
     def get_state_machines(self) -> dict:
-        """Return state machines for tweet and user entities."""
+        """Return state machines for tweet and twitter_user entities."""
         return {
             "tweet": {"transitions": TWEET_TRANSITIONS},
-            "user": {"transitions": TWITTER_USER_TRANSITIONS},
+            "twitter_user": {"transitions": TWITTER_USER_TRANSITIONS},
         }
 
     async def handle_action(

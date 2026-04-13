@@ -983,7 +983,41 @@ class WorldCompilerEngine(BaseEngine):
                     "reason": f"Private brief entity for {brief.actor_role}",
                 }
             )
-            created += 4  # page + gpb + 2 visibility rules
+            # Child blocks under the brief page so blocks.children.list
+            # returns useful content. Without this, agents query blocks
+            # on brief pages and get empty results (wasted research).
+            brief_text = brief.brief_content or ""
+            block_count = 0
+            if brief_text:
+                mission_text = brief.mission or brief_text[:200]
+                for idx, (btype, text) in enumerate(
+                    [("heading_2", mission_text), ("paragraph", brief_text)],
+                ):
+                    block_id = f"block-{notion_page_id}-{idx}"
+                    all_entities.setdefault("block", []).append(
+                        {
+                            "id": block_id,
+                            "object": "block",
+                            "type": btype,
+                            "parent": {
+                                "type": "page_id",
+                                "page_id": notion_page_id,
+                            },
+                            "created_time": "2026-01-01T00:00:00Z",
+                            "last_edited_time": "2026-01-01T00:00:00Z",
+                            btype: {
+                                "rich_text": [
+                                    {
+                                        "type": "text",
+                                        "text": {"content": text[:500]},
+                                        "plain_text": text[:500],
+                                    }
+                                ],
+                            },
+                        }
+                    )
+                    block_count += 1
+            created += 4 + block_count  # page + gpb + 2 visibility rules + blocks
 
         # 3. Target terms — competitive mode only (MF3)
         if plan.game.scoring_mode == "competitive":

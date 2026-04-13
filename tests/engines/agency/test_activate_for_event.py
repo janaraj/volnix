@@ -216,7 +216,12 @@ class TestActivateForEventBasics:
 class TestStateSummaryInjection:
     @pytest.mark.asyncio
     async def test_state_summary_appended_as_user_message(self):
-        """state_summary is appended to activation_messages as a user entry."""
+        """state_summary is injected into conversation messages by the tool loop.
+
+        State summary is now passed as a parameter to _activate_with_tool_loop
+        and injected INSIDE the loop (works on both first and re-activation).
+        After the loop, it persists in activation_messages.
+        """
         engine = await _create_engine()
         engine._llm_router = _make_router(_make_text_response("ok"))
         engine.set_tool_executor(_make_tool_executor())
@@ -234,7 +239,8 @@ class TestStateSummaryInjection:
             trigger_event=_make_world_event(),
             state_summary="deal-q3 status=proposed, price=90",
         )
-        # The last user message before activation should be our state summary
+        # State summary is injected into messages by the tool loop and
+        # persisted to activation_messages after the loop completes.
         user_msgs = [m for m in actor.activation_messages if m.get("role") == "user"]
         contents = [m["content"] for m in user_msgs]
         assert any("deal-q3 status=proposed" in c for c in contents)
@@ -265,6 +271,10 @@ class TestStateSummaryInjection:
         Step 1 (P6.3-fix.6) pins the first 2 messages (system + user
         prompt) so the agent never loses its identity. The rolling
         window truncation only drops entries from position 2 onwards.
+
+        State summary is now injected INSIDE the tool loop (not before
+        trim), so trim math doesn't include it. The tool loop receives
+        it as a parameter and appends to the messages array after building.
         """
         engine = await _create_engine()
 
@@ -274,13 +284,13 @@ class TestStateSummaryInjection:
         actor.activation_messages = [{"role": "user", "content": f"old-{i}"} for i in range(30)]
 
         captured_len: list[int] = []
-        captured_contents: list[list[str]] = []
+        captured_summaries: list[str | None] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_len.append(len(_actor.activation_messages))
-            captured_contents.append([m["content"] for m in _actor.activation_messages])
+            captured_summaries.append(state_summary)
             return []
 
         engine._activate_with_tool_loop = fake_loop  # type: ignore[assignment]
@@ -291,18 +301,14 @@ class TestStateSummaryInjection:
             trigger_event=None,
             state_summary="new ground truth",
         )
-        assert captured_len == [20]  # Exactly the cap
-        contents = captured_contents[0]
-        # With pinned messages: first 2 entries (old-0, old-1) survive.
-        # Rolling entries 2..30 (29 items) + 1 state_summary = 30.
-        # Trim rolling to 18 (cap - 2 pinned): old-13..old-29 (17) + summary (1) = 18.
-        # Total: old-0, old-1, old-13..old-29, state_summary = 20.
-        assert contents[0] == "old-0"  # Pinned (system prompt preserved)
-        assert contents[1] == "old-1"  # Pinned (user prompt preserved)
-        assert contents[2] == "old-13"  # Oldest surviving rolling entry
-        assert contents[-2] == "old-29"
-        assert "[game state update]" in contents[-1]
-        assert "new ground truth" in contents[-1]
+        assert captured_len == [20]  # Exactly the cap (trim before tool loop)
+        # State summary passed as parameter, not in activation_messages
+        assert captured_summaries[0] == "new ground truth"
+        # Pinned first 2 survive: old-0, old-1. Rolling: 28 entries
+        # trimmed to 18 (cap - 2). Oldest surviving: old-12.
+        assert actor.activation_messages[0]["content"] == "old-0"
+        assert actor.activation_messages[1]["content"] == "old-1"
+        assert actor.activation_messages[2]["content"] == "old-12"
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +325,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -340,7 +346,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -360,7 +366,7 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -386,7 +392,7 @@ class TestReasonForwarding:
         captured_reasons: list[str] = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True
+            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_reasons.append(reason)
             return []
@@ -566,7 +572,7 @@ class TestMaxActivationMessagesConfig:
         captured_len: list[int] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             captured_len.append(len(_actor.activation_messages))
             return []
@@ -611,7 +617,7 @@ class TestPerActorActivationLock:
         release_first = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             order.append("enter")
             await release_first.wait()
@@ -661,7 +667,7 @@ class TestPerActorActivationLock:
         release = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             inside.add(str(_actor.actor_id))
             max_concurrent["v"] = max(max_concurrent["v"], len(inside))
@@ -692,7 +698,7 @@ class TestPerActorActivationLock:
         engine = await _create_engine()
 
         async def raising_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             raise RuntimeError("boom")
 
@@ -709,7 +715,7 @@ class TestPerActorActivationLock:
         calls = {"n": 0}
 
         async def ok_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True
+            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
         ):
             calls["n"] += 1
             return []
@@ -749,3 +755,173 @@ class TestPerActorActivationLock:
             available_actions=[],
         )
         assert "### Your Action History" in prompt
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_history_for_game_move — Phase 1 history cleanup
+# ---------------------------------------------------------------------------
+
+
+from volnix.engines.agency.engine import _sanitize_history_for_game_move
+
+
+def _tc(name: str, tc_id: str) -> dict:
+    """Helper: build a minimal tool_call dict."""
+    return {
+        "id": tc_id,
+        "type": "function",
+        "function": {"name": name, "arguments": "{}"},
+    }
+
+
+GAME_TOOLS = frozenset({"negotiate_propose", "negotiate_counter", "negotiate_accept"})
+
+
+class TestSanitizeHistoryForGameMove:
+    """Unit tests for the Phase-1 history sanitization function."""
+
+    def test_non_game_tools_replaced_with_summary(self):
+        """Non-game tool_call + results → single assistant text with data."""
+        msgs = [
+            {"role": "system", "content": "You are a buyer."},
+            {"role": "user", "content": "Your mission."},
+            {"role": "assistant", "tool_calls": [_tc("databases.retrieve", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": '{"price": 95}'},
+            {"role": "assistant", "tool_calls": [_tc("pages.retrieve", "c2")]},
+            {"role": "tool", "tool_call_id": "c2", "content": '{"stock": 200}'},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+
+        # System + user preserved, two assistant+tool blocks → 1 summary
+        assert result[0] == msgs[0]
+        assert result[1] == msgs[1]
+        assert len(result) == 3
+        summary = result[2]
+        assert summary["role"] == "assistant"
+        assert "research" in summary["content"].lower()
+        assert '{"price": 95}' in summary["content"]
+        assert '{"stock": 200}' in summary["content"]
+
+    def test_game_tools_preserved(self):
+        """Messages with game tool_calls are kept as-is."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+            {
+                "role": "assistant",
+                "tool_calls": [_tc("negotiate_propose", "g1")],
+                "_provider_metadata": {"thinking_blocks": []},
+            },
+            {"role": "tool", "tool_call_id": "g1", "content": '{"ok": true}'},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        assert result == msgs
+
+    def test_system_and_user_preserved(self):
+        """System and user messages are never removed."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "mission"},
+            {"role": "user", "content": "[game state update] deal status"},
+            {"role": "assistant", "tool_calls": [_tc("conversations.list", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": "channels"},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        roles = [m["role"] for m in result]
+        assert roles.count("system") == 1
+        assert roles.count("user") >= 2
+        assert result[0]["content"] == "sys"
+        assert result[1]["content"] == "mission"
+        # State summary user msg also preserved
+        user_contents = [m["content"] for m in result if m["role"] == "user"]
+        assert any("game state update" in c for c in user_contents)
+
+    def test_text_assistant_preserved(self):
+        """Text-only assistant messages (no tool_calls) are kept."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+            {"role": "assistant", "content": "My analysis shows low supply."},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        assert result == msgs
+
+    def test_no_tool_calls_unchanged(self):
+        """When no tool_calls exist, output equals input."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        assert result == msgs
+
+    def test_empty_messages(self):
+        """Empty list → empty list."""
+        assert _sanitize_history_for_game_move([], GAME_TOOLS) == []
+
+    def test_no_mutation_of_input(self):
+        """The original message list is not modified."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+            {"role": "assistant", "tool_calls": [_tc("databases.retrieve", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": "data"},
+        ]
+        import copy
+
+        original = copy.deepcopy(msgs)
+        _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        assert msgs == original
+
+    def test_truncation_over_limit(self):
+        """Research findings exceeding the char limit are truncated."""
+        from volnix.engines.agency.engine import _HISTORY_SANITIZE_CHAR_LIMIT
+
+        big_content = "x" * 5000
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+            {"role": "assistant", "tool_calls": [_tc("db.query", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": big_content},
+            {"role": "assistant", "tool_calls": [_tc("db.query", "c2")]},
+            {"role": "tool", "tool_call_id": "c2", "content": big_content},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        summary = result[2]
+        assert "[...truncated]" in summary["content"]
+        # Total content (excluding header) should be capped
+        assert len(summary["content"]) < _HISTORY_SANITIZE_CHAR_LIMIT + 200
+
+    def test_research_summary_position(self):
+        """Summary is inserted where the first removed assistant msg was."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "usr"},
+            {"role": "user", "content": "[game state update] deal info"},
+            {"role": "assistant", "tool_calls": [_tc("databases.retrieve", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": "data"},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        # Position 0: system, 1: user, 2: user (state), 3: assistant (summary)
+        assert result[0]["role"] == "system"
+        assert result[1]["role"] == "user"
+        assert result[2]["role"] == "user"
+        assert result[2]["content"] == "[game state update] deal info"
+        assert result[3]["role"] == "assistant"
+        assert "research" in result[3]["content"].lower()
+
+    def test_state_summary_ordering(self):
+        """State summary user message stays before the research summary."""
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "mission"},
+            {"role": "user", "content": "[game state update] deal-q3 proposed"},
+            {"role": "assistant", "tool_calls": [_tc("pages.retrieve", "c1")]},
+            {"role": "tool", "tool_call_id": "c1", "content": '{"inventory": 50}'},
+        ]
+        result = _sanitize_history_for_game_move(msgs, GAME_TOOLS)
+        # State summary (user) at index 2, research summary (assistant) at 3
+        assert result[2]["role"] == "user"
+        assert "game state update" in result[2]["content"]
+        assert result[3]["role"] == "assistant"
+        assert '{"inventory": 50}' in result[3]["content"]

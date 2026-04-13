@@ -572,7 +572,12 @@ Escalation on inaction: {escalation_on_inaction}
 - Generate up to {budget} events as a JSON array
 - Each event:
   {{"actor_id": "<role from actors list>", "service_id": "service_name",
-    "action": "tool_name_from_list_above", "input_data": {{}}, "sub_type": "organic"}}
+    "action": "tool_name_from_list_above",
+    "input_data": {{"<fill ALL required_params from the tool definition>": "..."}},
+    "sub_type": "organic"}}
+- input_data MUST contain ALL fields listed in the tool's required_params.
+  Look up the action in Available Tools above and populate every required field
+  with a realistic value. Events with missing required fields will be rejected.
 - Use actor roles from the Actors list — events come FROM characters in the world
 - VARY the actor across ticks — rotate through different roles, don't always pick the same one
 - If no actors are defined, use "system" as actor_id
@@ -584,6 +589,10 @@ Escalation on inaction: {escalation_on_inaction}
   coherent — e.g., if there's a weather_alert named td_18w, evolve IT rather
   than spawning a second unrelated storm.
 - Events go through the governance pipeline — they CAN be blocked by policies
+- When generating events that reference specific entities (users, channels, pages,
+  databases), use ONLY entity IDs visible in the Current World State snapshot above.
+  Do NOT invent entity IDs — if no matching entity exists in the snapshot, skip that
+  event type and use a different action instead.
 
 Output ONLY valid JSON array.""",
     user="Generate up to {budget} world events.",

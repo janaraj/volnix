@@ -407,13 +407,35 @@ class WorldAnimatorEngine(BaseEngine):
         """
         app = self._config.get("_app")
 
+        # Validate input_data has required fields before hitting the
+        # pipeline. Skipping invalid events is cheaper than a pipeline
+        # round-trip that fails at the responder with a validation error.
+        action_name = event_def.get("action", "")
+        input_data = event_def.get("input_data") or {}
+        if self._available_tools:
+            tool_def = next(
+                (t for t in self._available_tools if t.get("name") == action_name),
+                None,
+            )
+            if tool_def:
+                required = set(tool_def.get("parameters", {}).get("required", []))
+                missing = required - set(input_data.keys())
+                if missing:
+                    logger.warning(
+                        "Animator: skipping event %s — missing required "
+                        "fields %s in input_data",
+                        action_name,
+                        missing,
+                    )
+                    return {"status": "skipped", "reason": f"missing_fields: {missing}"}
+
         result: dict[str, Any]
         if app:
             result = await app.handle_action(
                 actor_id=event_def.get("actor_id", "system"),
                 service_id=event_def.get("service_id", "world"),
                 action=event_def.get("action", "animator_event"),
-                input_data=event_def.get("input_data", {}),
+                input_data=input_data,
                 world_time=world_time,
             )
         else:

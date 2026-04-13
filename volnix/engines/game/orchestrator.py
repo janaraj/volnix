@@ -315,15 +315,28 @@ class GameOrchestrator(BaseEngine):
             self._definition.flow.type,
         )
 
-        # 7. Kickstart activation
+        # 7. Kickstart activation — build state summary so agents see
+        # deal IDs and game state from the very first activation.
+        # Mirrors the game_event re-activation path (line ~540).
+        kickstart_summary = await self._build_state_summary()
         if self._definition.flow.activation_mode == "parallel":
             for pid in self._player_ids:
-                self._launch_activation(pid, reason="game_kickstart", trigger_event=None)
+                self._launch_activation(
+                    pid,
+                    reason="game_kickstart",
+                    trigger_event=None,
+                    state_summary=kickstart_summary,
+                )
         else:
             # serial mode: activate only the first mover; the orchestrator
             # activates the next player on each commit
             if first_mover is not None:
-                self._launch_activation(first_mover, reason="game_kickstart", trigger_event=None)
+                self._launch_activation(
+                    first_mover,
+                    reason="game_kickstart",
+                    trigger_event=None,
+                    state_summary=kickstart_summary,
+                )
 
     async def _on_stop(self) -> None:
         """Graceful shutdown: cancel timers, drain tasks, unsubscribe."""
@@ -1101,6 +1114,30 @@ class GameOrchestrator(BaseEngine):
                         f"{p.get('msg_type', '?')}: "
                         f"terms={p.get('terms', {})}"
                     )
+
+        # Recent world events — animator-generated messages (port
+        # alerts, supply disruptions, weather changes) so agents see
+        # what's happening without needing to query specific channels.
+        # Filters to system/environment actor messages (not agent chat).
+        # World-agnostic: works for any channel layout or service mix.
+        if self._definition.flow.state_summary_include_world_events:
+            try:
+                messages = await self._state.query_entities("message")
+                world_msgs = [
+                    m
+                    for m in messages
+                    if m.get("user") in (None, "unknown", "system", "environment")
+                    or m.get("bot_id") is not None
+                ]
+                world_msgs.sort(key=lambda m: m.get("ts", "0"), reverse=True)
+                world_msgs = world_msgs[:5]
+                if world_msgs:
+                    parts.append("\nRecent world events:")
+                    for wm in reversed(world_msgs):
+                        text = (wm.get("text") or "")[:200]
+                        parts.append(f"  - {text}")
+            except Exception:  # noqa: BLE001
+                pass  # non-critical — summary valid without this
 
         return "\n".join(parts)
 
