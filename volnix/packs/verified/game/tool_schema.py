@@ -290,9 +290,9 @@ def build_negotiation_tools(fields: list[NegotiationField]) -> list[dict[str, An
             "name": "negotiate_accept",
             "service": "game",
             "description": (
-                "Close the deal. Accept the other party's current terms. "
-                "Locks in the deal and earns an efficiency bonus for "
-                "closing early."
+                "Close the deal at the other party's current terms. "
+                "The deal becomes final and both parties are scored "
+                "on the agreed terms."
             ),
             "parameters": terminal,
             "http_method": "POST",
@@ -301,9 +301,8 @@ def build_negotiation_tools(fields: list[NegotiationField]) -> list[dict[str, An
             "name": "negotiate_reject",
             "service": "game",
             "description": (
-                "Walk away from the negotiation. Use only when the other "
-                "party's terms are worse than your BATNA and they refuse "
-                "to move."
+                "Walk away from the negotiation. The deal is terminated "
+                "and each party receives their fallback score."
             ),
             "parameters": terminal,
             "http_method": "POST",

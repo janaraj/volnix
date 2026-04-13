@@ -144,34 +144,26 @@ class ActorPromptBuilder:
             )
         elif activation_reason in {"game_kickstart", "game_event"}:
             # Research-then-move model: game players can read the world
-            # (Notion, Slack, Twitter) before making their game move.
-            # The turn ends when a negotiate_* tool is called — reads
-            # are preparation, the game move is the conclusion.
+            # before making their game move. Game-type-agnostic — the
+            # agent's mission and personality define which tools exist
+            # and what they do.
             sections.append(
                 "## Instructions\n"
-                "You are a game player in a live negotiation. The world "
-                "is running; moves commit immediately.\n\n"
+                "You are a game player. The world is running; "
+                "moves commit immediately.\n\n"
                 "YOUR TURN has two phases:\n"
                 "1. **RESEARCH** (optional): Read the world to inform "
-                "your decision. Query Notion databases for your private "
-                "brief, check Slack for the other party's messages, "
-                "read market data. Re-compute your thresholds from live "
-                "data — the world changes between turns.\n"
-                "2. **MOVE** (required): Make exactly ONE negotiation "
-                "move:\n"
-                "   - **negotiate_propose**: opening offer (all term "
-                "fields required)\n"
-                "   - **negotiate_counter**: counter the other party's "
-                "terms (all fields required)\n"
-                "   - **negotiate_accept**: close the deal at current "
-                "terms\n"
-                "   - **negotiate_reject**: walk away from the "
-                "negotiation\n\n"
+                "your decision. Query available services for your "
+                "private data, check messages from other players, "
+                "review current state. Re-check live data each turn "
+                "— the world changes between activations.\n"
+                "2. **MOVE** (required): Make exactly ONE game move "
+                "using your game tools. Your mission and personality "
+                "define which tools are available and what they do.\n\n"
                 "Your turn ENDS when you make a game move. After your "
-                "move, the other party will see your terms and respond."
-                "\n\nYou may post ONE short in-character "
-                "chat.postMessage alongside your move. Do NOT call "
-                "do_nothing."
+                "move, other players will see your action and respond."
+                "\n\nYou may post ONE short in-character message "
+                "alongside your move. Do NOT call do_nothing."
             )
         elif actor.autonomous:
             sections.append(

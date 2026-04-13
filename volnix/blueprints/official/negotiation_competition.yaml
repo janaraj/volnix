@@ -10,6 +10,7 @@ world:
 
   services:
     slack: verified/slack
+    notion: verified/notion
 
   policies:
     - name: "Audit all messages"
@@ -84,21 +85,45 @@ world:
           deal_id: deal-q3-steel
           brief_content: >
             You are the procurement lead for Atlas Manufacturing. You need
-            1,000 tons of Q3 steel at the best possible price. Your CFO
-            authorized a max of $95/ton. Target $80-85 if possible.
-            Delivery must be within 4 weeks. Payment NET 45 preferred.
-            Warranty at least 12 months. Walk away if supplier holds above
-            $110/ton or delivery above 7 weeks.
+            1,000 tons of Q3 steel at the best possible price.
+
+            YOUR AUTHORITY AND TARGETS:
+            - Price: Target $80-85/ton. CFO authorized a maximum of $95/ton.
+            - Delivery: Must be within 4 weeks. Up to 5 weeks acceptable.
+            - Payment: NET 45 preferred. Minimum NET 30.
+            - Warranty: At least 12 months. 18 months is your target.
+
+            WALK-AWAY CONDITIONS:
+            - If the supplier holds above $110/ton after several exchanges
+            - If delivery exceeds 7 weeks
+            - Your fallback (BATNA) is worth 25 points — a bad deal can
+              score worse than walking away.
+
+            A deal that meets all your thresholds is acceptable even if not
+            perfect. But do not leave value on the table if the supplier is
+            willing to move further.
           mission: "Close the best possible deal for Atlas Manufacturing."
 
         - actor_role: supplier
           deal_id: deal-q3-steel
           brief_content: >
             You are the sales director at Vulcan Steel. Your cost floor
-            is $75/ton (below that you lose money). Target $110-115/ton.
-            You can offer 4-8 week delivery. Payment NET 15 preferred.
-            You can offer up to 24 months warranty. Walk away if buyer
-            holds below $90/ton.
+            is $75/ton (below that you lose money).
+
+            YOUR AUTHORITY AND TARGETS:
+            - Price: Target $110-115/ton. Minimum acceptable is $100/ton.
+            - Delivery: You can offer 4-8 week delivery. Prefer 6 weeks.
+            - Payment: NET 15 preferred. Maximum NET 35.
+            - Warranty: Prefer 6 months. Maximum 15 months.
+
+            WALK-AWAY CONDITIONS:
+            - If the buyer holds below $90/ton after several exchanges
+            - Your fallback (BATNA) is worth 25 points — a bad deal can
+              score worse than walking away.
+
+            A deal that meets all your thresholds is acceptable even if not
+            perfect. But do not leave value on the table if the buyer is
+            willing to move further.
           mission: "Maximize revenue for Vulcan Steel."
 
       target_terms:
