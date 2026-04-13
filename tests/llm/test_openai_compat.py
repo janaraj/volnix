@@ -54,9 +54,10 @@ def test_openai_compat_no_api_key_for_ollama():
 
 
 @skipif_no_openai
+@skipif_no_real
 @pytest.mark.asyncio
 async def test_openai_compat_generate_real():
-    """Integration: send a real request to OpenAI (skipped without key)."""
+    """Integration: send a real request to OpenAI (skipped without key + opt-in)."""
     provider = OpenAICompatibleProvider(
         api_key=OPENAI_KEY,
         base_url="https://api.openai.com/v1",
