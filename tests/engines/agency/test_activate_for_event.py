@@ -287,7 +287,12 @@ class TestStateSummaryInjection:
         captured_summaries: list[str | None] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_len.append(len(_actor.activation_messages))
             captured_summaries.append(state_summary)
@@ -325,7 +330,12 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            actor,
+            reason,
+            trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -346,7 +356,12 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            actor,
+            reason,
+            trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -366,7 +381,12 @@ class TestTriggerEventFiltering:
         captured_triggers: list = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            actor,
+            reason,
+            trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_triggers.append(trigger_event)
             return []
@@ -392,7 +412,12 @@ class TestReasonForwarding:
         captured_reasons: list[str] = []
 
         async def fake_loop(
-            actor, reason, trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            actor,
+            reason,
+            trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_reasons.append(reason)
             return []
@@ -572,7 +597,12 @@ class TestMaxActivationMessagesConfig:
         captured_len: list[int] = []
 
         async def fake_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             captured_len.append(len(_actor.activation_messages))
             return []
@@ -617,7 +647,12 @@ class TestPerActorActivationLock:
         release_first = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             order.append("enter")
             await release_first.wait()
@@ -667,7 +702,12 @@ class TestPerActorActivationLock:
         release = _asyncio.Event()
 
         async def slow_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             inside.add(str(_actor.actor_id))
             max_concurrent["v"] = max(max_concurrent["v"], len(inside))
@@ -698,7 +738,12 @@ class TestPerActorActivationLock:
         engine = await _create_engine()
 
         async def raising_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             raise RuntimeError("boom")
 
@@ -715,7 +760,12 @@ class TestPerActorActivationLock:
         calls = {"n": 0}
 
         async def ok_loop(
-            _actor, _reason, _trigger_event, max_calls_override=None, append_closure=True, state_summary=None
+            _actor,
+            _reason,
+            _trigger_event,
+            max_calls_override=None,
+            append_closure=True,
+            state_summary=None,
         ):
             calls["n"] += 1
             return []
@@ -875,7 +925,9 @@ class TestSanitizeHistoryForGameMove:
 
     def test_truncation_over_limit(self):
         """Research findings exceeding the char limit are truncated."""
-        from volnix.engines.agency.engine import _HISTORY_SANITIZE_CHAR_LIMIT
+        from volnix.engines.agency.config import AgencyConfig
+
+        char_limit = AgencyConfig().history_sanitize_char_limit
 
         big_content = "x" * 5000
         msgs = [
@@ -890,7 +942,7 @@ class TestSanitizeHistoryForGameMove:
         summary = result[2]
         assert "[...truncated]" in summary["content"]
         # Total content (excluding header) should be capped
-        assert len(summary["content"]) < _HISTORY_SANITIZE_CHAR_LIMIT + 200
+        assert len(summary["content"]) < char_limit + 200
 
     def test_research_summary_position(self):
         """Summary is inserted where the first removed assistant msg was."""

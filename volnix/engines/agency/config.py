@@ -63,7 +63,13 @@ class AgencyConfig(BaseModel):
     # (Future) Auto-add chat service subscription for all internal actors.
     # auto_include_chat: bool = True  -- not yet enforced
 
-    # ── Multi-turn tool loop ───────────��──────────────────────
+    # ── History sanitisation ──────────────────────────────────
+    # Max chars kept when summarising Phase 1 research history before
+    # Phase 2 game-move activation.  Prevents hallucination from long
+    # non-game tool_call context.
+    history_sanitize_char_limit: int = 8000
+
+    # ── Multi-turn tool loop ──────────────────────────────────
     # Max tool calls within a single agent activation loop.
     max_tool_calls_per_activation: int = 10
     # LLM tool_choice mode for agent activations: "auto" allows text responses.

@@ -19,6 +19,7 @@ from volnix.core.types import (
     EventId,
     FidelityTier,
     PolicyId,
+    RunResult,
     ServiceId,
     SnapshotId,
     StateDelta,
@@ -384,6 +385,29 @@ class AgencyActivationProtocol(Protocol):
             activation. Typed as ``list[Any]`` in the Protocol to
             avoid forward-importing ActionEnvelope into core.
         """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Runner
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class RunnerProtocol(Protocol):
+    """Interface for CLI-compatible simulation and game runners.
+
+    Both :class:`SimulationRunner` and :class:`OrchestratorRunner`
+    satisfy this protocol, allowing the CLI to operate on runners
+    without importing concrete engine classes.
+    """
+
+    async def run(self) -> RunResult:
+        """Block until the run terminates and return a unified result."""
+        ...
+
+    def set_mission(self, mission: str) -> None:
+        """Set the mission description (may be a no-op for game runners)."""
         ...
 
 

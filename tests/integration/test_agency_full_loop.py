@@ -453,7 +453,7 @@ class TestSimulationRunnerLoop:
         stop_reason = await runner.run()
 
         # Verify
-        assert stop_reason == StopReason.QUEUE_EMPTY
+        assert stop_reason.reason == StopReason.QUEUE_EMPTY
         assert len(events_processed) == 2  # external + internal
         assert str(events_processed[0].actor_id) == "agent-001"  # external first
         assert str(events_processed[1].actor_id) == "cust-001"  # then internal reaction
@@ -505,7 +505,7 @@ class TestSimulationRunnerLoop:
 
         stop_reason = await runner.run()
 
-        assert stop_reason == StopReason.MAX_EVENTS_REACHED
+        assert stop_reason.reason == StopReason.MAX_EVENTS_REACHED
         assert runner.total_events_processed == 3
 
     async def test_runner_loop_breaker_triggers(self):
@@ -555,7 +555,7 @@ class TestSimulationRunnerLoop:
 
         stop_reason = await runner.run()
 
-        assert stop_reason == StopReason.LOOP_BREAKER
+        assert stop_reason.reason == StopReason.LOOP_BREAKER
 
     async def test_runner_with_animator(self):
         """Animator produces environment events that get processed."""

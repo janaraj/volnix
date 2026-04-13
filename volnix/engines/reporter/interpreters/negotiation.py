@@ -1,4 +1,5 @@
 """Negotiation domain interpreter — formats game events into narrative lines."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -30,9 +31,7 @@ class NegotiationInterpreter:
                 changes: dict[str, Any] = effect.get("key_changes", {})
                 price = changes.get("unit_price") or changes.get("price") or "?"
                 extras = ", ".join(
-                    f"{k}={v}"
-                    for k, v in changes.items()
-                    if k not in ("unit_price", "price")
+                    f"{k}={v}" for k, v in changes.items() if k not in ("unit_price", "price")
                 )
                 line = f"{actor}: {tool} at ${price}"
                 if extras:

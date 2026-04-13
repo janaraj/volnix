@@ -50,6 +50,33 @@ def _generate_event_id() -> EventId:
 
 
 # ---------------------------------------------------------------------------
+# Governance event type constants — canonical strings used by pipeline engines
+# ---------------------------------------------------------------------------
+
+PERMISSION_DENIED = "permission.denied"
+PERMISSION_ALLOW = "permission.allow"
+POLICY_BLOCK = "policy.block"
+POLICY_HOLD = "policy.hold"
+POLICY_ESCALATE = "policy.escalate"
+POLICY_FLAG = "policy.flag"
+BUDGET_DEDUCTION = "budget.deduction"
+BUDGET_WARNING = "budget.warning"
+
+GOVERNANCE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        PERMISSION_DENIED,
+        PERMISSION_ALLOW,
+        POLICY_BLOCK,
+        POLICY_HOLD,
+        POLICY_ESCALATE,
+        POLICY_FLAG,
+        BUDGET_DEDUCTION,
+        BUDGET_WARNING,
+    }
+)
+
+
+# ---------------------------------------------------------------------------
 # Base event
 # ---------------------------------------------------------------------------
 

@@ -1440,6 +1440,67 @@ class VolnixApp:
             len(players),
         )
 
+    async def create_runner(
+        self,
+        compiled_plan: Any,
+        event_queue: Any,
+        pipeline_executor: Any,
+    ) -> tuple[Any, dict[str, Any]] | None:
+        """Create the appropriate runner for this blueprint.
+
+        Composition-root factory: resolves game detection and concrete
+        runner selection so the CLI never imports engine classes.
+
+        Returns ``(runner, metadata)`` or ``None`` if no game engine
+        is registered for a game blueprint.  ``metadata`` contains
+        display hints (``runner_kind``, ``game_mode``, ``scoring_mode``,
+        ``max_events``).
+        """
+        game_def = getattr(compiled_plan, "game", None)
+        if game_def and getattr(game_def, "enabled", False):
+            from volnix.engines.game.orchestrator_runner import OrchestratorRunner
+
+            try:
+                orchestrator = self._registry.get("game")
+            except KeyError:
+                return None
+            # Start the orchestrator NOW — after tool_executor is wired.
+            await orchestrator._on_start()
+            runner = OrchestratorRunner(
+                orchestrator=orchestrator,
+                agency=self._registry.get("agency"),
+                event_queue=event_queue,
+            )
+            return runner, {
+                "runner_kind": "game",
+                "game_mode": game_def.mode,
+                "scoring_mode": game_def.scoring_mode,
+                "max_events": game_def.flow.max_events,
+            }
+
+        # Standard simulation runner
+        from volnix.simulation.runner import SimulationRunner
+
+        plan_actors = getattr(compiled_plan, "actor_specs", [])
+        if not plan_actors:
+            plan_data = (
+                compiled_plan.model_dump(mode="json")
+                if hasattr(compiled_plan, "model_dump")
+                else {}
+            )
+            plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
+
+        runner = SimulationRunner(
+            event_queue=event_queue,
+            pipeline_executor=pipeline_executor,
+            agency_engine=self._registry.get("agency"),
+            animator=self._registry.get("animator"),
+            config=self._config.simulation_runner,
+            ledger=self._ledger,
+            actor_specs=plan_actors,
+        )
+        return runner, {"runner_kind": "simulation"}
+
     async def compile_and_run(self, plan: Any) -> dict:
         """Compile world + configure all runtime engines in one call.
 
@@ -1697,7 +1758,7 @@ class VolnixApp:
             actors_for_report = [
                 {"id": str(a.id), "type": str(a.type), "role": a.role}
                 for a in self._actor_registry.list_actors()
-                if a.type != ActorType.HUMAN
+                if a.type != ActorType.HUMAN and a.role != "gateway-default"
             ]
         if not actors_for_report:
             actors_for_report = [
@@ -1717,7 +1778,18 @@ class VolnixApp:
             )
 
         reporter = self._registry.get("reporter")
-        report = await reporter.generate_full_report(actors=actors_for_report, events=raw_events)
+        # Detect domain interpreter from events — wired here (composition root),
+        # not inside the generic reporter engine.
+        _interpreter: Any | None = None
+        if any(
+            str(e.get("event_type", "")).startswith("world.game.negotiate_") for e in raw_events
+        ):
+            from volnix.engines.reporter.interpreters.negotiation import NegotiationInterpreter
+
+            _interpreter = NegotiationInterpreter()
+        report = await reporter.generate_full_report(
+            actors=actors_for_report, events=raw_events, interpreter=_interpreter
+        )
         scorecard = await reporter.generate_scorecard(actors=actors_for_report, events=raw_events)
 
         await self._artifact_store.save_report(run_id, report)
@@ -1802,7 +1874,9 @@ class VolnixApp:
         await self._run_manager.complete_run(run_id, summary=summary)
         if self._current_run_id == str(run_id):
             self._current_run_id = None
-            self._current_world_id = None  # prevent _ensure_active_run from ghost-creating a new run
+            self._current_world_id = (
+                None  # prevent _ensure_active_run from ghost-creating a new run
+            )
         return {
             "run_id": str(run_id),
             "report": report,

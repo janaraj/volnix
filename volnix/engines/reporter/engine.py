@@ -194,6 +194,7 @@ class ReportGeneratorEngine(BaseEngine):
         world_id: WorldId = None,
         actors: list[dict[str, Any]] | None = None,
         events: list[dict[str, Any]] | None = None,
+        interpreter: Any | None = None,
     ) -> dict[str, Any]:
         """Generate a comprehensive report combining all diagnostics.
 
@@ -201,6 +202,8 @@ class ReportGeneratorEngine(BaseEngine):
             world_id: Optional world identifier.
             actors: Explicit actor list. If ``None``, reads from registry.
             events: Pre-filtered event list. If ``None``, reads all from bus.
+            interpreter: Optional DomainInterpreter for narrative strings.
+                         Wired by the caller (e.g. app.py) — not auto-detected here.
         """
         if events is None:
             events = await self._get_timeline()
@@ -212,7 +215,7 @@ class ReportGeneratorEngine(BaseEngine):
             actors=actors,
         )
         decision_trace = await self.generate_decision_trace(
-            events=events, actors=actors
+            events=events, actors=actors, interpreter=interpreter
         )
 
         return {
@@ -333,18 +336,6 @@ class ReportGeneratorEngine(BaseEngine):
         if actors is None:
             actors = self._get_actors()
         state = self._get_state_engine()
-        # Auto-detect negotiation game and instantiate interpreter when not provided
-        if interpreter is None:
-            has_negotiate = any(
-                str(e.get("event_type", "") if isinstance(e, dict)
-                    else getattr(e, "event_type", "")).startswith("world.game.negotiate_")
-                for e in events
-            )
-            if has_negotiate:
-                from volnix.engines.reporter.interpreters.negotiation import (
-                    NegotiationInterpreter,
-                )
-                interpreter = NegotiationInterpreter()
         return await self._trace_builder.build(
             events=events,
             actors=actors,

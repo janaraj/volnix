@@ -2,25 +2,37 @@
 
 Stateless computation: no constructor state. Call build() with run events.
 """
+
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol, runtime_checkable
 
-_PREFERRED_FIELDS: frozenset[str] = frozenset({
-    "id", "status", "name", "title", "price", "value", "count",
-    "severity", "level", "total", "amount", "quantity", "rate",
-})
+logger = logging.getLogger(__name__)
 
-_SYSTEM_ACTORS: frozenset[str] = frozenset({
-    "world_compiler", "animator", "system", "policy",
-    "budget", "state", "permission", "responder", "environment",
-})
+_PREFERRED_FIELDS: frozenset[str] = frozenset(
+    {
+        "id",
+        "status",
+        "name",
+        "title",
+        "price",
+        "value",
+        "count",
+        "severity",
+        "level",
+        "total",
+        "amount",
+        "quantity",
+        "rate",
+    }
+)
 
-_GOVERNANCE_TYPES: frozenset[str] = frozenset({
-    "permission.denied", "permission.allow",
-    "policy.block", "policy.hold", "policy.flag",
-    "budget.deduction", "budget.warning",
-})
+from volnix.core.events import GOVERNANCE_EVENT_TYPES as _GOVERNANCE_TYPES
+
+# Pipeline runs synchronously; governance events appear immediately after
+# the triggering world.* event. Scan at most this many positions forward.
+_GOVERNANCE_SCAN_WINDOW: int = 3
 
 
 @runtime_checkable
@@ -113,12 +125,13 @@ class DecisionTraceBuilder:
         # Step 1: Build lookup indexes in one pass
         by_actor, by_type = self._index_events(events)
 
-        # Step 2: Agent actor IDs — exclude system infrastructure
+        # Step 2: Agent actor IDs — exclude system and human types
         agent_ids: list[str] = [
             str(a["id"])
             for a in actors
-            if str(a.get("id", "")) and str(a.get("id", "")) not in _SYSTEM_ACTORS
+            if str(a.get("id", "")) and str(a.get("type", "")) not in ("system", "human")
         ]
+        agent_id_set: set[str] = set(agent_ids)
 
         # Step 3: Extract game_result from events if not provided
         if game_result is None:
@@ -136,7 +149,7 @@ class DecisionTraceBuilder:
                     break
 
         # Step 4: Group events into activations by timeline
-        all_activations = self._group_activations(events, agent_ids)
+        all_activations = self._group_activations(events, agent_ids, agent_id_set)
 
         # Step 5: Build action list for each activation
         for act in all_activations:
@@ -148,19 +161,20 @@ class DecisionTraceBuilder:
         for i, act in enumerate(all_activations):
             # Find where the same actor next activates
             same_actor_next_start = next(
-                (all_activations[j]["_first_event_idx"]
-                 for j in range(i + 1, len(all_activations))
-                 if all_activations[j]["actor_id"] == act["actor_id"]),
+                (
+                    all_activations[j]["_first_event_idx"]
+                    for j in range(i + 1, len(all_activations))
+                    if all_activations[j]["actor_id"] == act["actor_id"]
+                ),
                 len(events),  # end of events list if no next activation
             )
             window_start = act["_last_event_idx"] + 1
             window_events = events[window_start:same_actor_next_start]
-            act["world_response"] = self._build_world_response(act, window_events)
+            act["world_response"] = self._build_world_response(act, window_events, agent_id_set)
 
         # Step 7: Strip internal keys for output
         output_activations = [
-            {k: v for k, v in act.items() if not k.startswith("_")}
-            for act in all_activations
+            {k: v for k, v in act.items() if not k.startswith("_")} for act in all_activations
         ]
 
         # Step 8: Run-level aggregates (pass all_activations for utilization calc)
@@ -178,9 +192,7 @@ class DecisionTraceBuilder:
         if game_result is not None:
             trace["game_outcome"] = game_result
         if interpreter is not None:
-            trace["domain_narrative"] = interpreter.interpret(
-                output_activations, game_result
-            )
+            trace["domain_narrative"] = interpreter.interpret(output_activations, game_result)
         return trace
 
     # ── Internal methods ──────────────────────────────────────────────────────
@@ -205,6 +217,7 @@ class DecisionTraceBuilder:
         self,
         events: list[dict[str, Any]],
         agent_ids: list[str],
+        agent_id_set: set[str],
     ) -> list[dict[str, Any]]:
         """Group events into per-actor activations by timeline order.
 
@@ -214,7 +227,6 @@ class DecisionTraceBuilder:
         Governance events (permission.*, policy.*, budget.*) are attached to
         the current activation in progress (not a new activation boundary).
         """
-        agent_id_set = set(agent_ids)
         activations: list[dict[str, Any]] = []
         activation_counts: dict[str, int] = {}
 
@@ -237,20 +249,19 @@ class DecisionTraceBuilder:
 
             t_start = _get_val(batch[0], "timestamp") or {}
             t_end = _get_val(batch[-1], "timestamp") or {}
-            reason = "kickstart" if n == 1 else "game_event"
+            reason = "kickstart" if n == 1 else "re_activation"
 
-            # Cause: last non-system non-same-actor event before batch_start
+            # Cause: last event by a different known agent before batch_start
             cause_event_id: str | None = None
             for pe in reversed(events[:start]):
                 pe_aid = _get_str(pe, "actor_id")
-                if pe_aid and pe_aid != actor and pe_aid not in _SYSTEM_ACTORS:
+                if pe_aid and pe_aid != actor and pe_aid in agent_id_set:
                     cause_event_id = _get_str(pe, "event_id")
                     break
 
             # terminated_by: examine last world.* event in batch
             last_world = next(
-                (e for e in reversed(batch)
-                 if _get_str(e, "event_type").startswith("world.")),
+                (e for e in reversed(batch) if _get_str(e, "event_type").startswith("world.")),
                 batch[-1],
             )
             svc = _get_str(last_world, "service_id")
@@ -262,18 +273,20 @@ class DecisionTraceBuilder:
             else:
                 terminated_by = "turn_complete"
 
-            activations.append({
-                "activation_id": act_id,
-                "actor_id": actor,
-                "reason": reason,
-                "cause_event_id": cause_event_id,
-                "time_start": _ts_str(t_start),
-                "time_end": _ts_str(t_end),
-                "terminated_by": terminated_by,
-                "_raw_events": list(batch),    # stripped before output in build()
-                "_first_event_idx": start,     # index in events list
-                "_last_event_idx": last_idx,   # index of last event (incl. governance)
-            })
+            activations.append(
+                {
+                    "activation_id": act_id,
+                    "actor_id": actor,
+                    "reason": reason,
+                    "cause_event_id": cause_event_id,
+                    "time_start": _ts_str(t_start),
+                    "time_end": _ts_str(t_end),
+                    "terminated_by": terminated_by,
+                    "_raw_events": list(batch),  # stripped before output in build()
+                    "_first_event_idx": start,  # index in events list
+                    "_last_event_idx": last_idx,  # index of last event (incl. governance)
+                }
+            )
 
         for idx, e in enumerate(events):
             aid = _get_str(e, "actor_id")
@@ -336,7 +349,7 @@ class DecisionTraceBuilder:
                 "policy": "pass",
                 "budget_deducted": 0,
             }
-            for g in events[i + 1: i + 4]:
+            for g in events[i + 1 : i + 1 + _GOVERNANCE_SCAN_WINDOW]:
                 g_etype = _get_str(g, "event_type")
                 if _get_str(g, "actor_id") != actor_id:
                     continue
@@ -366,23 +379,15 @@ class DecisionTraceBuilder:
                     "entity_type": str(delta.get("entity_type", "")),
                     "entity_id": str(delta.get("entity_id", "")),
                     "operation": str(delta.get("operation", "update")),
-                    "key_changes": _extract_scalar_fields(
-                        delta.get("fields", {}), cap=5
-                    ),
+                    "key_changes": _extract_scalar_fields(delta.get("fields", {}), cap=5),
                 }
             elif response_body:
                 # Read action: summarize response
                 if isinstance(response_body, list):
                     n = len(response_body)
-                    first = (
-                        response_body[0]
-                        if n > 0 and isinstance(response_body[0], dict)
-                        else {}
-                    )
+                    first = response_body[0] if n > 0 and isinstance(response_body[0], dict) else {}
                     et = str(first.get("entity_type", ""))
-                    learned = {
-                        "summary": f"{n} entities" + (f" of type {et}" if et else "")
-                    }
+                    learned = {"summary": f"{n} entities" + (f" of type {et}" if et else "")}
                 elif isinstance(response_body, dict):
                     scalars = _extract_scalar_fields(response_body, cap=5)
                     if scalars:
@@ -411,6 +416,7 @@ class DecisionTraceBuilder:
         self,
         activation: dict[str, Any],
         interleaved_events: list[dict[str, Any]],
+        agent_id_set: set[str],
     ) -> dict[str, Any]:
         """Build world_response from events that occurred after this activation.
 
@@ -426,7 +432,7 @@ class DecisionTraceBuilder:
             if not etype.startswith("world."):
                 continue
 
-            if aid in _SYSTEM_ACTORS:
+            if aid and aid not in agent_id_set:
                 svc = _get_str(e, "service_id")
                 action = _get_str(e, "action")
                 response = _get_val(e, "response_body") or {}
@@ -440,17 +446,21 @@ class DecisionTraceBuilder:
                 if not summary:
                     target = _get_str(e, "target_entity")
                     summary = action + (f" on {target}" if target else "")
-                animator_reactions.append({
-                    "action": f"{svc}.{action}" if svc else action,
-                    "service": svc,
-                    "summary": summary,
-                })
+                animator_reactions.append(
+                    {
+                        "action": f"{svc}.{action}" if svc else action,
+                        "service": svc,
+                        "summary": summary,
+                    }
+                )
             elif aid and aid != activation["actor_id"]:
-                direct_cascades.append({
-                    "actor_id": aid,
-                    "action": _get_str(e, "action"),
-                    "service": _get_str(e, "service_id"),
-                })
+                direct_cascades.append(
+                    {
+                        "actor_id": aid,
+                        "action": _get_str(e, "action"),
+                        "service": _get_str(e, "service_id"),
+                    }
+                )
 
         return {
             "direct_cascades": direct_cascades,
@@ -478,8 +488,8 @@ class DecisionTraceBuilder:
         if state_engine is not None and hasattr(state_engine, "count_entities"):
             try:
                 total_entities = await state_engine.count_entities()
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001
+                logger.debug("count_entities unavailable; coverage ratio will use 0", exc_info=True)
 
         # Build per-actor set of entities queried in activations that had
         # at least one committed write or committed game-service action.
@@ -491,7 +501,8 @@ class DecisionTraceBuilder:
                     continue
                 # Does this activation have a committed non-read action?
                 has_committed_action = any(
-                    a.get("committed") and (
+                    a.get("committed")
+                    and (
                         a.get("effect") is not None  # write
                         or a.get("service") == "game"  # game-move
                     )
@@ -522,16 +533,10 @@ class DecisionTraceBuilder:
                 if svc:
                     services_used.add(svc)
 
-            coverage = (
-                round(len(queried) / total_entities, 3) if total_entities > 0 else 0.0
-            )
+            coverage = round(len(queried) / total_entities, 3) if total_entities > 0 else 0.0
             utilized = utilized_by_actor.get(actor_id, set())
-            utilization: float | None = (
-                round(len(utilized) / len(queried), 3) if queried else None
-            )
-            actor_meta = next(
-                (a for a in actors if str(a.get("id", "")) == actor_id), {}
-            )
+            utilization: float | None = round(len(utilized) / len(queried), 3) if queried else None
+            actor_meta = next((a for a in actors if str(a.get("id", "")) == actor_id), {})
             result[actor_id] = {
                 "role": actor_meta.get("role", actor_id),
                 "entities_available": total_entities,
@@ -540,6 +545,7 @@ class DecisionTraceBuilder:
                 "unique_services_used": sorted(services_used),
                 "coverage_ratio": coverage,
                 "utilization_ratio": utilization,
+                "utilization_method": "activation_co_occurrence",  # proxy, not causal
             }
         return result
 
@@ -552,45 +558,34 @@ class DecisionTraceBuilder:
         """Per-actor governance aggregate counts with pressure rates."""
         result: dict[str, Any] = {}
         for actor_id in agent_ids:
-            actor_events = [
-                e for e in events if _get_str(e, "actor_id") == actor_id
-            ]
+            actor_events = [e for e in events if _get_str(e, "actor_id") == actor_id]
             total_world_actions = sum(
-                1 for e in actor_events
-                if _get_str(e, "event_type").startswith("world.")
+                1 for e in actor_events if _get_str(e, "event_type").startswith("world.")
             )
             perms_checked = sum(
-                1 for e in actor_events
-                if _get_str(e, "event_type").startswith("permission.")
+                1 for e in actor_events if _get_str(e, "event_type").startswith("permission.")
             )
             perms_denied = sum(
-                1 for e in actor_events
-                if _get_str(e, "event_type") == "permission.denied"
+                1 for e in actor_events if _get_str(e, "event_type") == "permission.denied"
             )
             policies_triggered = sum(
-                1 for e in actor_events
-                if _get_str(e, "event_type").startswith("policy.")
+                1 for e in actor_events if _get_str(e, "event_type").startswith("policy.")
             )
             policies_blocked = sum(
-                1 for e in actor_events
-                if _get_str(e, "event_type") == "policy.block"
+                1 for e in actor_events if _get_str(e, "event_type") == "policy.block"
             )
             # Budget: sum world_actions-type deductions only (1 per world action)
             budget_consumed = sum(
                 int(_get_val(e, "amount", 0))
                 for e in actor_events
                 if _get_str(e, "event_type") == "budget.deduction"
-                and _get_str(e, "budget_type") in ("world_actions", "")
+                and _get_str(e, "budget_type") == "world_actions"
             )
-            actor_meta = next(
-                (a for a in actors if str(a.get("id", "")) == actor_id), {}
-            )
+            actor_meta = next((a for a in actors if str(a.get("id", "")) == actor_id), {})
             budget_cfg = actor_meta.get("budget") or {}
             budget_total: int = int(budget_cfg.get("world_actions", 0))
             budget_utilization: float | None = (
-                round(budget_consumed / budget_total, 3)
-                if budget_total > 0
-                else None
+                round(budget_consumed / budget_total, 3) if budget_total > 0 else None
             )
             # Derived pressure rates
             policy_pressure_rate: float | None = (
@@ -599,9 +594,7 @@ class DecisionTraceBuilder:
                 else None
             )
             rejection_rate: float | None = (
-                round(perms_denied / perms_checked, 3)
-                if perms_checked > 0
-                else None
+                round(perms_denied / perms_checked, 3) if perms_checked > 0 else None
             )
             result[actor_id] = {
                 "role": actor_meta.get("role", actor_id),

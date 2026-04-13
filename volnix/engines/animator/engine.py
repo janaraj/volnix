@@ -422,8 +422,7 @@ class WorldAnimatorEngine(BaseEngine):
                 missing = required - set(input_data.keys())
                 if missing:
                     logger.warning(
-                        "Animator: skipping event %s — missing required "
-                        "fields %s in input_data",
+                        "Animator: skipping event %s — missing required fields %s in input_data",
                         action_name,
                         missing,
                     )

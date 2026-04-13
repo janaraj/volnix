@@ -747,6 +747,7 @@ class GameOrchestrator(BaseEngine):
             event_id=EventId(f"evt-game-terminated-{self._run_id}-{_unique_suffix()}"),
             event_type="game.terminated",
             timestamp=_now_timestamp(),
+            run_id=str(self._run_id),
             winner=win_result.winner,
             reason=reason,
             final_standings=list(win_result.final_standings),
@@ -1136,8 +1137,13 @@ class GameOrchestrator(BaseEngine):
                     for wm in reversed(world_msgs):
                         text = (wm.get("text") or "")[:200]
                         parts.append(f"  - {text}")
-            except Exception:  # noqa: BLE001
-                pass  # non-critical — summary valid without this
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("World events query failed for state summary", exc_info=True)
+                await self._publish_engine_error(
+                    source="state_summary_world_events",
+                    event_number=self._game_state.event_counter,
+                    exc=exc,
+                )
 
         return "\n".join(parts)
 

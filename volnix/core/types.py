@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import Any, NewType
+from typing import Any, Literal, NewType
 
 from pydantic import BaseModel, Field
 
@@ -313,3 +313,33 @@ class Timestamp(BaseModel, frozen=True):
     world_time: datetime
     wall_time: datetime
     tick: int
+
+
+class RunResult(BaseModel, frozen=True):
+    """Unified result from any runner (simulation or game).
+
+    Both :class:`SimulationRunner` and :class:`OrchestratorRunner` return
+    this type from ``run()``, eliminating the need for type-based
+    dispatch in the CLI.
+
+    Attributes:
+        reason: Why the run stopped (StopReason value or game termination reason).
+        runner_kind: Discriminator: ``"simulation"`` or ``"game"``.
+        winner: Game-only — the winning actor, if any.
+        total_events: Number of committed events processed.
+        wall_clock_seconds: Elapsed wall-clock time.
+        deliverable_produced: Whether a deliverable artifact was produced.
+        deliverable_content: The deliverable JSON content, if produced.
+        final_standings: Game-only — ordered player standings.
+        behavior_scores: Game-only — per-player behavior metric scores.
+    """
+
+    reason: str
+    runner_kind: Literal["simulation", "game"]
+    winner: str | None = None
+    total_events: int = 0
+    wall_clock_seconds: float = 0.0
+    deliverable_produced: bool = False
+    deliverable_content: dict[str, Any] | None = None
+    final_standings: list[dict[str, Any]] = Field(default_factory=list)
+    behavior_scores: dict[str, dict[str, float]] = Field(default_factory=dict)

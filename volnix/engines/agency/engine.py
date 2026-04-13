@@ -54,12 +54,11 @@ def _build_tool_call_dict(tc: ToolCall, tc_id: str) -> dict[str, Any]:
 
 # -- history sanitisation for two-phase game activation ----------------
 
-_HISTORY_SANITIZE_CHAR_LIMIT = 8000
-
 
 def _sanitize_history_for_game_move(
     messages: list[dict[str, Any]],
     game_tool_names: frozenset[str],
+    char_limit: int = 8000,
 ) -> list[dict[str, Any]]:
     """Replace non-game tool-call history with a text research summary.
 
@@ -161,14 +160,11 @@ def _sanitize_history_for_game_move(
     # -- Inject research summary at the first-removed position ----------
     if research_findings:
         joined = "\n\n".join(research_findings)
-        if len(joined) > _HISTORY_SANITIZE_CHAR_LIMIT:
-            joined = joined[:_HISTORY_SANITIZE_CHAR_LIMIT] + "\n[...truncated]"
+        if len(joined) > char_limit:
+            joined = joined[:char_limit] + "\n[...truncated]"
         summary_msg: dict[str, Any] = {
             "role": "assistant",
-            "content": (
-                "[I gathered the following information during research.]\n\n"
-                + joined
-            ),
+            "content": ("[I gathered the following information during research.]\n\n" + joined),
         }
         pos = insert_pos if insert_pos is not None else min(2, len(result))
         result.insert(pos, summary_msg)
@@ -1219,10 +1215,12 @@ class AgencyEngine(BaseEngine):
             # (deal IDs, proposal history, world events) is visible
             # from the very first activation, not just re-activations.
             if state_summary:
-                messages.append({
-                    "role": "user",
-                    "content": f"[game state update]\n{state_summary}",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[game state update]\n{state_summary}",
+                    }
+                )
 
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
@@ -2195,11 +2193,10 @@ class AgencyEngine(BaseEngine):
                         )
                         if t.service == "game"
                     )
-                    actor_state.activation_messages = (
-                        _sanitize_history_for_game_move(
-                            actor_state.activation_messages,
-                            game_tool_names,
-                        )
+                    actor_state.activation_messages = _sanitize_history_for_game_move(
+                        actor_state.activation_messages,
+                        game_tool_names,
+                        char_limit=self._typed_config.history_sanitize_char_limit,
                     )
 
                 # Bridge message: tell the LLM research is done.

@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from volnix.engines.game.definition import GameResult
+from volnix.core.types import RunResult
 from volnix.engines.game.orchestrator import GameOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -72,14 +72,12 @@ class OrchestratorRunner:
         """
         self._mission = mission
 
-    async def run(self) -> GameResult:
+    async def run(self) -> RunResult:
         """Block until the orchestrator publishes ``GameTerminatedEvent``.
 
         Returns:
-            The :class:`GameResult` resolved by
-            :meth:`GameOrchestrator.await_result`. The CLI formats it
-            via ``_format_run_result`` (which reads ``.reason`` and
-            ``.winner`` attributes).
+            A :class:`RunResult` with ``runner_kind="game"`` populated
+            from the :class:`GameResult`.
 
         Raises:
             RuntimeError: If the orchestrator was never configured or
@@ -92,4 +90,12 @@ class OrchestratorRunner:
             result.reason,
             result.winner,
         )
-        return result
+        return RunResult(
+            reason=result.reason,
+            runner_kind="game",
+            winner=str(result.winner) if result.winner else None,
+            total_events=result.total_events,
+            wall_clock_seconds=result.wall_clock_seconds,
+            final_standings=result.final_standings,
+            behavior_scores=result.behavior_scores,
+        )

@@ -1,7 +1,7 @@
 """Tests for ``volnix.engines.game.orchestrator_runner.OrchestratorRunner``.
 
 The runner is the CLI-compatibility shim that bridges the
-``SimulationRunner.run()`` interface with
+``RunnerProtocol.run()`` interface with
 :meth:`GameOrchestrator.await_result`. Tested in isolation here;
 end-to-end CLI flow is covered by tests/cli/test_run_*.py.
 """
@@ -12,18 +12,13 @@ import asyncio
 
 import pytest
 
-from volnix.core.types import ActorId
+from volnix.core.types import ActorId, RunResult
 from volnix.engines.game.definition import GameResult
 from volnix.engines.game.orchestrator_runner import OrchestratorRunner
 
 
 class _FakeOrchestrator:
-    """Minimal orchestrator stub exposing ``await_result``.
-
-    The future is lazily created inside ``await_result`` so tests that
-    construct the stub outside a running event loop (e.g. sync tests
-    for ``_is_game_runner``) don't hit ``DeprecationWarning``.
-    """
+    """Minimal orchestrator stub exposing ``await_result``."""
 
     def __init__(self, result: GameResult | None = None) -> None:
         self._result = result
@@ -52,18 +47,22 @@ class _FakeOrchestrator:
 
 class TestOrchestratorRunnerRun:
     @pytest.mark.asyncio
-    async def test_run_returns_orchestrator_result(self):
-        expected = GameResult(
+    async def test_run_returns_run_result(self):
+        game_result = GameResult(
             reason="deal_closed",
             winner=ActorId("buyer-001"),
             total_events=7,
+            wall_clock_seconds=12.5,
         )
-        orch = _FakeOrchestrator(result=expected)
+        orch = _FakeOrchestrator(result=game_result)
         runner = OrchestratorRunner(orchestrator=orch, agency=None)
         result = await runner.run()
-        assert result is expected
+        assert isinstance(result, RunResult)
+        assert result.runner_kind == "game"
         assert result.reason == "deal_closed"
-        assert result.winner == ActorId("buyer-001")
+        assert result.winner == "buyer-001"
+        assert result.total_events == 7
+        assert result.wall_clock_seconds == 12.5
 
     @pytest.mark.asyncio
     async def test_run_blocks_until_result_resolved(self):
@@ -75,31 +74,29 @@ class TestOrchestratorRunnerRun:
         orch.set_result(GameResult(reason="stalemate"))
         result = await task
         assert result.reason == "stalemate"
+        assert result.runner_kind == "game"
 
 
 # ---------------------------------------------------------------------------
-# CLI compatibility surface
+# RunnerProtocol compliance
 # ---------------------------------------------------------------------------
 
 
-class TestCliCompat:
+class TestRunnerProtocol:
     @pytest.mark.asyncio
     async def test_set_mission_is_noop(self):
         orch = _FakeOrchestrator(result=GameResult(reason="ok"))
         runner = OrchestratorRunner(orchestrator=orch, agency=None)
         runner.set_mission("negotiate Q3 steel")
         assert runner._mission == "negotiate Q3 steel"
-        # Doesn't affect the result
         result = await runner.run()
         assert result.reason == "ok"
 
-    def test_class_name_is_detected_as_game_runner(self):
-        """CLI ``_is_game_runner`` matches on class name — must be stable."""
-        from volnix.cli import _is_game_runner
+    def test_satisfies_runner_protocol(self):
+        """OrchestratorRunner must satisfy RunnerProtocol."""
+        from volnix.core.protocols import RunnerProtocol
 
-        orch = _FakeOrchestrator(result=GameResult(reason="x"))
-        runner = OrchestratorRunner(orchestrator=orch, agency=None)
-        assert _is_game_runner(runner) is True
+        assert issubclass(OrchestratorRunner, RunnerProtocol)
 
 
 # ---------------------------------------------------------------------------
@@ -108,19 +105,23 @@ class TestCliCompat:
 
 
 class TestFormatRunResult:
-    """CLI's ``_format_run_result`` must handle OrchestratorRunner output."""
+    """CLI's ``_format_run_result`` must handle RunResult from game runner."""
 
     def test_winner_reason_formatted(self):
         from volnix.cli import _format_run_result
 
-        result = GameResult(reason="deal_closed", winner=ActorId("buyer-001"))
-        formatted = _format_run_result(result, is_game=True)
+        result = RunResult(
+            reason="deal_closed",
+            runner_kind="game",
+            winner="buyer-001",
+        )
+        formatted = _format_run_result(result)
         assert "deal_closed" in formatted
         assert "buyer-001" in formatted
 
     def test_reason_only_formatted(self):
         from volnix.cli import _format_run_result
 
-        result = GameResult(reason="stalemate")
-        formatted = _format_run_result(result, is_game=True)
+        result = RunResult(reason="stalemate", runner_kind="game")
+        formatted = _format_run_result(result)
         assert formatted == "stalemate"

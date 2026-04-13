@@ -1,4 +1,5 @@
 """Unit tests for DecisionTraceBuilder."""
+
 from __future__ import annotations
 
 import json
@@ -61,12 +62,14 @@ async def test_single_actor_single_activation() -> None:
             "agent1",
             "pages.create",
             "notion",
-            state_deltas=[{
-                "entity_type": "page",
-                "entity_id": "p1",
-                "operation": "create",
-                "fields": {"title": "Test"},
-            }],
+            state_deltas=[
+                {
+                    "entity_type": "page",
+                    "entity_id": "p1",
+                    "operation": "create",
+                    "fields": {"title": "Test"},
+                }
+            ],
         ),
     ]
     builder = DecisionTraceBuilder()
@@ -147,15 +150,9 @@ async def test_multi_actor_turn_grouping() -> None:
         {"id": "supplier", "type": "agent", "role": "supplier"},
     ]
     events = [
-        _make_event(
-            "world.game.negotiate_propose", "buyer", "negotiate_propose", "game"
-        ),
-        _make_event(
-            "world.game.negotiate_counter", "supplier", "negotiate_counter", "game"
-        ),
-        _make_event(
-            "world.game.negotiate_accept", "buyer", "negotiate_accept", "game"
-        ),
+        _make_event("world.game.negotiate_propose", "buyer", "negotiate_propose", "game"),
+        _make_event("world.game.negotiate_counter", "supplier", "negotiate_counter", "game"),
+        _make_event("world.game.negotiate_accept", "buyer", "negotiate_accept", "game"),
     ]
     builder = DecisionTraceBuilder()
     trace = await builder.build(events=events, actors=actors, state_engine=None)
@@ -224,9 +221,7 @@ async def test_information_coverage_ratio() -> None:
         },
     ]
     builder = DecisionTraceBuilder()
-    trace = await builder.build(
-        events=events, actors=actors, state_engine=MockStateEngine()
-    )
+    trace = await builder.build(events=events, actors=actors, state_engine=MockStateEngine())
     info = trace["information_analysis"]["agent1"]
     assert info["entities_available"] == 10
     assert info["entities_queried"] == 3
@@ -239,34 +234,50 @@ async def test_information_utilization_ratio() -> None:
     # activation 2: reads db3 only → no commit (not utilized)
     events = [
         {
-            **_make_event("world.notion.databases.retrieve", "agent1",
-                          "databases.retrieve", "notion"),
+            **_make_event(
+                "world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion"
+            ),
             "target_entity": "db1",
         },
         {
-            **_make_event("world.notion.databases.retrieve", "agent1",
-                          "databases.retrieve", "notion"),
+            **_make_event(
+                "world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion"
+            ),
             "target_entity": "db2",
         },
-        _make_event("world.game.negotiate_propose", "agent1", "negotiate_propose", "game",
-                    state_deltas=[{
-                        "entity_type": "deal", "entity_id": "d1",
-                        "operation": "update", "fields": {"price": 90},
-                    }]),
+        _make_event(
+            "world.game.negotiate_propose",
+            "agent1",
+            "negotiate_propose",
+            "game",
+            state_deltas=[
+                {
+                    "entity_type": "deal",
+                    "entity_id": "d1",
+                    "operation": "update",
+                    "fields": {"price": 90},
+                }
+            ],
+        ),
         # Different actor triggers second activation for agent1
         _make_event("world.game.negotiate_counter", "supplier", "negotiate_counter", "game"),
         # agent1 activation 2: reads db3 only (no commit)
         {
-            **_make_event("world.notion.databases.retrieve", "agent1",
-                          "databases.retrieve", "notion"),
+            **_make_event(
+                "world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion"
+            ),
             "target_entity": "db3",
         },
     ]
     builder = DecisionTraceBuilder()
-    trace = await builder.build(events=events, actors=[
-        {"id": "agent1", "type": "agent", "role": "buyer"},
-        {"id": "supplier", "type": "agent", "role": "supplier"},
-    ], state_engine=None)
+    trace = await builder.build(
+        events=events,
+        actors=[
+            {"id": "agent1", "type": "agent", "role": "buyer"},
+            {"id": "supplier", "type": "agent", "role": "supplier"},
+        ],
+        state_engine=None,
+    )
     info = trace["information_analysis"]["agent1"]
     # All 3 were queried
     assert info["entities_queried"] == 3
@@ -330,15 +341,156 @@ async def test_trace_is_json_serializable() -> None:
             "agent1",
             "pages.create",
             "notion",
-            state_deltas=[{
-                "entity_type": "page",
-                "entity_id": "p1",
-                "operation": "create",
-                "fields": {"title": "X"},
-            }],
+            state_deltas=[
+                {
+                    "entity_type": "page",
+                    "entity_id": "p1",
+                    "operation": "create",
+                    "fields": {"title": "X"},
+                }
+            ],
         ),
     ]
     builder = DecisionTraceBuilder()
     trace = await builder.build(events=events, actors=actors, state_engine=None)
     serialized = json.dumps(trace)  # must not raise TypeError
     assert "activations" in json.loads(serialized)
+
+
+async def test_system_type_actor_excluded_from_agent_ids() -> None:
+    """Actors with type='system' are not counted as agents."""
+    actors = [
+        {"id": "agent1", "type": "agent", "role": "buyer"},
+        {"id": "internal_system", "type": "system", "role": "system"},
+    ]
+    events = [
+        _make_event("world.slack.chat.post", "agent1", "chat.post", "slack"),
+        _make_event("world.slack.chat.post", "internal_system", "chat.post", "slack"),
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=actors, state_engine=None)
+    # Only agent1 gets an activation; internal_system does not
+    assert len(trace["activations"]) == 1
+    assert trace["activations"][0]["actor_id"] == "agent1"
+    assert "internal_system" not in trace["governance_summary"]
+
+
+async def test_utilization_method_field_present() -> None:
+    """information_analysis entries include utilization_method metadata."""
+    actors = [{"id": "agent1", "type": "agent", "role": "buyer"}]
+    events = [
+        _make_event("world.notion.databases.retrieve", "agent1", "databases.retrieve", "notion")
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=actors, state_engine=None)
+    info = trace["information_analysis"]["agent1"]
+    assert info["utilization_method"] == "activation_co_occurrence"
+
+
+# ===================================================================
+# Interpreter wiring — domain_narrative via DomainInterpreter protocol
+# ===================================================================
+
+
+async def test_interpreter_produces_domain_narrative() -> None:
+    """When a DomainInterpreter is passed, domain_narrative appears in the trace."""
+    from volnix.engines.reporter.interpreters.negotiation import NegotiationInterpreter
+
+    actors = [
+        {"id": "buyer", "type": "agent", "role": "buyer"},
+        {"id": "supplier", "type": "agent", "role": "supplier"},
+    ]
+    events = [
+        _make_event(
+            "world.game.negotiate_propose",
+            "buyer",
+            "negotiate_propose",
+            "game",
+            state_deltas=[
+                {
+                    "entity_type": "deal",
+                    "entity_id": "d1",
+                    "operation": "update",
+                    "fields": {"unit_price": 95},
+                }
+            ],
+        ),
+        _make_event(
+            "world.game.negotiate_accept",
+            "supplier",
+            "negotiate_accept",
+            "game",
+            state_deltas=[
+                {
+                    "entity_type": "deal",
+                    "entity_id": "d1",
+                    "operation": "update",
+                    "fields": {"status": "accepted"},
+                }
+            ],
+        ),
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(
+        events=events,
+        actors=actors,
+        state_engine=None,
+        interpreter=NegotiationInterpreter(),
+    )
+    assert "domain_narrative" in trace
+    narrative = trace["domain_narrative"]
+    assert isinstance(narrative, list)
+    assert len(narrative) >= 2
+    # Narrative lines reference the actors
+    assert any("buyer" in line for line in narrative)
+    assert any("supplier" in line for line in narrative)
+
+
+async def test_no_interpreter_means_no_narrative() -> None:
+    """Without interpreter, domain_narrative is absent even with game events."""
+    actors = [{"id": "buyer", "type": "agent", "role": "buyer"}]
+    events = [
+        _make_event(
+            "world.game.negotiate_propose",
+            "buyer",
+            "negotiate_propose",
+            "game",
+            state_deltas=[
+                {
+                    "entity_type": "deal",
+                    "entity_id": "d1",
+                    "operation": "update",
+                    "fields": {"unit_price": 95},
+                }
+            ],
+        ),
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=actors, state_engine=None)
+    assert "domain_narrative" not in trace
+
+
+async def test_negotiation_interpreter_satisfies_domain_protocol() -> None:
+    """NegotiationInterpreter is a structural match for DomainInterpreter."""
+    from volnix.engines.reporter.decision_trace import DomainInterpreter
+    from volnix.engines.reporter.interpreters.negotiation import NegotiationInterpreter
+
+    assert isinstance(NegotiationInterpreter(), DomainInterpreter)
+
+
+async def test_re_activation_reason_for_second_activation() -> None:
+    """Second activation gets 're_activation' reason, not 'game_event'."""
+    actors = [
+        {"id": "buyer", "type": "agent", "role": "buyer"},
+        {"id": "supplier", "type": "agent", "role": "supplier"},
+    ]
+    events = [
+        _make_event("world.game.negotiate_propose", "buyer", "negotiate_propose", "game"),
+        _make_event("world.game.negotiate_counter", "supplier", "negotiate_counter", "game"),
+        _make_event("world.game.negotiate_accept", "buyer", "negotiate_accept", "game"),
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=actors, state_engine=None)
+    second_buyer = trace["activations"][2]
+    assert second_buyer["actor_id"] == "buyer"
+    assert second_buyer["reason"] == "re_activation"

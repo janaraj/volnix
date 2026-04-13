@@ -93,7 +93,7 @@ class TestEndConditions:
         """Runner stops with QUEUE_EMPTY when queue is empty and stop_on_empty_queue is True."""
         runner = _make_runner()
         reason = await runner.run()
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
         assert runner.status == SimulationStatus.COMPLETED
 
     async def test_max_events_stops(self) -> None:
@@ -111,7 +111,7 @@ class TestEndConditions:
             q.submit(_make_envelope(logical_time=float(i)))
 
         reason = await runner.run()
-        assert reason == StopReason.MAX_EVENTS_REACHED
+        assert reason.reason == StopReason.MAX_EVENTS_REACHED
         assert runner.total_events_processed == 3
 
     async def test_max_time_stops(self) -> None:
@@ -127,7 +127,7 @@ class TestEndConditions:
         q.submit(_make_envelope(logical_time=200.0))
 
         reason = await runner.run()
-        assert reason == StopReason.MAX_TIME_REACHED
+        assert reason.reason == StopReason.MAX_TIME_REACHED
 
     async def test_manual_stop(self) -> None:
         """Runner stops with MANUAL_STOP when stop() is called."""
@@ -149,7 +149,7 @@ class TestEndConditions:
         reason = await runner.run()
         await stop_task
 
-        assert reason == StopReason.MANUAL_STOP
+        assert reason.reason == StopReason.MANUAL_STOP
 
     async def test_mission_completed_stops(self) -> None:
         """Runner stops with MISSION_COMPLETED when mission is marked complete."""
@@ -177,7 +177,7 @@ class TestEndConditions:
         executor.side_effect = mark_complete
 
         reason = await runner.run()
-        assert reason == StopReason.MISSION_COMPLETED
+        assert reason.reason == StopReason.MISSION_COMPLETED
 
     async def test_loop_breaker_stops(self) -> None:
         """Runner stops with LOOP_BREAKER after too many internal events without external."""
@@ -201,7 +201,7 @@ class TestEndConditions:
             )
 
         reason = await runner.run()
-        assert reason == StopReason.LOOP_BREAKER
+        assert reason.reason == StopReason.LOOP_BREAKER
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ class TestPipelineExecution:
         q.submit(_make_envelope(logical_time=1.0))
         reason = await runner.run()
 
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
         assert runner.total_events_processed == 1
         executor.assert_called_once()
 
@@ -323,7 +323,7 @@ class TestPipelineExecution:
         q.submit(_make_envelope(logical_time=1.0))
         reason = await runner.run()
 
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
         assert runner.total_events_processed == 0
 
     async def test_agency_engine_notified_on_event(self) -> None:
@@ -452,7 +452,7 @@ class TestBudgetAndDisconnect:
 
         reason = await runner.run()
 
-        assert reason == StopReason.ALL_BUDGETS_EXHAUSTED
+        assert reason.reason == StopReason.ALL_BUDGETS_EXHAUSTED
         assert runner.status == SimulationStatus.COMPLETED
         budget_checker.assert_called()
 
@@ -485,7 +485,7 @@ class TestBudgetAndDisconnect:
 
         reason = await runner.run()
 
-        assert reason == StopReason.ALL_AGENTS_DISCONNECTED
+        assert reason.reason == StopReason.ALL_AGENTS_DISCONNECTED
         assert agent not in runner._connected_agents
 
 
@@ -688,7 +688,7 @@ class TestTimeAdvancement:
         # The scheduled action should have fired and produced an event
         assert fired
         assert runner.total_events_processed >= 2  # initial + scheduled
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
 
     async def test_internal_only_no_scheduled_actions_stops_cleanly(self) -> None:
         """Internal-only sim, queue drains, no scheduled actions -> QUEUE_EMPTY."""
@@ -713,7 +713,7 @@ class TestTimeAdvancement:
         q.submit(_make_envelope(logical_time=0.0))
         reason = await runner.run()
 
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
 
     async def test_fast_forward_respects_max_ticks(self) -> None:
         """Scheduled action at tick 100, max_ticks=15 -> TICK_LIMIT after fast-forward."""
@@ -745,7 +745,7 @@ class TestTimeAdvancement:
         q.submit(_make_envelope(logical_time=0.0))
         reason = await runner.run()
 
-        assert reason == StopReason.TICK_LIMIT
+        assert reason.reason == StopReason.TICK_LIMIT
 
     async def test_external_driven_does_not_fast_forward(self) -> None:
         """External-driven sim with scheduled actions -> no fast-forward, QUEUE_EMPTY."""
@@ -773,7 +773,7 @@ class TestTimeAdvancement:
         reason = await runner.run()
 
         # Should stop normally, NOT fast-forward
-        assert reason == StopReason.QUEUE_EMPTY
+        assert reason.reason == StopReason.QUEUE_EMPTY
         assert q.current_time < 780.0  # time did not jump
 
 
