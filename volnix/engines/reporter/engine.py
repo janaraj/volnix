@@ -122,6 +122,43 @@ class ReportGeneratorEngine(BaseEngine):
             ]
         return []
 
+    # -- Shared helpers --------------------------------------------------------
+
+    _INTERNAL_ACTOR_IDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "world_compiler",
+            "animator",
+            "system",
+            "policy",
+            "budget",
+            "state",
+            "permission",
+            "responder",
+        }
+    )
+
+    def _discover_actors_from_events(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Derive actor list from events, excluding known engine actors.
+
+        Used as a fallback when the caller passes an empty or None actors
+        list — the live registry may be stale (different process) or empty
+        (internal-agent-only runs where world_def has no actor_specs).
+        """
+        seen: set[str] = set()
+        actors: list[dict[str, Any]] = []
+        for evt in events:
+            aid = (
+                evt.get("actor_id")
+                if isinstance(evt, dict)
+                else getattr(evt, "actor_id", None)
+            )
+            if aid and str(aid) not in seen and str(aid) not in self._INTERNAL_ACTOR_IDS:
+                actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
+                seen.add(str(aid))
+        return actors
+
     # -- Reporter operations ---------------------------------------------------
 
     async def generate_scorecard(
@@ -134,36 +171,15 @@ class ReportGeneratorEngine(BaseEngine):
 
         Args:
             world_id: Optional world identifier (unused, kept for API compat).
-            actors: Explicit actor list. If ``None``, reads from registry
-                and supplements with actors discovered from events.
+            actors: Explicit actor list. If empty/None, discovers actors
+                from events (excluding engine-internal actors).
             events: Pre-filtered event list. If ``None``, reads all from bus.
                 Pass run-scoped events to avoid cross-run contamination.
         """
         if events is None:
             events = await self._get_timeline()
-        if actors is None:
-            # Derive actors from events only — the live registry may have
-            # actors from a different run (e.g., animator NPCs from a new
-            # simulation that has nothing to do with the completed run).
-            internal = {
-                "world_compiler",
-                "animator",
-                "system",
-                "policy",
-                "budget",
-                "state",
-                "permission",
-                "responder",
-            }
-            seen: set[str] = set()
-            actors = []
-            for evt in events:
-                aid = (
-                    evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
-                )
-                if aid and str(aid) not in seen and str(aid) not in internal:
-                    actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
-                    seen.add(str(aid))
+        if not actors:
+            actors = self._discover_actors_from_events(events)
 
         return await self._scorecard.compute(events, actors)
 
@@ -200,13 +216,16 @@ class ReportGeneratorEngine(BaseEngine):
 
         Args:
             world_id: Optional world identifier.
-            actors: Explicit actor list. If ``None``, reads from registry.
+            actors: Explicit actor list. If empty/None, discovers actors
+                from events (excluding engine-internal actors).
             events: Pre-filtered event list. If ``None``, reads all from bus.
             interpreter: Optional DomainInterpreter for narrative strings.
                          Wired by the caller (e.g. app.py) — not auto-detected here.
         """
         if events is None:
             events = await self._get_timeline()
+        if not actors:
+            actors = self._discover_actors_from_events(events)
         scorecard = await self.generate_scorecard(world_id, actors=actors, events=events)
         gap_log = await self.generate_gap_log(world_id)
         gap_summary = await self._gap_analyzer.get_gap_summary(events)
@@ -240,7 +259,7 @@ class ReportGeneratorEngine(BaseEngine):
         world boundaries (data access, information handling, authority, probing).
         """
         events = await self._get_timeline()
-        if actors is None:
+        if not actors:
             actors = self._get_actors()
         conditions = self._config.get("_conditions")
 
@@ -333,7 +352,7 @@ class ReportGeneratorEngine(BaseEngine):
         """
         if events is None:
             events = await self._get_timeline()
-        if actors is None:
+        if not actors:
             actors = self._get_actors()
         state = self._get_state_engine()
         return await self._trace_builder.build(

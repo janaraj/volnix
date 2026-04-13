@@ -24,6 +24,7 @@ async def _make_wired_engine(events=None):
     mock_state = AsyncMock()
     mock_state.get_timeline = AsyncMock(return_value=events or [])
     mock_state.get_causal_chain = AsyncMock(return_value=[])
+    mock_state.count_entities = AsyncMock(return_value=0)
 
     eng._dependencies = {"state": mock_state}
     eng._config = {}
