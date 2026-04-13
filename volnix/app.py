@@ -1802,6 +1802,7 @@ class VolnixApp:
         await self._run_manager.complete_run(run_id, summary=summary)
         if self._current_run_id == str(run_id):
             self._current_run_id = None
+            self._current_world_id = None  # prevent _ensure_active_run from ghost-creating a new run
         return {
             "run_id": str(run_id),
             "report": report,
