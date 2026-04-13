@@ -163,9 +163,9 @@ class DecisionTraceBuilder:
             for act in all_activations
         ]
 
-        # Step 8: Run-level aggregates
+        # Step 8: Run-level aggregates (pass all_activations for utilization calc)
         info_analysis = await self._build_information_analysis(
-            events, agent_ids, actors, state_engine
+            events, agent_ids, actors, state_engine, activations=all_activations
         )
         gov_summary = self._build_governance_summary(events, agent_ids, actors)
 
@@ -463,11 +463,16 @@ class DecisionTraceBuilder:
         agent_ids: list[str],
         actors: list[dict[str, Any]],
         state_engine: Any,
+        activations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Per-actor information coverage metrics.
+        """Per-actor information coverage and utilization metrics.
 
         coverage_ratio = unique target_entity values queried / total entities.
-        Falls back to 0 if state_engine lacks count_entities().
+        utilization_ratio = entities queried in activations that had a committed
+            action / total entities queried. Proxy for whether reads influenced
+            decisions.
+        Falls back to 0 / None if state_engine lacks count_entities() or no
+        activations are provided.
         """
         total_entities = 0
         if state_engine is not None and hasattr(state_engine, "count_entities"):
@@ -475,6 +480,30 @@ class DecisionTraceBuilder:
                 total_entities = await state_engine.count_entities()
             except Exception:
                 pass
+
+        # Build per-actor set of entities queried in activations that had
+        # at least one committed write or committed game-service action.
+        utilized_by_actor: dict[str, set[str]] = {aid: set() for aid in agent_ids}
+        if activations:
+            for act in activations:
+                aid = act.get("actor_id", "")
+                if aid not in utilized_by_actor:
+                    continue
+                # Does this activation have a committed non-read action?
+                has_committed_action = any(
+                    a.get("committed") and (
+                        a.get("effect") is not None  # write
+                        or a.get("service") == "game"  # game-move
+                    )
+                    for a in act.get("actions", [])
+                )
+                if not has_committed_action:
+                    continue
+                # Collect all target entities read in this activation
+                for e in act.get("_raw_events", []):
+                    target = _get_val(e, "target_entity")
+                    if target and _get_str(e, "event_type").startswith("world."):
+                        utilized_by_actor[aid].add(str(target))
 
         result: dict[str, Any] = {}
         for actor_id in agent_ids:
@@ -496,6 +525,10 @@ class DecisionTraceBuilder:
             coverage = (
                 round(len(queried) / total_entities, 3) if total_entities > 0 else 0.0
             )
+            utilized = utilized_by_actor.get(actor_id, set())
+            utilization: float | None = (
+                round(len(utilized) / len(queried), 3) if queried else None
+            )
             actor_meta = next(
                 (a for a in actors if str(a.get("id", "")) == actor_id), {}
             )
@@ -503,8 +536,10 @@ class DecisionTraceBuilder:
                 "role": actor_meta.get("role", actor_id),
                 "entities_available": total_entities,
                 "entities_queried": len(queried),
+                "entities_utilized": len(utilized),
                 "unique_services_used": sorted(services_used),
                 "coverage_ratio": coverage,
+                "utilization_ratio": utilization,
             }
         return result
 

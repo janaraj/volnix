@@ -233,6 +233,48 @@ async def test_information_coverage_ratio() -> None:
     assert info["coverage_ratio"] == 0.3
 
 
+async def test_information_utilization_ratio() -> None:
+    """Reads in activations with committed actions count as utilized."""
+    # activation 1: reads db1, db2 → then commits a game-move (utilized)
+    # activation 2: reads db3 only → no commit (not utilized)
+    events = [
+        {
+            **_make_event("world.notion.databases.retrieve", "agent1",
+                          "databases.retrieve", "notion"),
+            "target_entity": "db1",
+        },
+        {
+            **_make_event("world.notion.databases.retrieve", "agent1",
+                          "databases.retrieve", "notion"),
+            "target_entity": "db2",
+        },
+        _make_event("world.game.negotiate_propose", "agent1", "negotiate_propose", "game",
+                    state_deltas=[{
+                        "entity_type": "deal", "entity_id": "d1",
+                        "operation": "update", "fields": {"price": 90},
+                    }]),
+        # Different actor triggers second activation for agent1
+        _make_event("world.game.negotiate_counter", "supplier", "negotiate_counter", "game"),
+        # agent1 activation 2: reads db3 only (no commit)
+        {
+            **_make_event("world.notion.databases.retrieve", "agent1",
+                          "databases.retrieve", "notion"),
+            "target_entity": "db3",
+        },
+    ]
+    builder = DecisionTraceBuilder()
+    trace = await builder.build(events=events, actors=[
+        {"id": "agent1", "type": "agent", "role": "buyer"},
+        {"id": "supplier", "type": "agent", "role": "supplier"},
+    ], state_engine=None)
+    info = trace["information_analysis"]["agent1"]
+    # All 3 were queried
+    assert info["entities_queried"] == 3
+    # Only db1, db2 were in an activation with a committed game-move
+    assert info["entities_utilized"] == 2
+    assert info["utilization_ratio"] == round(2 / 3, 3)
+
+
 def test_key_field_extraction_prefers_preferred_fields() -> None:
     body = {
         "id": "abc",
