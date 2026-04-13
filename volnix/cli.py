@@ -681,6 +681,27 @@ async def _run_impl(
             print_report(report_data)
             console.print()
             console.print(format_scorecard(scorecard_data))
+
+            trace_data = result.get("decision_trace", {})
+            if trace_data.get("domain_narrative"):
+                console.print()
+                console.print("[bold]Narrative:[/bold]")
+                for line in trace_data["domain_narrative"]:
+                    console.print(f"  {line}")
+            info = trace_data.get("information_analysis", {})
+            if info:
+                console.print()
+                console.print("[bold]Information Coverage:[/bold]")
+                for _aid, stats in info.items():
+                    role = stats.get("role", _aid)
+                    coverage = stats.get("coverage_ratio", 0)
+                    queried = stats.get("entities_queried", 0)
+                    available = stats.get("entities_available", 0)
+                    console.print(
+                        f"  {role}: researched {queried}/{available} entities "
+                        f"({coverage:.0%} coverage)"
+                    )
+
             print_success(f"Run {run_id} completed")
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted[/yellow]")

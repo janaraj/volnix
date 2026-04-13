@@ -1724,6 +1724,11 @@ class VolnixApp:
         await self._artifact_store.save_scorecard(run_id, scorecard)
         await self._artifact_store.save_event_log(run_id, raw_events)
 
+        # Save decision trace as a separate artifact (embedded in report dict)
+        trace = report.get("decision_trace", {})
+        if trace:
+            await self._artifact_store.save(run_id, "decision_trace", trace)
+
         # Generate governance report for Mode 1 (external agent testing)
         has_external = any(
             (a.get("type") if isinstance(a, dict) else getattr(a, "type", ""))
@@ -1797,7 +1802,12 @@ class VolnixApp:
         await self._run_manager.complete_run(run_id, summary=summary)
         if self._current_run_id == str(run_id):
             self._current_run_id = None
-        return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
+        return {
+            "run_id": str(run_id),
+            "report": report,
+            "scorecard": scorecard,
+            "decision_trace": trace,
+        }
 
     async def _start_animator_bridge(self, behavior: str) -> None:
         """Subscribe to bus events and trigger Animator for external-only runs.

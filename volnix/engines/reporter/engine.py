@@ -35,6 +35,7 @@ class ReportGeneratorEngine(BaseEngine):
         self._differ: Any = None
         self._challenge_analyzer: Any = None
         self._boundary_analyzer: Any = None
+        self._trace_builder: Any = None
 
     # -- BaseEngine hook -------------------------------------------------------
 
@@ -48,6 +49,10 @@ class ReportGeneratorEngine(BaseEngine):
         from volnix.engines.reporter.world_challenges import WorldChallengeAnalyzer
 
         self._scorecard = ScorecardComputer()
+
+        from volnix.engines.reporter.decision_trace import DecisionTraceBuilder
+
+        self._trace_builder = DecisionTraceBuilder()
         self._gap_analyzer = GapAnalyzer()
         self._causal_renderer = CausalTraceRenderer()
         self._differ = CounterfactualDiffer(scorecard_computer=self._scorecard)
@@ -205,12 +210,16 @@ class ReportGeneratorEngine(BaseEngine):
             world_id,
             actors=actors,
         )
+        decision_trace = await self.generate_decision_trace(
+            events=events, actors=actors
+        )
 
         return {
             "scorecard": scorecard,
             "gap_log": gap_log,
             "gap_summary": gap_summary,
             "condition_report": condition_report,
+            "decision_trace": decision_trace,
         }
 
     async def generate_condition_report(
@@ -295,3 +304,38 @@ class ReportGeneratorEngine(BaseEngine):
         if actors is None:
             actors = self._get_actors()
         return await self._governance_report.generate(events, actors)
+
+    async def generate_decision_trace(
+        self,
+        events: list[dict[str, Any]] | None = None,
+        actors: list[dict[str, Any]] | None = None,
+        game_result: dict[str, Any] | None = None,
+        interpreter: Any | None = None,
+    ) -> dict[str, Any]:
+        """Generate a structured decision trace for the run.
+
+        Builds per-activation trace: who acted, what tools were called,
+        governance decisions, committed effects, world response, information
+        coverage metrics, and governance aggregate counts.
+
+        Auto-extracts game_result from events if not provided and a
+        "game.terminated" event is present.
+
+        Args:
+            events: Raw event dicts. If None, reads all from bus.
+            actors: Actor list. If None, reads from registry.
+            game_result: Game outcome dict. If None, extracted from events.
+            interpreter: Optional DomainInterpreter for narrative strings.
+        """
+        if events is None:
+            events = await self._get_timeline()
+        if actors is None:
+            actors = self._get_actors()
+        state = self._get_state_engine()
+        return await self._trace_builder.build(
+            events=events,
+            actors=actors,
+            state_engine=state,
+            game_result=game_result,
+            interpreter=interpreter,
+        )
