@@ -15,12 +15,14 @@ import { GapsTab } from './tabs/gaps-tab';
 import { ConditionsTab } from './tabs/conditions-tab';
 import { DeliverableTab } from './tabs/deliverable-tab';
 import { ChatTab } from './tabs/chat-tab';
+import { DecisionTraceTab } from './tabs/decision-trace-tab';
 
 const TAB_ORDER: ReportTabId[] = [
   'overview',
   'deliverable',
   'chat',
   'scorecard',
+  'trace',
   'events',
   'entities',
   'gaps',
@@ -32,6 +34,7 @@ const TAB_LABELS: Record<ReportTabId, string> = {
   deliverable: 'Deliverable',
   chat: 'Chat',
   scorecard: 'Scorecard',
+  trace: 'Decision Trace',
   events: 'Events',
   entities: 'Entities',
   gaps: 'Gaps',
@@ -48,6 +51,8 @@ function ActiveTab({ tab, runId, run }: { tab: ReportTabId; runId: string; run: 
       return <ChatTab runId={runId} />;
     case 'scorecard':
       return <ScorecardTab runId={runId} services={run.services ?? []} />;
+    case 'trace':
+      return <DecisionTraceTab runId={runId} />;
     case 'events':
       return <EventsTab runId={runId} />;
     case 'entities':

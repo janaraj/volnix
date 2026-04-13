@@ -16,6 +16,7 @@ export const queryKeys = {
       ['runs', id, 'entities', params] as const,
     entity: (runId: string, entityId: string) => ['runs', runId, 'entities', entityId] as const,
     gaps: (id: string) => ['runs', id, 'gaps'] as const,
+    trace: (id: string) => ['runs', id, 'trace'] as const,
     actor: (runId: string, actorId: string) => ['runs', runId, 'actors', actorId] as const,
   },
   worlds: {
