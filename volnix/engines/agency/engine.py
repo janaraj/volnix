@@ -25,6 +25,7 @@ from volnix.core.types import (
 )
 from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.llm._history_compaction import compact_tool_results
 from volnix.llm._tool_pairing import repair_tool_call_pairing
 from volnix.llm.types import LLMRequest, ToolCall, ToolDefinition
 from volnix.simulation.world_context import WorldContextBundle
@@ -1259,6 +1260,16 @@ class AgencyEngine(BaseEngine):
                 if total_tool_calls >= max_calls:
                     break
 
+                # Compact tool-result history before each LLM call:
+                # keep only the last N results verbatim, elide older.
+                # Provider-agnostic — operates on the generic message
+                # dict shape. See _history_compaction.py.
+                messages = compact_tool_results(
+                    messages,
+                    keep_last=self._typed_config.max_verbatim_tool_results,
+                    max_chars=self._typed_config.max_tool_result_chars,
+                )
+
                 step_start = _time.monotonic()
 
                 request = LLMRequest(
@@ -1363,10 +1374,13 @@ class AgencyEngine(BaseEngine):
                         # tool-result message.
                         envelopes.append(env)
 
+                        # Full-fidelity serialization — compaction applied
+                        # pre-LLM-call in compact_tool_results() owns
+                        # char-capping uniformly.
                         result_body = json.dumps(
                             committed_event.response_body or {},
                             default=str,
-                        )[:2000]
+                        )
 
                         tool_result_msgs.append(
                             {

@@ -79,3 +79,13 @@ class AgencyConfig(BaseModel):
     # re-activations (roughly ``max_activation_messages / 2`` exchanges).
     # Caps prompt size for long games.
     max_activation_messages: int = 20
+    # Number of most-recent tool-result messages kept verbatim within a
+    # single activation's tool loop. Older tool results have their
+    # ``content`` replaced with an elision marker so prompts don't grow
+    # linearly with iteration count. Pairing (tool_call_id ↔ tool result)
+    # is preserved — only the content string is rewritten.
+    max_verbatim_tool_results: int = 3
+    # Per-tool-result character cap applied on every iteration (both
+    # kept-verbatim and any new result). Prevents a single huge payload
+    # from dominating the prompt.
+    max_tool_result_chars: int = 800
