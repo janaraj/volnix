@@ -142,8 +142,7 @@ def _sanitize_history_for_game_move(
                     game_only_tcs = [
                         tc
                         for tc in tool_calls
-                        if (tc.get("function") or {}).get("name", "")
-                        in game_tool_names
+                        if (tc.get("function") or {}).get("name", "") in game_tool_names
                     ]
                     # Mark insert_pos BEFORE this assistant so the
                     # research summary can't split the assistant from

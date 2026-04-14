@@ -47,7 +47,7 @@ class NegotiationInterpreter:
                 move_name = tool.split(".")[-1] if "." in tool else tool
                 # Strip "negotiate_" prefix
                 if move_name.startswith("negotiate_"):
-                    move_name = move_name[len("negotiate_"):]
+                    move_name = move_name[len("negotiate_") :]
 
                 # Get terms from arguments (input_data scalars) or
                 # effect.key_changes
@@ -59,8 +59,11 @@ class NegotiationInterpreter:
                 all_terms = {**changes, **terms}
                 # Filter out non-term fields
                 skip = {
-                    "deal_id", "message", "reasoning",
-                    "intended_for", "state_updates",
+                    "deal_id",
+                    "message",
+                    "reasoning",
+                    "intended_for",
+                    "state_updates",
                 }
                 term_parts = []
                 for k, v in all_terms.items():
@@ -137,9 +140,7 @@ class NegotiationInterpreter:
             f"{total_world_events} world events between agent turns ({types_str})",
         ]
 
-    def _outcome_analysis(
-        self, game_result: dict[str, Any] | None
-    ) -> list[str]:
+    def _outcome_analysis(self, game_result: dict[str, Any] | None) -> list[str]:
         """Game result summary."""
         if not game_result:
             return []
@@ -151,6 +152,5 @@ class NegotiationInterpreter:
         wall_str = f"{wall:.0f}s" if isinstance(wall, (int, float)) else "?"
         return [
             "--- Outcome ---",
-            f"{reason} in {total} moves ({wall_str}). "
-            f"Winner: {winner}. Mode: {mode}.",
+            f"{reason} in {total} moves ({wall_str}). Winner: {winner}. Mode: {mode}.",
         ]

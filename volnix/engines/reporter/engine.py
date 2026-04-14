@@ -137,9 +137,7 @@ class ReportGeneratorEngine(BaseEngine):
         }
     )
 
-    def _discover_actors_from_events(
-        self, events: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _discover_actors_from_events(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Derive actor list from events, excluding known engine actors.
 
         Used as a fallback when the caller passes an empty or None actors
@@ -149,11 +147,7 @@ class ReportGeneratorEngine(BaseEngine):
         seen: set[str] = set()
         actors: list[dict[str, Any]] = []
         for evt in events:
-            aid = (
-                evt.get("actor_id")
-                if isinstance(evt, dict)
-                else getattr(evt, "actor_id", None)
-            )
+            aid = evt.get("actor_id") if isinstance(evt, dict) else getattr(evt, "actor_id", None)
             if aid and str(aid) not in seen and str(aid) not in self._INTERNAL_ACTOR_IDS:
                 actors.append({"id": str(aid), "type": "agent", "role": str(aid)})
                 seen.add(str(aid))

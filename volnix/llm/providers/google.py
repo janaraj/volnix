@@ -500,9 +500,7 @@ class GoogleNativeProvider(LLMProvider):
                 cost_usd=self._estimate_cost(model, p_tok, c_tok),
             )
             if cached_tok > 0:
-                logger.info(
-                    "Gemini cache hit: %d/%d prompt tokens cached", cached_tok, p_tok
-                )
+                logger.info("Gemini cache hit: %d/%d prompt tokens cached", cached_tok, p_tok)
             return LLMResponse(
                 content=content,
                 structured_output=parsed_structured,
