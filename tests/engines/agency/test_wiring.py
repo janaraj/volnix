@@ -58,11 +58,10 @@ def test_registry_initialization_order_includes_agency():
 
 
 def test_default_registry_engine_count():
-    """Ensure registration of agency doesn't break existing engine count.
+    """Engine registration count is stable across cycles.
 
-    Previous count was 10 (state, policy, permission, budget, responder,
-    adapter, animator, reporter, feedback, world_compiler). Then 11 with
-    agency, now 12 with game.
+    10 (core) + agency + game (event-driven GameOrchestrator under the
+    ``"game"`` key after Cycle B.10 deleted the legacy GameEngine) = 12.
     """
     registry = create_default_registry()
     names = registry.list_engines()

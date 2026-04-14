@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import Any
 
 from volnix.core.envelope import ActionEnvelope
-from volnix.core.types import ActionSource, ActorId
+from volnix.core.types import ActionSource, ActorId, RunResult
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
 
@@ -202,8 +202,10 @@ class SimulationRunner:
         self._stop_reason = StopReason.MANUAL_STOP
         self._status = SimulationStatus.STOPPED
 
-    async def run(self) -> StopReason:
+    async def run(self) -> RunResult:
         """Run the main simulation loop until an end condition is met.
+
+        Returns a :class:`RunResult` with ``runner_kind="simulation"``.
 
         Loop:
         1. Check end conditions
@@ -457,7 +459,13 @@ class SimulationRunner:
                     float(self._current_tick) * self._config.tick_interval_seconds
                 )
 
-        return self._stop_reason  # type: ignore[return-value]
+        return RunResult(
+            reason=self._stop_reason.value if self._stop_reason else "unknown",
+            runner_kind="simulation",
+            total_events=self._total_events_processed,
+            deliverable_produced=self._deliverable_produced,
+            deliverable_content=self._deliverable_content,
+        )
 
     def _check_end_conditions(self) -> StopReason | None:
         """Check all simulation end conditions plus safety limits."""

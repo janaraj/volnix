@@ -48,6 +48,7 @@ class UsageTracker:
                     model=response.model,
                     prompt_tokens=response.usage.prompt_tokens,
                     completion_tokens=response.usage.completion_tokens,
+                    cached_tokens=response.usage.cached_tokens,
                     cost_usd=response.usage.cost_usd,
                     latency_ms=response.latency_ms,
                     success=response.error is None,
@@ -86,6 +87,7 @@ class UsageTracker:
             prompt_tokens=a.prompt_tokens + b.prompt_tokens,
             completion_tokens=a.completion_tokens + b.completion_tokens,
             total_tokens=a.total_tokens + b.total_tokens,
+            cached_tokens=a.cached_tokens + b.cached_tokens,
             cost_usd=a.cost_usd + b.cost_usd,
         )
 

@@ -168,10 +168,109 @@ class YAMLParser:
         }
 
     def _extract_game_config(self, raw: dict) -> Any:
-        """Extract game configuration from blueprint YAML."""
+        """Extract game configuration from blueprint YAML.
+
+        Event-driven only: the Cycle B plan §3.3 specified that legacy
+        round-based keys (``rounds`` / ``turn_protocol`` /
+        ``between_rounds`` / ``resource_reset_per_round``) must be
+        hard-rejected once migration is complete. B-cleanup.3 flipped
+        the soft-warn path to the hard-reject path the plan originally
+        mandated.
+
+        Validation:
+
+        - Legacy round-based keys raise ``YAMLParseError`` with a clear
+          migration message pointing to the event-driven replacements.
+        - Declared but empty ``entities.deals`` logs a warning (the
+          compile still succeeds, but the game has nothing to score).
+        - ``game.type_config.negotiation_fields`` (the pre-NF1 nested
+          shape) is auto-migrated with a warning for out-of-tree
+          blueprints — the in-tree blueprints were flattened in
+          B-cleanup.1b.
+        - :class:`pydantic.ValidationError` from bad field types
+          (e.g. ``max_events: "none"``) is wrapped in
+          :class:`YAMLParseError` with a blueprint-pointing message.
+        """
         game_raw = raw.get("game") or raw.get("world", {}).get("game")
         if not game_raw or not game_raw.get("enabled", False):
             return None
+        from pydantic import ValidationError
+
         from volnix.engines.game.definition import GameDefinition
 
-        return GameDefinition(**game_raw)
+        # NF8 (B-cleanup.3): hard-reject legacy round-based keys. The
+        # Cycle B plan §3.3 mandated this; implementation soft-warned
+        # by mistake. Now that migration is complete, reject loudly so
+        # a stale blueprint fails the compile with a clear actionable
+        # message rather than silently running with the round config
+        # ignored.
+        _LEGACY_ROUND_KEYS = (
+            "rounds",
+            "turn_protocol",
+            "between_rounds",
+            "resource_reset_per_round",
+        )
+        rejected = [k for k in _LEGACY_ROUND_KEYS if k in game_raw]
+        if rejected:
+            raise YAMLParseError(
+                f"Blueprint ``game`` section uses legacy round-based keys: "
+                f"{rejected}. These were removed in Cycle B. Migrate to "
+                f"``flow.type: event_driven``, ``game.entities``, and "
+                f"``game.negotiation_fields``. See ``docs/games.md`` or the "
+                f"Cycle B cleanup plan for the migration guide."
+            )
+
+        entities_raw = game_raw.get("entities") or {}
+        has_new_entities = bool(entities_raw.get("deals"))
+
+        # NF1 migration: the nested ``game.type_config.negotiation_fields``
+        # shape was flattened to top-level ``game.negotiation_fields`` in
+        # B-cleanup.1b. ``GameDefinition.type_config`` no longer exists and
+        # Pydantic's default ``extra="ignore"`` would silently drop the
+        # nested key. Pop it here with a warning and auto-migrate the
+        # contained negotiation_fields list so out-of-tree blueprints keep
+        # working for one release before authors migrate.
+        if "type_config" in game_raw:
+            tc = game_raw.pop("type_config") or {}
+            if (
+                isinstance(tc, dict)
+                and "negotiation_fields" in tc
+                and "negotiation_fields" not in game_raw
+            ):
+                logger.warning(
+                    "Blueprint uses legacy ``game.type_config.negotiation_fields``. "
+                    "Migrate to flattened ``game.negotiation_fields``. "
+                    "Auto-migrating for this run."
+                )
+                game_raw["negotiation_fields"] = tc["negotiation_fields"]
+            else:
+                logger.warning(
+                    "Blueprint declares ``game.type_config`` but this field "
+                    "was removed in NF1 (B-cleanup.1b). Ignoring."
+                )
+
+        # Warn if enabled but no deals declared — compile succeeds but
+        # the orchestrator will have nothing to negotiate over.
+        if not has_new_entities:
+            logger.warning(
+                "Blueprint sets ``game.enabled: true`` but declares no "
+                "``game.entities.deals``. The GameOrchestrator will start "
+                "with nothing to score."
+            )
+
+        # Warn if scoring_mode is behavioral but target_terms are declared —
+        # those are competitive-mode-only and will be silently dropped.
+        scoring_mode = str(game_raw.get("scoring_mode", "behavioral"))
+        if scoring_mode == "behavioral" and entities_raw.get("target_terms"):
+            logger.warning(
+                "Blueprint declares ``game.entities.target_terms`` in "
+                "behavioral scoring mode — these will be silently dropped "
+                "at materialization (competitive mode only)."
+            )
+
+        try:
+            return GameDefinition(**game_raw)
+        except ValidationError as exc:
+            # Surface a clear compiler-level error that points back to
+            # the blueprint rather than leaking Pydantic's raw output.
+            raise YAMLParseError(f"Invalid ``game`` section in blueprint: {exc}") from exc

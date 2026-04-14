@@ -8,7 +8,7 @@ from volnix.llm.providers.google import (
     GoogleNativeProvider,
     _sanitize_tool_params_for_gemini,
 )
-from volnix.llm.types import LLMRequest
+from volnix.llm.types import LLMRequest, LLMUsage
 
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
 skipif_no_google = pytest.mark.skipif(not GOOGLE_KEY, reason="GOOGLE_API_KEY not set")
@@ -53,6 +53,71 @@ async def test_google_provider_error_handling():
     assert resp.content == ""
     assert resp.provider == "google"
     assert resp.latency_ms >= 0
+
+
+def test_google_provider_handles_none_usage_tokens():
+    """Regression: gemini-3-flash-preview returns None for candidates_token_count.
+
+    Reproduces the exact failure mode from run_3cddf66b187c: the Gemini
+    SDK returns a ``usage_metadata`` object where
+    ``candidates_token_count`` is set-but-null (``None``). The provider's
+    defensive ``getattr(usage_meta, "candidates_token_count", 0)``
+    pattern returns ``None`` because the attribute *exists*, just holds
+    ``None`` — ``getattr`` default only kicks in on missing attributes.
+    The ``None`` then flows into ``LLMUsage(completion_tokens=None)``
+    which, prior to the field_validator fix, raised
+    ``pydantic.ValidationError`` and the router treated it as
+    non-retryable.
+
+    This test asserts the fixed behavior: the same ``getattr`` pattern
+    + ``LLMUsage`` construction no longer raises, and ``None`` is
+    coerced to ``0`` at the model boundary via the validator.
+    """
+
+    class FakeGeminiUsageMeta:
+        """Simulates Gemini SDK's usage_metadata with a None candidates count."""
+
+        prompt_token_count = 42
+        candidates_token_count = None  # ← the bug shape from run_3cddf66b187c
+        total_token_count = 42
+
+    usage_meta = FakeGeminiUsageMeta()
+
+    # The exact pattern used by GoogleNativeProvider in google.py:477-484.
+    usage = LLMUsage(
+        prompt_tokens=(getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0),
+        completion_tokens=(getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0),
+        total_tokens=(getattr(usage_meta, "total_token_count", 0) if usage_meta else 0),
+    )
+    # No exception raised. None was coerced to 0.
+    assert usage.prompt_tokens == 42
+    assert usage.completion_tokens == 0
+    assert usage.total_tokens == 42
+    assert usage.cost_usd == 0.0
+
+
+def test_google_provider_handles_completely_null_usage_meta():
+    """Edge case: all three Gemini token counts are None.
+
+    Less likely than a single None, but possible if the SDK returns a
+    usage_metadata stub with all counters unpopulated (e.g. when the
+    generation was truncated before any completion tokens were emitted).
+    """
+
+    class FakeGeminiUsageMeta:
+        prompt_token_count = None
+        candidates_token_count = None
+        total_token_count = None
+
+    usage_meta = FakeGeminiUsageMeta()
+    usage = LLMUsage(
+        prompt_tokens=getattr(usage_meta, "prompt_token_count", 0),
+        completion_tokens=getattr(usage_meta, "candidates_token_count", 0),
+        total_tokens=getattr(usage_meta, "total_token_count", 0),
+    )
+    assert usage.prompt_tokens == 0
+    assert usage.completion_tokens == 0
+    assert usage.total_tokens == 0
 
 
 @skipif_no_google
@@ -624,32 +689,49 @@ class TestSanitizeToolParamsForGemini:
         assert _sanitize_tool_params_for_gemini(None) is None
         assert _sanitize_tool_params_for_gemini([1, 2, 3]) == [1, 2, 3]
 
-    def test_negotiation_tool_schemas_survive_sanitization(self):
-        """End-to-end: the actual NEGOTIATION_TOOLS schemas sanitize cleanly."""
-        from volnix.game.evaluators.negotiation import NEGOTIATION_TOOLS
+    def test_negotiation_like_schema_survives_sanitization(self):
+        """A realistic negotiation-tool schema sanitizes cleanly for Gemini.
 
-        for tool in NEGOTIATION_TOOLS:
-            out = _sanitize_tool_params_for_gemini(tool.parameters)
-            # No forbidden keys at top level
-            assert "additionalProperties" not in out, (
-                f"{tool.name} still has additionalProperties after sanitize"
-            )
-            # No forbidden keys in nested properties either
-            for prop_name, prop_schema in out.get("properties", {}).items():
-                if isinstance(prop_schema, dict):
-                    assert "additionalProperties" not in prop_schema, (
-                        f"{tool.name}.{prop_name} has additionalProperties"
-                    )
-            # Core structure survives
-            assert out["type"] == "object"
-            assert "required" in out
-            assert "properties" in out
-            # Propose / counter still require all five terms
-            if tool.name in ("negotiate_propose", "negotiate_counter"):
-                assert set(out["required"]) == {
-                    "deal_id",
-                    "price",
-                    "delivery_weeks",
-                    "payment_days",
-                    "warranty_months",
-                }
+        This was an end-to-end smoke against the legacy NEGOTIATION_TOOLS
+        constants in ``volnix/game/evaluators/negotiation.py``. That module
+        was deleted in Cycle B.10; the test is preserved as a structural
+        check against a representative schema instead.
+        """
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "deal_id",
+                "price",
+                "delivery_weeks",
+                "payment_days",
+                "warranty_months",
+            ],
+            "properties": {
+                "deal_id": {"type": "string"},
+                "price": {"type": "number"},
+                "delivery_weeks": {"type": "integer"},
+                "payment_days": {"type": "integer"},
+                "warranty_months": {"type": "integer"},
+                "terms": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"note": {"type": "string"}},
+                },
+            },
+        }
+        out = _sanitize_tool_params_for_gemini(schema)
+        assert "additionalProperties" not in out
+        for _, prop_schema in out.get("properties", {}).items():
+            if isinstance(prop_schema, dict):
+                assert "additionalProperties" not in prop_schema
+        assert out["type"] == "object"
+        assert "required" in out
+        assert "properties" in out
+        assert set(out["required"]) == {
+            "deal_id",
+            "price",
+            "delivery_weeks",
+            "payment_days",
+            "warranty_months",
+        }

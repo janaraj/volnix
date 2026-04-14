@@ -25,7 +25,7 @@ Volnix creates living, governed realities for AI agents. Not mock servers. Not t
 pip install volnix
 export GOOGLE_API_KEY=...    # or OPENAI_API_KEY / ANTHROPIC_API_KEY
 volnix check                 # verify setup
-volnix serve dynamic_support_center --internal agents_dynamic_support --port 8080
+volnix run dynamic_support_center --internal agents_dynamic_support  # compile + run + report
 ```
 
 ### Option 2: From source (includes dashboard)
@@ -34,9 +34,9 @@ volnix serve dynamic_support_center --internal agents_dynamic_support --port 808
 git clone https://github.com/janaraj/volnix.git && cd volnix
 uv sync --all-extras
 export GOOGLE_API_KEY=...
-uv run volnix serve dynamic_support_center --internal agents_dynamic_support --port 8080
+uv run volnix run dynamic_support_center --internal agents_dynamic_support  # compile + run + report
 
-# Dashboard (separate terminal)
+# Dashboard (separate terminal — adds live event feed while running)
 cd volnix-dashboard && npm install && npm run dev    # http://localhost:3000
 ```
 
@@ -170,6 +170,7 @@ See [docs/games.md](docs/games.md) for the complete guide.
 - **BYOSP** — bring any service; the compiler auto-resolves from API docs
 - **Multi-provider LLM** — Gemini, OpenAI, Anthropic, Ollama, vLLM, CLI tools, with per-agent model + provider selection and Claude extended thinking opt-in
 - **Game framework** — turn-based agent contests (negotiation, …) with structured move tools, round evaluators, and pluggable win conditions; head-to-head across LLM providers
+- **Decision trace** — activation-level artifact answering "what did the agent do, why did governance intervene, and did the agent actually use the information it read?" (`decision_trace.json` saved alongside scorecard after every run)
 - **Real-time dashboard** with event feed, scorecards, and agent timeline
 - **Causal graph** — every event traces back to its causes
 - **13 built-in blueprints** across support, finance, DevOps, research, security, marketing, and games
@@ -242,7 +243,7 @@ Live event streaming, governance scorecards, policy trigger logs, deliverable in
 
 ```bash
 uv sync --all-extras          # install
-uv run pytest                 # test (2800+ tests)
+uv run pytest                 # test (3400+ tests)
 uv run ruff check volnix/     # lint
 uv run ruff format --check volnix/  # format
 ```

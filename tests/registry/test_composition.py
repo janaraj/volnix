@@ -8,6 +8,8 @@ from volnix.registry.registry import EngineRegistry
 def test_create_default_registry():
     reg = create_default_registry()
     assert isinstance(reg, EngineRegistry)
+    # After B.10 the legacy GameEngine is deleted — only GameOrchestrator
+    # is registered (under the ``"game"`` key).
     assert len(reg.list_engines()) == 12
 
 

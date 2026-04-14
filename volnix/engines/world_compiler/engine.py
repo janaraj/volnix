@@ -425,6 +425,17 @@ class WorldCompilerEngine(BaseEngine):
                 len({r["actor_role"] for r in visibility_rules}),
             )
 
+        # Step 7b: Materialize game entities (Cycle B)
+        # Runs AFTER seed-generated entities and visibility rules, BEFORE
+        # populate_entities + snapshot so game entities land in the initial
+        # world snapshot alongside everything else. See MF3: deals,
+        # player_briefs (as both notion page + entity), and target_terms
+        # (competitive mode only).
+        if plan.game is not None and plan.game.enabled:
+            game_count = self._materialize_game_entities(plan, all_entities)
+            if game_count:
+                logger.info("Materialized %d game entities", game_count)
+
         # Step 8: POPULATE state engine + register actors
         snapshot_id = None
         state_engine = self._config.get("_state_engine")
@@ -874,6 +885,165 @@ class WorldCompilerEngine(BaseEngine):
             for index, personality in enumerate(personalities)
         ]
         return validator.validate_actor_role(role, actors, expected_count=count)
+
+    def _materialize_game_entities(
+        self,
+        plan: WorldPlan,
+        all_entities: dict[str, list[dict[str, Any]]],
+    ) -> int:
+        """Materialize game entities declared in ``plan.game.entities``.
+
+        Adds four kinds of entities to ``all_entities`` (mutating in place)
+        so they land in state through the same ``populate_entities`` call
+        as seed-generated entities:
+
+        1. ``negotiation_deal`` — one per deal declared in
+           ``plan.game.entities.deals``. Always materialized.
+        2. ``page`` (notion) — a notion page per player brief, scoped to
+           the brief's owner role via ``owner_role`` for visibility rule
+           filtering.
+        3. ``game_player_brief`` — queryable entity form of the brief.
+        4. ``visibility_rule`` — one per player brief, scoping the notion
+           page + brief entity to the brief's owner role only. Kept
+           separate from the notion page so the existing visibility
+           filter pipeline (:mod:`volnix.engines.permission`) can apply it.
+        5. ``negotiation_target_terms`` — ONLY when
+           ``scoring_mode == "competitive"``. Scorer reads these to compute
+           deal scores + BATNA (MF3). Silently skipped in behavioral mode
+           to protect the behavioral invariant
+           (see ``tests/engines/game/test_behavioral_scorer.py``).
+
+        Returns:
+            The number of entities materialized.
+        """
+        if plan.game is None or not plan.game.enabled:
+            return 0
+
+        entities_config = plan.game.entities
+        created = 0
+
+        # 1. Deals
+        for deal in entities_config.deals:
+            all_entities.setdefault("negotiation_deal", []).append(
+                {
+                    "id": deal.id,
+                    "title": deal.title,
+                    "parties": list(deal.parties),
+                    "status": deal.status,
+                    "terms": dict(deal.terms),
+                    "terms_template": dict(deal.terms_template),
+                    "consent_rule": deal.consent_rule,
+                    "consent_by": [],
+                }
+            )
+            created += 1
+
+        # 2. Player briefs → notion page + game_player_brief entity +
+        # visibility_rule restricting the page to the brief owner.
+        for brief in entities_config.player_briefs:
+            notion_page_id = f"brief-{brief.actor_role}-{brief.deal_id}"
+            all_entities.setdefault("page", []).append(
+                {
+                    "id": notion_page_id,
+                    "object": "page",
+                    "owner_role": brief.actor_role,
+                    "properties": {
+                        "title": [{"text": {"content": f"Brief — {brief.actor_role}"}}],
+                    },
+                    "content": brief.brief_content,
+                    "mission": brief.mission,
+                }
+            )
+            gpb_id = f"gpb-{brief.actor_role}-{brief.deal_id}"
+            all_entities.setdefault("game_player_brief", []).append(
+                {
+                    "id": gpb_id,
+                    "actor_role": brief.actor_role,
+                    "deal_id": brief.deal_id,
+                    "owner_role": brief.actor_role,
+                    "brief_content": brief.brief_content,
+                    "mission": brief.mission,
+                    "notion_page_id": notion_page_id,
+                }
+            )
+            # Visibility rule: only the brief owner can see the page / gpb
+            all_entities.setdefault("visibility_rule", []).append(
+                {
+                    "actor_role": brief.actor_role,
+                    "entity_type": "page",
+                    "filter": {"id": notion_page_id},
+                    "reason": f"Private brief for {brief.actor_role}",
+                }
+            )
+            all_entities.setdefault("visibility_rule", []).append(
+                {
+                    "actor_role": brief.actor_role,
+                    "entity_type": "game_player_brief",
+                    "filter": {"id": gpb_id},
+                    "reason": f"Private brief entity for {brief.actor_role}",
+                }
+            )
+            # Child blocks under the brief page so blocks.children.list
+            # returns useful content. Without this, agents query blocks
+            # on brief pages and get empty results (wasted research).
+            brief_text = brief.brief_content or ""
+            block_count = 0
+            if brief_text:
+                mission_text = brief.mission or brief_text[:200]
+                for idx, (btype, text) in enumerate(
+                    [("heading_2", mission_text), ("paragraph", brief_text)],
+                ):
+                    block_id = f"block-{notion_page_id}-{idx}"
+                    all_entities.setdefault("block", []).append(
+                        {
+                            "id": block_id,
+                            "object": "block",
+                            "type": btype,
+                            "parent": {
+                                "type": "page_id",
+                                "page_id": notion_page_id,
+                            },
+                            "created_time": "2026-01-01T00:00:00Z",
+                            "last_edited_time": "2026-01-01T00:00:00Z",
+                            btype: {
+                                "rich_text": [
+                                    {
+                                        "type": "text",
+                                        "text": {"content": text[:500]},
+                                        "plain_text": text[:500],
+                                    }
+                                ],
+                            },
+                        }
+                    )
+                    block_count += 1
+            created += 4 + block_count  # page + gpb + 2 visibility rules + blocks
+
+        # 3. Target terms — competitive mode only (MF3)
+        if plan.game.scoring_mode == "competitive":
+            for tt in entities_config.target_terms:
+                all_entities.setdefault("negotiation_target_terms", []).append(
+                    {
+                        "id": f"tt-{tt.actor_role}-{tt.deal_id}",
+                        "actor_role": tt.actor_role,
+                        "deal_id": tt.deal_id,
+                        "ideal_terms": dict(tt.ideal_terms),
+                        "term_weights": dict(tt.term_weights),
+                        "term_ranges": {k: list(v) for k, v in tt.term_ranges.items()},
+                        "batna_score": tt.batna_score,
+                    }
+                )
+                created += 1
+        elif entities_config.target_terms:
+            # Behavioral mode — drop target_terms silently (yaml_parser
+            # already warned the author). Protects the behavioral-mode
+            # invariant that BehavioralScorer never queries these.
+            logger.info(
+                "Dropping %d target_terms entries (behavioral scoring mode)",
+                len(entities_config.target_terms),
+            )
+
+        return created
 
     async def _repair_world_entity_sections(
         self,

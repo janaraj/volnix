@@ -1423,11 +1423,9 @@ class HTTPRestAdapter(ProtocolAdapter):
                 if event_type.startswith("budget."):
                     return {"type": "budget_update", "data": data}
 
-                # Simulation lifecycle
+                # Simulation lifecycle (status events from bus, NOT completion —
+                # completion goes through the dedicated lifecycle channel)
                 if event_type.startswith("simulation."):
-                    status = getattr(event, "status", "")
-                    if status == "completed":
-                        return {"type": "run_complete", "data": data}
                     return {"type": "status", "data": data}
 
                 # Policy governance events
@@ -1492,6 +1490,11 @@ class HTTPRestAdapter(ProtocolAdapter):
                 if chat_msg is not None:
                     await queue.put(chat_msg)
 
+            # Register for lifecycle signals (run completion) via dedicated
+            # channel — these are NOT bus events, so they don't pollute the
+            # persisted event log.
+            gateway._app.subscribe_lifecycle(run_id, queue)
+
             await bus.subscribe("*", _on_event)
             try:
                 while True:
@@ -1503,6 +1506,7 @@ class HTTPRestAdapter(ProtocolAdapter):
                     run_id,
                 )
             finally:
+                gateway._app.unsubscribe_lifecycle(run_id, queue)
                 try:
                     await bus.unsubscribe("*", _on_event)
                 except Exception:

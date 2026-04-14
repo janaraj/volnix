@@ -1,7 +1,7 @@
 import type { Run, Entity, AgentSummary, World } from '@/types/domain';
 import type {
   RunsListResponse, EventsListResponse, EventDetailResponse, EntitiesListResponse,
-  GapsResponse, ScorecardResponse, CompareResponse, WorldsListResponse,
+  GapsResponse, ScorecardResponse, DecisionTraceResponse, CompareResponse, WorldsListResponse,
   RunListParams, EventFilterParams, EntityFilterParams,
 } from '@/types/api';
 import { ApiError } from '@/types/api';
@@ -86,6 +86,11 @@ export class ApiClient {
   // ── Gaps ─────────────────────────────────────
   async getCapabilityGaps(runId: string): Promise<GapsResponse> {
     return this.request('GET', `/api/v1/runs/${runId}/gaps`);
+  }
+
+  // ── Decision Trace ───────────────────────────
+  async getDecisionTrace(runId: string): Promise<DecisionTraceResponse> {
+    return this.request('GET', `/api/v1/runs/${runId}/artifacts/decision_trace`);
   }
 
   // ── Actors ───────────────────────────────────

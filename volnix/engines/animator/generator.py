@@ -59,8 +59,11 @@ class OrganicGenerator:
         if budget <= 0:
             return []
 
-        # Get template variables from AnimatorContext (NOT rebuilding)
-        base_vars = self._context.for_organic_generation(recent_actions)
+        # Get template variables from AnimatorContext (NOT rebuilding).
+        # Now async — may fetch a state snapshot from the state engine
+        # via the injected reader (P3). Backward compat: if no reader
+        # is configured, the entity_snapshot is a placeholder string.
+        base_vars = await self._context.for_organic_generation(recent_actions)
 
         # Build recent organic history for LLM context
         organic_history = ""

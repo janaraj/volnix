@@ -373,44 +373,24 @@ def run(
     )
 
 
-def _is_game_runner(runner: Any) -> bool:
-    """Check if a runner is a GameRunner (vs SimulationRunner)."""
-    return type(runner).__name__ == "GameRunner"
-
-
-def _format_run_result(result: Any, is_game: bool) -> str:
-    """Format the result of runner.run() for display.
-
-    SimulationRunner returns a string stop reason.
-    GameRunner returns a GameResult object with .reason and .winner.
-    """
-    if is_game and hasattr(result, "reason"):
-        winner = getattr(result, "winner", None)
-        if winner:
-            return f"{result.reason} (winner: {winner})"
-        return str(result.reason)
-    return str(result)
+def _format_run_result(result: Any) -> str:
+    """Format a :class:`RunResult` for console display."""
+    if result.winner:
+        return f"{result.reason} (winner: {result.winner})"
+    return str(result.reason)
 
 
 async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, Any] | None:
-    """Set up the SimulationRunner (or GameRunner) for a world with internal actors.
+    """Set up the runner for a world with internal actors.
 
-    Returns (runner, event_queue, kickstart) if the world has internal
-    actors, or None if no simulation is needed (external-only world).
+    Returns ``(runner, event_queue, kickstart)`` if the world has internal
+    actors, or ``None`` if no simulation is needed (external-only world).
 
-    If the blueprint has ``game.enabled: true``, returns a GameRunner instead
-    of a SimulationRunner. The GameRunner manages round-based game loops with
-    scoring and win conditions.
-
-    Shared between ``serve`` and ``run --serve`` to avoid duplication.
+    Runner creation is delegated to :meth:`VolnixApp.create_runner` (the
+    composition root) so the CLI never imports concrete engine classes.
     """
-    # Build kickstart — returns None if no internal actors or no comm service
-    import logging as _log
-
     from volnix.simulation.event_queue import EventQueue
-    from volnix.simulation.runner import SimulationRunner
 
-    _sim_log = _log.getLogger("volnix.simulation.setup")
     kickstart = await volnix.build_kickstart_envelope(compiled_plan)
     if kickstart is None:
         console.print("[yellow]  No kickstart envelope — simulation will not start[/yellow]")
@@ -426,8 +406,6 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
     async def pipeline_executor(envelope: object) -> object | None:
         """Execute an envelope through the governance pipeline."""
         try:
-            # Compute current tick so WorldEvent.timestamp.tick reflects
-            # the simulation's actual tick (needed for tier1 scheduled checks)
             tick_interval = volnix.config.simulation_runner.tick_interval_seconds
             current_tick = (
                 int(event_queue.current_time / tick_interval) if event_queue.current_time > 0 else 0
@@ -446,64 +424,53 @@ async def _setup_simulation(volnix: Any, compiled_plan: Any) -> tuple[Any, Any, 
             return None
         return event
 
-    # Also wire executor directly for when agency is used outside runner
     if agency and hasattr(agency, "set_tool_executor"):
         agency.set_tool_executor(pipeline_executor)
 
-    # --- Game blueprint detection ---
-    # If the plan has game.enabled: true, use GameRunner instead of SimulationRunner.
-    game_def = getattr(compiled_plan, "game", None)
-    if game_def and getattr(game_def, "enabled", False):
-        from volnix.game.runner import GameRunner
+    # Delegate runner creation to app.py (composition root)
+    factory_result = await volnix.create_runner(compiled_plan, event_queue, pipeline_executor)
+    if factory_result is None:
+        console.print("[yellow]  Game enabled but GameOrchestrator not registered[/yellow]")
+        return None
 
-        try:
-            game_engine = volnix.registry.get("game")
-        except KeyError:
-            console.print(
-                "[yellow]  Game enabled but GameEngine not registered — falling back to SimulationRunner[/yellow]"
-            )
-            game_engine = None
-
-        if game_engine is not None:
-            game_runner = GameRunner(
-                game_engine=game_engine,
-                agency_engine=agency,
-                animator=volnix.registry.get("animator"),
-                budget_engine=volnix.registry.get("budget"),
-                pipeline_executor=pipeline_executor,
-                app=volnix,
-            )
-            console.print(
-                f"  [green]Game mode: {game_def.mode}, {game_def.rounds.count} rounds[/green]"
-            )
-            event_queue.submit(kickstart)
-            return game_runner, event_queue, kickstart
-
-    # --- Standard simulation path ---
-    plan_actors = getattr(compiled_plan, "actor_specs", [])
-    if not plan_actors:
-        plan_data = (
-            compiled_plan.model_dump(mode="json") if hasattr(compiled_plan, "model_dump") else {}
-        )
-        plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
-
-    runner = SimulationRunner(
-        event_queue=event_queue,
-        pipeline_executor=pipeline_executor,
-        agency_engine=agency,
-        animator=volnix.registry.get("animator"),
-        config=volnix.config.simulation_runner,
-        ledger=volnix.ledger,
-        actor_specs=plan_actors,
-    )
-
+    runner, meta = factory_result
     mission = getattr(compiled_plan, "mission", None)
     if mission:
         runner.set_mission(mission)
 
-    event_queue.submit(kickstart)
+    if meta["runner_kind"] == "game":
+        console.print(
+            f"  [green]Game mode: {meta['game_mode']}, "
+            f"scoring={meta['scoring_mode']}, "
+            f"max_events={meta['max_events']}[/green]"
+        )
+    else:
+        # Standard simulation: submit kickstart to queue (game handles its own)
+        event_queue.submit(kickstart)
 
     return runner, event_queue, kickstart
+
+
+async def _run_simulation_block(
+    volnix: Any,
+    sim_plan: Any,
+    run_id: Any,
+    console: Any,
+    no_sim_message: str,
+) -> None:
+    """Run an internal simulation (game or autonomous) and save deliverable."""
+    sim = await _setup_simulation(volnix, sim_plan)
+    if sim is not None:
+        runner, _, _ = sim
+        run_result = await runner.run()
+        label = "Game" if run_result.runner_kind == "game" else "Simulation"
+        console.print(f"[bold]Step 4/4: Running {label.lower()}...[/bold]")
+        console.print(f"  {label} stopped: [yellow]{_format_run_result(run_result)}[/yellow]")
+        if run_result.deliverable_produced and run_result.deliverable_content is not None:
+            await volnix.artifact_store.save_deliverable(run_id, run_result.deliverable_content)
+            console.print("  [green]Deliverable saved[/green]")
+    else:
+        console.print(no_sim_message)
 
 
 async def _run_impl(
@@ -624,31 +591,25 @@ async def _run_impl(
                 console.print("  MCP:  stdio (connect via mcp client)")
                 console.print("[dim]Press Ctrl+C to stop[/dim]")
 
-                sim = await _setup_simulation(volnix, sim_plan)
-                if sim is not None:
-                    runner, _, _ = sim
-                    is_game = _is_game_runner(runner)
-                    label = "game" if is_game else "simulation"
-                    console.print(f"[bold]Step 4/4: Running {label}...[/bold]")
-                    run_result = await runner.run()
-                    stop_reason = _format_run_result(run_result, is_game)
-                    console.print(f"  {label.capitalize()} stopped: [yellow]{stop_reason}[/yellow]")
-                    if getattr(runner, "deliverable_produced", False) and getattr(
-                        runner, "deliverable_content", None
-                    ):
-                        await volnix.artifact_store.save_deliverable(
-                            run_id,
-                            runner.deliverable_content,
-                        )
-                        console.print("  [green]Deliverable saved[/green]")
-                else:
-                    console.print("[bold]Step 4/4: Waiting for external agents...[/bold]")
-            else:
-                console.print(
-                    "[bold]Step 3/4: Skipping server start (use --serve to enable)[/bold]"
+                await _run_simulation_block(
+                    volnix,
+                    sim_plan,
+                    run_id,
+                    console,
+                    no_sim_message="[bold]Step 4/4: Waiting for external agents...[/bold]",
                 )
-                console.print(
-                    "[bold]Step 4/4: Simulation ready for programmatic interaction[/bold]"
+            else:
+                # No external servers — still run any internal simulation (game or autonomous)
+                console.print("[bold]Step 3/4: Local run (no network servers)[/bold]")
+                await _run_simulation_block(
+                    volnix,
+                    sim_plan,
+                    run_id,
+                    console,
+                    no_sim_message=(
+                        "[bold]Step 4/4: No internal agents"
+                        " — use --serve to expose endpoints[/bold]"
+                    ),
                 )
 
             # End run + report
@@ -661,6 +622,27 @@ async def _run_impl(
             print_report(report_data)
             console.print()
             console.print(format_scorecard(scorecard_data))
+
+            trace_data = result.get("decision_trace", {})
+            if trace_data.get("domain_narrative"):
+                console.print()
+                console.print("[bold]Narrative:[/bold]")
+                for line in trace_data["domain_narrative"]:
+                    console.print(f"  {line}")
+            info = trace_data.get("information_analysis", {})
+            if info:
+                console.print()
+                console.print("[bold]Information Coverage:[/bold]")
+                for _aid, stats in info.items():
+                    role = stats.get("role", _aid)
+                    coverage = stats.get("coverage_ratio", 0)
+                    queried = stats.get("entities_queried", 0)
+                    available = stats.get("entities_available", 0)
+                    console.print(
+                        f"  {role}: researched {queried}/{available} entities "
+                        f"({coverage:.0%} coverage)"
+                    )
+
             print_success(f"Run {run_id} completed")
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted[/yellow]")
@@ -884,23 +866,23 @@ async def _serve_impl(
                 sim = await _setup_simulation(volnix, sim_plan)
                 if sim is not None:
                     runner, _, _ = sim
-                    is_game = _is_game_runner(runner)
 
                     async def _run_sim() -> None:
                         try:
                             run_result = await runner.run()
-                            stop = _format_run_result(run_result, is_game)
-                            label = "Game" if is_game else "Simulation"
-                            console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
-                            # Save deliverable artifact if produced
-                            if getattr(runner, "deliverable_produced", False) and getattr(
-                                runner, "deliverable_content", None
+                            label = "Game" if run_result.runner_kind == "game" else "Simulation"
+                            console.print(
+                                f"  {label} stopped: [yellow]{_format_run_result(run_result)}[/yellow]"
+                            )
+                            if (
+                                run_result.deliverable_produced
+                                and run_result.deliverable_content is not None
                             ):
                                 from volnix.core.types import RunId as _DRId
 
                                 await volnix.artifact_store.save_deliverable(
                                     _DRId(_active_run_id[0]),
-                                    runner.deliverable_content,
+                                    run_result.deliverable_content,
                                 )
                                 console.print("  [green]Deliverable saved[/green]")
                         except Exception as exc:
@@ -969,21 +951,21 @@ async def _serve_impl(
                         sim = await _setup_simulation(volnix, sim_plan)
                         if sim is not None:
                             runner, _, _ = sim
-                            is_game = _is_game_runner(runner)
                             try:
                                 run_result = await runner.run()
-                                stop = _format_run_result(run_result, is_game)
-                                label = "Game" if is_game else "Simulation"
-                                console.print(f"  {label} stopped: [yellow]{stop}[/yellow]")
-                                # Save deliverable
-                                if getattr(runner, "deliverable_produced", False) and getattr(
-                                    runner, "deliverable_content", None
+                                label = "Game" if run_result.runner_kind == "game" else "Simulation"
+                                console.print(
+                                    f"  {label} stopped: [yellow]{_format_run_result(run_result)}[/yellow]"
+                                )
+                                if (
+                                    run_result.deliverable_produced
+                                    and run_result.deliverable_content is not None
                                 ):
                                     from volnix.core.types import RunId as _DRId2
 
                                     await volnix.artifact_store.save_deliverable(
                                         _DRId2(_active_run_id[0]),
-                                        runner.deliverable_content,
+                                        run_result.deliverable_content,
                                     )
                                     console.print("  [green]Deliverable saved[/green]")
                             except Exception as exc:

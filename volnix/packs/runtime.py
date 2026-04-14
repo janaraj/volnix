@@ -62,6 +62,7 @@ class PackRuntime:
         input_data: dict[str, Any],
         state: dict[str, Any] | None = None,
         service_id: str | None = None,
+        actor_id: str | None = None,
     ) -> ResponseProposal:
         """Execute an action through its pack with full validation.
 
@@ -69,6 +70,13 @@ class PackRuntime:
             action: Tool name (e.g., "email_send").
             input_data: Input payload for the tool.
             state: Current entity state (dict of entity lists keyed by type).
+            service_id: Optional service id to disambiguate tool name collisions.
+            actor_id: Optional pipeline-injected actor_id. When set, passed to
+                the pack handler as ``input_data["_actor_id"]`` so handlers
+                that need to attribute state changes to the caller (game pack,
+                etc.) can read it. Underscore-prefixed to signal it is NOT a
+                user-facing schema field and is stripped before tool-schema
+                validation at step 3.
 
         Returns:
             Validated ResponseProposal with FidelityMetadata.
@@ -105,6 +113,13 @@ class PackRuntime:
                     message=f"Input validation failed for '{action}': {input_result.errors}",
                     validation_type="schema",
                 )
+
+        # 3b. Inject pipeline-level actor_id AFTER user-facing schema validation.
+        # Underscore prefix signals it is not a user-facing tool parameter.
+        # Pack handlers that need actor attribution (game pack, etc.) read
+        # input_data["_actor_id"]; other handlers ignore it.
+        if actor_id:
+            input_data = {**input_data, "_actor_id": actor_id}
 
         # 4. Dispatch to pack (the ABC contract -- handle_action)
         proposal = await pack.handle_action(ToolName(action), input_data, state)

@@ -51,9 +51,13 @@ class AgentAdapterEngine(BaseEngine):
 
         Dispatch order:
         0. Game actions (``service_id == "game"``): short-circuit to
-           ALLOW. Game moves are registered directly on the agency
-           engine by the GameRunner and have no pack/profile backing —
-           the commit itself IS the action.
+           ALLOW. The game pack handles dispatch in the responder
+           step, and tool schemas are registered on the agency at game
+           configure time via
+           :meth:`volnix.app.VolnixApp.configure_game` (NF1). This
+           short-circuit skips the Tier 1 pack-registry lookup for
+           game actions since the agency already enforces the tool
+           surface.
         1. Tier 1 pack (via ``PackRegistry.has_tool``)
         2. Tier 2 profile (via ``ProfileRegistry.get_profile_for_action``)
         3. Capability gap — ERROR with ``CapabilityGapEvent``
@@ -61,9 +65,11 @@ class AgentAdapterEngine(BaseEngine):
         Falls back to ALLOW when pack_registry is not yet injected
         (backward compat with tests that don't wire the full app).
         """
-        # Game actions are structured tools registered by the GameRunner
-        # via ``AgencyEngine.register_game_tools``. They have no pack or
-        # profile — the evaluator reads their committed events directly.
+        # Game actions are structured tools registered on the agency
+        # at game configure time via
+        # ``volnix.app.VolnixApp.configure_game`` (NF1). Short-circuit
+        # to ALLOW — the agency's ``_tool_definitions`` is the
+        # authoritative tool surface for game moves.
         if str(ctx.service_id or "") == "game":
             from datetime import datetime
 

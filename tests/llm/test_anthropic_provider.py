@@ -709,17 +709,29 @@ class TestFixSchemaForAnthropic:
         out = _fix_schema_for_anthropic(schema)
         assert "items" in out["properties"]["tags"]
 
-    def test_negotiation_tool_schemas_survive_fix(self):
-        """End-to-end: the real NEGOTIATION_TOOLS schemas pass Anthropic's fix."""
-        from volnix.game.evaluators.negotiation import NEGOTIATION_TOOLS
+    def test_negotiation_like_schema_survives_fix(self):
+        """A realistic negotiation-tool schema shape passes Anthropic's fix.
 
-        for tool in NEGOTIATION_TOOLS:
-            out = _fix_schema_for_anthropic(tool.parameters)
-            # Top-level schema from our game tools already has
-            # additionalProperties: false; the fixer leaves it alone
-            assert out.get("additionalProperties") is False, (
-                f"{tool.name} lost additionalProperties after fix"
-            )
-            assert out["type"] == "object"
-            assert "required" in out
-            assert "properties" in out
+        This was an end-to-end smoke against the legacy NEGOTIATION_TOOLS
+        constants in ``volnix/game/evaluators/negotiation.py``. That module
+        was deleted in Cycle B.10; the test is preserved as a structural
+        check against a representative schema instead.
+        """
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["deal_id", "price", "delivery_weeks"],
+            "properties": {
+                "deal_id": {"type": "string"},
+                "price": {"type": "number"},
+                "delivery_weeks": {"type": "integer"},
+                "tags": {"type": "array"},
+            },
+        }
+        out = _fix_schema_for_anthropic(schema)
+        assert out.get("additionalProperties") is False
+        assert out["type"] == "object"
+        assert "required" in out
+        assert "properties" in out
+        # The ``tags`` array should have an ``items`` field injected
+        assert "items" in out["properties"]["tags"]

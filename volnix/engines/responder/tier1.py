@@ -24,7 +24,8 @@ class Tier1Dispatcher:
         """Dispatch the action to the matching verified pack.
 
         Args:
-            ctx: The action context with action name and input data.
+            ctx: The action context with action name, input data, and
+                the calling actor's id.
             state: Current world state relevant to this action. If None,
                    the pack runtime will use an empty dict.
         """
@@ -33,6 +34,7 @@ class Tier1Dispatcher:
             input_data=ctx.input_data or {},
             state=state,
             service_id=str(ctx.service_id) if ctx.service_id else None,
+            actor_id=str(ctx.actor_id) if ctx.actor_id else None,
         )
 
     def has_pack_for_tool(self, tool_name: str) -> bool:

@@ -24,6 +24,7 @@ _ALLOWED_ARTIFACT_TYPES = frozenset(
         "captured_surface",
         "deliverable",
         "governance_report",
+        "decision_trace",
     }
 )
 

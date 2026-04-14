@@ -63,8 +63,29 @@ class AgencyConfig(BaseModel):
     # (Future) Auto-add chat service subscription for all internal actors.
     # auto_include_chat: bool = True  -- not yet enforced
 
-    # ── Multi-turn tool loop ───────────��──────────────────────
+    # ── History sanitisation ──────────────────────────────────
+    # Max chars kept when summarising Phase 1 research history before
+    # Phase 2 game-move activation.  Prevents hallucination from long
+    # non-game tool_call context.
+    history_sanitize_char_limit: int = 8000
+
+    # ── Multi-turn tool loop ──────────────────────────────────
     # Max tool calls within a single agent activation loop.
     max_tool_calls_per_activation: int = 10
     # LLM tool_choice mode for agent activations: "auto" allows text responses.
     tool_choice_mode: str = "auto"
+    # Max entries retained in an actor's rolling ``activation_messages``
+    # window after a ``state_summary`` is injected by GameOrchestrator
+    # re-activations (roughly ``max_activation_messages / 2`` exchanges).
+    # Caps prompt size for long games.
+    max_activation_messages: int = 20
+    # Number of most-recent tool-result messages kept verbatim within a
+    # single activation's tool loop. Older tool results have their
+    # ``content`` replaced with an elision marker so prompts don't grow
+    # linearly with iteration count. Pairing (tool_call_id ↔ tool result)
+    # is preserved — only the content string is rewritten.
+    max_verbatim_tool_results: int = 3
+    # Per-tool-result character cap applied on every iteration (both
+    # kept-verbatim and any new result). Prevents a single huge payload
+    # from dominating the prompt.
+    max_tool_result_chars: int = 800

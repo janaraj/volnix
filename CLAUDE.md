@@ -1,5 +1,24 @@
 # CLAUDE.md
 
+## Confidence tagging (required)
+
+Every factual claim you make about this codebase must carry a confidence tag. No exceptions, including in test scripts, responses, thinking process, subagent interactions, reviews, plan and chat replies.
+
+Use exactly one of these three tags:
+
+- `[verified]` — You ran the code, executed the test, read the actual file in this session, or observed the real output. You have direct evidence from *this session*.
+- `[inferred]` — You reasoned from code you read in this session, but did not execute or test the specific behavior you're claiming. Logical deduction from real evidence.
+- `[assumed]` — You are relying on general knowledge, prior training, convention, or pattern-matching. You did not verify against this codebase in this session.
+
+Rules:
+1. If you cannot tag a claim, do not make the claim. Run a tool and verify, or downgrade the claim.
+2. When summarizing what you did, tag each bullet. Example: "Fixed the auth redirect [verified by running tests]. Updated the config schema [inferred from reading config.ts]. The middleware should still pass through unchanged [assumed]."
+3. In code comments you write, prefix any non-obvious claim with the tag in a comment. Example: `// [assumed] this matches the format the upstream API expects`
+4. If a user asks "are you sure?", respond by re-checking and upgrading or downgrading the tag — do not just repeat the claim with more emphasis.
+5. Never use `[verified]` for something you read from cached knowledge or remember from earlier sessions. Verification means *this session*, *this codebase*.
+
+Why: I read your output faster when I can scan for `[assumed]` and check those lines first. Treat the tags as load-bearing — they are how I decide what to trust without re-reading everything you did.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What is Volnix

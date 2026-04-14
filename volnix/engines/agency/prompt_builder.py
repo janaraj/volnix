@@ -142,6 +142,29 @@ class ActorPromptBuilder:
                 "You are an OBSERVER. You can READ and ANALYZE data but CANNOT "
                 "create, update, or delete anything. Only use read actions."
             )
+        elif activation_reason in {"game_kickstart", "game_event"}:
+            # Research-then-move model: game players can read the world
+            # before making their game move. Game-type-agnostic — the
+            # agent's mission and personality define which tools exist
+            # and what they do.
+            sections.append(
+                "## Instructions\n"
+                "You are a game player. The world is running; "
+                "moves commit immediately.\n\n"
+                "YOUR TURN has two phases:\n"
+                "1. **RESEARCH** (optional): Read the world to inform "
+                "your decision. Query available services for your "
+                "private data, check messages from other players, "
+                "review current state. Re-check live data each turn "
+                "— the world changes between activations.\n"
+                "2. **MOVE** (required): Make exactly ONE game move "
+                "using your game tools. Your mission and personality "
+                "define which tools are available and what they do.\n\n"
+                "Your turn ENDS when you make a game move. After your "
+                "move, other players will see your action and respond."
+                "\n\nYou may post ONE short in-character message "
+                "alongside your move. Do NOT call do_nothing."
+            )
         elif actor.autonomous:
             sections.append(
                 self.build_autonomous_instructions(
@@ -193,9 +216,13 @@ class ActorPromptBuilder:
                 task_lines.append(f"{i}. {task}")
             context_parts.append("\n".join(task_lines))
 
-        # Action history (anti-repetition: shows what agent already did)
-        if actor.autonomous:
-            context_parts.append(self._build_action_history(actor, available_actions))
+        # Action history (anti-repetition: shows what agent already did).
+        # Unconditionally rendered in Cycle B — game players benefit from
+        # seeing their own moves as a compact list without scanning back
+        # through the rolling conversation window. The helper is generic
+        # (works from ``actor.recent_interactions``) and emits a
+        # "No actions taken yet." placeholder on first activation.
+        context_parts.append(self._build_action_history(actor, available_actions))
 
         # Recent activity (what the team has been doing)
         if actor.recent_interactions:
@@ -211,15 +238,26 @@ class ActorPromptBuilder:
             sections.append(f"## Trigger: {activation_reason}")
 
         # --- 6. Output format ---
-        sections.append(
-            "## Output\n"
-            "Call one of the available tools to take action, or call `do_nothing` to skip.\n"
-            "Include `reasoning` to explain your choice.\n"
-            "Use `intended_for` to address teammates by role (e.g. ['analyst'] or ['all']).\n"
-            "Use `state_updates` to track your progress:\n"
-            "  - `goal_context`: updated notes on what you've learned\n"
-            "  - `pending_tasks`: remaining work items"
-        )
+        if activation_reason == "game_turn":
+            sections.append(
+                "## Output\n"
+                "Call the structured tool for your move this turn. "
+                "Include `reasoning` to explain your choice privately. "
+                "Do NOT call `do_nothing` — you are a game player and "
+                "every turn is a new opportunity to act."
+            )
+        else:
+            sections.append(
+                "## Output\n"
+                "Call one of the available tools to take action, or call "
+                "`do_nothing` to skip.\n"
+                "Include `reasoning` to explain your choice.\n"
+                "Use `intended_for` to address teammates by role "
+                "(e.g. ['analyst'] or ['all']).\n"
+                "Use `state_updates` to track your progress:\n"
+                "  - `goal_context`: updated notes on what you've learned\n"
+                "  - `pending_tasks`: remaining work items"
+            )
 
         return "\n\n".join(sections)
 
@@ -339,7 +377,15 @@ class ActorPromptBuilder:
             a.get("name", ""): a.get("http_method", "POST").upper() for a in available_actions
         }
 
-        own = [r for r in actor.recent_interactions if r.source == "self"]
+        # Filter to structured InteractionRecord entries with source == "self".
+        # Legacy code paths occasionally inject plain strings into
+        # recent_interactions (backward compat); skip those — they surface
+        # via ``_build_recent_activity`` instead.
+        own = [
+            r
+            for r in actor.recent_interactions
+            if isinstance(r, InteractionRecord) and r.source == "self"
+        ]
         if not own and not actor.pending_actions:
             return "### Your Action History\nNo actions taken yet."
 

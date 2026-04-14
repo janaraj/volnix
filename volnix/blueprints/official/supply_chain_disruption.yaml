@@ -1,0 +1,519 @@
+world:
+  name: "Supply Chain Disruption"
+  description: >
+    Nimbus Electronics (US buyer) needs 20,000 units of custom power
+    regulators (SKU PWR-7A) for their consumer device assembly line.
+    Their regular supplier GulfCoast Components missed a shipment and
+    Nimbus is now down to ~5 days of safety stock. Their procurement
+    lead Dana calls Haiphong Precision (Vietnamese supplier they've
+    never bought from) in the #procurement-urgent channel. Meanwhile
+    a tropical depression is forming in the South China Sea and the
+    regional ports are tracking it nervously. Each party has PRIVATE
+    knowledge the other cannot see: the buyer knows their true
+    days-of-stock and downtime cost; the supplier knows their real
+    on-hand inventory and competing customer inquiries. The world is
+    volatile — weather, port status, fuel prices, and competing buyer
+    interest all move independently of the negotiation.
+
+  # Single notion service shared by both agents. Data isolation is
+  # achieved via the permission engine's visibility_rule mechanism:
+  # every seeded notion page carries an ``owner_role`` field set to
+  # "public", "nimbus_buyer", or "haiphong_supplier". Per-agent
+  # visibility rules (also seeded) filter query results so each
+  # agent sees only the union of public + their own private data.
+  services:
+    notion: verified/notion
+    twitter: verified/twitter
+    gmail: verified/gmail
+    slack: verified/slack
+
+  policies:
+    - name: "Audit all negotiation messages"
+      trigger:
+        service: slack
+      enforcement: log
+      reason: "All negotiation communication logged for compliance review"
+
+    - name: "Cap procurement authority"
+      trigger:
+        action: negotiate_accept
+        condition: "input.unit_price and float(input.unit_price) > 32"
+      enforcement: block
+      reason: "Unit price above $32 requires CFO board approval — not authorized for this emergency procurement"
+
+  seeds:
+    # ===== VISIBILITY RULES — the mechanism that enforces data separation =====
+    # Each rule says: "when actor with this role queries this entity
+    # type, filter by this field/value". Multiple rules for the same
+    # actor_role + target_entity_type are OR-combined (union), so we
+    # can give an agent both their own private data AND public data.
+
+    - >
+      Visibility rules for the NIMBUS_BUYER role. Create 4
+      visibility_rule entities:
+      (id "vr_buyer_page_own", actor_role "nimbus_buyer",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "nimbus_buyer"),
+      (id "vr_buyer_page_public", actor_role "nimbus_buyer",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "public"),
+      (id "vr_buyer_database_own", actor_role "nimbus_buyer",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "nimbus_buyer"),
+      (id "vr_buyer_database_public", actor_role "nimbus_buyer",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "public").
+
+    - >
+      Visibility rules for the HAIPHONG_SUPPLIER role. Create 4
+      visibility_rule entities (symmetric to the buyer's):
+      (id "vr_supplier_page_own", actor_role "haiphong_supplier",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "haiphong_supplier"),
+      (id "vr_supplier_page_public", actor_role "haiphong_supplier",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "public"),
+      (id "vr_supplier_database_own", actor_role "haiphong_supplier",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "haiphong_supplier"),
+      (id "vr_supplier_database_public", actor_role "haiphong_supplier",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "public").
+
+    # ===== PUBLIC DATA (owner_role = "public") =====
+    # Both agents can read these because their visibility rules
+    # include (filter_field=owner_role, filter_value=public).
+
+    - >
+      In the notion service, create a database entity with id
+      "ports_db", title "ports", owner_role "public". Then create 6
+      page entities (each with owner_role "public") representing
+      Asian shipping ports: (id "port_haiphong",
+      parent_database_id "ports_db", owner_role "public",
+      name "Haiphong", country "Vietnam", status "open",
+      congestion_level "low", typical_transit_to_la_days 18),
+      (id "port_hcm_city", parent_database_id "ports_db",
+      owner_role "public", name "Ho Chi Minh City",
+      country "Vietnam", status "open", congestion_level "medium",
+      typical_transit_to_la_days 19),
+      (id "port_kaohsiung", parent_database_id "ports_db",
+      owner_role "public", name "Kaohsiung", country "Taiwan",
+      status "open", congestion_level "low",
+      typical_transit_to_la_days 16),
+      (id "port_busan", parent_database_id "ports_db",
+      owner_role "public", name "Busan", country "South Korea",
+      status "open", congestion_level "medium",
+      typical_transit_to_la_days 12),
+      (id "port_shanghai", parent_database_id "ports_db",
+      owner_role "public", name "Shanghai", country "China",
+      status "open", congestion_level "high",
+      typical_transit_to_la_days 14),
+      (id "port_manila", parent_database_id "ports_db",
+      owner_role "public", name "Manila",
+      country "Philippines", status "open",
+      congestion_level "high", typical_transit_to_la_days 17).
+
+    - >
+      In the notion service, create a database entity with id
+      "weather_alerts_db", title "weather_alerts", owner_role "public".
+      Then create 1 page entity: (id "weather_td_18w",
+      parent_database_id "weather_alerts_db", owner_role "public",
+      region "South China Sea", event_type "Tropical Depression",
+      severity "Tropical Depression", center_lat 14.5, center_lon 127.0,
+      forecast_path "tracking westward toward Luzon Strait at 12 knots",
+      estimated_impact_zone "none yet",
+      last_updated "2026-04-11T00:00:00Z").
+
+    - >
+      In the notion service, create a database entity with id
+      "market_comps_db", title "market_comps", owner_role "public".
+      Then create 8 page entities with owner_role "public" for PWR-7A
+      spot prices over the last 30 days, prices ranging between $24
+      and $28 per unit with a mild upward trend in the last 7 days.
+      Each page has (id "market_comp_day_N",
+      parent_database_id "market_comps_db", owner_role "public",
+      date, spot_price_usd, volume_traded_units, source_exchange).
+
+    - >
+      In the notion service, create a database entity with id
+      "fuel_prices_db", title "fuel_prices", owner_role "public". Then
+      create 1 page entity: (id "fuel_bunker_index",
+      parent_database_id "fuel_prices_db", owner_role "public",
+      commodity "bunker_fuel_index", current_value 650,
+      week_over_week_pct_change 3.0, trend "rising",
+      note "affects sea freight quotes, impacts delivery lead times").
+
+    - >
+      In the notion service, create a database entity with id
+      "alternate_suppliers_db", title "alternate_suppliers",
+      owner_role "public". Then create 3 page entities with
+      owner_role "public": (id "alt_malaysia_corp",
+      parent_database_id "alternate_suppliers_db",
+      owner_role "public", name "MalaysiaCorp", country "Malaysia",
+      offered_price_usd 26.00, lead_time_days 20, credit_rating "A-",
+      relationship_status "cold", payment_terms_days 45,
+      notes "good price but slow"),
+      (id "alt_thailand_precision",
+      parent_database_id "alternate_suppliers_db",
+      owner_role "public", name "Thailand Precision",
+      country "Thailand", offered_price_usd 30.00, lead_time_days 7,
+      credit_rating "A", relationship_status "warm_lead",
+      payment_terms_days 30, notes "premium but fastest alternative"),
+      (id "alt_shenzhen_electronic",
+      parent_database_id "alternate_suppliers_db",
+      owner_role "public", name "Shenzhen Electronic",
+      country "China", offered_price_usd 23.00, lead_time_days 25,
+      credit_rating "B", relationship_status "unknown",
+      payment_terms_days 60, notes "cheapest but quality uncertain").
+
+    # ===== BUYER-PRIVATE DATA (owner_role = "nimbus_buyer") =====
+    # Only Dana sees these via her visibility rules.
+
+    - >
+      In the notion service, create a database entity with id
+      "production_schedule_db", title "production_schedule",
+      owner_role "nimbus_buyer". Then create 3 page entities with
+      owner_role "nimbus_buyer", one per Nimbus production line:
+      (id "prod_line_a1", parent_database_id "production_schedule_db",
+      owner_role "nimbus_buyer", component_sku "PWR-7A",
+      daily_burn_rate 3500, current_finished_stock 18900,
+      days_remaining 5.4, downtime_cost_per_day_usd 180000,
+      line_status "running_normal"),
+      (id "prod_line_a2", parent_database_id "production_schedule_db",
+      owner_role "nimbus_buyer", component_sku "PWR-7A",
+      daily_burn_rate 2800, current_finished_stock 22400,
+      days_remaining 8.0, downtime_cost_per_day_usd 145000,
+      line_status "running_normal"),
+      (id "prod_line_b1", parent_database_id "production_schedule_db",
+      owner_role "nimbus_buyer", component_sku "PWR-7A",
+      daily_burn_rate 1200, current_finished_stock 11520,
+      days_remaining 9.6, downtime_cost_per_day_usd 95000,
+      line_status "reduced_shift").
+
+    - >
+      In the notion service, create a database entity with id
+      "nimbus_inventory_db", title "nimbus_inventory",
+      owner_role "nimbus_buyer". Then create 4 page entities with
+      owner_role "nimbus_buyer", one per SKU:
+      (id "inv_pwr_7a", parent_database_id "nimbus_inventory_db",
+      owner_role "nimbus_buyer", sku "PWR-7A", on_hand 18900,
+      safety_stock 21000, reorder_point 25000,
+      current_lead_time_days 14,
+      preferred_supplier "GulfCoast Components",
+      preferred_supplier_status "shipment_missed"),
+      (id "inv_cap_3b", parent_database_id "nimbus_inventory_db",
+      owner_role "nimbus_buyer", sku "CAP-3B", on_hand 45000,
+      safety_stock 30000, reorder_point 35000,
+      current_lead_time_days 7,
+      preferred_supplier "Pacific Parts",
+      preferred_supplier_status "on_track"),
+      (id "inv_ic_9m", parent_database_id "nimbus_inventory_db",
+      owner_role "nimbus_buyer", sku "IC-9M", on_hand 8200,
+      safety_stock 6000, reorder_point 9000,
+      current_lead_time_days 21,
+      preferred_supplier "AsiaSemi",
+      preferred_supplier_status "on_track"),
+      (id "inv_res_11k", parent_database_id "nimbus_inventory_db",
+      owner_role "nimbus_buyer", sku "RES-11K", on_hand 82000,
+      safety_stock 60000, reorder_point 70000,
+      current_lead_time_days 10,
+      preferred_supplier "GenericCo",
+      preferred_supplier_status "on_track").
+
+    - >
+      In the notion service, create a database entity with id
+      "cfo_authority_db", title "cfo_authority",
+      owner_role "nimbus_buyer". Then create 1 page entity:
+      (id "cfo_pwr_7a_authority",
+      parent_database_id "cfo_authority_db",
+      owner_role "nimbus_buyer", component "PWR-7A",
+      max_unit_price_without_approval_usd 28,
+      emergency_ceiling_usd 32, approver "Jessica Lim, CFO",
+      note "Above $32 requires board approval which will not
+      happen until Monday's board meeting").
+
+    # ===== SUPPLIER-PRIVATE DATA (owner_role = "haiphong_supplier") =====
+    # Only Linh sees these via her visibility rules.
+
+    - >
+      In the notion service, create a database entity with id
+      "haiphong_inventory_db", title "haiphong_inventory",
+      owner_role "haiphong_supplier". Then create 1 page entity:
+      (id "hp_inv_pwr_7a", parent_database_id "haiphong_inventory_db",
+      owner_role "haiphong_supplier", sku "PWR-7A", on_hand 31000,
+      wip 5000, allocated_to_existing_orders 11000,
+      actually_available 25000, production_lead_time_days 10,
+      margin_target_pct 22).
+
+    - >
+      In the notion service, create a database entity with id
+      "order_book_db", title "order_book",
+      owner_role "haiphong_supplier". Then create 3 page entities
+      with owner_role "haiphong_supplier" representing pending
+      competing customer inquiries on PWR-7A:
+      (id "ob_megagadget_tw", parent_database_id "order_book_db",
+      owner_role "haiphong_supplier", buyer "MegaGadget Taiwan",
+      qty 15000, urgency "urgent", offered_price_usd 29.50,
+      payment_terms_days 15,
+      notes "needs before Q2 close, willing to pay premium for air freight"),
+      (id "ob_skd_display", parent_database_id "order_book_db",
+      owner_role "haiphong_supplier", buyer "SouthKorea Display",
+      qty 8000, urgency "normal", offered_price_usd 26.00,
+      payment_terms_days 30, notes "long-term partner"),
+      (id "ob_eu_oem", parent_database_id "order_book_db",
+      owner_role "haiphong_supplier", buyer "Europe OEM",
+      qty 4000, urgency "standard", offered_price_usd 25.00,
+      payment_terms_days 45, notes "price-sensitive").
+
+    # ===== COMMUNICATION CHANNELS =====
+
+    - >
+      Slack channels: one channel id "procurement_urgent" called
+      "procurement-urgent" for the deal negotiation between buyer
+      and supplier, one channel id "news" called "news" where
+      breaking supply chain news is posted by the world, one
+      channel id "general" called "general" for announcements.
+
+    - >
+      Twitter seeds: FIRST create 6 twitter user entities for the
+      news accounts (handles: reuterslogistics, bloombergbnef,
+      freightwaves, shiplogistics, tradewinds, marineinsight —
+      each with display name, bio, follower count). THEN create
+      6 recent tweets, one authored by each of those users, about
+      generic supply chain topics (container shipping rates,
+      commodity markets, trucking, port congestion, bulk shipping,
+      maritime weather). Every tweet's author_id MUST reference
+      one of the 6 user entities created in this seed. These
+      establish a believable feed that the animator can build on.
+
+    - >
+      Gmail seeds: 2 existing email threads in Dana's inbox — one
+      past RFQ to MalaysiaCorp dated 30 days ago (status "closed,
+      no deal") and one pending quote thread with Thailand Precision
+      dated 5 days ago (status "quote received, response pending").
+
+  behavior: dynamic
+
+  reality:
+    preset: messy
+    complexity:
+      volatility: 75
+      urgency: 80
+      edge_cases: 50
+    information:
+      incompleteness: 40
+      staleness: 30
+    friction:
+      deceptive: 30
+
+  animator:
+    creativity: high
+    event_frequency: frequent
+    contextual_targeting: true
+    escalation_on_inaction: true
+    creativity_budget_per_tick: 3
+    tick_interval_seconds: 45.0
+
+    # Exclude game-internal entity types from the animator's state
+    # snapshot so the LLM doesn't learn private game state. (Default
+    # excludes already cover negotiation_* types; listed explicitly
+    # for documentation + add visibility_rule to avoid coaching the
+    # LLM about the permission model.)
+    state_snapshot_exclude:
+      - negotiation_target_terms
+      - negotiation_proposal
+      - negotiation_deal
+      - game_player_brief
+      - visibility_rule
+
+    # Deterministic scheduled beats using the at_time format (P2).
+    # Each fires exactly once at the specified offset from animator
+    # start. Organic LLM generation fills the gaps with contextual
+    # reactions (other ports reacting, fuel prices drifting, news
+    # analysts commenting on the storm).
+    scheduled_events:
+      # T+60s — storm escalates to Tropical Storm. Agents should
+      # start noticing but it's not yet a crisis.
+      - at_time: "60s"
+        actor_id: weather_service
+        service_id: notion
+        action: pages.update
+        input_data:
+          page_id: "weather_td_18w"
+          properties:
+            severity: "Tropical Storm"
+            event_type: "Tropical Storm"
+            forecast_path: "strengthening, tracking NW toward Luzon Strait"
+
+      # T+120s — storm becomes Category 1 typhoon. Crisis mode.
+      - at_time: "120s"
+        actor_id: weather_service
+        service_id: notion
+        action: pages.update
+        input_data:
+          page_id: "weather_td_18w"
+          properties:
+            severity: "Category 1 Typhoon"
+            event_type: "Typhoon"
+            name: "Typhoon Manfai"
+            forecast_path: "Cat 1 intensity, direct threat to North Vietnam coast"
+
+      # T+125s — Haiphong port closes. Hard blocker for sea freight.
+      - at_time: "125s"
+        actor_id: port_authority
+        service_id: notion
+        action: pages.update
+        input_data:
+          page_id: "port_haiphong"
+          properties:
+            status: "closed"
+            congestion_level: "closed"
+            closure_reason: "Typhoon Manfai approaching — all outbound shipping suspended"
+            estimated_reopen_days: 7
+
+      # T+130s — Reuters breaking news. Both agents see it via
+      # twitter search. Triggers the jaw-drop moment in the chat.
+      - at_time: "130s"
+        actor_id: news_bot
+        service_id: twitter
+        action: create_tweet
+        input_data:
+          text: "BREAKING: Port of Haiphong closed as Typhoon Manfai strengthens to Category 1. All outbound electronics shipments delayed 7+ days. Global supply chain at risk."
+          author: "ReutersLogistics"
+
+      # T+200s — competing buyer inquiry arrives for Linh. Applies
+      # pressure to the supplier side: they now have a real
+      # alternative if Dana lowballs. Only Linh sees this because
+      # the new page has owner_role "haiphong_supplier".
+      - at_time: "200s"
+        actor_id: sales_ops
+        service_id: notion
+        action: pages.create
+        input_data:
+          parent_database_id: "order_book_db"
+          properties:
+            id: "ob_megagadget_urgent_upgrade"
+            owner_role: "haiphong_supplier"
+            buyer: "MegaGadget Taiwan"
+            qty: 15000
+            urgency: "URGENT"
+            offered_price_usd: 31.00
+            payment_terms_days: 10
+            notes: "Escalated due to Haiphong closure — willing to pay more for guaranteed air freight"
+
+  mode: governed
+
+  game:
+    enabled: true
+    mode: negotiation
+    scoring_mode: behavioral
+
+    # Domain schema — each field becomes a typed, REQUIRED parameter
+    # on the negotiate_propose / negotiate_counter tools at configure
+    # time (NF1) via
+    # ``volnix.packs.verified.game.tool_schema.build_negotiation_tools``.
+    negotiation_fields:
+      - name: unit_price
+        type: number
+        description: "USD per unit"
+      - name: quantity_units
+        type: integer
+        description: "Total units in this shipment"
+      - name: delivery_lead_days
+        type: integer
+        description: "Days from order confirmation to buyer receipt"
+      - name: payment_terms_days
+        type: integer
+        description: "NET payment terms in days"
+      - name: freight_mode
+        type: string
+        enum: [sea, air, rail]
+        description: "Shipping mode — sea is cheapest, air is fastest, rail is middle"
+      - name: late_penalty_pct
+        type: number
+        description: "Penalty as percent of deal value per day late"
+
+    flow:
+      type: event_driven
+      max_wall_clock_seconds: 900
+      max_events: 60
+      stalemate_timeout_seconds: 240
+      activation_mode: serial
+      first_mover: nimbus_buyer
+      bonus_per_event: 0.03
+      reactivity_window_events: 5
+      state_summary_entity_types:
+        - negotiation_deal
+
+    entities:
+      deals:
+        - id: deal-pwr7a-2026q2
+          title: "Emergency PWR-7A Shipment — Nimbus × Haiphong"
+          parties: [nimbus_buyer, haiphong_supplier]
+          status: open
+          terms: {}
+          terms_template:
+            unit_price: {range: [22, 35]}
+            quantity_units: {range: [15000, 25000]}
+            delivery_lead_days: {range: [3, 21]}
+            payment_terms_days: {range: [30, 90]}
+            late_penalty_pct: {range: [0.5, 5.0]}
+          consent_rule: unanimous
+
+      player_briefs:
+        - actor_role: nimbus_buyer
+          deal_id: deal-pwr7a-2026q2
+          brief_content: >
+            You are Dana, procurement lead at Nimbus Electronics. Your
+            regular PWR-7A supplier missed a shipment and you are now
+            down to ~5 days of safety stock on your highest-burn-rate
+            line. Every day of downtime costs the company $180,000. You
+            must close an emergency purchase of 20,000 PWR-7A units
+            from a new supplier (Haiphong Precision). Read the world
+            every turn — the storm, port status, market comps, and CFO
+            authority cap are all changing. You CANNOT pay more than
+            $32/ton without board approval (which will not happen
+            before Monday).
+
+            NEGOTIATION STRATEGY:
+            Do NOT accept the first offer. Always counter-propose with
+            better terms. Research the world state (Notion pages, Slack
+            messages) before each move — the situation is changing and
+            you can use new information as leverage. Push hard on
+            delivery speed and late penalties. Make at least 2-3
+            counter-offers before considering acceptance. Every dollar
+            saved matters to the CFO.
+          mission: "Close an emergency PWR-7A purchase that restores production."
+
+        - actor_role: haiphong_supplier
+          deal_id: deal-pwr7a-2026q2
+          brief_content: >
+            You are Linh, sales director at Haiphong Precision. Your PWR-7A
+            inventory is tight (25,000 units actually available after
+            existing commitments). A typhoon is forming in the South China
+            Sea and your port may close. Your margin target is 22% and
+            your floor is the highest bid in your existing order book.
+            Read the world every turn — your competing inquiries are
+            real pressure if Dana lowballs. Weigh whether to sell to
+            Nimbus or redirect the inventory to another buyer.
+
+            NEGOTIATION STRATEGY:
+            Do NOT accept the first offer. Push back on price — your
+            costs are rising with the typhoon logistics. Counter every
+            proposal with tighter payment terms or higher price. Check
+            the order book and competing inquiries each turn — use them
+            as leverage. Make at least 2-3 counter-offers before
+            considering acceptance. You have other buyers waiting.
+          mission: "Maximize revenue while maintaining supplier reputation."
+
+      # No target_terms block — behavioral mode evaluates player
+      # behavior (query quality, reactivity, policy compliance)
+      # rather than distance-from-ideal deal scoring.
+
+    win_conditions:
+      - type: deal_closed
+      - type: deal_rejected
+      - type: stalemate_timeout
+      - type: wall_clock_elapsed
+      - type: max_events_exceeded
+      - type: all_budgets_exhausted

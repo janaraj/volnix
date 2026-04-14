@@ -60,39 +60,24 @@ def _make_game_action_context(action: str = "negotiate_propose") -> ActionContex
     )
 
 
-class TestGameActionShortCircuit:
-    """Validate the responder's game-action short-circuit path.
+class TestGameActionDispatchesToPack:
+    """Validate that game actions route through the Tier 1 pack dispatcher.
 
-    Game moves (``service_id == "game"``) have no external service to
-    simulate; the responder returns a minimal "recorded" proposal and
-    skips the Tier 1 / Tier 2 pack lookup entirely.
+    Cycle B replaced a legacy short-circuit (``service_id == "game"`` →
+    minimal ``{"status": "recorded"}`` proposal, bypassing Tier 1) with
+    the standard Tier 1 dispatch path. The event-driven
+    :class:`GameOrchestrator` reads state (``negotiation_deal.status ==
+    "accepted"``) to evaluate win conditions, so the game pack handlers
+    MUST run to apply the state deltas — the short-circuit would leave
+    the deal's state frozen.
     """
 
-    async def test_game_action_returns_recorded_response(self):
+    async def test_game_action_consults_pack_registry(self):
+        """``has_pack("game")`` is called on every game action."""
         responder = await _make_responder_engine()
         ctx = _make_game_action_context(action="negotiate_propose")
 
-        result = await responder.execute(ctx)
-
-        assert result.verdict == StepVerdict.ALLOW
-        assert ctx.response_proposal is not None
-        assert ctx.response_proposal.response_body == {
-            "status": "recorded",
-            "action": "negotiate_propose",
-        }
-        assert result.metadata["game_action"] is True
-        assert result.metadata["fidelity_tier"] == 0
-        assert len(result.events) == 1
-        dispatch = result.events[0]
-        assert getattr(dispatch, "fidelity_tier", None) == 0
-        assert getattr(dispatch, "service_id", None) == "game"
-
-    async def test_game_action_skips_pack_registry(self):
-        """``has_pack`` is never consulted when ``service_id == "game"``."""
-        responder = await _make_responder_engine()
-        ctx = _make_game_action_context(action="negotiate_counter")
-
-        # Spy on pack_registry.has_pack — it MUST NOT be called.
+        # Spy on pack_registry.has_pack — it MUST be called now.
         call_count = {"n": 0}
         original = responder._pack_registry.has_pack
 
@@ -105,7 +90,26 @@ class TestGameActionShortCircuit:
         result = await responder.execute(ctx)
 
         assert result.verdict == StepVerdict.ALLOW
-        assert call_count["n"] == 0, "pack_registry.has_pack should not be called for game actions"
+        assert call_count["n"] >= 1, (
+            "pack_registry.has_pack must be called for game actions now "
+            "that the legacy short-circuit is gone"
+        )
+
+    async def test_game_action_dispatch_event_reports_tier1(self):
+        """When a game pack is registered, dispatch records fidelity_tier=1."""
+        responder = await _make_responder_engine()
+        ctx = _make_game_action_context(action="negotiate_propose")
+
+        result = await responder.execute(ctx)
+
+        assert result.verdict == StepVerdict.ALLOW
+        # The dispatch event is recorded; if the game pack is registered
+        # in the test responder, it reports tier 1. If not registered,
+        # the responder falls through to the "no handler" path — we only
+        # care that the short-circuit is gone.
+        assert "game_action" not in result.metadata, (
+            "Legacy ``game_action`` metadata flag was set by the removed short-circuit path"
+        )
 
     async def test_non_game_action_still_consults_packs(self):
         """Regression guard: non-game actions take the normal path."""

@@ -589,3 +589,241 @@ async def test_reactivation_includes_lead_instructions() -> None:
     assert "Do NOT investigate on your own" in content, (
         "Lead should be told not to investigate on their own"
     )
+
+
+# ---------------------------------------------------------------------------
+# Multi-call response handling + actions_per_turn budget plumbing
+# ---------------------------------------------------------------------------
+
+
+def _make_multi_tool_response(*calls: tuple[str, dict]) -> LLMResponse:
+    """LLM response containing multiple tool calls in a single message.
+
+    Mirrors the real behavior of OpenAI, Anthropic, and Google Gemini when
+    the model composes a turn as several coordinated actions.
+    """
+    return LLMResponse(
+        content="",
+        tool_calls=[
+            ToolCall(name=name, arguments=args, id=f"call_{i}_{name}")
+            for i, (name, args) in enumerate(calls)
+        ],
+        model="test",
+        provider="test",
+    )
+
+
+async def test_multi_call_response_all_executed():
+    """All tool calls in a single LLM response are executed, not just the first.
+
+    This is the real fix for the duplicate-call bug: before the fix, only
+    ``response.tool_calls[0]`` was processed and the rest were silently
+    dropped — causing the LLM to re-emit them on subsequent iterations
+    and producing runtime duplicates.
+    """
+    router = _make_sequential_router(
+        _make_multi_tool_response(
+            ("tickets_search", {"query": "refund", "reasoning": "search"}),
+            ("tickets_read", {"ticket_id": "T1", "reasoning": "read"}),
+            ("get_charge", {"charge_id": "ch_1", "reasoning": "check"}),
+        ),
+        _make_text_response("All three done"),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
+    )
+
+    # 3 tool envelopes from iteration 1 (one LLM response with 3 calls),
+    # plus 1 auto-posted chat from iteration 2's text response = 4 envelopes.
+    # Only 2 LLM round-trips total.
+    assert len(envelopes) == 4
+    action_types = [e.action_type for e in envelopes]
+    assert "tickets_search" in action_types
+    assert "tickets_read" in action_types
+    assert "get_charge" in action_types
+    assert "chat.postMessage" in action_types
+    # Exactly 2 LLM calls — the three tools shared one round-trip
+    assert router.route.call_count == 2
+
+
+async def test_multi_call_response_respects_budget():
+    """A multi-call response that exceeds the budget executes only up to the cap.
+
+    When ``max_calls_override`` is 3 and the LLM returns 5 tool calls in one
+    response, only the first 3 execute and the loop terminates with
+    ``terminated_by = "max_tool_calls"``.
+    """
+    router = _make_sequential_router(
+        _make_multi_tool_response(
+            ("tickets_search", {"query": "a", "reasoning": "r1"}),
+            ("tickets_read", {"ticket_id": "T1", "reasoning": "r2"}),
+            ("get_charge", {"charge_id": "ch1", "reasoning": "r3"}),
+            ("tickets_search", {"query": "b", "reasoning": "r4"}),
+            ("tickets_read", {"ticket_id": "T2", "reasoning": "r5"}),
+        ),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "game_event",
+        trigger_event=None,
+        max_calls_override=3,
+    )
+
+    # Only 3 of 5 tool calls executed — budget cap enforced mid-response
+    assert len(envelopes) == 3
+    # Only 1 LLM call — we didn't need a second round-trip
+    assert router.route.call_count == 1
+
+
+async def test_blocked_tool_in_multi_call_preserves_siblings():
+    """A blocked tool in a multi-call response does not stop sibling calls.
+
+    When the pipeline rejects one of several tool calls in a single response,
+    the BLOCKED message is fed back to the LLM (in history) and the remaining
+    calls in the same response continue to execute.
+    """
+    committed = _make_committed_event_mock()
+    # First call succeeds, second blocked, third succeeds, fourth is the
+    # auto-post of the text response (also succeeds).
+    executor = AsyncMock(side_effect=[committed, None, committed, committed])
+
+    router = _make_sequential_router(
+        _make_multi_tool_response(
+            ("tickets_search", {"query": "a", "reasoning": "r1"}),
+            ("tickets_read", {"ticket_id": "T1", "reasoning": "r2"}),
+            ("get_charge", {"charge_id": "ch1", "reasoning": "r3"}),
+        ),
+        _make_text_response("Two succeeded, one blocked"),
+    )
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
+    )
+
+    # 2 successful tool envelopes (blocked one isn't in envelopes) + 1 auto-posted chat
+    assert len(envelopes) == 3
+    action_types = [e.action_type for e in envelopes]
+    assert action_types.count("tickets_search") == 1
+    assert action_types.count("get_charge") == 1
+    # Blocked tool NOT in envelopes
+    assert "tickets_read" not in action_types
+
+    # BLOCKED message must have been fed back into the next LLM iteration
+    second_request = router.route.call_args_list[1][0][0]
+    tool_msgs = [m for m in second_request.messages if m.get("role") == "tool"]
+    assert any("BLOCKED" in m["content"] for m in tool_msgs)
+
+
+async def test_autonomous_uses_config_default_when_no_override():
+    """Non-game activation with no override uses ``max_tool_calls_per_activation``.
+
+    Ensures autonomous lead-agent workflows are unaffected by the game-turn
+    override plumbing — they keep using the global config value.
+    """
+    responses = [
+        _make_tool_response("tickets_search", {"query": f"q{i}", "reasoning": f"r{i}"})
+        for i in range(15)
+    ]
+    router = _make_sequential_router(*responses)
+    executor = _make_tool_executor()
+    engine = await _create_engine(config_overrides={"max_tool_calls_per_activation": 7})
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "autonomous_work",
+        trigger_event=None,
+        max_calls_override=None,
+    )
+
+    # Uses the config default of 7, not the global 10 or any override
+    assert len(envelopes) == 7
+    assert router.route.call_count == 7
+
+
+async def test_autopost_skipped_when_agent_already_chat_posted():
+    """Framework does not double-post when the agent already called chat.postMessage.
+
+    The pre-fix bug: if the agent explicitly called chat.postMessage in one
+    iteration and then returned plain text in the next, the auto-post branch
+    would post the text to the same channel — producing the visible
+    "1 second apart" duplicate chat messages in the run.
+    """
+    router = _make_sequential_router(
+        _make_tool_response(
+            "chat.postMessage",
+            {"channel": "#team", "text": "Explicit post", "reasoning": "announce"},
+            tool_id="call_chat",
+        ),
+        _make_text_response("Explicit post"),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "subscription_immediate",
+        trigger_event=None,
+    )
+
+    # Exactly one chat.postMessage — the explicit call. Auto-post must not fire.
+    chat_envelopes = [e for e in envelopes if e.action_type == "chat.postMessage"]
+    assert len(chat_envelopes) == 1
+
+
+async def test_do_nothing_short_circuits_multi_call_response():
+    """``do_nothing`` in a multi-call response stops the loop immediately.
+
+    The LLM may return ``[A, do_nothing, C]`` in one response (unusual but
+    possible). The first call executes, the do_nothing terminates the loop,
+    and the third call is NOT executed.
+    """
+    router = _make_sequential_router(
+        _make_multi_tool_response(
+            ("tickets_search", {"query": "a", "reasoning": "first"}),
+            ("do_nothing", {"reasoning": "nothing else to do"}),
+            ("get_charge", {"charge_id": "ch1", "reasoning": "should not run"}),
+        ),
+    )
+    executor = _make_tool_executor()
+    engine = await _create_engine()
+    engine._llm_router = router
+    engine.set_tool_executor(executor)
+    actor = list(engine._actor_states.values())[0]
+
+    envelopes = await engine._activate_with_tool_loop(
+        actor,
+        "autonomous_continue",
+        trigger_event=None,
+    )
+
+    # Only the first call executed; do_nothing halted the loop before get_charge
+    assert len(envelopes) == 1
+    assert envelopes[0].action_type == "tickets_search"
+    # Only one LLM call — do_nothing terminated the outer loop too
+    assert router.route.call_count == 1

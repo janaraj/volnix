@@ -25,6 +25,8 @@ from volnix.core.types import (
 )
 from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.llm._history_compaction import compact_tool_results
+from volnix.llm._tool_pairing import repair_tool_call_pairing
 from volnix.llm.types import LLMRequest, ToolCall, ToolDefinition
 from volnix.simulation.world_context import WorldContextBundle
 
@@ -52,11 +54,154 @@ def _build_tool_call_dict(tc: ToolCall, tc_id: str) -> dict[str, Any]:
     return entry
 
 
+# -- history sanitisation for two-phase game activation ----------------
+
+
+def _sanitize_history_for_game_move(
+    messages: list[dict[str, Any]],
+    game_tool_names: frozenset[str],
+    char_limit: int = 8000,
+) -> list[dict[str, Any]]:
+    """Replace non-game tool-call history with a text research summary.
+
+    Phase 1 (``game_research``) leaves assistant messages containing
+    ``tool_calls`` for non-game tools (``databases.retrieve``,
+    ``pages.retrieve``, ``conversations.list``, etc.).  When Phase 2
+    (``game_move``) replays this history, weaker models hallucinate
+    calls to those tool names even though only game tools are in the
+    ``tools`` parameter.
+
+    This function:
+
+    * Preserves system / user messages (identity, prompts, state updates)
+    * Preserves assistant messages whose tool_calls are ALL game tools
+    * Preserves text-only assistant messages
+    * Replaces non-game (assistant + tool result) blocks with a single
+      text-only assistant message containing the research findings
+
+    Args:
+        messages: The conversation history (OpenAI-format dicts).
+        game_tool_names: Tool names registered under ``service="game"``
+            (e.g. ``{"negotiate_propose", "negotiate_counter", …}``).
+            Derived by the caller from ``_get_tools_for_actor`` so the
+            function is game-type agnostic.
+
+    Returns:
+        A **new** list — the input is not mutated.
+    """
+    if len(messages) < 2:
+        return list(messages)
+
+    # -- Pre-pass: collect tool_call IDs that belong to game tools ------
+    game_tc_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                fn_name = (tc.get("function") or {}).get("name", "")
+                if fn_name in game_tool_names:
+                    game_tc_ids.add(tc.get("id", ""))
+
+    # -- Main pass: keep / skip / collect --------------------------------
+    research_findings: list[str] = []
+    result: list[dict[str, Any]] = []
+    insert_pos: int | None = None  # where the first removed msg was
+
+    for msg in messages:
+        role = msg.get("role", "")
+
+        # System and user messages are always preserved.
+        if role in ("system", "user"):
+            result.append(msg)
+            continue
+
+        if role == "assistant":
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                all_game = all(
+                    (tc.get("function") or {}).get("name", "") in game_tool_names
+                    for tc in tool_calls
+                )
+                any_game = any(
+                    (tc.get("function") or {}).get("name", "") in game_tool_names
+                    for tc in tool_calls
+                )
+                if all_game:
+                    result.append(msg)
+                elif any_game:
+                    # Mixed game + non-game in one response — shouldn't
+                    # happen (game calls trigger short-circuit in Phase 1)
+                    # but strip the non-game tool_calls so the assistant
+                    # only declares ids that will be answered by the tool
+                    # responses we keep below. Non-game tool responses
+                    # still get their content absorbed into research_findings.
+                    logger.warning(
+                        "_sanitize_history_for_game_move: mixed game/"
+                        "non-game tool_calls in one assistant message, "
+                        "stripping non-game tool_calls",
+                    )
+                    game_only_tcs = [
+                        tc
+                        for tc in tool_calls
+                        if (tc.get("function") or {}).get("name", "") in game_tool_names
+                    ]
+                    # Mark insert_pos BEFORE this assistant so the
+                    # research summary can't split the assistant from
+                    # its tool responses (which would break pairing).
+                    if insert_pos is None:
+                        insert_pos = len(result)
+                    result.append({**msg, "tool_calls": game_only_tcs})
+                else:
+                    # All non-game: skip, mark insertion position.
+                    if insert_pos is None:
+                        insert_pos = len(result)
+            else:
+                # Text-only assistant message: preserve.
+                result.append(msg)
+            continue
+
+        if role == "tool":
+            tc_id = msg.get("tool_call_id", "")
+            if tc_id in game_tc_ids:
+                result.append(msg)
+            else:
+                content = msg.get("content", "")
+                if content:
+                    research_findings.append(content)
+            continue
+
+        # Unknown role: preserve defensively.
+        result.append(msg)
+
+    # -- Inject research summary at the first-removed position ----------
+    if research_findings:
+        joined = "\n\n".join(research_findings)
+        if len(joined) > char_limit:
+            joined = joined[:char_limit] + "\n[...truncated]"
+        summary_msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": ("[I gathered the following information during research.]\n\n" + joined),
+        }
+        pos = insert_pos if insert_pos is not None else min(2, len(result))
+        result.insert(pos, summary_msg)
+
+    # Final structural invariant: tool_call ↔ tool-response pairing.
+    # Handles edge cases (partial prior-turn blocks, unexpected orphans)
+    # so no downstream provider sees a payload that would 400.
+    return repair_tool_call_pairing(result)
+
+
 class AgencyEngine(BaseEngine):
     """Manages internal actor lifecycle: activation, action generation, state updates."""
 
     engine_name: ClassVar[str] = "agency"
-    subscriptions: ClassVar[list[str]] = ["world", "simulation"]
+    # Agency is NOT driven by bus fanout. The legacy ``["world", "simulation"]``
+    # subscriptions never actually matched any published event types
+    # (events are published as ``world.negotiate_propose`` etc, not ``world``),
+    # so ``_handle_event`` never fired for them. SimulationRunner and
+    # GameOrchestrator both call agency methods directly (SimulationRunner
+    # via ``notify``, orchestrator via ``activate_for_event``). Cleared to
+    # ``[]`` in Cycle B.7 to make the contract explicit.
+    subscriptions: ClassVar[list[str]] = []
     dependencies: ClassVar[list[str]] = ["state"]
 
     async def _on_initialize(self) -> None:
@@ -73,6 +218,15 @@ class AgencyEngine(BaseEngine):
         self._tool_to_service: dict[str, str] = {}  # sanitized API name → service name
         self._llm_semaphore = asyncio.Semaphore(self._typed_config.max_concurrent_actor_calls)
         self._pipeline_lock = asyncio.Lock()  # Serializes pipeline execution across parallel agents
+        # Per-actor locks serialize same-actor activations. Prevents the
+        # feedback-loop race where GameOrchestrator re-activates a player
+        # whose previous activation is still inside _activate_with_tool_loop
+        # (Player A commits → bus → orchestrator activates Player B → B
+        # commits → bus → orchestrator activates A *again*). Without the
+        # lock, two concurrent activations mutate actor_state.activation_messages
+        # interleaved. The lock is lazy — only created on first activation
+        # for a given actor.
+        self._actor_activation_locks: dict[ActorId, asyncio.Lock] = {}
         self._tool_executor: Any = None
         self._simulation_progress: tuple[int, int] | None = None  # (current_events, max_events)
 
@@ -224,30 +378,105 @@ class AgencyEngine(BaseEngine):
         )
         return tools
 
-    def register_game_tools(self, tools: list[ToolDefinition]) -> None:
-        """Register structured game-move tools for the active game.
+    def register_game_tools(self, actions: list[dict[str, Any]]) -> None:
+        """Register structured game-move tools for the active game (NF1).
 
-        Called by the GameRunner at game setup time. Tools are appended to
-        the agency's tool list and mapped in the name→action / name→service
-        lookup tables so that ``_parse_tool_call`` can resolve them when
-        the LLM calls them natively.
+        Called by :meth:`volnix.app.VolnixApp.configure_game` after
+        :meth:`GameOrchestrator.configure` and before the orchestrator's
+        ``_on_start``. The actions come from
+        ``volnix.packs.verified.game.tool_schema.build_negotiation_tools``
+        and have the same shape as entries in ``self._available_actions``
+        — raw action dicts with ``name``, ``service``, ``description``,
+        ``parameters``, and ``http_method`` keys.
 
-        Idempotent: registering the same tool name twice replaces the prior
-        entry (safe for reloads). Tools registered here are naturally
-        filtered by the existing ``_get_tools_for_actor`` permission logic —
-        only agents with ``write: [game]`` in their profile will see them.
-        The ``method_lookup.get(name, "POST")`` fallback in the filter
-        classifies unknown-service tools as write, so no change to the
-        filter is needed.
+        This method layers the shared agency meta_params (``reasoning``,
+        ``intended_for``, ``state_updates``) onto each action's
+        parameters — matching :meth:`_build_tool_definitions` exactly —
+        so the LLM sees a uniform tool interface. ``reasoning`` is always
+        required. Parameter schemas are sanitized for provider
+        compatibility (bare ``object`` types get empty ``properties``,
+        bare ``array`` types get ``items: {type: string}``).
+
+        Idempotent: registering the same tool ``name`` twice replaces
+        the prior entry (safe for reloads). Tools registered here are
+        naturally filtered by :meth:`_get_tools_for_actor` — only
+        actors with ``write: [game]`` in their permissions see them.
         """
-        for tool in tools:
-            # Replace any existing entry with the same name (idempotent reload)
-            self._tool_definitions = [t for t in self._tool_definitions if t.name != tool.name]
-            self._tool_definitions.append(tool)
+        meta_params: dict[str, Any] = {
+            "reasoning": {
+                "type": "string",
+                "description": "Why you chose this action",
+            },
+            "intended_for": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Teammate roles to address (e.g. ['analyst', 'researcher']). "
+                    "Use specific roles, not 'all'."
+                ),
+            },
+            "state_updates": {
+                "type": "object",
+                "properties": {
+                    "goal_context": {
+                        "type": "string",
+                        "description": "Updated progress notes",
+                    },
+                    "pending_tasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Remaining tasks",
+                    },
+                },
+            },
+        }
+
+        for action in actions:
+            name = action.get("name", "")
+            if not name:
+                logger.warning("register_game_tools: skipping action with no name: %s", action)
+                continue
+            service = action.get("service", "")
+            params = action.get("parameters") or {}
+            raw_properties = {**params.get("properties", {}), **meta_params}
+            required = list(params.get("required", [])) + ["reasoning"]
+
+            # Sanitize for provider compatibility (matches _build_tool_definitions).
+            properties: dict[str, Any] = {}
+            for pname, pdef in raw_properties.items():
+                if isinstance(pdef, dict):
+                    pdef = dict(pdef)
+                    if pdef.get("type") == "object" and "properties" not in pdef:
+                        pdef["properties"] = {}
+                    if pdef.get("type") == "array" and "items" not in pdef:
+                        pdef["items"] = {"type": "string"}
+                properties[pname] = pdef
+
+            tool = ToolDefinition(
+                name=name,
+                service=service,
+                description=action.get("description", ""),
+                parameters={
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            )
+
+            # Idempotent replace by name. PREPEND game tools so they
+            # appear before Slack/service tools in the LLM's tool list.
+            # LLMs (especially flash models) tend to prefer tools listed
+            # first — prepending makes negotiate_* the default choice.
+            self._tool_definitions = [tool] + [t for t in self._tool_definitions if t.name != name]
             # Identity mapping: tool name == action type
-            self._tool_name_map[tool.name] = tool.name
-            self._tool_to_service[tool.name] = tool.service
-            logger.info("Registered game tool %s (service=%s)", tool.name, tool.service)
+            self._tool_name_map[name] = name
+            self._tool_to_service[name] = service
+            logger.info(
+                "Registered game tool %s (service=%s, %d params)",
+                name,
+                service,
+                len(properties),
+            )
 
     def _get_tools_for_actor(self, actor_id: str) -> list[ToolDefinition]:
         """Filter tool definitions by actor's service permissions.
@@ -849,15 +1078,31 @@ class AgencyEngine(BaseEngine):
         actor: ActorState,
         reason: str,
         trigger_event: WorldEvent | None,
+        max_calls_override: int | None = None,
+        append_closure: bool = True,
+        state_summary: str | None = None,
     ) -> list[ActionEnvelope]:
         """Activate an agent with a multi-turn tool-calling loop.
 
         The agent maintains a conversation (messages array) across tool calls
-        within this single activation. Each tool call goes through the full
-        governance pipeline. The loop terminates when:
+        within this single activation. Each LLM response may contain multiple
+        tool calls — all of them are executed in order (each through the full
+        governance pipeline) and each appended to the conversation history so
+        the next iteration sees the complete record. The loop terminates when:
         - Agent responds with text (findings) → auto-posted to team channel
+          (unless the agent already explicitly chat-posted this activation)
         - Agent calls do_nothing
-        - max_tool_calls_per_activation reached
+        - Total tool-call budget is exhausted
+
+        Args:
+            actor: The actor state to activate.
+            reason: The activation reason string (e.g. "game_kickstart",
+                "game_event", "autonomous_work", "subscription_immediate").
+            trigger_event: The event that caused this activation, if any.
+            max_calls_override: If set, overrides
+                ``max_tool_calls_per_activation`` from config for this
+                activation only. A value of ``None`` (or non-positive)
+                falls back to the global default.
 
         Returns:
             List of ActionEnvelopes produced during this activation.
@@ -877,8 +1122,21 @@ class AgencyEngine(BaseEngine):
         from volnix.ledger.entries import ActivationCompleteEntry, ToolLoopStepEntry
 
         activation_id = str(uuid.uuid4())[:12]
-        max_calls = self._typed_config.max_tool_calls_per_activation
+        # Per-activation tool-call budget. Override (from game runner's
+        # actions_per_turn) wins when set; otherwise use the global default.
+        max_calls = (
+            max_calls_override
+            if isinstance(max_calls_override, int) and max_calls_override > 0
+            else self._typed_config.max_tool_calls_per_activation
+        )
         tool_choice = self._typed_config.tool_choice_mode
+        # Phase 2 (game_move): force the LLM to return a tool call.
+        # "required" is supported by all providers (Gemini=ANY,
+        # Anthropic={"type":"any"}, OpenAI="required"). This is the
+        # clean way to ensure the agent makes a game move — no retry
+        # loops, no nudge messages, no special-case handlers.
+        if reason == "game_move":
+            tool_choice = "required"
 
         async with self._llm_semaphore:
             system_prompt = self._prompt_builder.build_system_prompt()
@@ -886,39 +1144,82 @@ class AgencyEngine(BaseEngine):
                 {"role": a.role, "id": str(a.actor_id)} for a in self._actor_states.values()
             ]
             actor_tools = self._get_tools_for_actor(str(actor.actor_id))
+
+            # Two-phase game activation: research (game_research) uses
+            # full tools, move (game_move) uses game-only tools.
+            # activate_for_event dispatches the phases; this block just
+            # configures the tool list for whichever phase we're in.
+            _GAME_ACTIVATION_REASONS = {
+                "game_kickstart",
+                "game_event",
+                "game_research",
+                "game_move",
+            }
+            if reason in _GAME_ACTIVATION_REASONS:
+                if reason == "game_move":
+                    # Phase 2: game tools ONLY — force the negotiate move
+                    allowed_services: set[str] | None = {"game"}
+                    actor_tools = [t for t in actor_tools if t.service == "game"]
+                else:
+                    # Phase 1 (game_research) or legacy (game_kickstart/event):
+                    # full tool set for research, text prompt focuses on game
+                    allowed_services = {"game"}
+                    actor_tools = [t for t in actor_tools if t.name != "do_nothing"]
+            else:
+                # Non-game: show all services in text prompt (existing behavior)
+                allowed_services = {t.service for t in actor_tools if t.service}
+
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
                 activation_reason=reason,
                 available_actions=self._available_actions,
                 team_roster=team_roster,
+                allowed_services=allowed_services,
                 simulation_progress=self._simulation_progress,
             )
 
-            # Build messages: continue from persisted conversation or start fresh
+            # Build messages: continue from persisted conversation or start fresh.
+            #
+            # For GAME activations (``game_kickstart`` / ``game_event``),
+            # the caller (``activate_for_event``) has already appended a
+            # game-specific state-summary user message to
+            # ``activation_messages``. Do NOT layer the generic re-activation
+            # context or autonomous lead/sub-agent instructions on top —
+            # those are for delegation/monitoring workflows and will confuse
+            # a game player (e.g. telling a non-lead negotiator to
+            # "INVESTIGATE/SHARE/call do_nothing" directly contradicts the
+            # game persona's instruction to counter or accept).
+            #
+            # Non-game re-activations (autonomous lead agents, subscription
+            # triggers, etc.) still get the generic re-activation context +
+            # autonomous phase instructions.
+            _GAME_REASONS = {"game_kickstart", "game_event", "game_research", "game_move"}
             if actor.activation_messages:
-                # Re-activation: continue prior conversation with new context
                 messages: list[dict[str, Any]] = list(actor.activation_messages)
-                reactivation_ctx = self._build_reactivation_context(
-                    actor,
-                    trigger_event,
-                    reason,
-                )
-                # Include updated phase-aware instructions on re-activation.
-                # Lead agents get phase-specific prompts (monitor/buffer)
-                # based on activation_reason + is_reactivation.
-                if actor.autonomous:
-                    reactivation_instructions = ActorPromptBuilder.build_autonomous_instructions(
-                        actor=actor,
-                        team_roster=team_roster,
-                        activation_reason=reason,
-                        simulation_progress=self._simulation_progress,
+                if reason not in _GAME_REASONS:
+                    reactivation_ctx = self._build_reactivation_context(
+                        actor,
+                        trigger_event,
+                        reason,
                     )
-                    combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
-                else:
-                    combined = reactivation_ctx
-                if combined:
-                    messages.append({"role": "user", "content": combined})
+                    # Include updated phase-aware instructions on re-activation.
+                    # Lead agents get phase-specific prompts (monitor/buffer)
+                    # based on activation_reason + is_reactivation.
+                    if actor.autonomous:
+                        reactivation_instructions = (
+                            ActorPromptBuilder.build_autonomous_instructions(
+                                actor=actor,
+                                team_roster=team_roster,
+                                activation_reason=reason,
+                                simulation_progress=self._simulation_progress,
+                            )
+                        )
+                        combined = f"{reactivation_instructions}\n\n{reactivation_ctx}"
+                    else:
+                        combined = reactivation_ctx
+                    if combined:
+                        messages.append({"role": "user", "content": combined})
             else:
                 # First activation: build from scratch
                 messages: list[dict[str, Any]] = [
@@ -926,10 +1227,48 @@ class AgencyEngine(BaseEngine):
                     {"role": "user", "content": user_prompt},
                 ]
 
+            # Inject state summary — works on BOTH first activation
+            # (messages just built from system+user) and re-activation
+            # (messages loaded from activation_messages). Game state
+            # (deal IDs, proposal history, world events) is visible
+            # from the very first activation, not just re-activations.
+            if state_summary:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[game state update]\n{state_summary}",
+                    }
+                )
+
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
+            total_tool_calls = 0
 
-            for step_idx in range(max_calls):
+            # Outer loop: one LLM call per iteration. Each response may
+            # contain multiple tool calls (OpenAI, Anthropic, and Google
+            # Gemini all support this); we execute all of them in order,
+            # each through the governance pipeline, each recorded in the
+            # conversation history. The LLM on the next iteration sees
+            # the complete record of what happened and does not need to
+            # re-emit any "dropped" calls.
+            #
+            # Iteration cap equals max_calls as a safety rail — if the
+            # LLM only emits one call per iteration (the common pattern),
+            # the outer loop naturally limits work to the budget.
+            for iteration in range(max_calls):
+                if total_tool_calls >= max_calls:
+                    break
+
+                # Compact tool-result history before each LLM call:
+                # keep only the last N results verbatim, elide older.
+                # Provider-agnostic — operates on the generic message
+                # dict shape. See _history_compaction.py.
+                messages = compact_tool_results(
+                    messages,
+                    keep_last=self._typed_config.max_verbatim_tool_results,
+                    max_chars=self._typed_config.max_tool_result_chars,
+                )
+
                 step_start = _time.monotonic()
 
                 request = LLMRequest(
@@ -950,111 +1289,162 @@ class AgencyEngine(BaseEngine):
                 step_latency = (_time.monotonic() - step_start) * 1000
 
                 if response.tool_calls:
-                    tc = response.tool_calls[0]
+                    # Execute ALL tool calls from this response, in order,
+                    # respecting the total budget. Build ONE assistant
+                    # message containing every executed tool_call, followed
+                    # by matching tool-result messages — this mirrors the
+                    # original LLM response structure (one model turn with
+                    # multiple function_calls) and preserves per-call
+                    # provider metadata (including Gemini thought_signatures
+                    # that Gemini 3 requires on replay).
+                    stop_outer = False
+                    executed_tc_dicts: list[dict[str, Any]] = []
+                    tool_result_msgs: list[dict[str, Any]] = []
 
-                    # do_nothing terminates the loop
-                    if tc.name == "do_nothing":
-                        terminated_by = "do_nothing"
-                        self._record_to_ledger(
-                            ToolLoopStepEntry(
-                                actor_id=actor.actor_id,
-                                activation_id=activation_id,
-                                step_index=step_idx,
-                                tool_name="do_nothing",
-                                llm_latency_ms=step_latency,
+                    for tc_index, tc in enumerate(response.tool_calls):
+                        if total_tool_calls >= max_calls:
+                            stop_outer = True
+                            break
+
+                        tc_latency = step_latency if tc_index == 0 else 0.0
+
+                        # do_nothing short-circuits the whole activation,
+                        # even if it appears mid-response. Do not record it
+                        # in the assistant history (it's a sentinel, not a
+                        # real action); just terminate.
+                        if tc.name == "do_nothing":
+                            terminated_by = "do_nothing"
+                            self._record_to_ledger(
+                                ToolLoopStepEntry(
+                                    actor_id=actor.actor_id,
+                                    activation_id=activation_id,
+                                    step_index=total_tool_calls,
+                                    tool_name="do_nothing",
+                                    llm_latency_ms=tc_latency,
+                                )
                             )
+                            stop_outer = True
+                            break
+
+                        # Parse tool call into ActionEnvelope. A bad parse is
+                        # skipped (does NOT terminate the loop) so sibling
+                        # calls in the same response still execute.
+                        env = self._parse_tool_call(actor, tc, reason, trigger_event)
+                        if env is None:
+                            continue
+
+                        # Execute through governance pipeline INLINE.
+                        # Lock serializes pipeline access across parallel agents.
+                        async with self._pipeline_lock:
+                            committed_event = await self._tool_executor(env)
+
+                        tc_id = tc.id or f"call_{iteration}_{tc_index}"
+                        executed_tc_dicts.append(_build_tool_call_dict(tc, tc_id))
+
+                        if committed_event is None:
+                            # Pipeline blocked — still record the call in
+                            # the assistant history and feed a BLOCKED
+                            # result back so the LLM sees what happened.
+                            tool_result_msgs.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc_id,
+                                    "content": (
+                                        "BLOCKED: This action was not permitted "
+                                        "by the governance pipeline."
+                                    ),
+                                }
+                            )
+                            self._record_to_ledger(
+                                ToolLoopStepEntry(
+                                    actor_id=actor.actor_id,
+                                    activation_id=activation_id,
+                                    step_index=total_tool_calls,
+                                    tool_name=tc.name,
+                                    tool_arguments=tc.arguments,
+                                    blocked=True,
+                                    llm_latency_ms=tc_latency,
+                                )
+                            )
+                            total_tool_calls += 1
+                            continue
+
+                        # Success — record envelope and append matching
+                        # tool-result message.
+                        envelopes.append(env)
+
+                        # Full-fidelity serialization — compaction applied
+                        # pre-LLM-call in compact_tool_results() owns
+                        # char-capping uniformly.
+                        result_body = json.dumps(
+                            committed_event.response_body or {},
+                            default=str,
                         )
-                        break
 
-                    # Parse tool call into ActionEnvelope
-                    env = self._parse_tool_call(actor, tc, reason, trigger_event)
-                    if env is None:
-                        terminated_by = "do_nothing"
-                        break
-
-                    # Execute through governance pipeline INLINE
-                    # Lock serializes pipeline access across parallel agents
-                    async with self._pipeline_lock:
-                        committed_event = await self._tool_executor(env)
-
-                    if committed_event is None:
-                        # Pipeline blocked — tell the agent
-                        blocked_tc_id = tc.id or f"call_{step_idx}"
-                        blocked_assistant_msg: dict[str, Any] = {
-                            "role": "assistant",
-                            "tool_calls": [
-                                _build_tool_call_dict(tc, blocked_tc_id),
-                            ],
-                        }
-                        if response.provider_metadata:
-                            # Stash per-turn provider metadata (e.g., Anthropic
-                            # extended-thinking blocks) so the same provider can
-                            # echo them back on the next turn. Other providers
-                            # strip the ``_provider_metadata`` key at their
-                            # boundary — it never leaks to an unintended SDK.
-                            blocked_assistant_msg["_provider_metadata"] = response.provider_metadata
-                        messages.append(blocked_assistant_msg)
-                        messages.append(
+                        tool_result_msgs.append(
                             {
                                 "role": "tool",
-                                "tool_call_id": blocked_tc_id,
-                                "content": "BLOCKED: This action was not permitted by the governance pipeline.",
+                                "tool_call_id": tc_id,
+                                "content": result_body,
                             }
                         )
+
                         self._record_to_ledger(
                             ToolLoopStepEntry(
                                 actor_id=actor.actor_id,
                                 activation_id=activation_id,
-                                step_index=step_idx,
+                                step_index=total_tool_calls,
                                 tool_name=tc.name,
                                 tool_arguments=tc.arguments,
-                                blocked=True,
-                                llm_latency_ms=step_latency,
+                                event_id=committed_event.event_id,
+                                llm_latency_ms=tc_latency,
+                                response_preview=result_body[:200],
                             )
                         )
-                        continue
+                        total_tool_calls += 1
 
-                    # Success — record envelope and add result to messages
-                    envelopes.append(env)
-
-                    result_body = json.dumps(
-                        committed_event.response_body or {},
-                        default=str,
-                    )[:2000]
-
-                    tc_id = tc.id or f"call_{step_idx}"
-                    success_assistant_msg: dict[str, Any] = {
-                        "role": "assistant",
-                        "tool_calls": [_build_tool_call_dict(tc, tc_id)],
-                    }
-                    if response.provider_metadata:
-                        # Stash per-turn provider metadata (e.g., Anthropic
-                        # extended-thinking blocks) so the same provider can
-                        # echo them back on the next turn. Other providers
-                        # strip the ``_provider_metadata`` key at their
-                        # boundary — it never leaks to an unintended SDK.
-                        success_assistant_msg["_provider_metadata"] = response.provider_metadata
-                    messages.append(success_assistant_msg)
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": result_body,
+                    # Commit the assistant message + tool results as a
+                    # single coherent turn in the conversation history.
+                    # One assistant message with N tool_calls, followed by
+                    # N tool results (one per executed tool_call) — this
+                    # is what Gemini, Anthropic, and OpenAI all expect
+                    # when replaying multi-call responses.
+                    if executed_tc_dicts:
+                        assistant_msg: dict[str, Any] = {
+                            "role": "assistant",
+                            "tool_calls": executed_tc_dicts,
                         }
-                    )
+                        if response.provider_metadata:
+                            assistant_msg["_provider_metadata"] = response.provider_metadata
+                        messages.append(assistant_msg)
+                        messages.extend(tool_result_msgs)
 
-                    self._record_to_ledger(
-                        ToolLoopStepEntry(
-                            actor_id=actor.actor_id,
-                            activation_id=activation_id,
-                            step_index=step_idx,
-                            tool_name=tc.name,
-                            tool_arguments=tc.arguments,
-                            event_id=committed_event.event_id,
-                            llm_latency_ms=step_latency,
-                            response_preview=result_body[:200],
+                    # Step 3b: turn-ending action detection for game
+                    # activations. If any tool call in this response
+                    # committed a game-service event (negotiate_*), the
+                    # turn is over — yield to the other player. Non-game
+                    # tool calls (Notion reads, Slack reads, chat posts)
+                    # do NOT end the turn — they're research preparation.
+                    if reason in _GAME_ACTIVATION_REASONS:
+                        game_move_this_response = (
+                            any(
+                                getattr(e, "action_type", "").startswith("negotiate_")
+                                for e in envelopes[-len(executed_tc_dicts) :]
+                            )
+                            if executed_tc_dicts
+                            else False
                         )
-                    )
+                        if game_move_this_response:
+                            terminated_by = "game_move"
+                            stop_outer = True
+
+                    if stop_outer:
+                        break
+                    if total_tool_calls >= max_calls:
+                        terminated_by = "max_tool_calls"
+                        break
+                    # Otherwise continue to next iteration — the LLM may
+                    # have more to do after seeing all the results.
 
                 elif response.content:
                     # Text response — agent is sharing findings
@@ -1068,8 +1458,16 @@ class AgencyEngine(BaseEngine):
                     # agent sees it on re-activation and doesn't repeat itself.
                     messages.append({"role": "assistant", "content": text})
 
-                    # Auto-post findings to team channel
-                    if actor.team_channel:
+                    # Auto-post findings to team channel — ONLY if the agent
+                    # did not already explicitly chat-post during this
+                    # activation. Without this guard the same text is posted
+                    # twice: once via the agent's explicit chat.postMessage
+                    # tool call earlier in the loop, and again via this
+                    # auto-post branch.
+                    already_posted_chat = any(
+                        getattr(e, "action_type", "") == "chat.postMessage" for e in envelopes
+                    )
+                    if actor.team_channel and not already_posted_chat:
                         post_env = self._create_channel_post(
                             actor,
                             text,
@@ -1088,10 +1486,10 @@ class AgencyEngine(BaseEngine):
                     # Treat as do_nothing (agent has nothing to contribute).
                     terminated_by = "do_nothing"
                     logger.info(
-                        "[AGENCY.loop] actor=%s step=%d: empty response "
+                        "[AGENCY.loop] actor=%s iter=%d: empty response "
                         "(completion_tokens=%d), treating as do_nothing",
                         actor.actor_id,
-                        step_idx,
+                        iteration,
                         response.usage.completion_tokens if response.usage else 0,
                     )
                     break
@@ -1112,9 +1510,11 @@ class AgencyEngine(BaseEngine):
                 closure = "[Nothing to do. Activation complete.]"
             else:
                 closure = f"[Activation ended: {terminated_by}.]"
-            messages.append({"role": "user", "content": closure})
+            if append_closure:
+                messages.append({"role": "user", "content": closure})
 
-            # Persist conversation for future re-activations
+            # Persist conversation for future re-activations (always,
+            # even without closure — Phase 1 persists so Phase 2 sees it)
             actor.activation_messages = messages
 
             # Record activation completion
@@ -1698,38 +2098,176 @@ class AgencyEngine(BaseEngine):
         """Return all actor states managed by this engine."""
         return list(self._actor_states.values())
 
-    async def activate_for_game_turn(
+    async def activate_for_event(
         self,
         actor_id: ActorId,
-        round_number: int = 0,
-        total_rounds: int = 0,
-        standings_summary: str = "",
+        reason: str,
+        trigger_event: Event | None = None,
+        max_calls_override: int | None = None,
+        max_read_calls: int | None = None,
+        state_summary: str | None = None,
     ) -> list[ActionEnvelope]:
-        """Activate an actor for a game turn. Public API for GameRunner.
+        """Activate an actor for one multi-turn tool-loop iteration.
 
-        Injects round-specific context into the actor's goal_context so the
-        LLM knows this is a new round and should take fresh actions. The
-        prompt builder renders goal_context — no changes needed there.
+        Implements :class:`volnix.core.protocols.AgencyActivationProtocol`.
+        This is the unified entry point used by:
+
+        - :class:`GameOrchestrator` for ``game_kickstart`` and ``game_event``
+          re-activations
+        - :class:`SimulationRunner` for autonomous tick activations
+        - The agent adapter for event-affected triggers
+
+        Args:
+            actor_id: The actor to activate.
+            reason: Activation reason string. One of ``"game_kickstart"``,
+                ``"game_event"``, ``"subscription_match"``,
+                ``"event_affected"``, ``"autonomous_tick"``, or any other
+                string the caller wants to tag this activation with. Game-
+                reason values drive the prompt shape via the prompt
+                builder's ``_GAME_REASONS`` check.
+            trigger_event: The committed world event that caused this
+                activation, if any. ``None`` for kickstarts. Passed through
+                to :meth:`_activate_with_tool_loop` if the event is a
+                :class:`WorldEvent`.
+            max_calls_override: Override the per-activation tool-call
+                budget. ``None`` falls back to
+                ``max_tool_calls_per_activation`` from global agency config.
+            state_summary: Optional compact game-state summary string.
+                Injected as a fresh user message at the top of the actor's
+                rolling conversation (``activation_messages``). Used for
+                game re-activations so the LLM sees ground truth from state
+                without replaying full history. Trimmed to a rolling
+                window of ``K`` recent entries to cap prompt size.
+
+        Returns:
+            List of :class:`ActionEnvelope` objects produced during the
+            activation. Empty list if the actor is unknown.
         """
         actor_state = self._actor_states.get(actor_id)
         if actor_state is None:
+            logger.warning(
+                "activate_for_event: unknown actor_id %s, ignoring activation",
+                actor_id,
+            )
             return []
 
-        # Prepend round context to existing goal_context.
-        # No restore needed — _activate_with_tool_loop may update goal_context
-        # (delegation at L349, buffer at L486, findings at L1016) and we must
-        # not wipe those updates.
-        round_ctx = (
-            f"ROUND {round_number}/{total_rounds} — NEW ROUND. "
-            f"Your action budget has been refreshed. You MUST take actions this round. "
-            f"Do NOT repeat previous analysis — each round is a new opportunity to act."
-        )
-        if standings_summary:
-            round_ctx += f"\nCurrent standings: {standings_summary}"
-        actor_state.goal_context = f"{round_ctx}\n{actor_state.goal_context or ''}"
+        # Per-actor lock serializes same-actor activations. The orchestrator
+        # feedback loop can request a re-activation while the previous one
+        # is still mid-tool-loop (see class docstring above), which races
+        # on ``actor_state.activation_messages`` mutation. Lazy-create the
+        # lock on first use so unused actors don't pay the cost.
+        actor_lock = self._actor_activation_locks.get(actor_id)
+        if actor_lock is None:
+            actor_lock = asyncio.Lock()
+            self._actor_activation_locks[actor_id] = actor_lock
 
-        # Fresh conversation each game round — prevents accumulated history
-        # from causing the LLM to decide "I already did everything".
-        actor_state.activation_messages = []
+        async with actor_lock:
+            # Rolling-window trim — cap activation_messages to prevent
+            # unbounded prompt growth. Pins first 2 messages (system +
+            # user prompt) so the agent never loses identity mid-game.
+            # State summary injection moved to _activate_with_tool_loop
+            # so it works on both first activation and re-activation.
+            if actor_state.activation_messages:
+                cap = self._typed_config.max_activation_messages
+                if len(actor_state.activation_messages) > cap:
+                    pinned = actor_state.activation_messages[:2]
+                    rolling = actor_state.activation_messages[2:]
+                    actor_state.activation_messages = pinned + rolling[-(cap - 2) :]
 
-        return await self._activate_with_tool_loop(actor_state, "game_turn", None)
+            # Only WorldEvent triggers are forwarded to the tool-loop; other
+            # event types (lifecycle, policy, etc.) flow through as ``None``.
+            world_trigger: WorldEvent | None = (
+                trigger_event if isinstance(trigger_event, WorldEvent) else None
+            )
+
+            # Two-phase game activation: research → move.
+            # Phase 1 (research): full tools, read the world.
+            # Phase 2 (move): game tools only, make exactly 1 negotiate call.
+            # The agent decides whether to research — if it calls a
+            # negotiate tool in Phase 1, turn-ending fires and Phase 2
+            # is skipped. If max_read_calls=0, Phase 1 is skipped entirely.
+            if reason in {"game_kickstart", "game_event"}:
+                research_budget = max_read_calls or 0
+
+                # Phase 1: Research (optional)
+                if research_budget > 0:
+                    research_envelopes = await self._activate_with_tool_loop(
+                        actor_state,
+                        "game_research",
+                        world_trigger,
+                        max_calls_override=research_budget,
+                        append_closure=False,
+                        state_summary=state_summary,
+                    )
+                else:
+                    research_envelopes = []
+
+                # Short-circuit: if Phase 1 already made a game move
+                # (turn-ending fired in research phase), skip Phase 2.
+                phase1_made_game_move = any(
+                    getattr(e, "action_type", "").startswith("negotiate_")
+                    for e in research_envelopes
+                )
+                if phase1_made_game_move:
+                    return research_envelopes
+
+                # Sanitize Phase 1 history: replace non-game tool-call
+                # messages with a text research summary so Phase 2 doesn't
+                # see non-game tool names in the conversation. Without this,
+                # weaker models (Haiku) hallucinate tool calls from history
+                # even though only game tools are in Phase 2's tool list.
+                if research_budget > 0:
+                    game_tool_names = frozenset(
+                        t.name
+                        for t in self._get_tools_for_actor(
+                            str(actor_state.actor_id),
+                        )
+                        if t.service == "game"
+                    )
+                    actor_state.activation_messages = _sanitize_history_for_game_move(
+                        actor_state.activation_messages,
+                        game_tool_names,
+                        char_limit=self._typed_config.history_sanitize_char_limit,
+                    )
+
+                # Bridge message: tell the LLM research is done.
+                # Only injected when Phase 1 actually ran (budget > 0).
+                if research_budget > 0:
+                    actor_state.activation_messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "[Research phase complete. Based on what "
+                                "you just read, make your negotiation "
+                                "move now. You can only call "
+                                "negotiate_propose, negotiate_counter, "
+                                "negotiate_accept, or negotiate_reject.]"
+                            ),
+                        }
+                    )
+
+                # Phase 2: Move (required). Budget of 4 allows retries
+                # Phase 2 uses tool_choice="required" so the LLM MUST
+                # return a tool call. No retries needed.
+                # State summary: if Phase 1 ran, it's already in the
+                # persisted conversation. If Phase 1 was skipped
+                # (budget=0), Phase 2 needs it directly.
+                move_envelopes = await self._activate_with_tool_loop(
+                    actor_state,
+                    "game_move",
+                    world_trigger,
+                    max_calls_override=2,  # 1 game move + 1 margin
+                    append_closure=True,
+                    state_summary=state_summary if research_budget == 0 else None,
+                )
+                return research_envelopes + move_envelopes
+
+            else:
+                # Non-game: single-phase (unchanged)
+                return await self._activate_with_tool_loop(
+                    actor_state,
+                    reason,
+                    world_trigger,
+                    max_calls_override=max_calls_override,
+                    state_summary=state_summary,
+                )

@@ -322,3 +322,104 @@ def test_addressed_to_you_tag():
 
     assert "[TO YOU]" in prompt
     assert "Please handle ticket 42" in prompt
+
+
+def test_game_turn_prompt_skips_autonomous_instructions():
+    """Game turn activations bypass the autonomous delegate/investigate block.
+
+    For a non-observer autonomous actor, ``build_individual_prompt`` normally
+    injects ``build_autonomous_instructions`` — which tells lead agents to
+    DELEGATE and non-lead agents to INVESTIGATE/SHARE/call do_nothing. That
+    is fundamentally wrong for a game player who should follow their own
+    game persona (counter, accept, reject for negotiation; place orders
+    for trading; etc.).
+
+    When ``activation_reason`` is ``"game_kickstart"`` or ``"game_event"``
+    the prompt must use game-specific instructions instead. This test is
+    game-type-agnostic: it uses a generic player role and asserts only
+    that the autonomous delegation vocabulary is absent.
+    """
+    ctx = _make_world_context()
+    builder = ActorPromptBuilder(ctx)
+    actor = _make_actor(
+        actor_id=ActorId("player-1"),
+        role="player",
+        autonomous=True,
+        is_lead=False,
+    )
+
+    prompt = builder.build_individual_prompt(
+        actor=actor,
+        trigger_event=None,
+        activation_reason="game_event",
+        available_actions=[],
+        team_roster=[
+            {"role": "player", "id": "player-1"},
+            {"role": "opponent", "id": "player-2"},
+        ],
+    )
+
+    # Autonomous instruction vocabulary must NOT appear in a game turn prompt
+    forbidden = [
+        "DELEGATE",
+        "MONITOR",
+        "BUFFER PERIOD",
+        "Phase 1",
+        "Phase 2",
+        "Phase 3",
+        "sub-agent",
+        "orchestration",
+        "INVESTIGATE",
+    ]
+    for word in forbidden:
+        assert word not in prompt, (
+            f"Autonomous-instructions word '{word}' leaked into game-turn prompt. "
+            f"Game players must follow their own persona, not delegation patterns. "
+            f"Prompt excerpt: {prompt[:800]}"
+        )
+
+    # Output format must NOT tell game players to call do_nothing as an
+    # option. Any mention of do_nothing must be in a "Do NOT call" form.
+    lowered = prompt.lower()
+    if "do_nothing" in lowered:
+        assert "do not" in lowered and "do_nothing" in lowered, (
+            "Game players should not be told to call do_nothing as an option"
+        )
+
+    # Must include the game-player instruction marker
+    assert "game player" in prompt.lower(), (
+        "Game turn prompt must identify the actor as a game player"
+    )
+
+
+def test_lead_autonomous_still_gets_delegation_instructions():
+    """Regression guard: non-game autonomous lead agents still get the
+    delegation/monitor instructions. The game-turn branch only kicks in
+    for ``activation_reason == "game_turn"`` — any other reason (e.g.
+    ``subscription_match``, ``autonomous_work``) keeps the pre-existing
+    autonomous behavior.
+    """
+    ctx = _make_world_context()
+    builder = ActorPromptBuilder(ctx)
+    actor = _make_actor(
+        actor_id=ActorId("lead-1"),
+        role="supervisor",
+        autonomous=True,
+        is_lead=True,
+    )
+
+    prompt = builder.build_individual_prompt(
+        actor=actor,
+        trigger_event=None,
+        activation_reason="subscription_match",
+        available_actions=[],
+        team_roster=[
+            {"role": "supervisor", "id": "lead-1"},
+            {"role": "analyst", "id": "analyst-1"},
+        ],
+    )
+
+    # Non-game lead should still see delegation-related content
+    assert "team lead" in prompt.lower() or "orchestration" in prompt.lower(), (
+        "Non-game autonomous lead agents should still get delegation instructions"
+    )

@@ -51,6 +51,7 @@ class VolnixApp:
         self._health: HealthAggregator | None = None
         self._provider_registry: Any = None
         self._llm_router: Any = None
+        self._usage_tracker: Any = None
         self._gateway: Any = None
         self._scheduler: Any = None
         self._run_manager: Any = None
@@ -65,6 +66,15 @@ class VolnixApp:
         self._started = False
         self._last_action_time: datetime | None = None
         self._idle_watcher_task: Any = None
+        self._animator_tick_task: Any = None
+        # F2 (P6.3-fix.3): game player actor IDs, populated by
+        # configure_game. The animator bridge uses this to only trigger
+        # on player actions (not NPC/animator-generated actions).
+        self._game_player_actor_ids: set[str] = set()
+        self._game_terminated: bool = False
+        # Run lifecycle notification queues — WebSocket handlers register
+        # here to receive completion signals without polluting the event bus.
+        self._lifecycle_queues: dict[str, list[asyncio.Queue]] = {}
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -193,6 +203,7 @@ class VolnixApp:
         from volnix.llm.registry import ProviderRegistry
         from volnix.llm.router import LLMRouter
         from volnix.llm.secrets import EnvVarResolver
+        from volnix.llm.tracker import UsageTracker
 
         llm_config = self._config.llm
         if not llm_config.providers:
@@ -203,7 +214,14 @@ class VolnixApp:
         resolver = EnvVarResolver()
         await self._provider_registry.initialize_all(llm_config, resolver)
 
-        router = LLMRouter(config=llm_config, registry=self._provider_registry)
+        # Wire UsageTracker so every router call appends an LLMCallEntry to
+        # the ledger (tokens, cost, latency, provider, model, engine).
+        self._usage_tracker = UsageTracker(ledger=self._ledger)
+        router = LLMRouter(
+            config=llm_config,
+            registry=self._provider_registry,
+            tracker=self._usage_tracker,
+        )
         active = [p.name for p in self._provider_registry.list_providers()]
         logger.info(
             "LLM initialized: providers=%s, default=%s/%s",
@@ -406,9 +424,59 @@ class VolnixApp:
         feedback._config["_profile_loader"] = getattr(responder, "_profile_loader", None)
         feedback._config["_run_manager"] = self._run_manager
 
+        # --- Cycle B: GameOrchestrator + GameActivePolicy wiring ---
+        # The orchestrator needs:
+        #   * ``state`` dependency (already resolved via inject_dependencies)
+        #   * ``agency`` dependency (cross-engine injection)
+        #   * ``_ledger`` in config (for lifecycle entries)
+        # The GameActivePolicy gate needs:
+        #   * registration on the PolicyEngine gate list
+        #   * subscription to ``game.active_state_changed`` so it flips its
+        #     internal flag when GameOrchestrator publishes the lifecycle event
+        # Build the GameActivePolicy gate FIRST so we can inject it into
+        # the orchestrator's dependencies alongside the agency. The gate
+        # defaults to ``is_active=False`` which denies ``negotiate_*``
+        # tool calls until the orchestrator publishes
+        # ``GameActiveStateChangedEvent(active=True)`` at game start. For
+        # non-game runs, the gate is effectively a no-op (no negotiate_*
+        # actions are ever issued).
+        from volnix.engines.policy.builtin.game_active import GameActivePolicy
+
+        self._game_active_gate = GameActivePolicy()
+        policy_engine.register_gate(self._game_active_gate)
+        if self._bus is not None:
+            # The bus subscription is kept as a secondary mechanism so
+            # any other publisher of ``game.active_state_changed`` (e.g.
+            # a future replay / test harness / external coordinator) can
+            # still flip the gate. The primary mechanism for the
+            # in-process orchestrator is the direct ``set_active`` call
+            # via the injected dependency below (M3).
+            await self._bus.subscribe(
+                "game.active_state_changed",
+                self._game_active_gate.on_event,
+            )
+
+        try:
+            orchestrator = self._registry.get("game")
+        except KeyError:
+            orchestrator = None
+        if orchestrator is not None:
+            orchestrator._dependencies["agency"] = agency
+            # M3 (B-cleanup.3): inject the gate so the orchestrator can
+            # call ``gate.set_active(True/False)`` DIRECTLY inside
+            # ``_publish_active_state`` instead of relying exclusively on
+            # async bus delivery. This eliminates the FIFO-``_ready``
+            # ordering dependency that the Cycle B audit flagged as
+            # "correct but fragile" (see §3 M3 in the cleanup plan).
+            orchestrator._dependencies["game_active_gate"] = self._game_active_gate
+            orchestrator._config["_ledger"] = self._ledger
+
     async def stop(self) -> None:
         """Graceful shutdown in reverse order."""
         self._escalation_handler = None
+        if self._animator_tick_task and not self._animator_tick_task.done():
+            self._animator_tick_task.cancel()
+            self._animator_tick_task = None
         if self._hold_expiry_task and not self._hold_expiry_task.done():
             self._hold_expiry_task.cancel()
             self._hold_expiry_task = None
@@ -1278,7 +1346,7 @@ class VolnixApp:
         await agency.configure(actor_states, world_context, available_actions)
 
     async def configure_game(self, plan: Any, internal_profile: Any | None = None) -> None:
-        """Configure the game engine from blueprint game definition.
+        """Configure the :class:`GameOrchestrator` from blueprint game definition.
 
         When an internal agent profile is provided, only those agents become
         game players. Otherwise falls back to all non-HUMAN/non-SYSTEM actors.
@@ -1290,12 +1358,6 @@ class VolnixApp:
 
         game_def = getattr(plan, "game", None)
         if game_def is None or not game_def.enabled:
-            return
-
-        try:
-            game_engine = self._registry.get("game")
-        except KeyError:
-            logger.debug("Game engine not registered — skipping configure_game")
             return
 
         # Collect player IDs
@@ -1313,14 +1375,65 @@ class VolnixApp:
             logger.warning("Game enabled but no eligible players found — skipping configure_game")
             return
 
-        await game_engine.configure(
+        # F2 (P6.3-fix.3): store player IDs so the animator bridge can
+        # filter to player-only triggers (prevents self-amplification loop).
+        self._game_player_actor_ids = set(players)
+
+        try:
+            orchestrator = self._registry.get("game")
+        except KeyError:
+            logger.warning("game orchestrator not registered — cannot configure game")
+            return
+
+        await orchestrator.configure(
             definition=game_def,
-            players=players,
+            player_actor_ids=players,
             run_id=self._current_run_id,
         )
-        # Game mode: clear lead status on all players.
-        # Game players act independently — there is no coordinator.
-        # Lead behavior (delegation, synthesis) is for simulation mode only.
+
+        # NF1: build the negotiation tool schema from the blueprint's
+        # ``negotiation_fields`` (typed parameters) and register them on
+        # the agency BEFORE the orchestrator starts listening for events.
+        # When ``negotiation_fields`` is empty, the builder returns the
+        # static fallback (``deal_id`` + ``message`` only), preserving
+        # the pre-NF1 behavior for minimal blueprints.
+        try:
+            agency_for_tools = self._registry.get("agency")
+        except KeyError:
+            agency_for_tools = None
+        if agency_for_tools is not None:
+            from volnix.packs.verified.game.tool_schema import build_negotiation_tools
+
+            game_actions = build_negotiation_tools(list(game_def.negotiation_fields))
+            agency_for_tools.register_game_tools(game_actions)
+            logger.info(
+                "Registered %d negotiation tools on agency (%d typed fields)",
+                len(game_actions),
+                len(game_def.negotiation_fields),
+            )
+        else:
+            logger.warning(
+                "configure_game: no 'agency' engine registered; skipping "
+                "negotiation tool registration."
+            )
+
+        # NOTE: ``orchestrator._on_start()`` is NOT called here anymore.
+        # The orchestrator's ``_on_start`` launches the first activation
+        # task (kickstart), which requires ``agency.set_tool_executor``
+        # to be set FIRST. In the CLI serve/run flow, ``set_tool_executor``
+        # is called in ``_setup_simulation`` AFTER ``configure_game``
+        # returns. Calling ``_on_start`` here would race: the activation
+        # task would fire before the executor is wired, and the agent
+        # would bail with "No tool_executor set". Instead,
+        # ``_setup_simulation`` calls ``_on_start`` after wiring the
+        # executor (see cli.py::_setup_simulation).
+        #
+        # For tests that bypass the CLI, ``_on_start`` must be called
+        # explicitly after ``configure`` + ``set_tool_executor``.
+
+        # Game mode: clear lead status on all players. Game players act
+        # independently — there is no coordinator. Lead behavior
+        # (delegation, synthesis) is for simulation mode only.
         try:
             agency = self._registry.get("agency")
             for pid in players:
@@ -1332,12 +1445,73 @@ class VolnixApp:
             logger.debug("Could not clear lead status: %s", exc)
 
         logger.info(
-            "Game configured: mode=%s, %d rounds, %d players (%s)",
+            "Game configured: mode=%s scoring=%s flow=%s players=%d",
             game_def.mode,
-            game_def.rounds.count,
+            game_def.scoring_mode,
+            game_def.flow.type,
             len(players),
-            ", ".join(players),
         )
+
+    async def create_runner(
+        self,
+        compiled_plan: Any,
+        event_queue: Any,
+        pipeline_executor: Any,
+    ) -> tuple[Any, dict[str, Any]] | None:
+        """Create the appropriate runner for this blueprint.
+
+        Composition-root factory: resolves game detection and concrete
+        runner selection so the CLI never imports engine classes.
+
+        Returns ``(runner, metadata)`` or ``None`` if no game engine
+        is registered for a game blueprint.  ``metadata`` contains
+        display hints (``runner_kind``, ``game_mode``, ``scoring_mode``,
+        ``max_events``).
+        """
+        game_def = getattr(compiled_plan, "game", None)
+        if game_def and getattr(game_def, "enabled", False):
+            from volnix.engines.game.orchestrator_runner import OrchestratorRunner
+
+            try:
+                orchestrator = self._registry.get("game")
+            except KeyError:
+                return None
+            # Start the orchestrator NOW — after tool_executor is wired.
+            await orchestrator._on_start()
+            runner = OrchestratorRunner(
+                orchestrator=orchestrator,
+                agency=self._registry.get("agency"),
+                event_queue=event_queue,
+            )
+            return runner, {
+                "runner_kind": "game",
+                "game_mode": game_def.mode,
+                "scoring_mode": game_def.scoring_mode,
+                "max_events": game_def.flow.max_events,
+            }
+
+        # Standard simulation runner
+        from volnix.simulation.runner import SimulationRunner
+
+        plan_actors = getattr(compiled_plan, "actor_specs", [])
+        if not plan_actors:
+            plan_data = (
+                compiled_plan.model_dump(mode="json")
+                if hasattr(compiled_plan, "model_dump")
+                else {}
+            )
+            plan_actors = plan_data.get("actor_specs", plan_data.get("actors", []))
+
+        runner = SimulationRunner(
+            event_queue=event_queue,
+            pipeline_executor=pipeline_executor,
+            agency_engine=self._registry.get("agency"),
+            animator=self._registry.get("animator"),
+            config=self._config.simulation_runner,
+            ledger=self._ledger,
+            actor_specs=plan_actors,
+        )
+        return runner, {"runner_kind": "simulation"}
 
     async def compile_and_run(self, plan: Any) -> dict:
         """Compile world + configure all runtime engines in one call.
@@ -1567,9 +1741,11 @@ class VolnixApp:
             self._idle_watcher_task = asyncio.create_task(
                 self._idle_watcher(run_id, timeout_seconds=300)
             )
-            # Start animator bridge for reactive/dynamic behavior
+            # Start animator bridge for reactive/dynamic behavior.
+            # Reactive: ticks on player events only (bus subscriber).
+            # Dynamic: ticks independently on tick_interval + on player events.
             plan_behavior = world_def.get("behavior", "static")
-            if plan_behavior == "reactive" and self._bus:
+            if plan_behavior in ("reactive", "dynamic") and self._bus:
                 await self._start_animator_bridge(plan_behavior)
 
         return run_id
@@ -1594,7 +1770,7 @@ class VolnixApp:
             actors_for_report = [
                 {"id": str(a.id), "type": str(a.type), "role": a.role}
                 for a in self._actor_registry.list_actors()
-                if a.type != ActorType.HUMAN
+                if a.type != ActorType.HUMAN and a.role != "gateway-default"
             ]
         if not actors_for_report:
             actors_for_report = [
@@ -1614,12 +1790,28 @@ class VolnixApp:
             )
 
         reporter = self._registry.get("reporter")
-        report = await reporter.generate_full_report(actors=actors_for_report, events=raw_events)
+        # Detect domain interpreter from events — wired here (composition root),
+        # not inside the generic reporter engine.
+        _interpreter: Any | None = None
+        if any(
+            str(e.get("event_type", "")).startswith("world.game.negotiate_") for e in raw_events
+        ):
+            from volnix.engines.reporter.interpreters.negotiation import NegotiationInterpreter
+
+            _interpreter = NegotiationInterpreter()
+        report = await reporter.generate_full_report(
+            actors=actors_for_report, events=raw_events, interpreter=_interpreter
+        )
         scorecard = await reporter.generate_scorecard(actors=actors_for_report, events=raw_events)
 
         await self._artifact_store.save_report(run_id, report)
         await self._artifact_store.save_scorecard(run_id, scorecard)
         await self._artifact_store.save_event_log(run_id, raw_events)
+
+        # Save decision trace as a separate artifact (embedded in report dict)
+        trace = report.get("decision_trace", {})
+        if trace:
+            await self._artifact_store.save(run_id, "decision_trace", trace)
 
         # Generate governance report for Mode 1 (external agent testing)
         has_external = any(
@@ -1692,9 +1884,48 @@ class VolnixApp:
         }
 
         await self._run_manager.complete_run(run_id, summary=summary)
+
+        # Notify WebSocket clients (dashboard) that the run completed.
+        # Uses a dedicated lifecycle channel — not the event bus — to avoid
+        # persisting synthetic events into the world event log.
+        await self._notify_run_lifecycle(str(run_id), "completed")
+
         if self._current_run_id == str(run_id):
             self._current_run_id = None
-        return {"run_id": str(run_id), "report": report, "scorecard": scorecard}
+            self._current_world_id = (
+                None  # prevent _ensure_active_run from ghost-creating a new run
+            )
+        return {
+            "run_id": str(run_id),
+            "report": report,
+            "scorecard": scorecard,
+            "decision_trace": trace,
+        }
+
+    # ── Run lifecycle notifications (for WebSocket clients) ─────
+
+    def subscribe_lifecycle(self, run_id: str, queue: asyncio.Queue) -> None:
+        """Register a queue to receive lifecycle signals for a run."""
+        self._lifecycle_queues.setdefault(run_id, []).append(queue)
+
+    def unsubscribe_lifecycle(self, run_id: str, queue: asyncio.Queue) -> None:
+        """Unregister a lifecycle queue."""
+        qs = self._lifecycle_queues.get(run_id, [])
+        try:
+            qs.remove(queue)
+        except ValueError:
+            pass
+        if not qs:
+            self._lifecycle_queues.pop(run_id, None)
+
+    async def _notify_run_lifecycle(self, run_id: str, status: str) -> None:
+        """Push a lifecycle signal to all registered queues for a run."""
+        msg = {"type": "run_complete", "data": {"run_id": run_id, "status": status}}
+        for q in self._lifecycle_queues.get(run_id, []):
+            try:
+                q.put_nowait(msg)
+            except asyncio.QueueFull:
+                pass
 
     async def _start_animator_bridge(self, behavior: str) -> None:
         """Subscribe to bus events and trigger Animator for external-only runs.
@@ -1712,14 +1943,54 @@ class VolnixApp:
             logger.warning("Animator bridge: no animator engine available")
             return
 
+        # Capture player actor IDs from configure_game. In game mode,
+        # only player actions should trigger the animator — not NPC
+        # events generated by the animator itself (which would create
+        # an infinite self-amplification loop). In non-game serve mode,
+        # this set is empty and the fallback is the original behavior
+        # (all non-system actors trigger).
+        player_ids = set(self._game_player_actor_ids)
+
+        # Read actions that should NOT trigger reactive animation.
+        # When an agent queries a database or reads a page, the world
+        # shouldn't react — the agent is just gathering information.
+        # Only WRITE actions (negotiate, chat, create, update) should
+        # trigger the animator to produce ambient world events.
+        _READ_ACTION_PREFIXES = (
+            "databases.retrieve",
+            "databases.query",
+            "pages.retrieve",
+            "blocks.children",
+            "conversations.list",
+            "conversations.history",
+            "conversations.info",
+            "conversations.members",
+            "users.list",
+            "users.info",
+            "users.profile",
+            "search",
+            "files.info",
+            "files.list",
+        )
+
         async def _on_committed_event(event: Any) -> None:
+            if self._game_terminated:
+                return
             event_type = getattr(event, "event_type", "")
             if not event_type.startswith("world."):
                 return
-            # Skip events generated by the animator itself to prevent cascading.
-            # Animator events use actor_id="system" — only trigger on external agent actions.
             actor = str(getattr(event, "actor_id", ""))
+            # Always skip system/animator/compiler actors.
             if actor in ("system", "animator", "world_compiler"):
+                return
+            # F2: in game mode, only trigger on PLAYER actions.
+            if player_ids and actor not in player_ids:
+                return
+            # Skip read-only actions — queries don't change the world
+            # and shouldn't trigger reactive animation. This prevents
+            # 8 research reads from generating 24 ambient events.
+            action = str(getattr(event, "action", ""))
+            if any(action.startswith(prefix) for prefix in _READ_ACTION_PREFIXES):
                 return
             # Notify animator (records action for reactive mode)
             try:
@@ -1739,7 +2010,64 @@ class VolnixApp:
             except Exception as exc:
                 logger.warning("Animator bridge tick failed: %s", exc)
 
+        # Also subscribe to game.terminated to stop the animator when
+        # the game ends. Without this, the dynamic tick loop and the
+        # bridge keep firing after deal_closed, wasting LLM calls.
+        async def _on_game_terminated(event: Any) -> None:
+            event_type = getattr(event, "event_type", "")
+            if event_type == "game.terminated":
+                logger.info("Animator bridge: game terminated, stopping animator")
+                self._game_terminated = True
+                if self._animator_tick_task and not self._animator_tick_task.done():
+                    self._animator_tick_task.cancel()
+                    self._animator_tick_task = None
+
         await self._bus.subscribe("*", _on_committed_event)
+        await self._bus.subscribe("game.terminated", _on_game_terminated)
+
+        # Dynamic mode: add an independent tick loop so the animator
+        # fires scheduled events (storm, port closure, etc.) and
+        # organic events on its own schedule — not just when players
+        # act. Without this, at_time events pile up silently until
+        # the next player action triggers a bus event.
+        #
+        # Reactive mode: no independent tick needed — the bus
+        # subscriber above is sufficient (animator only fires when
+        # players act).
+        #
+        # Non-game impact: NONE — this code path only runs when
+        # has_internal=False (compile_plan has no actor_specs),
+        # which happens exclusively for game-mode serve and
+        # external-only serve. SimulationRunner handles its own
+        # ticking independently via its main loop.
+        if behavior == "dynamic":
+            tick_interval = getattr(animator, "_typed_config", None)
+            tick_secs = (
+                getattr(tick_interval, "tick_interval_seconds", 45.0) if tick_interval else 45.0
+            )
+
+            async def _dynamic_tick_loop() -> None:
+                """Independent tick for dynamic behavior mode."""
+                while True:
+                    try:
+                        await asyncio.sleep(tick_secs)
+                    except asyncio.CancelledError:
+                        return
+                    try:
+                        results = await animator.tick(datetime.now(UTC))
+                        if results:
+                            logger.info(
+                                "Animator dynamic tick: %d events",
+                                len(results),
+                            )
+                    except Exception as exc:
+                        logger.warning("Animator dynamic tick failed: %s", exc)
+
+            self._animator_tick_task = asyncio.create_task(
+                _dynamic_tick_loop(),
+                name="animator_dynamic_tick",
+            )
+
         logger.info("Animator bridge started (behavior=%s)", behavior)
 
     async def _idle_watcher(self, run_id: RunId, timeout_seconds: int = 300) -> None:
