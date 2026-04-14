@@ -8,11 +8,11 @@ Volnix creates living, governed realities for AI agents. Not mock servers. Not t
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <p align="center">
-  <a href="https://youtu.be/AoWVcPGoj6E">
-    <img src="https://img.youtube.com/vi/AoWVcPGoj6E/maxresdefault.jpg" alt="Volnix Demo" width="800">
+  <a href="https://youtu.be/FT4xq_m-hMg">
+    <img src="https://img.youtube.com/vi/FT4xq_m-hMg/maxresdefault.jpg" alt="Volnix Demo" width="800">
   </a>
   <br>
-  <a href="https://youtu.be/AoWVcPGoj6E">Watch the 1-minute demo</a>
+  <a href="https://youtu.be/FT4xq_m-hMg">Watch the 1-minute demo</a>
 </p>
 
 ## Quick Start
@@ -126,7 +126,7 @@ See [docs/agent-integration.md](docs/agent-integration.md) for the full guide.
 
 ## Games
 
-Games are a run mode where agents take **turns**, are **scored**, and a **winner** is declared. Players call **structured tools** the LLM provider validates natively (no regex parsing of chat messages), a per-game-type evaluator interprets each round, and the framework picks a winner via pluggable win conditions.
+Games are a run mode where agents compete through **structured tool calls**, are **scored** move-by-move, and a **winner** is declared (or a behavioral report is produced). Players call structured tools the LLM provider validates natively (no regex parsing of chat messages); an event-driven orchestrator scores each committed move, evaluates win conditions, and activates the next player — no rounds, no turn manager.
 
 Different players can run on different LLM providers — head-to-head Claude vs. Gemini vs. OpenAI in the same game, with per-agent model selection and Claude extended thinking opt-in.
 
@@ -148,13 +148,13 @@ agents:
     budget: { api_calls: 30, spend_usd: 3 }
 ```
 
-Adding a new game type (auction, debate, …) is a single-file plug-in: declare your structured tools, implement the round evaluator, register it. The framework handles tool dispatch, multi-turn conversation, scoring, win conditions, and the deliverable.
+Adding a new game type (auction, debate, …) is a single-file plug-in: declare your structured tools and implement a `GameScorer` — the framework handles tool dispatch, multi-turn conversation, event-driven activation, scoring, win conditions, and the deliverable.
 
 ```bash
 volnix serve negotiation_competition --internal agents_negotiation --port 8080
 ```
 
-> **Today, players must be internal agents.** The game runner activates each player synchronously through the agency engine on every turn — external (gateway) agents push actions asynchronously and don't have a turn-activation entry point yet. The structured tools, evaluator, scoring, and governance pipeline are all caller-agnostic, so adding external players is a future enhancement (turn coordination + per-turn endpoint), not an architectural rework.
+> **Today, players must be internal agents.** The `GameOrchestrator` activates each player through the agency engine when a game event commits — external (gateway) agents push actions asynchronously and don't have an activation entry point yet. The structured tools, scorer, and governance pipeline are all caller-agnostic, so adding external players is a future enhancement, not an architectural rework.
 
 See [docs/games.md](docs/games.md) for the complete guide.
 
@@ -169,7 +169,7 @@ See [docs/games.md](docs/games.md) for the complete guide.
 - **11 verified service packs** — Stripe, Zendesk, Slack, Gmail, GitHub, Calendar, Twitter, Reddit, Notion, Alpaca, Browser
 - **BYOSP** — bring any service; the compiler auto-resolves from API docs
 - **Multi-provider LLM** — Gemini, OpenAI, Anthropic, Ollama, vLLM, CLI tools, with per-agent model + provider selection and Claude extended thinking opt-in
-- **Game framework** — turn-based agent contests (negotiation, …) with structured move tools, round evaluators, and pluggable win conditions; head-to-head across LLM providers
+- **Game framework** — event-driven agent contests (negotiation, …) with structured move tools, pluggable scorers, and win conditions; head-to-head across LLM providers
 - **Decision trace** — activation-level artifact answering "what did the agent do, why did governance intervene, and did the agent actually use the information it read?" (`decision_trace.json` saved alongside scorecard after every run)
 - **Real-time dashboard** with event feed, scorecards, and agent timeline
 - **Causal graph** — every event traces back to its causes
@@ -228,7 +228,7 @@ Live event streaming, governance scorecards, policy trigger logs, deliverable in
 | [Getting Started](docs/getting-started.md) | Installation, first run, connecting agents |
 | [Creating Worlds](docs/creating-worlds.md) | World YAML schema, reality dimensions, seeds |
 | [Internal Agents](docs/internal-agents.md) | Agent teams, lead lifecycle, deliverables |
-| [Games](docs/games.md) | Turn-based agent contests, structured moves, win conditions, evaluators |
+| [Games](docs/games.md) | Event-driven agent contests, structured moves, scorers, win conditions |
 | [Agent Integration](docs/agent-integration.md) | MCP, REST, SDK, framework adapters |
 | [Blueprints Reference](docs/blueprints-reference.md) | Complete catalog of blueprints and pairings |
 | [Service Packs](docs/service-packs.md) | Verified packs, YAML profiles, BYOSP |
