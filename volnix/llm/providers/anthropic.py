@@ -365,14 +365,24 @@ class AnthropicProvider(LLMProvider):
             if thinking_blocks_out:
                 response_provider_metadata = {"thinking_blocks": thinking_blocks_out}
 
+            cached_tok = (
+                getattr(message.usage, "cache_read_input_tokens", 0) or 0
+            )
             usage = LLMUsage(
                 prompt_tokens=message.usage.input_tokens,
                 completion_tokens=message.usage.output_tokens,
                 total_tokens=message.usage.input_tokens + message.usage.output_tokens,
+                cached_tokens=cached_tok,
                 cost_usd=self._estimate_cost(
                     model, message.usage.input_tokens, message.usage.output_tokens
                 ),
             )
+            if cached_tok > 0:
+                logger.info(
+                    "Anthropic cache hit: %d/%d prompt tokens cached",
+                    cached_tok,
+                    message.usage.input_tokens,
+                )
             # Parse structured output when schema was requested
             parsed_structured = None
             if request.output_schema and content:

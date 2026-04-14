@@ -169,6 +169,144 @@ export function isFirstOfGroup(items: WorldEvent[], index: number): boolean {
 }
 
 // ===========================================================================
+// Catalyst + term-delta helpers (generic across game types)
+//
+// The "catalyst" for a game move is the set of events that occurred between
+// this move and the previous game move. It surfaces cause-and-effect: the
+// agent saw something in the world, read/researched, then moved. All rules
+// below are purely observational (timestamps, actor identity, event_type
+// prefixes) — no per-game / per-blueprint special casing.
+// ===========================================================================
+
+function eventWorldTime(e: WorldEvent): string {
+  return e.timestamp?.world_time ?? '';
+}
+
+/** Actors that made at least one game move in the event stream. */
+export function getGameParticipants(events: WorldEvent[]): Set<string> {
+  const s = new Set<string>();
+  for (const e of events) {
+    if (isGameMoveEvent(e) && e.actor_id) s.add(e.actor_id);
+  }
+  return s;
+}
+
+/** All game moves in chronological order (oldest first). */
+function chronologicalGameMoves(events: WorldEvent[]): WorldEvent[] {
+  return events
+    .filter(isGameMoveEvent)
+    .slice()
+    .sort((a, b) => eventWorldTime(a).localeCompare(eventWorldTime(b)));
+}
+
+export interface MoveCatalyst {
+  /** This actor's own non-game actions (reads/writes) since the prior move. */
+  agentActions: WorldEvent[];
+  /** World-authored events visible to players (tweets, emails, web pages, ...). */
+  worldEvents: WorldEvent[];
+}
+
+/**
+ * Build the catalyst for a given game move.
+ *
+ * Window = (priorMove.world_time, currentMove.world_time). If there is no
+ * prior move, the window is (-∞, currentMove.world_time).
+ *
+ * Within that window:
+ *   - agentActions = events by the current-move actor that are `world.*`
+ *     and not themselves game moves and not `world.populate.*` (compile-time
+ *     seed) and not chat posts (already in the chat timeline).
+ *   - worldEvents  = events by actors who are NOT game participants, same
+ *     event_type filters. Chat posts are excluded (visibility-uncertain;
+ *     the timeline already renders chat separately when appropriate).
+ *
+ * The "counter-party's research actions" are intentionally dropped — their
+ * own reads will show up as *their* catalyst on *their* next move card.
+ */
+export function getCatalyst(
+  allEvents: WorldEvent[],
+  current: WorldEvent,
+  prior: WorldEvent | null,
+  participants: Set<string>,
+): MoveCatalyst {
+  const endTs = eventWorldTime(current);
+  const startTs = prior ? eventWorldTime(prior) : '';
+  const currentActor = current.actor_id;
+  const agentActions: WorldEvent[] = [];
+  const worldEvents: WorldEvent[] = [];
+  for (const e of allEvents) {
+    const ts = eventWorldTime(e);
+    if (!ts || ts <= startTs || ts >= endTs) continue;
+    if (!e.event_type?.startsWith('world.')) continue;
+    if (e.event_type.startsWith('world.populate.')) continue;
+    if (e.service_id === 'game') continue;
+    if (isChatEvent(e)) continue;
+    if (e.actor_id === currentActor) {
+      agentActions.push(e);
+    } else if (!participants.has(e.actor_id)) {
+      worldEvents.push(e);
+    }
+  }
+  return { agentActions, worldEvents };
+}
+
+/** Per-field delta between two game-move term payloads. */
+export type TermDelta =
+  | { kind: 'unchanged'; key: string; value: string }
+  | { kind: 'changed'; key: string; from: string; to: string; numericDelta?: number }
+  | { kind: 'new'; key: string; value: string };
+
+/**
+ * Diff current terms against prior terms (both raw tool-call inputs minus
+ * metadata keys). Unchanged, changed (numeric or string), and newly-introduced
+ * keys each get a distinct kind so the UI can style them.
+ */
+export function computeTermDeltas(
+  current: Record<string, unknown> | undefined,
+  prior: Record<string, unknown> | undefined,
+): Record<string, TermDelta> {
+  const out: Record<string, TermDelta> = {};
+  if (!current) return out;
+  for (const [k, v] of Object.entries(current)) {
+    if (v === null || v === undefined) continue;
+    const p = prior?.[k];
+    const vStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (p === undefined || p === null) {
+      out[k] = { kind: 'new', key: k, value: vStr };
+      continue;
+    }
+    const pStr = typeof p === 'object' ? JSON.stringify(p) : String(p);
+    if (pStr === vStr) {
+      out[k] = { kind: 'unchanged', key: k, value: vStr };
+    } else if (typeof v === 'number' && typeof p === 'number') {
+      out[k] = { kind: 'changed', key: k, from: pStr, to: vStr, numericDelta: v - p };
+    } else {
+      out[k] = { kind: 'changed', key: k, from: pStr, to: vStr };
+    }
+  }
+  return out;
+}
+
+/** Format a signed numeric delta for display: `+3050` / `-500` / `0`. */
+function formatNumericDelta(n: number): string {
+  if (n === 0) return '0';
+  return (n > 0 ? '+' : '') + n.toLocaleString();
+}
+
+/** Pull a short human-readable snippet out of an event's input payload. */
+function extractWorldEventSnippet(e: WorldEvent): string {
+  const inp = e.input_data as Record<string, unknown> | undefined;
+  if (!inp) return '';
+  for (const k of ['title', 'subject', 'text', 'body', 'content', 'message']) {
+    const v = inp[k];
+    if (typeof v === 'string' && v.length > 0) {
+      return v.length > 120 ? v.slice(0, 117) + '…' : v;
+    }
+  }
+  return '';
+}
+
+// ===========================================================================
 // Generic game-move formatters (no hardcoded action or field names)
 // ===========================================================================
 
@@ -534,7 +672,13 @@ function SystemAnnouncement({ event }: { event: WorldEvent }) {
 // Game move card (generic — works for any game type)
 // ===========================================================================
 
-function GameMoveFields({ fields }: { fields: ClassifiedFields }) {
+function GameMoveFields({
+  fields,
+  deltas,
+}: {
+  fields: ClassifiedFields;
+  deltas?: Record<string, TermDelta>;
+}) {
   const hasAny = fields.compact.length + fields.long.length + fields.complex.length > 0;
   if (!hasAny) {
     return <div className="text-[11px] italic text-text-muted">(no fields)</div>;
@@ -543,13 +687,20 @@ function GameMoveFields({ fields }: { fields: ClassifiedFields }) {
     <div className="space-y-1">
       {fields.compact.length > 0 && (
         <div className="flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[11px] text-text-secondary">
-          {fields.compact.map(([key, value], i) => (
-            <span key={key}>
-              <span className="text-text-muted">{formatFieldKey(key)}:</span>{' '}
-              <span className="text-text-primary">{value}</span>
-              {i < fields.compact.length - 1 && <span className="ml-2 text-text-muted">·</span>}
-            </span>
-          ))}
+          {fields.compact.map(([key, value], i) => {
+            const d = deltas?.[key];
+            // Subtle hover-only hint: if value changed, keep it visually
+            // identical but surface the prior value on hover via `title`.
+            const titleHint =
+              d?.kind === 'changed' ? `previously: ${d.from}` : undefined;
+            return (
+              <span key={key} title={titleHint}>
+                <span className="text-text-muted">{formatFieldKey(key)}:</span>{' '}
+                <span className="text-text-primary">{value}</span>
+                {i < fields.compact.length - 1 && <span className="ml-2 text-text-muted">·</span>}
+              </span>
+            );
+          })}
         </div>
       )}
       {fields.long.map(([key, value]) => (
@@ -593,12 +744,128 @@ interface GameMoveCardProps {
   side: ChatSide;
   showHeader: boolean;
   onSelectActor?: (actorId: string) => void;
+  /** Prior game-move terms (any actor) — used to compute field-level deltas. */
+  priorTerms?: Record<string, unknown>;
+  /** Events between the prior game move and this one. */
+  catalyst?: MoveCatalyst;
 }
 
-function GameMoveCard({ event, side, showHeader, onSelectActor }: GameMoveCardProps) {
+/** Keys stripped from game move field display — metadata noise, not deal terms. */
+const GAME_META_KEYS = new Set(['deal_id', 'message', 'reasoning', 'intended_for', 'state_updates']);
+
+/**
+ * CatalystStrip — compact ribbon shown above a game-move card summarising
+ * what the world did and what the agent read between the prior move and
+ * this one. Purely observational: no per-game wording, no hardcoded
+ * actions. If both buckets are empty it renders nothing.
+ */
+function CatalystStrip({ catalyst, side }: { catalyst: MoveCatalyst; side: ChatSide }) {
+  const { agentActions, worldEvents } = catalyst;
+  if (agentActions.length === 0 && worldEvents.length === 0) return null;
+  const WORLD_CAP = 4;
+  const ACTION_CAP = 6;
+  const worldHead = worldEvents.slice(0, WORLD_CAP);
+  const worldMore = worldEvents.length - worldHead.length;
+  const actionHead = agentActions.slice(0, ACTION_CAP);
+  const actionMore = agentActions.length - actionHead.length;
+  // When side === 'center' the strip is rendered directly by the center
+  // variant (outside any column), so it still needs self-centering. In
+  // left/right variants the strip sits inside the flex-1 column and
+  // auto-fills its width.
+  const alignClass = side === 'center' ? 'mx-auto max-w-[80%]' : '';
+  return (
+    <div
+      className={cn(
+        'mb-3 rounded-md border border-warning/25 bg-warning/5 px-3 py-1.5 text-[11px]',
+        alignClass,
+      )}
+    >
+      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning/80">
+        <span>⚡</span>
+        <span>Since last move</span>
+        <span className="text-text-muted/80">
+          · {worldEvents.length} world {worldEvents.length === 1 ? 'event' : 'events'} ·{' '}
+          {agentActions.length} read{agentActions.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {worldHead.length > 0 && (
+        <ul className="mb-1 space-y-0.5">
+          {worldHead.map((e, i) => {
+            const snippet = extractWorldEventSnippet(e);
+            const actionLabel = e.action || e.event_type?.replace(/^world\./, '') || 'event';
+            return (
+              <li
+                key={e.event_id ?? `${e.actor_id}-${i}`}
+                className="font-mono text-[10.5px] leading-snug text-text-secondary"
+              >
+                <span className="text-text-muted">🌐</span>{' '}
+                <span className="text-text-primary">{e.actor_id}</span>
+                <span className="mx-1 text-text-muted">·</span>
+                <span className="text-text-muted">{actionLabel}</span>
+                {snippet && (
+                  <>
+                    <span className="mx-1 text-text-muted">·</span>
+                    <span className="italic text-text-secondary">"{snippet}"</span>
+                  </>
+                )}
+              </li>
+            );
+          })}
+          {worldMore > 0 && (
+            <li className="font-mono text-[10.5px] italic text-text-muted">
+              … +{worldMore} more
+            </li>
+          )}
+        </ul>
+      )}
+      {actionHead.length > 0 && (
+        <div className="flex flex-wrap gap-1 text-[10px]">
+          <span className="text-text-muted">👀 Read:</span>
+          {actionHead.map((e, i) => {
+            const svc = e.service_id || 'world';
+            const act = e.action || e.event_type?.replace(/^world\./, '') || 'event';
+            return (
+              <span
+                key={e.event_id ?? `${e.actor_id}-action-${i}`}
+                className="rounded bg-bg-surface/60 px-1 font-mono text-text-secondary"
+              >
+                {svc}.{act}
+              </span>
+            );
+          })}
+          {actionMore > 0 && (
+            <span className="italic text-text-muted">+{actionMore} more</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GameMoveCard({
+  event,
+  side,
+  showHeader,
+  onSelectActor,
+  priorTerms,
+  catalyst,
+}: GameMoveCardProps) {
   const isFailed = Boolean(event.outcome && event.outcome !== 'success');
   const actionLabel = formatActionName(event.action);
-  const fields = classifyFields(event.input_data as Record<string, unknown> | undefined);
+
+  // Extract the agent's negotiation message — display prominently, not as muted text
+  const rawInput = event.input_data as Record<string, unknown> | undefined;
+  const agentMessage = typeof rawInput?.message === 'string' ? (rawInput.message as string) : null;
+
+  // Strip metadata/message keys before classifying — only deal terms remain
+  const termsOnly = rawInput
+    ? Object.fromEntries(Object.entries(rawInput).filter(([k]) => !GAME_META_KEYS.has(k)))
+    : undefined;
+  const priorTermsStripped = priorTerms
+    ? Object.fromEntries(Object.entries(priorTerms).filter(([k]) => !GAME_META_KEYS.has(k)))
+    : undefined;
+  const fields = classifyFields(termsOnly);
+  const deltas = computeTermDeltas(termsOnly, priorTermsStripped);
 
   const actionBadge = (
     <span className="rounded bg-accent/20 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-accent">
@@ -613,8 +880,9 @@ function GameMoveCard({ event, side, showHeader, onSelectActor }: GameMoveCardPr
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="my-3 flex justify-center"
+        className="my-3 flex flex-col items-center"
       >
+        {catalyst && <CatalystStrip catalyst={catalyst} side="center" />}
         <div
           className={cn(
             'max-w-[80%] rounded-lg border border-accent/30 bg-accent/5 px-3 py-2',
@@ -627,7 +895,12 @@ function GameMoveCard({ event, side, showHeader, onSelectActor }: GameMoveCardPr
             </span>
             {actionBadge}
           </div>
-          <GameMoveFields fields={fields} />
+          {agentMessage && (
+            <div className="mb-2">
+              <MarkdownText text={agentMessage} />
+            </div>
+          )}
+          <GameMoveFields fields={fields} deltas={deltas} />
           {isFailed && <FailedMoveFooter event={event} />}
         </div>
       </motion.div>
@@ -675,28 +948,35 @@ function GameMoveCard({ event, side, showHeader, onSelectActor }: GameMoveCardPr
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      className={rowClasses}
     >
-      {avatarCol}
-      <div className="min-w-0 flex-1">
-        {showHeader && (
-          <div
-            className={cn(
-              'mb-1 flex items-baseline gap-2 text-xs',
-              side === 'right' && 'flex-row-reverse',
+      <div className={rowClasses}>
+        {avatarCol}
+        <div className="min-w-0 flex-1">
+          {catalyst && <CatalystStrip catalyst={catalyst} side={side} />}
+          {showHeader && (
+            <div
+              className={cn(
+                'mb-1 flex items-baseline gap-2 text-xs',
+                side === 'right' && 'flex-row-reverse',
+              )}
+            >
+              {nameEl}
+              {tick > 0 && (
+                <span className="font-mono text-[10px] text-text-muted">{formatTick(tick)}</span>
+              )}
+              {actionBadge}
+            </div>
+          )}
+          <div className={cardClasses}>
+            {!showHeader && <div className="mb-1">{actionBadge}</div>}
+            {agentMessage && (
+              <div className="mb-2">
+                <MarkdownText text={agentMessage} />
+              </div>
             )}
-          >
-            {nameEl}
-            {tick > 0 && (
-              <span className="font-mono text-[10px] text-text-muted">{formatTick(tick)}</span>
-            )}
-            {actionBadge}
+            <GameMoveFields fields={fields} deltas={deltas} />
+            {isFailed && <FailedMoveFooter event={event} />}
           </div>
-        )}
-        <div className={cardClasses}>
-          {!showHeader && <div className="mb-1">{actionBadge}</div>}
-          <GameMoveFields fields={fields} />
-          {isFailed && <FailedMoveFooter event={event} />}
         </div>
       </div>
     </motion.div>
@@ -832,12 +1112,32 @@ export function ChatView({ events, onSelectActor, inline = false }: ChatViewProp
   const [autoScroll, setAutoScroll] = useState(true);
 
   // Filter + reverse to chronological order. Timeline = chat messages + game moves.
+  // In game mode, hide NPC/animator chat messages — they're visible in the Events
+  // tab already and clutter the negotiation timeline.
   const timelineItems = useMemo(() => {
-    return events.filter(isTimelineEvent).slice().reverse();
+    const all = events.filter(isTimelineEvent).slice().reverse();
+    const hasGameEvents = all.some((e) => isGameMoveEvent(e) || isGameConclusionEvent(e));
+    return hasGameEvents ? all.filter((e) => !isChatEvent(e)) : all;
   }, [events]);
 
   // Deterministic per-actor side assignment based on ALL timeline participants
   const sideMap = useMemo(() => buildSideMap(timelineItems), [timelineItems]);
+
+  // Game-move indexing for per-move catalyst + delta computation. Computed
+  // against the FULL event stream (not the filtered timeline) so that world
+  // events and non-game agent actions are available as causal context.
+  const gameParticipants = useMemo(() => getGameParticipants(events), [events]);
+  const gameMovesByActor = useMemo(() => {
+    const byActor = new Map<string, WorldEvent[]>();
+    const moves = chronologicalGameMoves(events);
+    for (const m of moves) {
+      if (!m.actor_id) continue;
+      const list = byActor.get(m.actor_id) ?? [];
+      list.push(m);
+      byActor.set(m.actor_id, list);
+    }
+    return byActor;
+  }, [events]);
 
   // Initial mount — pin to bottom before paint (scrollable mode only)
   useLayoutEffect(() => {
@@ -888,6 +1188,24 @@ export function ChatView({ events, onSelectActor, inline = false }: ChatViewProp
         const side = sideMap[event.actor_id] ?? 'left';
         const showHeader = isFirstOfGroup(timelineItems, i);
         if (isGameMoveEvent(event)) {
+          // Prior move = same actor's most recent game move strictly before this one
+          // (chronological by world_time). Catalyst windows are computed against
+          // the FULL event stream so pre-filtered/hidden items (chat, populate,
+          // counter-party reads) are still available as context.
+          // Same actor's most recent game move strictly before this one
+          // (chronological by world_time). actorMoves is pre-sorted ascending.
+          const actorMoves = gameMovesByActor.get(event.actor_id) ?? [];
+          const curTs = event.timestamp?.world_time ?? '';
+          let priorMove: WorldEvent | null = null;
+          for (const m of actorMoves) {
+            const ts = m.timestamp?.world_time ?? '';
+            if (ts < curTs) priorMove = m;
+            else break;
+          }
+          const priorTerms = priorMove?.input_data as
+            | Record<string, unknown>
+            | undefined;
+          const catalyst = getCatalyst(events, event, priorMove, gameParticipants);
           return (
             <GameMoveCard
               key={key}
@@ -895,6 +1213,8 @@ export function ChatView({ events, onSelectActor, inline = false }: ChatViewProp
               side={side}
               showHeader={showHeader}
               onSelectActor={onSelectActor}
+              priorTerms={priorTerms}
+              catalyst={catalyst}
             />
           );
         }

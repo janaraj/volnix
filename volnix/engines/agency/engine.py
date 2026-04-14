@@ -25,6 +25,7 @@ from volnix.core.types import (
 )
 from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
+from volnix.llm._tool_pairing import repair_tool_call_pairing
 from volnix.llm.types import LLMRequest, ToolCall, ToolDefinition
 from volnix.simulation.world_context import WorldContextBundle
 
@@ -128,13 +129,27 @@ def _sanitize_history_for_game_move(
                 elif any_game:
                     # Mixed game + non-game in one response — shouldn't
                     # happen (game calls trigger short-circuit in Phase 1)
-                    # but preserve to avoid orphaned tool results.
+                    # but strip the non-game tool_calls so the assistant
+                    # only declares ids that will be answered by the tool
+                    # responses we keep below. Non-game tool responses
+                    # still get their content absorbed into research_findings.
                     logger.warning(
                         "_sanitize_history_for_game_move: mixed game/"
                         "non-game tool_calls in one assistant message, "
-                        "preserving as-is",
+                        "stripping non-game tool_calls",
                     )
-                    result.append(msg)
+                    game_only_tcs = [
+                        tc
+                        for tc in tool_calls
+                        if (tc.get("function") or {}).get("name", "")
+                        in game_tool_names
+                    ]
+                    # Mark insert_pos BEFORE this assistant so the
+                    # research summary can't split the assistant from
+                    # its tool responses (which would break pairing).
+                    if insert_pos is None:
+                        insert_pos = len(result)
+                    result.append({**msg, "tool_calls": game_only_tcs})
                 else:
                     # All non-game: skip, mark insertion position.
                     if insert_pos is None:
@@ -169,7 +184,10 @@ def _sanitize_history_for_game_move(
         pos = insert_pos if insert_pos is not None else min(2, len(result))
         result.insert(pos, summary_msg)
 
-    return result
+    # Final structural invariant: tool_call ↔ tool-response pairing.
+    # Handles edge cases (partial prior-turn blocks, unexpected orphans)
+    # so no downstream provider sees a payload that would 400.
+    return repair_tool_call_pairing(result)
 
 
 class AgencyEngine(BaseEngine):

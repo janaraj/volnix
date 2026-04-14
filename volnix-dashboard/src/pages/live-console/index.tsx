@@ -19,7 +19,7 @@ export function LiveConsolePage() {
 
   const connectionStatus = useLiveEvents(runId);
   const runQuery = useRun(runId);
-  const eventsQuery = useRunEvents(runId, { sort: 'desc', limit: 500 });
+  const eventsQuery = useRunEvents(runId, { sort: 'desc', limit: 1000 });
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedActorId, setSelectedActorId] = useState<string | null>(null);

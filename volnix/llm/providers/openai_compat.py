@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 import openai
 from openai import AsyncOpenAI
 
+from volnix.llm._tool_pairing import repair_tool_call_pairing as _repair_tool_call_pairing
 from volnix.llm.provider import LLMProvider
 from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
 
@@ -46,6 +47,9 @@ def _sanitize_messages_for_openai(
     - The ``provider_metadata`` key inside each ``tool_calls`` entry (used
       to round-trip Gemini ``thought_signature`` via ToolCall).
 
+    After key stripping, :func:`_repair_tool_call_pairing` enforces the
+    strict tool_call ↔ tool-response pairing OpenAI requires.
+
     A shallow copy is made so the original message dicts are never mutated
     (callers may retain references to them).
     """
@@ -59,7 +63,7 @@ def _sanitize_messages_for_openai(
                 for tc in m_copy["tool_calls"]
             ]
         result.append(m_copy)
-    return result
+    return _repair_tool_call_pairing(result)
 
 
 def _fix_bare_arrays(schema: Any) -> Any:
@@ -87,6 +91,24 @@ class OpenAICompatibleProvider(LLMProvider):
     """LLM provider for any OpenAI-compatible Chat Completions API."""
 
     provider_name: ClassVar[str] = "openai_compatible"
+
+    # Cost per 1M tokens: (input_usd, output_usd). [assumed] — these are
+    # approximate public list prices and should be kept in sync with vendor
+    # pricing pages. Unknown models fall back to the gpt-5.4-mini rate so
+    # the tracker still records a non-zero cost.
+    # NOTE: Local providers (Ollama, vLLM) have zero marginal API cost —
+    # `_estimate_cost` short-circuits to 0.0 for `self._is_local`.
+    COST_TABLE: ClassVar[dict[str, tuple[float, float]]] = {
+        # OpenAI
+        "gpt-5.4-mini": (0.25, 2.00),
+        "gpt-5.4": (2.50, 10.00),
+        "gpt-4o-mini": (0.15, 0.60),
+        "gpt-4o": (2.50, 10.00),
+        # Gemini via OpenAI-compatible endpoint (if used)
+        "gemini-3-flash-preview": (0.075, 0.30),
+        "gemini-3.1-pro": (1.25, 5.00),
+    }
+    _DEFAULT_RATE: ClassVar[tuple[float, float]] = (0.25, 2.00)
 
     def __init__(
         self,
@@ -277,10 +299,14 @@ class OpenAICompatibleProvider(LLMProvider):
                 if details and hasattr(details, "cached_tokens"):
                     cached_tokens = details.cached_tokens or 0
 
+            p_tok = usage_data.prompt_tokens if usage_data else 0
+            c_tok = usage_data.completion_tokens if usage_data else 0
             usage = LLMUsage(
-                prompt_tokens=usage_data.prompt_tokens if usage_data else 0,
-                completion_tokens=usage_data.completion_tokens if usage_data else 0,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
                 total_tokens=usage_data.total_tokens if usage_data else 0,
+                cached_tokens=cached_tokens,
+                cost_usd=self._estimate_cost(model, p_tok, c_tok),
             )
 
             if cached_tokens > 0:
@@ -350,6 +376,17 @@ class OpenAICompatibleProvider(LLMProvider):
             return [m.id for m in models.data]
         except Exception:
             return [self._default_model]
+
+    def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Estimate request cost in USD from the COST_TABLE.
+
+        Local providers (Ollama, vLLM) have no per-token billing, so they
+        return 0.0. Unknown hosted models fall back to ``_DEFAULT_RATE``.
+        """
+        if self._is_local:
+            return 0.0
+        in_cost, out_cost = self.COST_TABLE.get(model, self._DEFAULT_RATE)
+        return (input_tokens * in_cost + output_tokens * out_cost) / 1_000_000
 
     def get_info(self) -> ProviderInfo:
         """Return provider metadata.

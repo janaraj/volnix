@@ -1,0 +1,601 @@
+world:
+  name: "Car Dealership Negotiation"
+  description: >
+    Claire is buying a 2026 Honda CR-V EX-L AWD from Marcus, a sales
+    manager at Valley Honda. They meet in the #showroom-deal Slack
+    channel after Claire test-drove the vehicle this morning. It's
+    the last weekend of the month and the dealership is chasing
+    quota. Claire is researching market pricing, KBB trade-in
+    values, competing dealer inventory, and manufacturer incentives
+    through her browser. Marcus is working from the dealership's
+    internal DMS and watching the floor. The world is volatile:
+    TrueCar prices tick, competing dealers reach out, rebates drop,
+    and the Fed may move rates before the deal closes. Each side
+    holds PRIVATE information the other cannot see.
+
+  # Browser pack hosts all public reference sites — TrueCar, KBB,
+  # Edmunds, competing dealers, Honda's offers page, a consumer
+  # advocacy blog. Notion hosts each party's PRIVATE internal
+  # workspace (dealer DMS, buyer's personal research notes). Slack
+  # is the negotiation channel + buyer's personal message inbox +
+  # the dealership's internal sales floor. Twitter carries market
+  # news and consumer alerts. Gmail carries pre-approvals, rebate
+  # email blasts, competing-dealer quotes.
+  services:
+    browser: verified/browser
+    notion: verified/notion
+    twitter: verified/twitter
+    gmail: verified/gmail
+    slack: verified/slack
+
+  policies:
+    - name: "Audit showroom communication"
+      trigger:
+        service: slack
+      enforcement: log
+      reason: "All dealership negotiation messages logged for CFPB compliance"
+
+    - name: "Dealer APR ceiling — predatory rate guard"
+      trigger:
+        action: negotiate_accept
+        condition: "input.apr_pct > 8.0"
+      enforcement: block
+      reason: "APR above 8.0% flagged by dealership compliance as predatory for Tier 1 credit — cannot finalize without F&I director approval (unavailable weekends)."
+
+  seeds:
+    # ===== VISIBILITY RULES =====
+    # Applied to the buyer's private notion workspace and the
+    # dealer's private notion workspace. Browser pages are all
+    # public — no visibility rules needed.
+    - >
+      Visibility rules for the BUYER_CLAIRE role on her private
+      notion workspace. Create 2 visibility_rule entities:
+      (id "vr_buyer_db", actor_role "buyer_claire",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "buyer_claire"),
+      (id "vr_buyer_page", actor_role "buyer_claire",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "buyer_claire").
+
+    - >
+      Visibility rules for the DEALER_MARCUS role on his private
+      notion workspace. Create 2 visibility_rule entities:
+      (id "vr_dealer_db", actor_role "dealer_marcus",
+      target_entity_type "database", filter_field "owner_role",
+      filter_value "dealer_marcus"),
+      (id "vr_dealer_page", actor_role "dealer_marcus",
+      target_entity_type "page", filter_field "owner_role",
+      filter_value "dealer_marcus").
+
+    # ===== PUBLIC WEB — BROWSER PACK =====
+    # All reference sites are web_site + web_page entities. The
+    # compiler generates realistic content; agents discover via
+    # web_search and web_navigate the same way real buyers do.
+
+    - >
+      Create a web_site entity for TrueCar with id "site_truecar",
+      domain "truecar.com", name "TrueCar", site_type
+      "corporate_website", description "Automotive pricing data
+      aggregator showing regional sale prices and great-deal
+      thresholds." Then create a web_page with id
+      "page_truecar_crv_ex_l_awd", site_id "site_truecar",
+      domain "truecar.com",
+      path "/new-cars/honda/cr-v/ex-l-awd/bay-area",
+      title "2026 Honda CR-V EX-L AWD — Bay Area Market Pricing",
+      page_type "entity_view", status "published",
+      content_source "compiled". The content_text should describe
+      realistic current-market pricing for a 2026 Honda CR-V
+      EX-L AWD (MSRP $42,995 + destination fee $1,395) in the
+      San Francisco Bay Area in the final weekend of April 2026:
+      regional average sale price, "great deal" threshold,
+      distribution of recent transactions, regional inventory
+      count (~40-60 units), and a pricing trend note (prices
+      drifting downward as dealers chase month-end). Use
+      realistic numbers plausible for this trim and region —
+      do NOT invent outlier prices.
+
+    - >
+      Create a web_site entity for Edmunds with id "site_edmunds",
+      domain "edmunds.com", name "Edmunds",
+      site_type "corporate_website",
+      description "Independent automotive reviews and fair-price
+      recommendations." Then create a web_page with id
+      "page_edmunds_crv_ex_l_awd", site_id "site_edmunds",
+      domain "edmunds.com",
+      path "/honda/cr-v/2026/ex-l-awd/pricing",
+      title "2026 Honda CR-V EX-L AWD — Edmunds Fair Price",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text should describe
+      Edmunds' current fair purchase price for this trim
+      (typically slightly above TrueCar average), true cost to
+      own over 5 years, and expected depreciation. Realistic
+      numbers; do NOT copy exact values from TrueCar.
+
+    - >
+      Create a web_site entity for Kelley Blue Book with id
+      "site_kbb", domain "kbb.com", name "Kelley Blue Book",
+      site_type "corporate_website",
+      description "Trade-in and private-party value estimates
+      for used vehicles." Then create a web_page with id
+      "page_kbb_corolla_2019_le",
+      site_id "site_kbb", domain "kbb.com",
+      path "/toyota/corolla/2019/le/trade-in",
+      title "2019 Toyota Corolla LE — Trade-in Value",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text should describe
+      the trade-in value for a 2019 Toyota Corolla LE with
+      approximately 68,000 miles, "Good" condition, clean title,
+      no accidents, Bay Area zip code. Include low-end, average,
+      and high-end trade-in values, plus private-party value
+      (typically ~$1,500-$2,500 higher than trade-in average).
+      Realistic April 2026 used-car market pricing.
+
+    - >
+      Create a web_site entity for Honda's official offers page
+      with id "site_honda_offers", domain "automobiles.honda.com",
+      name "Honda Current Offers",
+      site_type "corporate_website",
+      description "Manufacturer-direct lease, purchase, and
+      finance offers updated throughout the month." Then create
+      a web_page with id "page_honda_offers_crv",
+      site_id "site_honda_offers", domain "automobiles.honda.com",
+      path "/offers/cr-v", title "Current 2026 CR-V Offers",
+      page_type "article", status "published",
+      content_source "compiled". content_text should list the
+      currently-active manufacturer incentives for the 2026
+      CR-V EX-L AWD, expiring at month-end (April 30, 2026):
+      a modest loyalty/grad cash bonus available to all buyers,
+      and a low-APR special offer for Tier 1 credit buyers
+      (the two cannot be combined). Realistic amounts typical
+      for Honda month-end incentives.
+
+    - >
+      Create a web_site entity for Valley Honda's public
+      inventory page with id "site_valley_honda",
+      domain "valleyhonda.com", name "Valley Honda",
+      site_type "corporate_website",
+      description "Valley Honda's public inventory listings
+      and advertised prices." Then create a web_page with id
+      "page_valley_honda_stock_vh_2026_0417",
+      site_id "site_valley_honda", domain "valleyhonda.com",
+      path "/inventory/VH-2026-0417",
+      title "2026 Honda CR-V EX-L AWD — Still Night Pearl — Stock VH-2026-0417",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text should describe
+      the vehicle: VIN 5J6RW2H84NA012345, MSRP $42,995,
+      destination fee $1,395, Still Night Pearl exterior,
+      Black Leather interior, 38 miles, on lot now. Include
+      Valley Honda's advertised price (MSRP + a market
+      adjustment the dealership typically applies in-market).
+      Realistic dealer anchor.
+
+    - >
+      Create 3 web_site entities for competing Bay Area Honda
+      dealers, one per dealer. For each, create a corresponding
+      inventory page showing the same CR-V EX-L AWD trim with
+      their current advertised OTD price:
+      Dealer 1: id "site_metro_honda", domain "metrohonda.com",
+      name "Metro Honda", site_type "corporate_website".
+      Page: id "page_metro_honda_crv", domain "metrohonda.com",
+      path "/inventory/cr-v-ex-l-awd",
+      title "2026 Honda CR-V EX-L AWD at Metro Honda",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text: 4 units in
+      stock (colors vary), current advertised OTD price
+      (typically below Valley Honda's ad — Metro is known for
+      internet-sales aggressive pricing), distance 35 miles.
+      Dealer 2: id "site_riverside_honda", domain
+      "riversidehonda.com", name "Riverside Honda",
+      site_type "corporate_website". Page: id
+      "page_riverside_honda_crv", domain "riversidehonda.com",
+      path "/inventory/cr-v-ex-l-awd",
+      title "2026 Honda CR-V EX-L AWD at Riverside Honda",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text: 2 units in
+      stock, advertised OTD (mid-range between Metro and
+      Valley), distance 22 miles, note about weekend traffic.
+      Dealer 3: id "site_peninsula_honda", domain
+      "peninsulahonda.com", name "Peninsula Honda",
+      site_type "corporate_website". Page: id
+      "page_peninsula_honda_crv", domain "peninsulahonda.com",
+      path "/inventory/cr-v-ex-l-awd",
+      title "2026 Honda CR-V EX-L AWD at Peninsula Honda",
+      page_type "entity_view", status "published",
+      content_source "compiled". content_text: 1 unit in
+      stock, advertised OTD (highest of the three — limited
+      color options), distance 48 miles.
+
+    - >
+      Create a web_site entity for a consumer advocacy blog
+      with id "site_autoinsider", domain "autoinsider.com",
+      name "AutoInsider", site_type "knowledge_base",
+      description "Consumer-advocacy blog exposing dealership
+      tactics." Then create a web_page with id
+      "page_autoinsider_addons_scam",
+      site_id "site_autoinsider", domain "autoinsider.com",
+      path "/articles/dealer-add-ons-scam",
+      title "The Dealer Add-On Scam: Nitrogen, Paint, VIN Etching",
+      page_type "article", status "published",
+      content_source "compiled". content_text should be a
+      ~250-word article explaining that common dealer add-ons
+      (nitrogen tire fills, paint protection, VIN etching,
+      extended warranties) are high-margin dealer profit,
+      almost never worth the cost, and should be rejected or
+      negotiated to zero. Tone: consumer-protective, factual.
+
+    # ===== BUYER-PRIVATE — NOTION =====
+    # Claire's personal research workspace. Only she can read
+    # these via her visibility rules.
+
+    - >
+      In the notion service, create a database entity with id
+      "buyer_finances_db", title "buyer_finances",
+      owner_role "buyer_claire". Then create 1 page entity
+      with id "bf_claire_budget",
+      parent_database_id "buyer_finances_db",
+      owner_role "buyer_claire". Contents: Claire's monthly
+      take-home pay (realistic Bay Area project manager income,
+      around $6,000-$6,500/mo after tax), her current monthly
+      obligations (rent, student loans, insurance, groceries —
+      realistic), her max acceptable new-car monthly payment
+      (a firm ceiling — below which she will not sign, above
+      which she walks), and her available cash for down payment
+      (a few thousand dollars). Include a note that the monthly
+      ceiling is hard — she would rather keep the Corolla than
+      overpay.
+
+    - >
+      In the notion service, create a database entity with id
+      "buyer_credit_db", title "buyer_credit",
+      owner_role "buyer_claire". Then create 1 page entity
+      with id "bc_claire_preapproval",
+      parent_database_id "buyer_credit_db",
+      owner_role "buyer_claire". Contents: Claire's FICO
+      score (Tier 1, around 740-760), her pre-approved auto
+      loan from "Golden State Credit Union" — a realistic
+      APR for Tier 1 credit on a 60-month new-car loan in
+      April 2026, max loan amount, term, expiration date.
+      Note that she will only take dealer financing if the
+      APR strictly beats her credit union pre-approval.
+
+    - >
+      In the notion service, create a database entity with id
+      "buyer_trade_db", title "buyer_trade",
+      owner_role "buyer_claire". Then create 1 page entity
+      with id "bt_claire_corolla",
+      parent_database_id "buyer_trade_db",
+      owner_role "buyer_claire". Contents: Claire's trade-in
+      vehicle — 2019 Toyota Corolla LE, approximately 68,000
+      miles, "Good" condition, clean title, zero accidents,
+      lienholder "Chase Auto" with a remaining loan payoff
+      balance (realistic for the car's age and a 5-year loan
+      now in year 5). Note that she does NOT want to
+      private-party sell the car — no time.
+
+    # ===== DEALER-PRIVATE — NOTION =====
+    # Valley Honda's internal DMS/CRM workspace. Only Marcus
+    # can read these.
+
+    - >
+      In the notion service, create a database entity with id
+      "dealer_cost_db", title "dealer_cost",
+      owner_role "dealer_marcus". Then create 1 page entity
+      with id "dc_cr_v_ex_l_awd",
+      parent_database_id "dealer_cost_db",
+      owner_role "dealer_marcus". Contents: the dealer's
+      internal numbers for stock VH-2026-0417 — invoice cost
+      paid to the manufacturer, destination fee, holdback
+      amount, any manufacturer-to-dealer incentive, true cost
+      to dealer (derived), and the absolute minimum OTD price
+      below which the unit sells at a loss. Use realistic
+      Honda dealer economics (holdback typically ~2% of MSRP,
+      invoice typically ~94% of MSRP). Note that below the
+      floor, the GM's override is required and is unavailable
+      on weekends.
+
+    - >
+      In the notion service, create a database entity with id
+      "dealer_quota_db", title "dealer_quota",
+      owner_role "dealer_marcus". Then create 1 page entity
+      with id "dq_april_2026",
+      parent_database_id "dealer_quota_db",
+      owner_role "dealer_marcus". Contents: current month
+      (April 2026), the store's monthly unit target, units
+      sold month-to-date, units remaining to hit quota, days
+      left in the month (2 — it's Saturday of the final
+      weekend), the manufacturer stair-step bonus the store
+      unlocks on hitting quota, and Marcus's personal per-unit
+      spiff. Note that hitting stair-step is a significant
+      revenue event for the dealership.
+
+    - >
+      In the notion service, create a database entity with id
+      "dealer_pipeline_db", title "dealer_pipeline",
+      owner_role "dealer_marcus". Then create 3 page entities
+      with owner_role "dealer_marcus" representing other
+      live prospects on Marcus's desk (one another CR-V
+      family, one a Civic buyer close to close, one a stale
+      fleet inquiry). For each include prospect name, vehicle,
+      current stage, likelihood, and a short note.
+
+    # ===== COMMUNICATION CHANNELS =====
+    - >
+      Slack channels: one channel id "showroom_deal" called
+      "showroom-deal" for the negotiation between Claire and
+      Marcus (both roles read + write), one channel id
+      "sales_floor" called "sales-floor" where dealership
+      internal chatter appears — owner_role "dealer_marcus"
+      so only Marcus sees it, one channel id
+      "buyer_messages" called "buyer-messages" where Claire's
+      personal SMS-style messages arrive from competing
+      dealers, friends, family — owner_role "buyer_claire"
+      so only Claire sees it.
+
+    - >
+      Twitter seeds: FIRST create exactly 5 twitter user
+      entities with these EXACT entity IDs (no prefix, no
+      suffix — use the id verbatim):
+        id "user_truecar_official", handle "truecar_official"
+        id "user_edmunds", handle "edmunds"
+        id "user_kbb_official", handle "kbb_official"
+        id "user_cars_dot_com", handle "cars_dot_com"
+        id "user_autoinsider", handle "autoinsider"
+      Each with a realistic display name, bio, follower count.
+      THEN create exactly 5 recent tweet entities, one per
+      user. Each tweet's author_id field MUST exactly match
+      one of the five user entity IDs above (e.g.
+      author_id: "user_truecar_official"). Topics: EV demand,
+      interest-rate outlook, SUV inventory, year-end
+      clearance, buying tips — one per tweet.
+
+    - >
+      Gmail seeds: 3 existing email threads in Claire's
+      inbox, owner_role "buyer_claire". One from her credit
+      union with her auto-loan pre-approval letter (matching
+      what appears in buyer_credit_db). One from Honda
+      Financial Services promoting the current APR special
+      (matching what appears on the Honda offers web page).
+      One from Metro Honda's internet sales manager with a
+      prior quote on a similar CR-V (matching the price
+      shown on Metro Honda's inventory web page).
+
+  behavior: dynamic
+
+  reality:
+    preset: messy
+    complexity:
+      volatility: 70
+      urgency: 65
+      edge_cases: 45
+    information:
+      incompleteness: 35
+      staleness: 25
+    friction:
+      deceptive: 45
+      uncooperative: 35
+
+  animator:
+    creativity: high
+    event_frequency: frequent
+    contextual_targeting: true
+    escalation_on_inaction: true
+    creativity_budget_per_tick: 3
+    tick_interval_seconds: 40.0
+
+    state_snapshot_exclude:
+      - negotiation_target_terms
+      - negotiation_proposal
+      - negotiation_deal
+      - game_player_brief
+      - visibility_rule
+
+    # Scheduled beats — each materially changes the world so
+    # the side that reads it has a genuine reason to counter.
+    # We mutate pages via web_page_modify, create new pages
+    # via web_page_create, drop slack messages into the
+    # buyer's private inbox, and push twitter/internal-floor
+    # beats. Numbers referenced below (like "drop the price by
+    # some plausible amount") are described in narrative terms
+    # — the animator's LLM chooses specific values consistent
+    # with the world at that moment.
+
+    scheduled_events:
+      # T+20s — TrueCar's current-market page updates: average
+      # selling price drops slightly as weekend transactions
+      # clear, great-deal threshold tightens. Claire's reference
+      # moves down.
+      - at_time: "20s"
+        actor_id: truecar_feed
+        service_id: browser
+        action: web_page_modify
+        input_data:
+          id: "page_truecar_crv_ex_l_awd"
+          modification: "update_content"
+          content_text: "TrueCar April 2026 weekend update for 2026 Honda CR-V EX-L AWD in the Bay Area: sales velocity up — most transactions closing noticeably below the MSRP + destination total. Average selling price has drifted lower in the last two hours as month-end pressure mounts. Great-deal threshold has tightened alongside the average. Regional inventory plentiful. Trend: favorable to buyers, dealers are negotiating."
+
+      # T+100s — competing dealer texts Claire a sharper offer
+      # in her private slack DM inbox. Only she sees this.
+      - at_time: "40s"
+        actor_id: metro_honda_sales
+        service_id: slack
+        action: chat.postMessage
+        input_data:
+          channel: "buyer_messages"
+          text: "Hi Claire — Dave from Metro Honda. Saw you test-drove the CR-V EX-L AWD this morning. I can sharpen our advertised OTD by a few hundred dollars and beat any trade offer you get in writing. I'm here until 8pm tonight. Want me to put it in writing?"
+
+      # T+150s — Honda drops an unexpected flash rebate. A new
+      # page appears on automobiles.honda.com — both sides
+      # can see it via web_search or navigating to
+      # /offers/cr-v/flash.
+      - at_time: "60s"
+        actor_id: honda_usa_comms
+        service_id: browser
+        action: web_page_create
+        input_data:
+          site_id: "site_honda_offers"
+          domain: "automobiles.honda.com"
+          path: "/offers/cr-v/flash-weekend"
+          title: "FLASH: Extra Weekend Rebate — 2026 CR-V EX-L AWD"
+          page_type: "article"
+          content_text: "Flash weekend-only rebate active now through Sunday night on all 2026 Honda CR-V trims including EX-L AWD. Stacks with existing loyalty/grad cash. Must register by end of day Sunday. Dealers may not withhold this rebate — it flows directly to the customer at the deal. Amount disclosed in-dealer at signing."
+
+      # T+155s — Honda USA tweets the flash rebate for social
+      # discoverability.
+      - at_time: "65s"
+        actor_id: honda_usa
+        service_id: twitter
+        action: create_tweet
+        input_data:
+          text: "FLASH WEEKEND ONLY: extra rebate stacking on top of existing incentives for all 2026 CR-V models. Register by Sunday. #HondaCRV #WeekendDeal"
+
+      # T+210s — sales floor desk-manager leaks quota pressure
+      # into the internal sales-floor channel (only Marcus sees
+      # this because owner_role on the channel is dealer_marcus).
+      - at_time: "90s"
+        actor_id: sales_desk_manager
+        service_id: slack
+        action: chat.postMessage
+        input_data:
+          channel: "sales_floor"
+          text: "Team — stair-step still live, we're two units short with one day left. Marcus the CR-V deal on the floor has to close tonight. I'll approve to floor if the gross works through finance or trade. Move it."
+
+      # T+270s — Fed rate decision lands in the twitter feed,
+      # stabilizing credit union rate expectations.
+      - at_time: "120s"
+        actor_id: reuters_finance
+        service_id: twitter
+        action: create_tweet
+        input_data:
+          text: "Federal Reserve holds overnight rate steady; auto-loan benchmark unchanged. Credit union new-car lending rates expected to remain favorable through Q2. #FedRates #AutoLoans"
+
+      # T+330s — autoinsider publishes a reminder tweet about
+      # add-on upsells, which Claire can quote verbatim when
+      # refusing dealer add-ons.
+      - at_time: "150s"
+        actor_id: autoinsider
+        service_id: twitter
+        action: create_tweet
+        input_data:
+          text: "REMINDER for anyone negotiating a new car this weekend: nitrogen fills, paint sealant, VIN etching — all pure dealer profit. Refuse them. If the dealer bundles, walk out. More here: autoinsider.com/articles/dealer-add-ons-scam"
+
+      # T+400s — a second competing dealer escalates via buyer's
+      # private inbox.
+      - at_time: "180s"
+        actor_id: riverside_honda_sales
+        service_id: slack
+        action: chat.postMessage
+        input_data:
+          channel: "buyer_messages"
+          text: "Claire — Priya at Riverside Honda. I heard Metro is working on you. I can match any competing OTD in writing and throw in the Honda APR special on top. Manager has signed off. If you can get here in 45 minutes, the car is yours."
+
+  mode: governed
+
+  game:
+    enabled: true
+    mode: negotiation
+    scoring_mode: behavioral
+
+    negotiation_fields:
+      - name: otd_price
+        type: number
+        description: "Out-the-door price in USD — includes vehicle, fees, taxes, and add-ons"
+      - name: trade_in_value
+        type: number
+        description: "USD credit applied to the deal for the buyer's trade-in vehicle"
+      - name: apr_pct
+        type: number
+        description: "Annual percentage rate for dealer-arranged financing"
+      - name: term_months
+        type: integer
+        description: "Loan length in months (typical: 36, 48, 60, 72)"
+      - name: warranty_cost
+        type: number
+        description: "Extended warranty package price in USD, 0 if declined"
+      - name: add_ons_cost
+        type: number
+        description: "Total for add-ons (nitrogen, paint, etching, etc.) in USD, 0 if declined"
+      - name: down_payment
+        type: number
+        description: "Cash down payment in USD"
+
+    flow:
+      type: event_driven
+      max_wall_clock_seconds: 900
+      max_events: 60
+      stalemate_timeout_seconds: 240
+      activation_mode: serial
+      first_mover: dealer_marcus
+      bonus_per_event: 0.0
+      reactivity_window_events: 5
+      state_summary_entity_types:
+        - negotiation_deal
+
+    entities:
+      deals:
+        - id: deal-crv-claire
+          title: "2026 CR-V EX-L AWD — Claire × Valley Honda"
+          parties: [buyer_claire, dealer_marcus]
+          status: open
+          terms: {}
+          terms_template:
+            otd_price: {range: [40000, 52000]}
+            trade_in_value: {range: [8000, 15000]}
+            apr_pct: {range: [3.9, 8.5]}
+            term_months: {range: [36, 84]}
+            warranty_cost: {range: [0, 3500]}
+            add_ons_cost: {range: [0, 2500]}
+            down_payment: {range: [0, 8000]}
+          consent_rule: unanimous
+
+      player_briefs:
+        - actor_role: buyer_claire
+          deal_id: deal-crv-claire
+          brief_content: >
+            You are Claire — a 34-year-old project manager
+            test-driving a 2026 Honda CR-V EX-L AWD at Valley
+            Honda. You have a credit-union pre-approval and a
+            2019 Corolla to trade. You know the market (you
+            research it every turn via your browser) and you
+            know your own finances (your personal notion
+            workspace). Your ABSOLUTE constraint is the
+            computed monthly payment on the financed amount.
+            If you cannot make it work inside that constraint,
+            you walk.
+
+            Research the world EVERY turn — TrueCar and Edmunds
+            pricing pages, KBB trade-in value, competing Honda
+            dealers' advertised OTDs, Honda's offers page,
+            consumer-advocacy guidance, and your personal SMS
+            inbox. The world moves under you. New rebates may
+            appear. Competing dealers may text. Use whatever is
+            currently true as leverage.
+          mission: "Buy the CR-V on terms you can actually afford, or walk."
+
+        - actor_role: dealer_marcus
+          deal_id: deal-crv-claire
+          brief_content: >
+            You are Marcus, sales manager at Valley Honda, 11
+            years on the floor. You have a real vehicle to move,
+            a quota stair-step within reach, and other live
+            prospects competing for your attention. Your
+            internal DMS (your notion workspace) shows invoice
+            cost, holdback, quota status, and pipeline. You
+            CANNOT accept below your cost floor — the policy
+            engine will block predatory APR as well.
+
+            Read the world every turn — sales-floor chatter,
+            new manufacturer incentives (Honda's web page and
+            offers email blasts), Fed rate news, and what the
+            competition is advertising will all shape what
+            moves make sense. You can use finance reserve,
+            add-ons, and trade allowance to make the gross work
+            even if OTD is tight.
+          mission: "Close the deal above your cost floor, protecting gross and hitting stair-step."
+
+    win_conditions:
+      - type: deal_closed
+      - type: deal_rejected
+      - type: stalemate_timeout
+      - type: wall_clock_elapsed
+      - type: max_events_exceeded
+      - type: all_budgets_exhausted

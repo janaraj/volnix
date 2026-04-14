@@ -51,6 +51,7 @@ class VolnixApp:
         self._health: HealthAggregator | None = None
         self._provider_registry: Any = None
         self._llm_router: Any = None
+        self._usage_tracker: Any = None
         self._gateway: Any = None
         self._scheduler: Any = None
         self._run_manager: Any = None
@@ -71,6 +72,9 @@ class VolnixApp:
         # on player actions (not NPC/animator-generated actions).
         self._game_player_actor_ids: set[str] = set()
         self._game_terminated: bool = False
+        # Run lifecycle notification queues — WebSocket handlers register
+        # here to receive completion signals without polluting the event bus.
+        self._lifecycle_queues: dict[str, list[asyncio.Queue]] = {}
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -199,6 +203,7 @@ class VolnixApp:
         from volnix.llm.registry import ProviderRegistry
         from volnix.llm.router import LLMRouter
         from volnix.llm.secrets import EnvVarResolver
+        from volnix.llm.tracker import UsageTracker
 
         llm_config = self._config.llm
         if not llm_config.providers:
@@ -209,7 +214,14 @@ class VolnixApp:
         resolver = EnvVarResolver()
         await self._provider_registry.initialize_all(llm_config, resolver)
 
-        router = LLMRouter(config=llm_config, registry=self._provider_registry)
+        # Wire UsageTracker so every router call appends an LLMCallEntry to
+        # the ledger (tokens, cost, latency, provider, model, engine).
+        self._usage_tracker = UsageTracker(ledger=self._ledger)
+        router = LLMRouter(
+            config=llm_config,
+            registry=self._provider_registry,
+            tracker=self._usage_tracker,
+        )
         active = [p.name for p in self._provider_registry.list_providers()]
         logger.info(
             "LLM initialized: providers=%s, default=%s/%s",
@@ -1872,6 +1884,12 @@ class VolnixApp:
         }
 
         await self._run_manager.complete_run(run_id, summary=summary)
+
+        # Notify WebSocket clients (dashboard) that the run completed.
+        # Uses a dedicated lifecycle channel — not the event bus — to avoid
+        # persisting synthetic events into the world event log.
+        await self._notify_run_lifecycle(str(run_id), "completed")
+
         if self._current_run_id == str(run_id):
             self._current_run_id = None
             self._current_world_id = (
@@ -1883,6 +1901,31 @@ class VolnixApp:
             "scorecard": scorecard,
             "decision_trace": trace,
         }
+
+    # ── Run lifecycle notifications (for WebSocket clients) ─────
+
+    def subscribe_lifecycle(self, run_id: str, queue: asyncio.Queue) -> None:
+        """Register a queue to receive lifecycle signals for a run."""
+        self._lifecycle_queues.setdefault(run_id, []).append(queue)
+
+    def unsubscribe_lifecycle(self, run_id: str, queue: asyncio.Queue) -> None:
+        """Unregister a lifecycle queue."""
+        qs = self._lifecycle_queues.get(run_id, [])
+        try:
+            qs.remove(queue)
+        except ValueError:
+            pass
+        if not qs:
+            self._lifecycle_queues.pop(run_id, None)
+
+    async def _notify_run_lifecycle(self, run_id: str, status: str) -> None:
+        """Push a lifecycle signal to all registered queues for a run."""
+        msg = {"type": "run_complete", "data": {"run_id": run_id, "status": status}}
+        for q in self._lifecycle_queues.get(run_id, []):
+            try:
+                q.put_nowait(msg)
+            except asyncio.QueueFull:
+                pass
 
     async def _start_animator_bridge(self, behavior: str) -> None:
         """Subscribe to bus events and trigger Animator for external-only runs.

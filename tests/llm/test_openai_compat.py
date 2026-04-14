@@ -6,6 +6,7 @@ import pytest
 
 from volnix.llm.providers.openai_compat import (
     OpenAICompatibleProvider,
+    _repair_tool_call_pairing,
     _sanitize_messages_for_openai,
 )
 from volnix.llm.types import LLMRequest
@@ -170,6 +171,8 @@ class TestSanitizeMessagesForOpenAI:
                     },
                 ],
             },
+            {"role": "tool", "tool_call_id": "c1", "content": "r1"},
+            {"role": "tool", "tool_call_id": "c2", "content": "r2"},
         ]
         result = _sanitize_messages_for_openai(messages)
         for tc in result[0]["tool_calls"]:
@@ -206,7 +209,8 @@ class TestSanitizeMessagesForOpenAI:
                     }
                 ],
                 "_provider_metadata": {"thinking_blocks": []},
-            }
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "r1"},
         ]
         result = _sanitize_messages_for_openai(messages)
         assert "_provider_metadata" not in result[0]
@@ -226,6 +230,101 @@ class TestSanitizeMessagesForOpenAI:
         # custom_tag and weight are not underscore-prefixed → preserved
         assert result[0]["custom_tag"] == "x"
         assert result[0]["weight"] == 0.5
+
+
+class TestRepairToolCallPairing:
+    """OpenAI-specific tool_call ↔ tool-response pairing invariant."""
+
+    def test_passes_through_plain_messages(self):
+        msgs = [
+            {"role": "system", "content": "you are x"},
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        assert _repair_tool_call_pairing(msgs) == msgs
+
+    def test_keeps_complete_tool_call_block(self):
+        msgs = [
+            {"role": "user", "content": "search"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "result"},
+            {"role": "assistant", "content": "done"},
+        ]
+        assert _repair_tool_call_pairing(msgs) == msgs
+
+    def test_drops_incomplete_assistant_with_unanswered_tool_call(self):
+        # Assistant declared c1 AND c2 but only c1 got a response.
+        msgs = [
+            {"role": "user", "content": "go"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}},
+                    {"id": "c2", "type": "function", "function": {"name": "g", "arguments": "{}"}},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "r1"},
+            {"role": "user", "content": "next"},
+        ]
+        out = _repair_tool_call_pairing(msgs)
+        assert out == [
+            {"role": "user", "content": "go"},
+            {"role": "user", "content": "next"},
+        ]
+
+    def test_drops_stray_tool_message(self):
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "tool", "tool_call_id": "nowhere", "content": "orphan"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        out = _repair_tool_call_pairing(msgs)
+        assert out == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+
+    def test_preserves_multiple_blocks(self):
+        msgs = [
+            {"role": "user", "content": "u1"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "a1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "a1", "content": "r1"},
+            {"role": "assistant", "content": "mid"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "a2", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "a2", "content": "r2"},
+        ]
+        assert _repair_tool_call_pairing(msgs) == msgs
+
+    def test_drops_duplicate_tool_responses(self):
+        # Duplicate tool response for same id — keep only the first.
+        msgs = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "r1"},
+            {"role": "tool", "tool_call_id": "c1", "content": "r1-dup"},
+        ]
+        out = _repair_tool_call_pairing(msgs)
+        assert len(out) == 2
+        assert out[1]["content"] == "r1"
 
 
 @skipif_no_openai

@@ -88,9 +88,18 @@ class LLMUsage(BaseModel, frozen=True):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    cached_tokens: int = 0
+    # Subset of prompt_tokens served from provider-side prompt cache.
+    # OpenAI: usage.prompt_tokens_details.cached_tokens
+    # Gemini: usage_metadata.cached_content_token_count
+    # Anthropic: usage.cache_read_input_tokens
+    # Billing discount varies by vendor; cost_usd is NOT adjusted here —
+    # this field is reported for observability only.
     cost_usd: float = 0.0
 
-    @field_validator("prompt_tokens", "completion_tokens", "total_tokens", mode="before")
+    @field_validator(
+        "prompt_tokens", "completion_tokens", "total_tokens", "cached_tokens", mode="before"
+    )
     @classmethod
     def _coerce_none_int(cls, v: Any) -> Any:
         """Coerce None to 0 for integer token fields.

@@ -61,7 +61,7 @@ world:
       stalemate_timeout_seconds: 240
       activation_mode: serial
       first_mover: buyer
-      bonus_per_event: 0.35
+      bonus_per_event: 0.08
       reactivity_window_events: 5
       state_summary_entity_types:
         - negotiation_deal
@@ -101,7 +101,9 @@ world:
 
             A deal that meets all your thresholds is acceptable even if not
             perfect. But do not leave value on the table if the supplier is
-            willing to move further.
+            willing to move further. Do NOT accept the first offer — always
+            counter-propose. Make at least 2-3 counter-offers before
+            considering acceptance. Push hard on every term.
           mission: "Close the best possible deal for Atlas Manufacturing."
 
         - actor_role: supplier
@@ -123,7 +125,9 @@ world:
 
             A deal that meets all your thresholds is acceptable even if not
             perfect. But do not leave value on the table if the buyer is
-            willing to move further.
+            willing to move further. Do NOT accept the first offer — always
+            counter-propose. Make at least 2-3 counter-offers before
+            considering acceptance. Push hard on every term.
           mission: "Maximize revenue for Vulcan Steel."
 
       target_terms:

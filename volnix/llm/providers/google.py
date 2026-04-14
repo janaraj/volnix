@@ -103,6 +103,18 @@ class GoogleNativeProvider(LLMProvider):
 
     provider_name: ClassVar[str] = "google"
 
+    # Cost per 1M tokens: (input_usd, output_usd). [assumed] public list
+    # prices — keep in sync with Google's pricing page. Unknown models fall
+    # back to the flash-preview rate.
+    COST_TABLE: ClassVar[dict[str, tuple[float, float]]] = {
+        "gemini-3-flash-preview": (0.075, 0.30),
+        "gemini-3-flash": (0.075, 0.30),
+        "gemini-3.1-pro": (1.25, 5.00),
+        "gemini-2.5-pro": (1.25, 5.00),
+        "gemini-2.5-flash": (0.075, 0.30),
+    }
+    _DEFAULT_RATE: ClassVar[tuple[float, float]] = (0.075, 0.30)
+
     def __init__(
         self, api_key: str, default_model: str = "gemini-3-flash-preview", timeout: float = 300.0
     ) -> None:
@@ -475,13 +487,22 @@ class GoogleNativeProvider(LLMProvider):
                     )
 
             usage_meta = response.usage_metadata
+            p_tok = getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0
+            c_tok = getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
+            cached_tok = (
+                getattr(usage_meta, "cached_content_token_count", 0) if usage_meta else 0
+            ) or 0
             usage = LLMUsage(
-                prompt_tokens=(getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0),
-                completion_tokens=(
-                    getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
-                ),
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
                 total_tokens=(getattr(usage_meta, "total_token_count", 0) if usage_meta else 0),
+                cached_tokens=cached_tok,
+                cost_usd=self._estimate_cost(model, p_tok, c_tok),
             )
+            if cached_tok > 0:
+                logger.info(
+                    "Gemini cache hit: %d/%d prompt tokens cached", cached_tok, p_tok
+                )
             return LLMResponse(
                 content=content,
                 structured_output=parsed_structured,
@@ -538,6 +559,15 @@ class GoogleNativeProvider(LLMProvider):
             "gemini-2.5-pro",
             "gemini-2.5-flash",
         ]
+
+    def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Estimate request cost in USD from the COST_TABLE.
+
+        Unknown models fall back to ``_DEFAULT_RATE`` so the tracker still
+        records a non-zero cost when a new Gemini variant appears.
+        """
+        in_cost, out_cost = self.COST_TABLE.get(model, self._DEFAULT_RATE)
+        return (input_tokens * in_cost + output_tokens * out_cost) / 1_000_000
 
     def get_info(self) -> ProviderInfo:
         """Return provider metadata.

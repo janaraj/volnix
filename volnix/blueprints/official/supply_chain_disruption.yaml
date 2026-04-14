@@ -275,13 +275,16 @@ world:
       channel id "general" called "general" for announcements.
 
     - >
-      Twitter seeds: 6 recent tweets from supply chain news
-      accounts about generic topics (@ReutersLogistics on
-      container shipping rates, @BloombergBNEF on commodity
-      markets, @FreightWaves on trucking, @ShipLogistics on port
-      congestion, @TradeWinds on bulk shipping, @MarineInsight on
-      maritime weather). These establish a believable feed that
-      the animator can build on.
+      Twitter seeds: FIRST create 6 twitter user entities for the
+      news accounts (handles: reuterslogistics, bloombergbnef,
+      freightwaves, shiplogistics, tradewinds, marineinsight —
+      each with display name, bio, follower count). THEN create
+      6 recent tweets, one authored by each of those users, about
+      generic supply chain topics (container shipping rates,
+      commodity markets, trucking, port congestion, bulk shipping,
+      maritime weather). Every tweet's author_id MUST reference
+      one of the 6 user entities created in this seed. These
+      establish a believable feed that the animator can build on.
 
     - >
       Gmail seeds: 2 existing email threads in Dana's inbox — one
@@ -437,7 +440,7 @@ world:
       stalemate_timeout_seconds: 240
       activation_mode: serial
       first_mover: nimbus_buyer
-      bonus_per_event: 0.14
+      bonus_per_event: 0.03
       reactivity_window_events: 5
       state_summary_entity_types:
         - negotiation_deal
@@ -471,6 +474,15 @@ world:
             authority cap are all changing. You CANNOT pay more than
             $32/ton without board approval (which will not happen
             before Monday).
+
+            NEGOTIATION STRATEGY:
+            Do NOT accept the first offer. Always counter-propose with
+            better terms. Research the world state (Notion pages, Slack
+            messages) before each move — the situation is changing and
+            you can use new information as leverage. Push hard on
+            delivery speed and late penalties. Make at least 2-3
+            counter-offers before considering acceptance. Every dollar
+            saved matters to the CFO.
           mission: "Close an emergency PWR-7A purchase that restores production."
 
         - actor_role: haiphong_supplier
@@ -484,6 +496,14 @@ world:
             Read the world every turn — your competing inquiries are
             real pressure if Dana lowballs. Weigh whether to sell to
             Nimbus or redirect the inventory to another buyer.
+
+            NEGOTIATION STRATEGY:
+            Do NOT accept the first offer. Push back on price — your
+            costs are rising with the typhoon logistics. Counter every
+            proposal with tighter payment terms or higher price. Check
+            the order book and competing inquiries each turn — use them
+            as leverage. Make at least 2-3 counter-offers before
+            considering acceptance. You have other buyers waiting.
           mission: "Maximize revenue while maintaining supplier reputation."
 
       # No target_terms block — behavioral mode evaluates player
