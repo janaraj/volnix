@@ -1,0 +1,92 @@
+{
+  "customer_support.yaml": [
+    {
+      "count": 2,
+      "has_activation_profile": false,
+      "role": "support-agent",
+      "type": "external"
+    },
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "supervisor",
+      "type": "internal"
+    },
+    {
+      "count": 10,
+      "has_activation_profile": false,
+      "role": "customer",
+      "type": "internal"
+    }
+  ],
+  "dynamic_support_center.yaml": [
+    {
+      "count": 3,
+      "has_activation_profile": false,
+      "role": "frustrated-customer",
+      "type": "internal"
+    },
+    {
+      "count": 2,
+      "has_activation_profile": false,
+      "role": "vip-customer",
+      "type": "internal"
+    }
+  ],
+  "hubspot_sales_pipeline.yaml": [
+    {
+      "count": 2,
+      "has_activation_profile": false,
+      "role": "sales-rep",
+      "type": "internal"
+    }
+  ],
+  "incident_response.yaml": [
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "oncall-engineer",
+      "type": "external"
+    },
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "incident-commander",
+      "type": "internal"
+    },
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "sre-lead",
+      "type": "internal"
+    }
+  ],
+  "support_ticket_triage.yaml": [
+    {
+      "count": 2,
+      "has_activation_profile": false,
+      "role": "support-agent",
+      "type": "internal"
+    },
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "support-lead",
+      "type": "internal"
+    },
+    {
+      "count": 5,
+      "has_activation_profile": false,
+      "role": "customer",
+      "type": "external"
+    }
+  ],
+  "trading_competition.yaml": [
+    {
+      "count": 1,
+      "has_activation_profile": false,
+      "role": "market-commentator",
+      "type": "internal"
+    }
+  ]
+}

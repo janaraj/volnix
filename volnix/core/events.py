@@ -470,3 +470,116 @@ class SimulationEvent(Event):
 
     status: str
     world_id: WorldId
+
+
+# ---------------------------------------------------------------------------
+# Active-NPC events (Layer 1 of the PMF plan)
+#
+# These events drive LLM-activated HUMAN actors. Passive NPCs — the
+# default — neither emit nor react to them. See the Phase 0 regression
+# oracle (``tests/integration/test_passive_npc_regression.py``) for the
+# compile-time invariant protecting passive behavior.
+#
+# Event-type strings are frozen; changing them is a breaking change for
+# subscriptions and test fixtures alike.
+# ---------------------------------------------------------------------------
+
+
+class NPCExposureEvent(WorldEvent):
+    """An NPC becomes aware of a product feature.
+
+    Source is one of:
+      * ``seed`` — planted in the initial world state.
+      * ``animator`` — opt-in exposure generation (Phase 3).
+      * ``agent_action`` — caused by an agent's world action (e.g. a
+        marketing email).
+      * ``peer`` — word-of-mouth from another NPC.
+
+    Attributes:
+        npc_id: The NPC who is now exposed.
+        feature_id: The product feature the NPC was exposed to.
+        source: Where the exposure came from.
+        medium: Optional human-readable medium (e.g.
+            ``"push_notification"``, ``"billboard"``,
+            ``"friend_mention"``). Informational only.
+    """
+
+    npc_id: ActorId
+    feature_id: str
+    source: str  # Literal enforced via docstring; kept as str for forward compat.
+    medium: str | None = None
+
+
+class WordOfMouthEvent(WorldEvent):
+    """NPC A mentions a product feature to NPC B via the ``npc_chat`` pack.
+
+    Emitted deterministically by the ``npc_chat`` pack when
+    ``send_message`` is called with a non-empty ``feature_mention``.
+
+    Attributes:
+        sender_id: The NPC who sent the message.
+        recipient_id: The NPC who received it.
+        feature_id: The feature mentioned.
+        sentiment: The mentioner's sentiment toward the feature.
+    """
+
+    sender_id: ActorId
+    recipient_id: ActorId
+    feature_id: str
+    sentiment: str  # positive | neutral | negative
+
+
+class NPCInterviewProbeEvent(WorldEvent):
+    """A research-team agent sends a direct probe to an NPC.
+
+    The NPC activates in response, produces an answer, and commits it
+    as an ``interview_response`` entity (wired in Layer 2).
+
+    Attributes:
+        researcher_id: The agent doing the probing.
+        npc_id: The target NPC.
+        prompt: The question to ask.
+        context: Arbitrary additional context for the NPC's prompt.
+    """
+
+    researcher_id: ActorId
+    npc_id: ActorId
+    prompt: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class NPCStateChangedEvent(Event):
+    """Emitted after an NPC's persistent state mutates.
+
+    Observability signal for the reporter and signal computers — lets
+    them reconstruct awareness / interest / satisfaction trajectories
+    without replaying the entire event log.
+
+    Attributes:
+        npc_id: The NPC whose state changed.
+        before: State dict before the change.
+        after: State dict after the change.
+        cause_event_id: Optional event that caused the mutation.
+    """
+
+    npc_id: ActorId
+    before: dict[str, Any]
+    after: dict[str, Any]
+    cause_event_id: EventId | None = None
+
+
+class NPCDailyTickEvent(Event):
+    """Periodic activation trigger for simulated day rhythm.
+
+    Cadence is configured per-profile via ``activation_triggers:
+    - scheduled: daily_life_tick``. The scheduler (Phase 2) emits this
+    at the configured interval; active NPCs subscribed to
+    ``daily_life_tick`` activate in response.
+
+    Attributes:
+        npc_id: The NPC receiving the tick.
+        sim_day: The simulated day number.
+    """
+
+    npc_id: ActorId
+    sim_day: int

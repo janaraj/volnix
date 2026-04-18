@@ -642,3 +642,68 @@ class LedgerProtocol(Protocol):
             entry_type: If provided, count only entries of this type.
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Active-NPC protocols (Layer 1 of the PMF plan)
+#
+# These protocols are the inter-module contract for Active NPCs. Phase 2
+# wires concrete implementations in the composition root; in Phase 1
+# nothing depends on them yet, but their shape is locked here so
+# downstream engines (reporter signal computers, etc.) can be developed
+# against a stable interface.
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ActivationProfileLoaderProtocol(Protocol):
+    """Loader for :class:`volnix.actors.activation_profile.ActivationProfile`.
+
+    Engines that need to resolve a profile-name string into a profile
+    instance (for example, to read its ``state_schema`` or
+    ``tool_scope``) depend on this protocol, never on the concrete
+    loader module. The concrete implementation is wired in
+    ``volnix/registry/composition.py``.
+    """
+
+    def load(self, name: str) -> Any:
+        """Return the :class:`ActivationProfile` for ``name``.
+
+        Raises:
+            FileNotFoundError: If no profile with that name exists.
+            ValueError: If the profile YAML fails validation.
+        """
+        ...
+
+    def list_available(self) -> list[str]:
+        """Return the list of profile names known to the registry."""
+        ...
+
+
+@runtime_checkable
+class NPCActivatorProtocol(Protocol):
+    """Entry point for activating an Active NPC on a trigger event.
+
+    The concrete implementation (Phase 2:
+    ``volnix/engines/agency/npc_activator.py``) reuses the AgencyEngine
+    tool-loop so that every NPC action flows through the same 7-step
+    pipeline as agent actions. There is no NPC-specific fast path.
+    """
+
+    async def activate_npc(
+        self,
+        actor_id: ActorId,
+        trigger_event: Event,
+        actor_state: Any,
+    ) -> None:
+        """Activate the NPC in response to ``trigger_event``.
+
+        Args:
+            actor_id: The target NPC's actor id.
+            trigger_event: The event that woke the NPC
+                (e.g. :class:`NPCExposureEvent`).
+            actor_state: The actor's mutable :class:`ActorState`. Its
+                ``activation_profile_name`` must be set — this contract
+                is for Active NPCs only.
+        """
+        ...

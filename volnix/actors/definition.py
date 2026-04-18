@@ -34,3 +34,11 @@ class ActorDefinition(BaseModel, frozen=True):
     friction_profile: FrictionProfile | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     personality_hint: str = ""
+    # Opt-in LLM-activation for HUMAN actors. When None (the default),
+    # the actor is a passive NPC: the Animator generates events on its
+    # behalf and no ``ActorState`` is created. When set to a profile
+    # name (e.g. "consumer_user"), Phase 2's actor loader constructs an
+    # ``ActorState`` and routes matching trigger events through the
+    # ``NPCActivator``. Resolved against
+    # :data:`volnix.actors.npc_profiles.AVAILABLE_PROFILES` at load time.
+    activation_profile: str | None = None

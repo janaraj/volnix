@@ -159,3 +159,13 @@ class ActorState(BaseModel):
     llm_provider: str | None = None  # Per-agent LLM provider override
     llm_thinking_enabled: bool = False  # Opt in to provider extended thinking
     llm_thinking_budget_tokens: int | None = None  # None → provider default
+
+    # Active-NPC attachment (Layer 1 of the PMF plan).
+    # Populated only for HUMAN actors whose ``ActorDefinition`` declares
+    # an ``activation_profile``. Passive NPCs never have an ``ActorState``
+    # at all, so these fields stay at their defaults for every AGENT.
+    # ``npc_state`` is the per-NPC persistent dict validated against the
+    # profile's ``state_schema``; mutations flow through the State
+    # Engine commit interface, never direct assignment.
+    activation_profile_name: str | None = None
+    npc_state: dict[str, Any] | None = None

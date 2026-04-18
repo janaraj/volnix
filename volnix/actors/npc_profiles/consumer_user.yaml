@@ -1,0 +1,59 @@
+name: consumer_user
+description: >
+  LLM-activated consumer making persona-driven product decisions. Used
+  for PMF simulation — the actor is a prospective user, not a worker.
+
+state_schema:
+  type: object
+  properties:
+    awareness:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0
+    interest:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0
+    satisfaction:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0.5
+    usage_count:
+      type: integer
+      minimum: 0
+      default: 0
+    last_used_tick:
+      type: [integer, "null"]
+      default: null
+    social_graph:
+      type: array
+      items: {type: string}
+      default: []
+    known_features:
+      type: array
+      items: {type: string}
+      default: []
+    sentiment:
+      type: string
+      enum: [neutral, positive, very_positive, negative, very_negative]
+      default: neutral
+  required: [awareness, interest, satisfaction, usage_count]
+
+activation_triggers:
+  - event: npc.exposure
+  - event: npc.word_of_mouth
+  - event: npc.interview_probe
+  - scheduled: daily_life_tick
+
+prompt_template: consumer_user_decision.j2
+
+tool_scope:
+  read: [self_state, product_services, social_graph, marketplace, npc_chat]
+  write: [product_services, npc_chat, self_state]
+
+budget_defaults:
+  api_calls: 20
+  llm_spend: 0.50
