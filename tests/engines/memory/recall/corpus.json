@@ -1,0 +1,72 @@
+{
+  "description": "Domain-neutral memory-recall fixture. Nine categories x three queries each. No pack-specific or project-internal jargon -- the embedder serves every downstream pack so the fixture cannot reward any incumbent. See the canonical plan doc for design rationale.",
+  "records": [
+    {"id": "r01", "owner_id": "actor-A", "content": "The meeting was scheduled for Tuesday afternoon."},
+    {"id": "r02", "owner_id": "actor-A", "content": "Several meetings were held last week."},
+    {"id": "r03", "owner_id": "actor-A", "content": "Alice submitted the expense report on time."},
+    {"id": "r04", "owner_id": "actor-A", "content": "REPORT FILED WEDNESDAY BY THE NIGHT SHIFT"},
+    {"id": "r05", "owner_id": "actor-A", "content": "The café near the station was closed yesterday."},
+    {"id": "r06", "owner_id": "actor-A", "content": "Doesn't that sound nice to you?"},
+    {"id": "r07", "owner_id": "actor-A", "content": "Bob was unhappy about the delay to the launch."},
+    {"id": "r08", "owner_id": "actor-A", "content": "The package was large and heavy."},
+    {"id": "r09", "owner_id": "actor-A", "content": "Carol prefers early mornings for focused work."},
+    {"id": "r10", "owner_id": "actor-A", "content": "Dan felt exhausted after the long run on Saturday."},
+    {"id": "r11", "owner_id": "actor-A", "content": "The quarterly review has been rescheduled again."},
+    {"id": "r12", "owner_id": "actor-A", "content": "Errata were noted in sections three and seven."},
+    {"id": "r13", "owner_id": "actor-A", "content": "The contract requires both signatures by Friday."},
+    {"id": "r14", "owner_id": "actor-A", "content": "Emma left the office at six thirty last evening."},
+    {"id": "r15", "owner_id": "actor-A", "content": "A conference call is planned for next Monday morning."},
+    {"id": "r16", "owner_id": "actor-A", "content": "The invoice totals four thousand dollars exactly."},
+    {"id": "r17", "owner_id": "actor-A", "content": "Frank's apology was accepted by the whole team."},
+    {"id": "r18", "owner_id": "actor-A", "content": "The training session ran longer than expected."},
+    {"id": "r19", "owner_id": "actor-A", "content": "New hires joined the operations team last month."},
+    {"id": "r20", "owner_id": "actor-A", "content": "The board approved the proposal unanimously."},
+    {"id": "r21", "owner_id": "actor-A", "content": "Grace submitted the budget with revised numbers yesterday."},
+    {"id": "r22", "owner_id": "actor-A", "content": "The software update rolled out to all regions."},
+    {"id": "r23", "owner_id": "actor-A", "content": "Henry drove for six hours without a single break."},
+    {"id": "r24", "owner_id": "actor-A", "content": "Isabel's proposal highlighted three key priorities."},
+    {"id": "r25", "owner_id": "actor-A", "content": "The library closed at eight sharp last night."},
+    {"id": "r26", "owner_id": "actor-A", "content": "James was thrilled with the surprise announcement."},
+    {"id": "r27", "owner_id": "actor-A", "content": "The inspection report noted minor issues only."},
+    {"id": "r28", "owner_id": "actor-A", "content": "This is a longer record intended to exercise BM25 length normalization. The content rambles across several topics -- interpersonal dynamics, quarterly planning, routine administrative tasks, occasional technical hiccups, and the occasional moment of levity. Search engines that rely too heavily on raw term frequency may over-reward this kind of verbose record relative to concise one-sentence records like the others in this fixture. The BM25 default parameters are tuned to discount length appropriately; this record is here to verify that empirically."},
+    {"id": "r29", "owner_id": "actor-A", "content": "The building has three floors and two elevators."},
+    {"id": "r30", "owner_id": "actor-B", "content": "The building has three floors and two elevators."}
+  ],
+  "queries": [
+    {"id": "q01", "category": "exact_keyword",    "text": "meeting Tuesday",          "owner_id": "actor-A", "relevant_ids": ["r01"]},
+    {"id": "q02", "category": "exact_keyword",    "text": "expense report",           "owner_id": "actor-A", "relevant_ids": ["r03"]},
+    {"id": "q03", "category": "exact_keyword",    "text": "contract signatures",      "owner_id": "actor-A", "relevant_ids": ["r13"]},
+
+    {"id": "q04", "category": "morphological",    "text": "meeting",                  "owner_id": "actor-A", "relevant_ids": ["r01", "r02"]},
+    {"id": "q05", "category": "morphological",    "text": "train",                    "owner_id": "actor-A", "relevant_ids": ["r18"]},
+    {"id": "q06", "category": "morphological",    "text": "submit",                   "owner_id": "actor-A", "relevant_ids": ["r03", "r21"]},
+
+    {"id": "q07", "category": "multi_keyword",    "text": "Alice expense",            "owner_id": "actor-A", "relevant_ids": ["r03"]},
+    {"id": "q08", "category": "multi_keyword",    "text": "Frank apology team",       "owner_id": "actor-A", "relevant_ids": ["r17"]},
+    {"id": "q09", "category": "multi_keyword",    "text": "Henry six hours",          "owner_id": "actor-A", "relevant_ids": ["r23"]},
+
+    {"id": "q10", "category": "case_folding",     "text": "report",                   "owner_id": "actor-A", "relevant_ids": ["r03", "r04", "r27"]},
+    {"id": "q11", "category": "case_folding",     "text": "wednesday",                "owner_id": "actor-A", "relevant_ids": ["r04"]},
+    {"id": "q12", "category": "case_folding",     "text": "filed",                    "owner_id": "actor-A", "relevant_ids": ["r04"]},
+
+    {"id": "q13", "category": "diacritics",       "text": "cafe",                     "owner_id": "actor-A", "relevant_ids": ["r05"]},
+    {"id": "q14", "category": "diacritics",       "text": "café",                     "owner_id": "actor-A", "relevant_ids": ["r05"]},
+    {"id": "q15", "category": "diacritics",       "text": "station",                  "owner_id": "actor-A", "relevant_ids": ["r05"]},
+
+    {"id": "q16", "category": "punctuation",      "text": "doesn't nice",             "owner_id": "actor-A", "relevant_ids": ["r06"]},
+    {"id": "q17", "category": "punctuation",      "text": "Frank apology",            "owner_id": "actor-A", "relevant_ids": ["r17"]},
+    {"id": "q18", "category": "punctuation",      "text": "Isabel proposal",          "owner_id": "actor-A", "relevant_ids": ["r24"]},
+
+    {"id": "q19", "category": "paraphrase",       "text": "Bob disappointed",         "owner_id": "actor-A", "relevant_ids": ["r07"]},
+    {"id": "q20", "category": "paraphrase",       "text": "Dan tired after workout",  "owner_id": "actor-A", "relevant_ids": ["r10"]},
+    {"id": "q21", "category": "paraphrase",       "text": "James excited surprise",   "owner_id": "actor-A", "relevant_ids": ["r26"]},
+
+    {"id": "q22", "category": "synonym",          "text": "parcel big",               "owner_id": "actor-A", "relevant_ids": ["r08"]},
+    {"id": "q23", "category": "synonym",          "text": "video call",               "owner_id": "actor-A", "relevant_ids": ["r15"]},
+    {"id": "q24", "category": "synonym",          "text": "delighted",                "owner_id": "actor-A", "relevant_ids": ["r26"]},
+
+    {"id": "q25", "category": "scope_isolation",  "text": "building three floors",    "owner_id": "actor-A", "relevant_ids": ["r29"]},
+    {"id": "q26", "category": "scope_isolation",  "text": "building three floors",    "owner_id": "actor-B", "relevant_ids": ["r30"]},
+    {"id": "q27", "category": "scope_isolation",  "text": "elevators",                "owner_id": "actor-B", "relevant_ids": ["r30"]}
+  ]
+}

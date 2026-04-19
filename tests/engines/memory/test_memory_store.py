@@ -126,9 +126,7 @@ class TestInitialize:
         store = SQLiteMemoryStore(db)
         await store.initialize()
         # Tamper the version to simulate a future DB opened by 4B code.
-        await db.execute(
-            f"UPDATE {TABLE_SCHEMA_VERSION} SET version = ?", (SCHEMA_VERSION + 1,)
-        )
+        await db.execute(f"UPDATE {TABLE_SCHEMA_VERSION} SET version = ?", (SCHEMA_VERSION + 1,))
         fresh_store = SQLiteMemoryStore(db)
         with pytest.raises(RuntimeError, match="schema version mismatch"):
             await fresh_store.initialize()
@@ -209,15 +207,11 @@ class TestInsertAndGet:
         assert back is not None
         assert back.consolidated_from == [MemoryRecordId("e1"), MemoryRecordId("e2")]
 
-    async def test_positive_metadata_sort_keys_deterministic_on_disk(
-        self, store, db
-    ) -> None:
+    async def test_positive_metadata_sort_keys_deterministic_on_disk(self, store, db) -> None:
         # D4 (Step 1 review): on-disk JSON must use sort_keys=True so
         # two semantically-equal-but-insertion-order-different metadata
         # payloads produce byte-identical rows.
-        await store.insert(
-            _record(record_id="r1", metadata={"beta": 2, "alpha": 1, "zeta": 3})
-        )
+        await store.insert(_record(record_id="r1", metadata={"beta": 2, "alpha": 1, "zeta": 3}))
         row = await db.fetchone(
             f"SELECT metadata_json FROM {TABLE_RECORDS} WHERE record_id = ?",
             ("r1",),
@@ -236,9 +230,7 @@ class TestListByOwner:
     async def test_negative_unknown_owner_returns_empty(self, store) -> None:
         assert await store.list_by_owner("nobody") == []
 
-    async def test_positive_order_is_newest_first_then_record_id(
-        self, store
-    ) -> None:
+    async def test_positive_order_is_newest_first_then_record_id(self, store) -> None:
         # Same tick to force tie-break path — must fall back to record_id ASC.
         await store.insert(_record(record_id="z", created_tick=5))
         await store.insert(_record(record_id="a", created_tick=5))
@@ -250,9 +242,7 @@ class TestListByOwner:
 
     async def test_positive_kind_filter_applied(self, store) -> None:
         await store.insert(_record(record_id="e1", kind="episodic"))
-        await store.insert(_record(
-            record_id="s1", kind="semantic", source="consolidated"
-        ))
+        await store.insert(_record(record_id="s1", kind="semantic", source="consolidated"))
         episodes = await store.list_by_owner("npc-1", kind="episodic")
         assert [str(r.record_id) for r in episodes] == ["e1"]
         semantics = await store.list_by_owner("npc-1", kind="semantic")
@@ -260,9 +250,7 @@ class TestListByOwner:
 
     async def test_positive_limit_truncates_results(self, store) -> None:
         for i in range(5):
-            await store.insert(
-                _record(record_id=f"r{i}", created_tick=i)
-            )
+            await store.insert(_record(record_id=f"r{i}", created_tick=i))
         got = await store.list_by_owner("npc-1", limit=3)
         assert len(got) == 3
         # Newest-first truncation — r4, r3, r2
@@ -321,9 +309,7 @@ class TestPruneOldestEpisodic:
         # Ring buffer only applies to episodic — semantic records
         # persist until consolidation prunes them explicitly.
         await store.insert(_record(record_id="e1", kind="episodic"))
-        await store.insert(_record(
-            record_id="s1", kind="semantic", source="consolidated"
-        ))
+        await store.insert(_record(record_id="s1", kind="semantic", source="consolidated"))
         await store.prune_oldest_episodic("npc-1", keep=0)
         remaining = await store.list_by_owner("npc-1")
         ids = [str(r.record_id) for r in remaining]
@@ -360,12 +346,8 @@ class TestFtsSearch:
 
     async def test_positive_scope_isolation(self, store) -> None:
         # FTS must be owner-scoped — NPC-1's records invisible to NPC-2.
-        await store.insert(
-            _record(record_id="r1", owner_id="npc-1", content="flare phrase")
-        )
-        await store.insert(
-            _record(record_id="r2", owner_id="npc-2", content="flare phrase")
-        )
+        await store.insert(_record(record_id="r1", owner_id="npc-1", content="flare phrase"))
+        await store.insert(_record(record_id="r2", owner_id="npc-2", content="flare phrase"))
         hits = await store.fts_search("npc-1", "flare", top_k=5)
         assert len(hits) == 1
         assert str(hits[0][0].record_id) == "r1"
@@ -378,9 +360,7 @@ class TestFtsSearch:
         ids = {str(r.record_id) for r, _ in hits}
         assert ids == {"r1", "r2"}  # OR semantics
 
-    async def test_positive_query_with_fts5_special_chars_does_not_crash(
-        self, store
-    ) -> None:
+    async def test_positive_query_with_fts5_special_chars_does_not_crash(self, store) -> None:
         # FTS5 operator tokens (AND, OR, quotes) in user text must
         # not raise a parse error. The store tokenises + quotes.
         await store.insert(_record(content="hello world"))
@@ -390,24 +370,18 @@ class TestFtsSearch:
             # Doesn't raise; may or may not match.
             assert isinstance(hits, list)
 
-    async def test_positive_deterministic_tie_break_on_record_id(
-        self, store
-    ) -> None:
+    async def test_positive_deterministic_tie_break_on_record_id(self, store) -> None:
         # Identical content → identical BM25 score → deterministic
         # tie-break must be record_id ASC.
         for i in range(3):
-            await store.insert(
-                _record(record_id=f"r{i}", content="identical text")
-            )
+            await store.insert(_record(record_id=f"r{i}", content="identical text"))
         hits = await store.fts_search("npc-1", "identical", top_k=5)
         ids = [str(r.record_id) for r, _ in hits]
         assert ids == sorted(ids)  # record_id ASC as tie-break
 
     async def test_positive_top_k_truncates_results(self, store) -> None:
         for i in range(5):
-            await store.insert(
-                _record(record_id=f"r{i}", content=f"match token{i}")
-            )
+            await store.insert(_record(record_id=f"r{i}", content=f"match token{i}"))
         hits = await store.fts_search("npc-1", "match", top_k=3)
         assert len(hits) == 3
 
@@ -461,9 +435,7 @@ class TestProtocolConformance:
             async def prune_oldest_episodic(self, owner_id, keep): ...
             async def fts_search(self, owner_id, query, top_k): ...
             async def embedding_cache_get(self, content_hash, provider_id): ...
-            async def embedding_cache_put(
-                self, content_hash, provider_id, vector_blob
-            ): ...
+            async def embedding_cache_put(self, content_hash, provider_id, vector_blob): ...
 
         assert isinstance(_Stub(), MemoryStoreProtocol)
 
@@ -486,9 +458,7 @@ class TestDeterminism:
             await store.initialize()
             # Same semantic payload but different insertion order —
             # should produce byte-identical metadata_json.
-            await store.insert(
-                _record(metadata={"zeta": 3, "alpha": 1, "beta": 2})
-            )
+            await store.insert(_record(metadata={"zeta": 3, "alpha": 1, "beta": 2}))
             row = await db.fetchone(
                 f"SELECT metadata_json FROM {TABLE_RECORDS} WHERE record_id = ?",
                 ("r1",),

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from volnix.engines.memory.config import (
     VALID_CADENCE_TRIGGERS,
     VALID_EMBEDDER_SCHEMES,
+    VALID_TOKENIZER_PREFIXES,
     MemoryConfig,
 )
 
@@ -125,9 +126,7 @@ class TestCadenceTriggers:
     # acceptable as a sole trigger.
     def test_every_exported_trigger_is_accepted_individually(self) -> None:
         for trigger in VALID_CADENCE_TRIGGERS:
-            cfg = MemoryConfig(
-                enabled=True, consolidation_triggers=[trigger]
-            )
+            cfg = MemoryConfig(enabled=True, consolidation_triggers=[trigger])
             assert cfg.consolidation_triggers == [trigger]
 
 
@@ -135,24 +134,30 @@ class TestEmbedderScheme:
     """Embedder string is '<scheme>' or '<scheme>:<model>'. Scheme
     must be one of three known values."""
 
-    @pytest.mark.parametrize("bad_embedder", [
-        "fts",         # close but wrong
-        "FTS5",        # case mismatch
-        "transformer", # partial
-        "huggingface:all-MiniLM-L6-v2",  # wrong prefix
-        "",            # empty
-    ])
+    @pytest.mark.parametrize(
+        "bad_embedder",
+        [
+            "fts",  # close but wrong
+            "FTS5",  # case mismatch
+            "transformer",  # partial
+            "huggingface:all-MiniLM-L6-v2",  # wrong prefix
+            "",  # empty
+        ],
+    )
     def test_negative_unknown_scheme_rejected(self, bad_embedder: str) -> None:
         with pytest.raises(ValidationError, match="unknown scheme"):
             MemoryConfig(enabled=True, embedder=bad_embedder)
 
-    @pytest.mark.parametrize("good_embedder", [
-        "fts5",
-        "sentence-transformers",
-        "sentence-transformers:all-MiniLM-L6-v2",
-        "openai",
-        "openai:text-embedding-3-small",
-    ])
+    @pytest.mark.parametrize(
+        "good_embedder",
+        [
+            "fts5",
+            "sentence-transformers",
+            "sentence-transformers:all-MiniLM-L6-v2",
+            "openai",
+            "openai:text-embedding-3-small",
+        ],
+    )
     def test_positive_schemes_accepted(self, good_embedder: str) -> None:
         cfg = MemoryConfig(enabled=True, embedder=good_embedder)
         assert cfg.embedder == good_embedder
@@ -340,6 +345,7 @@ class TestTomlRoundTrip:
         assert cfg.memory.storage_db_name == "volnix_memory"
         assert cfg.memory.reset_on_world_start is True
         assert cfg.memory.schema_version == 1
+        assert cfg.memory.fts_tokenizer == "porter unicode61 remove_diacritics 2"
 
 
 class TestBooleanToggles:
@@ -362,6 +368,63 @@ class TestBooleanToggles:
         assert getattr(cfg, field) is value
 
 
+class TestFtsTokenizer:
+    """Phase 4B Step 4 — FTS5 tokenizer is configurable with a
+    known-prefix allowlist. The prefix check runs regardless of
+    ``enabled`` so typos are caught even in disabled configs.
+    """
+
+    @pytest.mark.parametrize(
+        "bad_prefix",
+        [
+            "portter unicode61",  # typo in porter
+            "PORTER unicode61",  # uppercase not allowed
+            "transformer unicode61",  # unknown scheme
+            "",  # empty
+            "   ",  # whitespace only
+        ],
+    )
+    def test_negative_unknown_prefix_rejected(self, bad_prefix: str) -> None:
+        with pytest.raises(ValidationError, match="fts_tokenizer"):
+            MemoryConfig(fts_tokenizer=bad_prefix)
+
+    def test_negative_prefix_check_runs_when_disabled_too(self) -> None:
+        # Tokenizer shape is structural — typos must fail even
+        # with enabled=False, so CI catches bad config on a world
+        # that *intends* to enable memory later.
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=False, fts_tokenizer="garbage prefix")
+
+    def test_default_includes_remove_diacritics_2(self) -> None:
+        # The whole point of the default — fixes the default-
+        # diacritics gap in bare ``unicode61``.
+        cfg = MemoryConfig()
+        assert "remove_diacritics 2" in cfg.fts_tokenizer
+        assert cfg.fts_tokenizer.startswith("porter ")
+
+    @pytest.mark.parametrize(
+        "good_tokenizer",
+        [
+            "porter unicode61 remove_diacritics 2",
+            "unicode61",
+            "unicode61 remove_diacritics 2",
+            "trigram",
+            "ascii",
+            "porter",
+        ],
+    )
+    def test_positive_valid_tokenizers_accepted(self, good_tokenizer: str) -> None:
+        cfg = MemoryConfig(fts_tokenizer=good_tokenizer)
+        assert cfg.fts_tokenizer == good_tokenizer
+
+    def test_every_exported_prefix_accepted_bare(self) -> None:
+        # N1-style test — exported set is source of truth; every
+        # member must be individually acceptable.
+        for prefix in VALID_TOKENIZER_PREFIXES:
+            cfg = MemoryConfig(fts_tokenizer=prefix)
+            assert cfg.fts_tokenizer == prefix
+
+
 class TestStorageDbName:
     """C1 of Step 2 review — the logical DB name must be pattern-
     validated. Empty string, path separators, special sqlite names
@@ -377,15 +440,15 @@ class TestStorageDbName:
     @pytest.mark.parametrize(
         "bad_name",
         [
-            "",                 # empty
-            "memory/v1",        # forward slash — traversal vector
-            "..",               # parent directory
-            "../memory",        # explicit traversal
-            "memory\\v1",       # backslash
-            ":memory:",         # SQLite reserved in-memory name
-            "volnix memory",    # space
-            "memory.db",        # with suffix (manager adds it)
-            "mem-v1",           # hyphen not in [a-zA-Z0-9_]
+            "",  # empty
+            "memory/v1",  # forward slash — traversal vector
+            "..",  # parent directory
+            "../memory",  # explicit traversal
+            "memory\\v1",  # backslash
+            ":memory:",  # SQLite reserved in-memory name
+            "volnix memory",  # space
+            "memory.db",  # with suffix (manager adds it)
+            "mem-v1",  # hyphen not in [a-zA-Z0-9_]
         ],
     )
     def test_negative_invalid_db_name_rejected(self, bad_name: str) -> None:

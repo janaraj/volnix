@@ -31,14 +31,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 VALID_CADENCE_TRIGGERS: frozenset[str] = frozenset(
     {"on_eviction", "periodic", "on_activation_complete"}
 )
-VALID_EMBEDDER_SCHEMES: frozenset[str] = frozenset(
-    {"fts5", "sentence-transformers", "openai"}
-)
+VALID_EMBEDDER_SCHEMES: frozenset[str] = frozenset({"fts5", "sentence-transformers", "openai"})
+
+# FTS5 tokenizer prefixes (Phase 4B Step 4). The first whitespace-
+# separated token of ``fts_tokenizer`` must be one of these — FTS5
+# requires it. Restricting the prefix set is also our SQL-injection
+# mitigation: the tokenizer string is substituted into DDL via
+# f-string (no parameter binding available for virtual table spec),
+# so we rely on (a) config-source-only provenance, and (b) this
+# prefix allow-list.
+VALID_TOKENIZER_PREFIXES: frozenset[str] = frozenset({"porter", "unicode61", "trigram", "ascii"})
 
 # Aliases kept for any caller that still references the underscored
 # names — internal-only module constants keep the underscore.
 _VALID_CADENCE_TRIGGERS = VALID_CADENCE_TRIGGERS
 _VALID_EMBEDDER_SCHEMES = VALID_EMBEDDER_SCHEMES
+_VALID_TOKENIZER_PREFIXES = VALID_TOKENIZER_PREFIXES
 
 
 class MemoryConfig(BaseModel):
@@ -80,14 +88,32 @@ class MemoryConfig(BaseModel):
     forces every embed() call to recompute — useful for tests that
     verify determinism of the underlying provider."""
 
+    # ── FTS5 tokenizer (Phase 4B Step 4) ──────────────────────────
+    fts_tokenizer: str = "porter unicode61 remove_diacritics 2"
+    """FTS5 tokenizer spec — substituted into the virtual-table DDL
+    by ``SQLiteMemoryStore``. Default combines:
+      * ``porter`` — English stemming (``hangouts`` → ``hangout``).
+      * ``unicode61`` — Unicode-aware tokenisation + case folding.
+      * ``remove_diacritics 2`` — fold diacritics (``café`` → ``cafe``).
+
+    Alternatives:
+      * ``trigram`` — character 3-grams. Gives typo tolerance at
+        the cost of stemming. No porter.
+      * ``unicode61`` alone — case folding only, no stemming.
+      * ``ascii`` — ASCII-only tokenisation (legacy; avoid).
+
+    The first whitespace-separated token must be in
+    ``VALID_TOKENIZER_PREFIXES``. That's the SQL-injection mitigation
+    — the string reaches DDL via f-string substitution because FTS5
+    doesn't support parameter binding for the tokenizer spec.
+    """
+
     # ── Size caps ─────────────────────────────────────────────────
     max_episodic_per_actor: int = Field(default=500, ge=1)
     max_semantic_per_actor: int = Field(default=100, ge=1)
 
     # ── Consolidation ─────────────────────────────────────────────
-    consolidation_triggers: list[str] = Field(
-        default_factory=lambda: ["on_eviction", "periodic"]
-    )
+    consolidation_triggers: list[str] = Field(default_factory=lambda: ["on_eviction", "periodic"])
     """Subset of ``on_eviction``, ``periodic``, ``on_activation_complete``."""
 
     consolidation_periodic_interval_ticks: int = Field(default=100, ge=1)
@@ -153,6 +179,19 @@ class MemoryConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> MemoryConfig:
+        # The tokenizer prefix check runs regardless of ``enabled`` —
+        # it's a pure string-shape check and catches typos even in
+        # disabled configs. Silent rejection when enabled=True later
+        # would hide config bugs from CI.
+        tokenizer_parts = self.fts_tokenizer.split()
+        first_prefix = tokenizer_parts[0] if tokenizer_parts else ""
+        if first_prefix not in VALID_TOKENIZER_PREFIXES:
+            raise ValueError(
+                f"MemoryConfig.fts_tokenizer must start with one of "
+                f"{sorted(VALID_TOKENIZER_PREFIXES)}; got {first_prefix!r}. "
+                f"Full spec was {self.fts_tokenizer!r}."
+            )
+
         # Structural bounds (Field(ge=..., le=..., pattern=...))
         # always fire, regardless of ``enabled``. Cross-field semantic
         # validation below only fires when the engine will actually

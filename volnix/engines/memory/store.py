@@ -61,6 +61,12 @@ TABLE_FTS: str = "memory_fts"
 TABLE_EMBEDDING_CACHE: str = "embedding_cache"
 TABLE_SCHEMA_VERSION: str = "memory_schema_version"
 
+# Default FTS5 tokenizer spec. Mirrors the ``MemoryConfig.fts_tokenizer``
+# default so standalone store construction (e.g. in tests) produces
+# the same index shape the engine would in production. Callers that
+# customise must pass through the validated config string.
+DEFAULT_FTS_TOKENIZER: str = "porter unicode61 remove_diacritics 2"
+
 
 @runtime_checkable
 class MemoryStoreProtocol(Protocol):
@@ -81,17 +87,13 @@ class MemoryStoreProtocol(Protocol):
         limit: int | None = None,
     ) -> list[MemoryRecord]: ...
 
-    async def prune_oldest_episodic(
-        self, owner_id: str, keep: int
-    ) -> list[MemoryRecordId]: ...
+    async def prune_oldest_episodic(self, owner_id: str, keep: int) -> list[MemoryRecordId]: ...
 
     async def fts_search(
         self, owner_id: str, query: str, top_k: int
     ) -> list[tuple[MemoryRecord, float]]: ...
 
-    async def embedding_cache_get(
-        self, content_hash: str, provider_id: str
-    ) -> bytes | None: ...
+    async def embedding_cache_get(self, content_hash: str, provider_id: str) -> bytes | None: ...
 
     async def embedding_cache_put(
         self, content_hash: str, provider_id: str, vector_blob: bytes
@@ -104,15 +106,30 @@ class SQLiteMemoryStore:
     Accepts a connected ``Database`` via DI; never constructs one
     itself. Tests inject ``await create_database(":memory:")`` and
     get a real SQLite backend with full FTS5 support.
+
+    The ``fts_tokenizer`` argument is substituted into the FTS5
+    virtual-table DDL via f-string because FTS5 does not support
+    parameter binding for tokenizer specs. Safety rails:
+      (a) only the composition root + tests construct this class,
+          so the string is always config-sourced, never user/LLM;
+      (b) ``MemoryConfig`` validates the prefix against a known
+          allowlist (``VALID_TOKENIZER_PREFIXES``);
+      (c) tests pass only literal module constants or known tokens.
     """
 
-    def __init__(self, db: Database) -> None:
+    def __init__(
+        self,
+        db: Database,
+        *,
+        fts_tokenizer: str = DEFAULT_FTS_TOKENIZER,
+    ) -> None:
         if db is None:
             raise ValueError(
                 "SQLiteMemoryStore requires a connected Database instance "
                 "(G5 — inject via ConnectionManager or create_database)."
             )
         self._db = db
+        self._fts_tokenizer = fts_tokenizer
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -182,7 +199,7 @@ class SQLiteMemoryStore:
             CREATE VIRTUAL TABLE IF NOT EXISTS {TABLE_FTS} USING fts5(
                 record_id UNINDEXED,
                 content,
-                tokenize='porter unicode61'
+                tokenize='{self._fts_tokenizer}'
             )
             """,
             f"""
@@ -207,9 +224,7 @@ class SQLiteMemoryStore:
             await self._db.execute(f"DELETE FROM {TABLE_EMBEDDING_CACHE}")
 
     async def _read_schema_version(self) -> int:
-        row = await self._db.fetchone(
-            f"SELECT version FROM {TABLE_SCHEMA_VERSION} LIMIT 1"
-        )
+        row = await self._db.fetchone(f"SELECT version FROM {TABLE_SCHEMA_VERSION} LIMIT 1")
         return int(row["version"]) if row else 0
 
     async def schema_version(self) -> int:
@@ -293,9 +308,7 @@ class SQLiteMemoryStore:
             params.append(kind)
         where = " AND ".join(clauses)
         sql = (
-            f"SELECT * FROM {TABLE_RECORDS} "
-            f"WHERE {where} "
-            f"ORDER BY created_tick DESC, record_id ASC"
+            f"SELECT * FROM {TABLE_RECORDS} WHERE {where} ORDER BY created_tick DESC, record_id ASC"
         )
         if limit is not None:
             # ``limit`` is always a server-validated int (MemoryQuery
@@ -304,9 +317,7 @@ class SQLiteMemoryStore:
         rows = await self._db.fetchall(sql, tuple(params))
         return [self._row_to_record(r) for r in rows]
 
-    async def prune_oldest_episodic(
-        self, owner_id: str, keep: int
-    ) -> list[MemoryRecordId]:
+    async def prune_oldest_episodic(self, owner_id: str, keep: int) -> list[MemoryRecordId]:
         """Remove episodic records beyond the ``keep`` most recent.
 
         Ring-buffer enforcement for ``max_episodic_per_actor``.
@@ -372,9 +383,7 @@ class SQLiteMemoryStore:
     # Embedding cache
     # ------------------------------------------------------------------
 
-    async def embedding_cache_get(
-        self, content_hash: str, provider_id: str
-    ) -> bytes | None:
+    async def embedding_cache_get(self, content_hash: str, provider_id: str) -> bytes | None:
         row = await self._db.fetchone(
             f"""
             SELECT vector_blob FROM {TABLE_EMBEDDING_CACHE}

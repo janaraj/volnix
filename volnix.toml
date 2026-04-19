@@ -226,6 +226,11 @@ hydrate_on_promote = false
 storage_db_name = "volnix_memory"
 reset_on_world_start = true         # cross-run memory reuse is opt-in only
 schema_version = 1
+# FTS5 tokenizer spec — substituted into virtual-table DDL.
+# Default combines: porter (stemming) + unicode61 (tokenisation + case
+# fold) + remove_diacritics 2 (fold accented chars: café -> cafe).
+# Alternative: "trigram" for typo tolerance (loses stemming).
+fts_tokenizer = "porter unicode61 remove_diacritics 2"
 
 # ── External Agent Slots ───────────────────────────────────
 [agents]
