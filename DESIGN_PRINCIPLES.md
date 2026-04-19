@@ -152,6 +152,35 @@ The entire system is async-first:
 
 ---
 
+## Test Discipline
+
+Tests are the load-bearing guarantee behind every change. Coverage and green checkmarks are not enough — a test that passes while the feature is broken is worse than no test, because it confers false confidence. These principles were codified after a Phase 4A principal-engineer review surfaced 20 findings that the existing 95%-coverage test suite had failed to catch.
+
+### Principles
+
+1. **Write the negative case first, or at least beside, the positive case.** For every "it works when inputs are good" test, ask: "what test proves it rejects bad input, surfaces the error path, or fails loudly when it should?" Validator tests especially — if the only asserted path is "valid config works," the validator is untested. Every field added to a schema comes with at least one "rejects typo / out-of-range / wrong type" test.
+
+2. **Bound assertions must be tight enough to fail on drift.** `assert count <= 300` when the expected value is ~200 is regression theater: it passes green while a 50% behavior drift slips through. Pick the smallest bound that survives legitimate flake, not the largest bound that can't flake. If you can't pick a tight bound, the metric is not a good assertion target — pick a different invariant.
+
+3. **Do not mock the thing under test.** If the behavior being tested routes through a real subsystem (event bus, ledger, state engine, LLM router), the test must exercise the real subsystem or an in-memory equivalent that preserves the path. Mocks that drop messages on the floor hide exactly the bugs that cross subsystem boundaries. Use `AsyncMock` for unit-level isolation; use the real bus/ledger (with an in-memory DB) for integration-level assertions.
+
+4. **Coverage measures execution, not verification.** 95% line coverage means 95% of lines ran during tests — it does not mean 95% of behaviors are asserted. Every side effect that is a product feature (a ledger row, a bus publish, a state mutation, a log line the user sees) needs an explicit assertion. Mental model check before declaring a test done: "if I flipped the return value of this line, would any of my tests fail?"
+
+5. **Error paths assert side effects, not just the raised exception.** When a code path catches an exception, log it, and continue — the test must check the log/ledger entry was emitted and any compensating action happened. Tests that only verify "the function didn't crash" let silent failures accumulate.
+
+6. **Observability is a tested feature.** Ledger entries, bus publishes, and metrics are not bookkeeping — they are the product contract with operators and downstream tooling. Any code path that emits an observability signal ships with a test that asserts the signal lands in the right place with the right shape.
+
+7. **Adversarial design review is a distinct gate from test review.** Tests verify code does what code says it does. Design review verifies the contract is coherent, protocols are complete, dead code is removed, and the module's invariants are articulated and documented. Neither substitutes for the other. Both happen before a phase ships.
+
+### Enforcement
+
+- **Negative-case minimum:** every new validator, schema, or public function accepting untrusted input has at least one rejection test alongside the acceptance tests. Code review rejects PRs that only test the happy path.
+- **Tight-bound review:** in code review, check every `assert <=`, `assert >=`, `assert len(...) >`. If the margin is >20% above/below the target, either justify it in a test comment or tighten it.
+- **Real-subsystem integration tests:** every cross-engine contract has at least one integration test that uses the real bus and a memory-backed ledger — not `AsyncMock(bus)`.
+- **Observability assertions:** the audit procedure (`internal_docs/pmf/audit-procedure.md`) includes gate K (ledger completeness) specifically to catch unasserted observability signals.
+
+---
+
 ## Enforcement
 
 These principles are not aspirational — they are enforced mechanically:
