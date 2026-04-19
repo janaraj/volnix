@@ -305,7 +305,13 @@ class TestPromotePolicy:
 
 
 class TestAgentsExempt:
-    """Agents (no activation_profile_name) never enter the cohort gate."""
+    """Agents (no activation_profile_name) never enter the cohort gate.
+
+    Review fix D3: the gate predicate is extracted to
+    ``AgencyEngine._should_cohort_gate`` and only actors with an
+    ``activation_profile_name`` are gated. This test pins that
+    contract so a future refactor can't widen the gate silently.
+    """
 
     @pytest.mark.asyncio
     async def test_agent_not_gated_by_cohort(self) -> None:
@@ -324,3 +330,91 @@ class TestAgentsExempt:
         await engine._activate_with_tool_loop(agent_state, "event_affected", None)
         # No queueing happened — gate skipped because activation_profile_name is None.
         assert cohort.queue_depth(agent_state.actor_id) == 0
+
+    @pytest.mark.asyncio
+    async def test_should_cohort_gate_predicate_agent_false(self) -> None:
+        """The extracted predicate must say 'no' for agents."""
+        agent = _passive_agent("agent-lead")
+        cohort = _make_cohort(active_ids=["npc-0"], dormant_ids=["npc-1"], max_active=1)
+        engine, _, _, _ = await _build_engine([agent], cohort=cohort)
+        assert engine._should_cohort_gate(agent, cohort) is False
+
+    @pytest.mark.asyncio
+    async def test_should_cohort_gate_predicate_dormant_npc_true(self) -> None:
+        """The predicate must say 'yes' for a dormant NPC with profile."""
+        # npc-9 is dormant (only npc-0 is initially active).
+        npc = _active_npc("npc-9")
+        cohort = _make_cohort(
+            active_ids=["npc-0"],
+            dormant_ids=["npc-1", "npc-9"],
+            max_active=1,
+        )
+        engine, _, _, _ = await _build_engine([npc], cohort=cohort)
+        assert engine._should_cohort_gate(npc, cohort) is True
+
+
+class TestCohortDecisionLedger:
+    """Review fix M4: every gate decision lands a ``CohortDecisionEntry``
+    in the ledger so runners can explain why an NPC didn't activate.
+    """
+
+    @pytest.mark.asyncio
+    async def test_defer_writes_decision_entry(self) -> None:
+        npc = _active_npc("npc-5")
+        cohort = _make_cohort(
+            active_ids=["npc-0", "npc-1", "npc-2"],
+            dormant_ids=["npc-3", "npc-4", "npc-5"],
+        )
+        engine, _, _, ledger = await _build_engine([npc], cohort=cohort)
+        await engine.notify(_exposure("npc-5"))
+
+        # Allow fire-and-forget ledger writes to flush
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        decisions = [e for e in ledger.entries if getattr(e, "entry_type", "") == "cohort_decision"]
+        assert any(d.decision == "defer" for d in decisions), (
+            f"No 'defer' decision recorded. Got: {[d.decision for d in decisions]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_promote_writes_decision_entry_with_evicted_id(self) -> None:
+        npc = _active_npc("npc-5")
+        cohort = _make_cohort(
+            active_ids=["npc-0"],
+            dormant_ids=["npc-1", "npc-5"],
+            max_active=1,
+            promote_budget=3,
+        )
+        engine, _, _, ledger = await _build_engine([npc], cohort=cohort)
+        await engine.notify(_interview("researcher", "npc-5"))
+
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        decisions = [e for e in ledger.entries if getattr(e, "entry_type", "") == "cohort_decision"]
+        promote_decisions = [d for d in decisions if d.decision == "promote"]
+        assert len(promote_decisions) == 1
+        # Evicted id should be the previous active member.
+        assert str(promote_decisions[0].evicted_actor_id) == "npc-0"
+
+    @pytest.mark.asyncio
+    async def test_budget_exhausted_writes_decision_entry(self) -> None:
+        # Make budget=1, send 2 probes to 2 dormant NPCs.
+        npcs = [_active_npc(f"npc-{i}") for i in (2, 3)]
+        cohort = _make_cohort(
+            active_ids=["npc-0"],
+            dormant_ids=["npc-1", "npc-2", "npc-3"],
+            max_active=1,
+            promote_budget=1,
+        )
+        engine, _, _, ledger = await _build_engine(npcs, cohort=cohort)
+        await engine.notify(_interview("researcher", "npc-2"))
+        await engine.notify(_interview("researcher", "npc-3"))
+
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        decisions = [e for e in ledger.entries if getattr(e, "entry_type", "") == "cohort_decision"]
+        exhausted = [d for d in decisions if d.decision == "promote_budget_exhausted"]
+        assert len(exhausted) == 1

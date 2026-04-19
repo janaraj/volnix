@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# Allowed values for inactive-event policies. Kept as a module-level
+# tuple so the validator can check YAML strings without duplicating
+# the set (review fix N3).
+_VALID_INACTIVE_POLICIES: frozenset[str] = frozenset({"record_only", "defer", "promote"})
 
 
 class CohortConfig(BaseModel):
@@ -16,6 +21,13 @@ class CohortConfig(BaseModel):
     stay byte-identical when the cohort is disabled — the engine-side
     gate short-circuits in that case. See
     ``internal_docs/pmf/phase-4a-activation-cycling.md``.
+
+    Review fix N3+N6: Pydantic validators enforce (a) every policy
+    string is one of ``record_only`` / ``defer`` / ``promote``, and
+    (b) cross-field sanity: ``rotation_batch_size <= max_active`` and
+    ``promote_budget_per_tick <= max_active``. Earlier versions
+    silently truncated in the manager when a YAML author wrote
+    ``batch=50, max_active=20``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -52,6 +64,36 @@ class CohortConfig(BaseModel):
             "npc.interview_probe": "promote",
         }
     )
+
+    @model_validator(mode="after")
+    def _validate_policies_and_batches(self) -> CohortConfig:
+        # N3: every policy string must be a known enum value. Typos
+        # like "defurr" or "PROMOTE" must fail fast, not fall through
+        # to some default branch.
+        for event_type, policy in self.inactive_event_policies.items():
+            if policy not in _VALID_INACTIVE_POLICIES:
+                raise ValueError(
+                    f"CohortConfig.inactive_event_policies[{event_type!r}]: "
+                    f"unknown policy {policy!r}. "
+                    f"Expected one of {sorted(_VALID_INACTIVE_POLICIES)}."
+                )
+        if "default" not in self.inactive_event_policies:
+            raise ValueError("CohortConfig.inactive_event_policies must include a 'default' key.")
+        # N6: cross-field sanity. When the cohort is disabled these
+        # are ignored; when enabled, nonsense values like batch > max
+        # must fail loudly.
+        if self.max_active is not None:
+            if self.rotation_batch_size > self.max_active:
+                raise ValueError(
+                    f"rotation_batch_size ({self.rotation_batch_size}) must not "
+                    f"exceed max_active ({self.max_active})."
+                )
+            if self.promote_budget_per_tick > self.max_active:
+                raise ValueError(
+                    f"promote_budget_per_tick ({self.promote_budget_per_tick}) "
+                    f"must not exceed max_active ({self.max_active})."
+                )
+        return self
 
 
 class AgencyConfig(BaseModel):

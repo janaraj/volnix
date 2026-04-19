@@ -13,6 +13,7 @@ import json
 import logging
 from typing import Any, ClassVar
 
+from volnix.actors.queued_event import QueuedEvent
 from volnix.actors.state import ActorState, InteractionRecord, ScheduledAction, Subscription
 from volnix.core.engine import BaseEngine
 from volnix.core.envelope import ActionEnvelope
@@ -572,17 +573,15 @@ class AgencyEngine(BaseEngine):
         When SimulationRunner is active (event_queue is wired), skip —
         the runner calls notify() directly. Running both paths causes
         a re-entrancy deadlock on _llm_semaphore.
+
+        Note (PMF Plan Phase 4A, fix for review C1): ``CohortRotationEvent``
+        is published by ``rotate_cohort`` for observability only. The
+        drain path is already called inline inside ``rotate_cohort``,
+        so we deliberately do NOT re-drain when the event comes back
+        around through the bus — that would double-drain. The event
+        exists for downstream observers (dashboards, runners) and is
+        ignored by this engine.
         """
-        # PMF Plan Phase 4A — cohort rotation is an engine-state
-        # action (not a world action) and is handled inline here.
-        # Imported lazily so the module still loads in environments
-        # where the Phase-4A events module hasn't been extended yet.
-        from volnix.core.events import CohortRotationEvent
-
-        if isinstance(event, CohortRotationEvent):
-            await self._drain_promoted_cohort_queues(list(event.promoted_ids))
-            return
-
         if self._config.get("_event_queue") is not None:
             return  # SimulationRunner handles notify() directly
 
@@ -623,12 +622,28 @@ class AgencyEngine(BaseEngine):
         tests) to drive rotation. Rotation is engine state — not a
         world action — so this doesn't go through the pipeline.
 
-        The method:
-          1. Asks the cohort manager to pick demotes + promotes.
-          2. Publishes ``CohortRotationEvent`` to the bus (observability).
-          3. Records a ``CohortRotationEntry`` in the ledger.
+        The method writes to three channels (review D1 — intentional):
+          1. Asks the cohort manager to pick demotes + promotes
+             (mutation of engine state).
+          2. Publishes ``CohortRotationEvent`` on the bus — pure
+             observability for external dashboards / runners.
+             ``_handle_event`` specifically ignores this event on
+             its way back in (review C1) so we never double-drain.
+          3. Records a ``CohortRotationEntry`` in the ledger for
+             audit.
           4. Drains queued events on promoted NPCs through the normal
              ``activate_for_event`` path.
+
+        The three channels serve distinct consumers (runtime logic /
+        real-time observers / audit) and aren't merge-able into one.
+
+        Concurrency (review C2 / C3): single-loop asyncio makes all
+        synchronous methods on the cohort manager (``rotate``,
+        ``try_promote``, ``enqueue``) atomic w.r.t. each other — two
+        coroutines calling in race-free because no ``await`` happens
+        between the read-modify-write steps. If this engine is ever
+        migrated to a thread pool, a real lock must be added to
+        ``CohortManager``; today it's not needed.
 
         Returns ``([], [])`` when cohort is disabled so callers can
         treat it as a no-op cleanly.
@@ -652,7 +667,10 @@ class AgencyEngine(BaseEngine):
 
         now = datetime.now(UTC)
         stats = cm.stats()
-        rotation_policy = getattr(cm, "_rotation_policy", "unknown")
+        # Review fix D4: read rotation_policy via the protocol-exposed
+        # stats snapshot, not via ``getattr(cm, "_rotation_policy", …)``
+        # which reached a private attribute and defeated the Protocol.
+        rotation_policy = getattr(stats, "rotation_policy", "unknown")
 
         await self.publish(
             CohortRotationEvent(
@@ -680,7 +698,12 @@ class AgencyEngine(BaseEngine):
             )
             try:
                 await ledger.append(entry)
-            except Exception as exc:  # noqa: BLE001 — non-fatal observability
+            except (OSError, RuntimeError, ValueError) as exc:
+                # Review fix N2: narrowed from bare ``except Exception``.
+                # Realistic ledger failure modes: backing store I/O
+                # (OSError), protocol contract breach (RuntimeError),
+                # Pydantic/schema issue (ValueError). Anything else
+                # — CancelledError, KeyboardInterrupt — must propagate.
                 logger.warning("CohortRotationEntry append failed: %s", exc)
 
         # Drain first — the event is already published, so even if
@@ -688,41 +711,93 @@ class AgencyEngine(BaseEngine):
         await self._drain_promoted_cohort_queues(list(promoted))
         return demoted, promoted
 
-    def _record_dormant_notification(
-        self, actor: ActorState, trigger_event: WorldEvent | None
-    ) -> None:
-        """Append a dormant-cohort notification to ``actor.pending_notifications``.
+    def _should_cohort_gate(self, actor: ActorState, cm: Any) -> bool:
+        """Return True if this actor must go through the cohort gate.
 
-        Phase 4A: the ``record_only`` inactive-event policy uses this
-        so dormant NPCs see a note about events they missed while
-        cycled out, without consuming LLM cycles. Respects the
-        existing ``max_pending_notifications`` cap.
+        Review fix D3: the predicate is:
+
+        * ``cm.enabled`` — cohort actually holding actors, else no gate.
+        * ``activation_profile_name is not None`` — only Active NPCs
+          are gated; agents + passive HUMANs bypass entirely.
+        * ``not cm.is_active(actor_id)`` — active members flow through
+          as usual.
+
+        Kept as a dedicated method so future actor categories have one
+        site to audit before widening the gate.
         """
-        if trigger_event is None:
-            return
-        note = f"[cohort:dormant] {trigger_event.event_type}"
-        actor.pending_notifications.append(note)
-        cap = self._typed_config.max_pending_notifications
-        if len(actor.pending_notifications) > cap:
-            actor.pending_notifications = actor.pending_notifications[-cap:]
+        if not getattr(cm, "enabled", False):
+            return False
+        if actor.activation_profile_name is None:
+            return False
+        return not cm.is_active(actor.actor_id)
+
+    def _record_cohort_decision(
+        self,
+        actor_id: ActorId,
+        decision: str,
+        event_type: str,
+        cm: Any,
+        *,
+        evicted_actor_id: ActorId | None = None,
+    ) -> None:
+        """Ledger a cohort-gate decision (review fix M4).
+
+        Fire-and-forget via ``_record_to_ledger`` so the gate stays
+        fast. Absent ledger → no-op.
+        """
+        from volnix.ledger.entries import CohortDecisionEntry
+
+        self._record_to_ledger(
+            CohortDecisionEntry(
+                actor_id=actor_id,
+                decision=decision,
+                event_type=event_type,
+                queue_depth_after=cm.queue_depth(actor_id),
+                evicted_actor_id=evicted_actor_id,
+            )
+        )
 
     def _current_tick(self) -> int:
-        """Best-effort current tick; ``0`` when unknown (tests).
+        """Best-effort current tick; ``0`` when unknown.
 
         Phase 4A uses this to stamp ``QueuedEvent.queued_tick`` so
         drain + replay can reconstruct chronological order. The agent
         path already uses ``_simulation_progress`` the same way.
+
+        Review fix M3: when ``_simulation_progress`` is absent and
+        cohort policies depend on monotonic tick ordering (recency,
+        event_pressure_weighted), silently returning 0 means every
+        queued event and every activation record collapses to tick 0
+        and recency policy degenerates to registered-order. We log a
+        warning the first time it happens per process so runner
+        mis-wiring shows up in logs. Tests routinely leave progress
+        absent — the warning is informational, not fatal.
         """
         progress = self._simulation_progress
-        return progress[0] if progress else 0
+        if progress is not None:
+            return progress[0]
+        if not getattr(self, "_tick_fallback_warned", False):
+            logger.warning(
+                "AgencyEngine._current_tick() falling back to 0 — "
+                "_simulation_progress is not set. In production the "
+                "simulation runner must call set_simulation_progress "
+                "so cohort recency/pressure policies have real ticks."
+            )
+            self._tick_fallback_warned = True
+        return 0
 
     def _record_to_ledger(self, *entries) -> None:
         """Schedule ledger writes without blocking the caller.
 
         Ledger is observability — writes must never block the simulation loop.
         Uses asyncio.create_task for fire-and-forget scheduling.
+
+        Accepts ledger from either ``self._config["_ledger"]`` (the
+        production wiring path) OR ``self._ledger`` (the attribute path
+        used in tests and directly from ``rotate_cohort``). Both are
+        legitimate wiring modes and should work.
         """
-        ledger = self._config.get("_ledger")
+        ledger = self._config.get("_ledger") or getattr(self, "_ledger", None)
         if ledger is None:
             return
 
@@ -730,7 +805,10 @@ class AgencyEngine(BaseEngine):
             for entry in items:
                 try:
                     await lgr.append(entry)
-                except Exception:
+                except (OSError, RuntimeError, ValueError):
+                    # Review fix N2: narrowed from bare ``except:``.
+                    # Backing-store I/O, protocol mismatch, schema
+                    # issue — all non-fatal. Other exceptions propagate.
                     pass
 
         asyncio.create_task(_write(ledger, entries))
@@ -1302,23 +1380,40 @@ class AgencyEngine(BaseEngine):
         # pre-4A. When enabled, dormant NPCs dispatch to
         # ``record_only`` / ``defer`` / ``promote`` per
         # ``CohortConfig.inactive_event_policies``.
+        # Review fix D3: stronger gate predicate — only actors that
+        # are BOTH ``HUMAN`` type AND have an activation_profile are
+        # cohort-gated. Previously we checked only
+        # ``activation_profile_name is not None`` which would
+        # accidentally capture any future non-HUMAN actor category
+        # that gains a profile. This predicate is lifted into a
+        # helper so the intent is reviewable at one site.
         cm = self._cohort_manager
-        if (
-            cm is not None
-            and getattr(cm, "enabled", False)
-            and actor.activation_profile_name is not None
-            and not cm.is_active(actor.actor_id)
-        ):
+        if cm is not None and self._should_cohort_gate(actor, cm):
             event_type = getattr(trigger_event, "event_type", "") if trigger_event else ""
             policy = cm.policy_for(event_type or "default")
             if policy == "record_only":
-                self._record_dormant_notification(actor, trigger_event)
+                # Review fix M4 + M8: record the decision as a ledger
+                # entry so runners can explain why this NPC didn't
+                # activate. We deliberately do NOT also append to
+                # ``actor.pending_notifications`` here — the notify()
+                # loop already added one generic entry earlier for
+                # every subscription-matched actor, and doubling up
+                # would bloat the actor's rolling buffer without new
+                # information. The ``CohortDecisionEntry`` is the
+                # authoritative record of the gate decision.
+                self._record_cohort_decision(actor.actor_id, "record_only", event_type, cm)
                 return []
             if policy == "defer":
+                overflow_occurred = False
                 if trigger_event is not None:
-                    from volnix.actors.queued_event import QueuedEvent
-
-                    cm.enqueue(
+                    # N1: ``QueuedEvent`` is a frozen value object
+                    # (not an engine). Value-object imports across
+                    # module boundaries are fine per DESIGN_PRINCIPLES
+                    # — the composition-root rule targets concrete
+                    # *engine* classes. Consolidated to module scope.
+                    # ``enqueue`` returns False on overflow-drop so we
+                    # can log the overflow separately (M4).
+                    did_queue = cm.enqueue(
                         actor.actor_id,
                         QueuedEvent(
                             event=trigger_event,
@@ -1326,16 +1421,18 @@ class AgencyEngine(BaseEngine):
                             reason="defer_inactive",
                         ),
                     )
+                    overflow_occurred = not did_queue
+                if overflow_occurred:
+                    self._record_cohort_decision(actor.actor_id, "queue_overflow", event_type, cm)
+                self._record_cohort_decision(actor.actor_id, "defer", event_type, cm)
                 return []
             if policy == "promote":
-                promoted, _evicted = cm.try_promote(actor.actor_id)
+                promoted, evicted = cm.try_promote(actor.actor_id)
                 if not promoted:
                     # Budget exhausted → fall back to defer so the
                     # event isn't lost. The next rotation will surface
                     # this NPC naturally if its queue keeps growing.
                     if trigger_event is not None:
-                        from volnix.actors.queued_event import QueuedEvent
-
                         cm.enqueue(
                             actor.actor_id,
                             QueuedEvent(
@@ -1344,8 +1441,22 @@ class AgencyEngine(BaseEngine):
                                 reason="promote_budget_exhausted",
                             ),
                         )
+                    self._record_cohort_decision(
+                        actor.actor_id,
+                        "promote_budget_exhausted",
+                        event_type,
+                        cm,
+                    )
                     return []
-                # Promotion succeeded — fall through to normal NPC path.
+                # Promotion succeeded — record and fall through to
+                # normal NPC path so the LLM loop actually runs.
+                self._record_cohort_decision(
+                    actor.actor_id,
+                    "promote",
+                    event_type,
+                    cm,
+                    evicted_actor_id=evicted,
+                )
 
         # Active-NPC branch — catch both entry points (``notify`` calls
         # this method directly; ``activate_for_event`` routes through it

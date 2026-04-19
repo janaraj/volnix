@@ -462,6 +462,33 @@ class CohortRotationEntry(LedgerEntry):
     queue_total_depth: int
 
 
+class CohortDecisionEntry(LedgerEntry):
+    """Records a single cohort-gate decision on an Active NPC (Phase 4A).
+
+    Review fix M4: earlier drafts silently dropped observability for
+    every policy branch other than rotation (queue overflow, promote
+    budget exhausted, record_only). DESIGN_PRINCIPLES: "if it did not
+    produce a ledger entry, it did not happen." These entries give
+    runners the data to explain why an NPC didn't activate on a
+    matching event.
+
+    ``decision`` values:
+      * ``"defer"`` — dormant NPC, event queued.
+      * ``"promote"`` — dormant NPC, preempt-promoted + activated.
+      * ``"promote_budget_exhausted"`` — wanted to promote, fell back to defer.
+      * ``"record_only"`` — dormant NPC, just noted the event.
+      * ``"queue_overflow"`` — queue was full; oldest event dropped.
+    """
+
+    entry_type: str = "cohort_decision"
+    actor_id: ActorId
+    decision: str
+    event_type: str
+    queue_depth_after: int = 0
+    evicted_actor_id: ActorId | None = None
+    reason: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
@@ -489,6 +516,7 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "tool_loop_step": ToolLoopStepEntry,
     "activation_complete": ActivationCompleteEntry,
     "cohort_rotation": CohortRotationEntry,
+    "cohort_decision": CohortDecisionEntry,
 }
 
 

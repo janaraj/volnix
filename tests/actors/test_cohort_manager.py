@@ -368,3 +368,6 @@ class TestStats:
         assert s.registered_count == 10
         assert s.queue_total_depth == 1
         assert s.promote_budget_remaining == 4
+        # Review fix D4: rotation_policy on stats, not via
+        # ``getattr(_rotation_policy, "unknown")``.
+        assert s.rotation_policy == "event_pressure_weighted"

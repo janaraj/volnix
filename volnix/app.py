@@ -1459,10 +1459,20 @@ class VolnixApp:
         ):
             from volnix.registry.composition import build_cohort_manager
 
-            # World seed flows into rotation determinism — no hardcoded
-            # default anywhere on the 4A path.
-            world_seed = getattr(plan, "seed", 42)
-            cm = build_cohort_manager(cohort_cfg, world_seed)
+            # Review fix M2: world_seed MUST come from the compiled
+            # WorldPlan. An earlier draft had ``getattr(plan, "seed", 42)``
+            # which silently hid a missing-seed wiring bug behind a
+            # hardcoded 42, making supposedly different-seeded runs
+            # produce identical rotation histories. ``WorldPlan`` always
+            # populates ``seed`` (default on the Pydantic model, not
+            # here). A missing attribute here indicates a broken plan
+            # object and must raise, not paper over with a fallback.
+            if not hasattr(plan, "seed") or getattr(plan, "seed") is None:
+                raise RuntimeError(
+                    "Cohort manager requires ``plan.seed``; WorldPlan was "
+                    "constructed without one — this is a wiring bug."
+                )
+            cm = build_cohort_manager(cohort_cfg, int(plan.seed))
             if cm is not None:
                 active_npc_ids = [
                     s.actor_id for s in actor_states if s.activation_profile_name is not None

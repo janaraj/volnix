@@ -6,8 +6,24 @@ Registered NPCs stay forever in ``AgencyEngine._actor_states`` for the
 life of a run; ``CohortManager`` gates which of them consume LLM
 cycles, and queues events for the rest. The gate itself lives in
 ``AgencyEngine._activate_with_tool_loop`` — this module owns no
-engines, opens no bus, makes no LLM calls. Every decision here is a
-pure function of (state, config, seed).
+engines, opens no bus, makes no LLM calls.
+
+Concurrency model (review fix C2 + D2): all methods are synchronous.
+Under single-loop asyncio, two coroutines calling in — say, from an
+``asyncio.gather`` of activations — run atomically with respect to
+each other because no ``await`` occurs inside these methods. That
+makes every policy decision a pure function of (state, config, seed)
+**at the single-loop scheduling level**. If this codebase ever
+migrates any AgencyEngine call site onto a thread pool or multi-loop
+runtime, the mutable state here (``_active``, ``_queues``,
+``_last_activation``, ``_promote_used_this_window``) would need an
+explicit ``asyncio.Lock`` or equivalent. Today it does not.
+
+Memory bounds (review fix N4): ``_last_activation`` grows by at most
+one entry per registered NPC (never pruned during a run). At the 4A
+target of N≤1000 NPCs that's ~32KB — tolerable. Cross-run
+persistence (``audience/`` artifact) is 4B's job; at that point the
+dict is snapshotted + cleared on run boundaries.
 
 Design principles this module enforces:
 
@@ -43,7 +59,13 @@ InactivePolicy = Literal["record_only", "defer", "promote"]
 
 
 class CohortStats(BaseModel):
-    """Snapshot of manager state — used on the ledger entry."""
+    """Snapshot of manager state — used on the ledger entry.
+
+    Review fix D4: ``rotation_policy`` is exposed here so callers
+    don't need to reach into private ``_rotation_policy``. The
+    :class:`CohortManagerProtocol` returns ``Any`` for ``stats()``
+    so engines can read fields without importing the concrete class.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -51,6 +73,7 @@ class CohortStats(BaseModel):
     registered_count: int
     queue_total_depth: int
     promote_budget_remaining: int
+    rotation_policy: str
 
 
 class CohortManager:
@@ -130,7 +153,16 @@ class CohortManager:
 
     @property
     def enabled(self) -> bool:
-        """True iff the manager has a cap AND is holding actors."""
+        """True iff cohort is configured AND ``register()`` has been called.
+
+        Review fix N5: earlier wording suggested config presence
+        alone was enough. Actually requires BOTH: a positive
+        ``max_active`` (config) AND a non-empty registered list
+        (``register()`` called). A config-present-but-never-registered
+        manager returns ``False`` here, which is correct — the gate
+        would have no actors to reason about. Callers debugging
+        "cohort gate never fires" should check both conditions.
+        """
         return self._max_active > 0 and len(self._registered) > 0
 
     def is_active(self, actor_id: ActorId) -> bool:
@@ -334,7 +366,11 @@ class CohortManager:
         self._last_activation[actor_id] = tick
 
     def stats(self) -> CohortStats:
-        """Snapshot for ``CohortRotationEntry`` ledger writes."""
+        """Snapshot for ``CohortRotationEntry`` ledger writes.
+
+        Review fix D4: includes ``rotation_policy`` so callers don't
+        need to reach ``getattr(cm, "_rotation_policy", "unknown")``.
+        """
         return CohortStats(
             active_count=len(self._active),
             registered_count=len(self._registered),
@@ -343,4 +379,5 @@ class CohortManager:
                 0,
                 self._promote_budget_per_tick - self._promote_used_this_window,
             ),
+            rotation_policy=self._rotation_policy,
         )

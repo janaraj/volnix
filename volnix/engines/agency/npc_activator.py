@@ -133,6 +133,34 @@ class NPCActivator:
         loop_start = time.monotonic()
         ledger = getattr(host, "_ledger", None)
 
+        def _record_cohort_activation() -> None:
+            # Review fix M7: previously ``record_activation`` was
+            # called only at the end of the main loop — text-response
+            # early-return and error-path early-return both skipped
+            # it. That made NPCs who abstain or hit a provider error
+            # look "never activated" forever, making them the LRU
+            # policy's permanent top candidate → thrash. Call this
+            # helper in every termination path.
+            cm = getattr(host, "_cohort_manager", None)
+            if cm is None:
+                return
+            tick_now = 0
+            progress = getattr(host, "_simulation_progress", None)
+            if progress is not None:
+                tick_now = progress[0]
+            try:
+                cm.record_activation(actor.actor_id, tick_now)
+            except (AttributeError, RuntimeError) as exc:
+                # Review fix N2: narrow the exception surface. These
+                # are the only realistic failure modes — a manager
+                # missing the method (misconfigured mock) or a state
+                # mutation raising. Other exceptions propagate.
+                logger.warning(
+                    "Cohort record_activation failed for %s: %s",
+                    actor.actor_id,
+                    exc,
+                )
+
         # Import lazily — keeps the module decoupled from the LLM package
         # at import time (zero circular-import risk).
         from volnix.ledger.entries import (
@@ -170,12 +198,22 @@ class NPCActivator:
                     "agency",
                     "npc_decision",
                 )
-            except Exception as exc:
+            except (
+                ConnectionError,
+                TimeoutError,
+                RuntimeError,
+                ValueError,
+            ) as exc:
+                # Review fix N2: narrowed from bare ``except Exception``.
+                # Provider failures manifest as these four; anything
+                # else (e.g., KeyboardInterrupt, asyncio.CancelledError)
+                # should propagate so the tick can unwind cleanly.
                 logger.warning(
                     "[NPC %s] LLM call failed: %s — ending activation",
                     actor.actor_id,
                     exc,
                 )
+                _record_cohort_activation()
                 await _append_ledger(
                     ledger,
                     ActivationCompleteEntry(
@@ -208,6 +246,7 @@ class NPCActivator:
 
             if not tool_calls:
                 # NPC abstained (text-only or empty response). Record and exit.
+                _record_cohort_activation()
                 await _append_ledger(
                     ledger,
                     ActivationCompleteEntry(
@@ -294,23 +333,11 @@ class NPCActivator:
                     break
 
         duration_ms = (time.monotonic() - loop_start) * 1000
-        # Phase 4A: record activation on the cohort manager (if
-        # present) so ``recency`` + LRU eviction have fresh data for
-        # the next rotation. Guarded — no-op when cohort is absent.
-        cm = getattr(host, "_cohort_manager", None)
-        if cm is not None:
-            tick_now = 0
-            progress = getattr(host, "_simulation_progress", None)
-            if progress is not None:
-                tick_now = progress[0]
-            try:
-                cm.record_activation(actor.actor_id, tick_now)
-            except Exception as exc:  # noqa: BLE001 — non-fatal
-                logger.warning(
-                    "Cohort record_activation failed for %s: %s",
-                    actor.actor_id,
-                    exc,
-                )
+        # Review fix M7: record activation for every termination
+        # path including max_tool_calls / do_nothing / spend_cap /
+        # normal-loop-exit. ``_record_cohort_activation`` is a no-op
+        # when no cohort manager is wired.
+        _record_cohort_activation()
 
         await _append_ledger(
             ledger,

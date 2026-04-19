@@ -780,19 +780,43 @@ class NPCActivatorProtocol(Protocol):
 
 @runtime_checkable
 class CohortManagerProtocol(Protocol):
-    """Narrow interface used by AgencyEngine for activation cycling.
+    """Full interface used by AgencyEngine and app.py for activation cycling.
 
     Pure logic — no bus, no LLM, no async. Decisions are deterministic
-    at a given seed + tick.
+    at a given seed + tick under single-loop asyncio (all methods are
+    sync, so two coroutines calling into the manager run atomically
+    with respect to each other).
+
+    Review fix M5+D4: every method / property actually called by the
+    engine or composition root is declared here. Earlier versions
+    declared only 9 members — ``register``, ``active_ids``,
+    ``registered_ids``, ``stats``, ``queue_depth`` were missing even
+    though the engine called them, which would have made any
+    Protocol-typed mock blow up at those call sites.
     """
 
     @property
     def enabled(self) -> bool:
-        """True when a non-empty active cohort cap is in force."""
+        """True when both a cap is set and NPCs have been registered."""
+        ...
+
+    def register(self, actor_ids: list[ActorId]) -> None:
+        """Register all NPCs up front. Bootstraps the initial active
+        cohort and resets all per-run state (queues, last-activation
+        tracking, cursors).
+        """
         ...
 
     def is_active(self, actor_id: ActorId) -> bool:
         """Is this NPC in the current active cohort?"""
+        ...
+
+    def active_ids(self) -> set[ActorId]:
+        """Return a copy of the current active cohort."""
+        ...
+
+    def registered_ids(self) -> list[ActorId]:
+        """Return a copy of the full registered list, stable order."""
         ...
 
     def policy_for(self, event_type: str) -> str:
@@ -813,7 +837,9 @@ class CohortManagerProtocol(Protocol):
         """Pop and return all queued events for ``actor_id``."""
         ...
 
-    def queue_depth(self, actor_id: ActorId) -> int: ...
+    def queue_depth(self, actor_id: ActorId) -> int:
+        """Current queue depth for ``actor_id`` (0 if no queue exists)."""
+        ...
 
     def try_promote(self, actor_id: ActorId) -> tuple[bool, ActorId | None]:
         """Preempt-promote a dormant NPC. Returns
@@ -829,4 +855,15 @@ class CohortManagerProtocol(Protocol):
 
     def record_activation(self, actor_id: ActorId, tick: int) -> None:
         """Log an activation for the ``recency`` policy and LRU eviction."""
+        ...
+
+    def stats(self) -> Any:
+        """Return a :class:`CohortStats`-compatible snapshot.
+
+        Shape: ``.active_count``, ``.registered_count``,
+        ``.queue_total_depth``, ``.promote_budget_remaining``,
+        ``.rotation_policy`` (review fix D4 — policy was previously
+        reached via ``getattr(cm, "_rotation_policy", "unknown")``
+        which defeats the Protocol indirection).
+        """
         ...

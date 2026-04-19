@@ -182,12 +182,21 @@ class TestScale:
     async def test_cohort_caps_llm_calls_at_scale(self) -> None:
         """200 NPCs × cohort=20 × 10 ticks × 50 events/tick.
 
-        The agent path pre-4A would fan out every event to every
-        matching NPC subscribed (200 × 50 = 10,000 LLM calls / tick ×
-        10 ticks = 100,000). With cohort=20, each tick can only fire
-        ≤20 activations (one per active NPC), so across 10 ticks the
-        total LLM call count must be ≤ ~200 + small overhead from the
-        drain replay.
+        Tight bound (review fix N7 — earlier assertion ``<= 300`` was
+        loose-by-50%). Reasoning:
+
+        * Events target a specific npc_id via ``intended_for``. Only
+          events hitting the active cohort of 20 trigger activation.
+        * Uniform distribution: ~20/200 = 10% of 50 events/tick hit
+          active members → ~5 activations per tick from the notify
+          fan-out. Over 10 ticks → ~50 notify activations.
+        * With ``promote_budget_per_tick=0`` no preempts happen, so
+          extra calls come only from drain-on-promotion (``rotation_batch_size=5``
+          NPCs promoted per tick × ≤3 queued events each = ≤15/tick,
+          10 ticks → ≤150).
+        * Upper bound: ~200. We assert <= 220 for small slack from
+          ordering edge-cases, and take a per-tick counter so that if
+          any single tick spikes the test fails immediately.
         """
         npcs = _make_npcs(200)
         cohort = CohortManager(
@@ -202,23 +211,32 @@ class TestScale:
         cohort.register([n.actor_id for n in npcs])
         engine, llm_router, _, ledger, bus_pub = await _build_engine(npcs, cohort=cohort)
 
-        # 10 ticks × 50 exposure events = 500 events fanned out to 200 NPCs
-        # each matching the event_type subscription.
+        # Record LLM call count per tick so any single-tick spike is
+        # detectable (review fix N7). Before-state captured, then diff
+        # after each tick.
+        per_tick_calls: list[int] = []
         for tick in range(10):
+            before = llm_router.route.await_count
             for i in range(50):
                 npc_id = f"npc-{((tick * 50 + i) % 200):03d}"
                 await engine.notify(_exposure(npc_id))
             await engine.rotate_cohort(tick)
+            per_tick_calls.append(llm_router.route.await_count - before)
 
-        # Active cohort size is 20 → at most 20 LLM calls per tick via
-        # the subscription fan-out. The notify path still hits the
-        # cohort gate for the other ~30 subscribed NPCs per event and
-        # defers them. Total LLM count is bounded by activations from
-        # events targeting active NPCs plus drain events on promoted
-        # NPCs after each rotation.
-        assert llm_router.route.await_count <= 300, (
-            f"Too many LLM calls: {llm_router.route.await_count} — cohort gate leaking"
+        # Global bound: tight (~200 expected, 220 slack).
+        total = llm_router.route.await_count
+        assert total <= 220, (
+            f"Too many LLM calls: {total} (per-tick: {per_tick_calls}) — cohort gate leaking"
         )
+        # Per-tick bound: max 20 notify activations + 15 drain + 5
+        # post-rotation = 40 pessimistic upper bound. Any single tick
+        # > 40 means the gate let something through that shouldn't
+        # have.
+        for i, calls in enumerate(per_tick_calls):
+            assert calls <= 40, (
+                f"Tick {i}: {calls} LLM calls (per-tick spike) — "
+                f"expected <= 40. Full sequence: {per_tick_calls}"
+            )
 
         # 10 rotations → 10 CohortRotationEntry ledger rows
         rotation_entries = [e for e in ledger if isinstance(e, CohortRotationEntry)]
