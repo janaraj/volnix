@@ -9,7 +9,11 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from volnix.engines.memory.config import MemoryConfig
+from volnix.engines.memory.config import (
+    VALID_CADENCE_TRIGGERS,
+    VALID_EMBEDDER_SCHEMES,
+    MemoryConfig,
+)
 
 
 class TestDefaultsDisabled:
@@ -26,19 +30,39 @@ class TestDefaultsDisabled:
         assert cfg.storage_db_name == "volnix_memory"
         assert cfg.schema_version == 1
 
-    def test_disabled_config_skips_cross_field_validation(self) -> None:
-        # When disabled, even nonsense-by-any-other-measure validates.
-        # Enabling it later would trip the validator — that's the
-        # right order: turn memory on, discover the bad knobs.
+    def test_disabled_skips_model_validator_not_field_bounds(self) -> None:
+        # When disabled, the ``model_validator`` (semantic cross-field
+        # checks) is skipped. Structural ``Field(ge=...)`` bounds still
+        # apply — 0 or negative caps are nonsense regardless of
+        # ``enabled``. This is the right split (M1 of Step 2 review).
         cfg = MemoryConfig(
             enabled=False,
-            # These would all fail if enabled=True:
+            # These would all fail the model_validator if enabled=True:
             embedder="totally-made-up",
             consolidation_triggers=["never_heard_of_it"],
             consolidation_episodic_window=9999,
-            max_episodic_per_actor=1,
+            max_episodic_per_actor=1,  # passes Field(ge=1)
         )
         assert cfg.enabled is False
+
+    def test_disabled_still_enforces_field_bounds(self) -> None:
+        # M1 continued: Field bounds fire regardless of ``enabled``
+        # because they encode structural validity, not semantic fit.
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=False, max_episodic_per_actor=0)
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=False, default_recall_top_k=-1)
+
+    def test_enabled_with_only_defaults_validates(self) -> None:
+        # M2 of Step 2 review: the minimum-viable enabled config must
+        # validate with no extra arguments. Every default is deliberate;
+        # any future change that breaks this test is likely breaking
+        # the default behavior contract.
+        cfg = MemoryConfig(enabled=True)
+        assert cfg.enabled is True
+        assert cfg.embedder == "fts5"
+        assert cfg.tier_mode == "tier2_only"
+        assert cfg.consolidation_triggers == ["on_eviction", "periodic"]
 
     def test_frozen(self) -> None:
         cfg = MemoryConfig()
@@ -80,6 +104,32 @@ class TestCadenceTriggers:
         cfg = MemoryConfig(enabled=True, consolidation_triggers=triggers)
         assert cfg.consolidation_triggers == triggers
 
+    # C3 of Step 2 review: duplicates silently accepted would fire
+    # consolidation twice on the same event. Validator rejects.
+    def test_negative_duplicate_trigger_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="duplicate"):
+            MemoryConfig(
+                enabled=True,
+                consolidation_triggers=["on_eviction", "on_eviction"],
+            )
+
+    def test_negative_duplicate_among_valid_values_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="duplicate"):
+            MemoryConfig(
+                enabled=True,
+                consolidation_triggers=["on_eviction", "periodic", "on_eviction"],
+            )
+
+    # N1: tests source from the exported frozenset so a rename
+    # doesn't drift. Every value in the frozenset must be individually
+    # acceptable as a sole trigger.
+    def test_every_exported_trigger_is_accepted_individually(self) -> None:
+        for trigger in VALID_CADENCE_TRIGGERS:
+            cfg = MemoryConfig(
+                enabled=True, consolidation_triggers=[trigger]
+            )
+            assert cfg.consolidation_triggers == [trigger]
+
 
 class TestEmbedderScheme:
     """Embedder string is '<scheme>' or '<scheme>:<model>'. Scheme
@@ -106,6 +156,33 @@ class TestEmbedderScheme:
     def test_positive_schemes_accepted(self, good_embedder: str) -> None:
         cfg = MemoryConfig(enabled=True, embedder=good_embedder)
         assert cfg.embedder == good_embedder
+
+    # C2 of Step 2 review: empty model suffix after colon is nonsense
+    # and would silently call providers with an empty model name.
+    @pytest.mark.parametrize(
+        "bad_embedder",
+        ["openai:", "sentence-transformers:", "fts5:"],
+    )
+    def test_negative_empty_model_suffix_rejected(self, bad_embedder: str) -> None:
+        with pytest.raises(ValidationError, match="empty model"):
+            MemoryConfig(enabled=True, embedder=bad_embedder)
+
+    # N1 — every exported scheme accepted as a bare scheme.
+    def test_every_exported_scheme_accepted(self) -> None:
+        for scheme in VALID_EMBEDDER_SCHEMES:
+            cfg = MemoryConfig(enabled=True, embedder=scheme)
+            assert cfg.embedder == scheme
+
+    # M3 — error message guides the user to the ``<scheme>:<model>`` shape
+    def test_error_message_shows_format(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            MemoryConfig(enabled=True, embedder="bge")
+        # Error message should mention the format + all schemes.
+        msg = str(excinfo.value)
+        assert "<scheme>" in msg
+        assert "<model>" in msg
+        for scheme in VALID_EMBEDDER_SCHEMES:
+            assert scheme in msg
 
 
 class TestSizeCaps:
@@ -202,17 +279,23 @@ class TestTopLevelNestingInVolnixConfig:
     """
 
     def test_memory_is_sibling_of_agency_not_child(self) -> None:
+        # N2 of Step 2 review: tighter regression guard via model_fields.
+        # hasattr-style check passes even if memory lands at both top
+        # and nested positions. model_fields inspection catches that.
         from volnix.config.schema import VolnixConfig
+        from volnix.engines.agency.config import AgencyConfig
 
-        cfg = VolnixConfig()
-        # Top-level access works
-        assert isinstance(cfg.memory, MemoryConfig)
-        # And ``agency`` does NOT expose a ``memory`` attribute —
-        # if someone re-introduces the nested layout, this fails.
-        assert not hasattr(cfg.agency, "memory"), (
-            "memory must be a top-level field on VolnixConfig, not "
-            "nested under AgencyConfig (G1)."
+        assert "memory" in VolnixConfig.model_fields, (
+            "memory must be a declared field on VolnixConfig (G1)."
         )
+        assert "memory" not in AgencyConfig.model_fields, (
+            "memory must NOT be declared on AgencyConfig; it is a "
+            "top-level engine config, not an agency sub-concern (G1)."
+        )
+        # Runtime shape also checks out.
+        cfg = VolnixConfig()
+        assert isinstance(cfg.memory, MemoryConfig)
+        assert not hasattr(cfg.agency, "memory")
 
     def test_default_volnix_config_disabled_memory(self) -> None:
         from volnix.config.schema import VolnixConfig
@@ -280,12 +363,39 @@ class TestBooleanToggles:
 
 
 class TestStorageDbName:
-    """storage_db_name is passed to ConnectionManager.get_connection().
-    Empty string would collide with other DB-less usage; guard it
-    loudly even though defaults are sensible."""
+    """C1 of Step 2 review — the logical DB name must be pattern-
+    validated. Empty string, path separators, special sqlite names
+    are all traversal or ambiguity vectors.
+    """
 
     def test_default_logical_name(self) -> None:
         cfg = MemoryConfig()
         assert cfg.storage_db_name == "volnix_memory"
         assert "/" not in cfg.storage_db_name
         assert "." not in cfg.storage_db_name  # logical name, no file suffix
+
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "",                 # empty
+            "memory/v1",        # forward slash — traversal vector
+            "..",               # parent directory
+            "../memory",        # explicit traversal
+            "memory\\v1",       # backslash
+            ":memory:",         # SQLite reserved in-memory name
+            "volnix memory",    # space
+            "memory.db",        # with suffix (manager adds it)
+            "mem-v1",           # hyphen not in [a-zA-Z0-9_]
+        ],
+    )
+    def test_negative_invalid_db_name_rejected(self, bad_name: str) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(storage_db_name=bad_name)
+
+    @pytest.mark.parametrize(
+        "good_name",
+        ["memory", "volnix_memory", "mem_v1", "VolnixMemory42"],
+    )
+    def test_positive_valid_db_names_accepted(self, good_name: str) -> None:
+        cfg = MemoryConfig(storage_db_name=good_name)
+        assert cfg.storage_db_name == good_name

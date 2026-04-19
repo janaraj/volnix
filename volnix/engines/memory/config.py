@@ -25,13 +25,20 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Module-level constants. Reused by the config validator AND by tests
 # and the store layer — single source of truth for every bound so no
-# numeric literal leaks into code outside this module.
-_VALID_CADENCE_TRIGGERS: frozenset[str] = frozenset(
+# numeric literal leaks into code outside this module. Exported (no
+# leading underscore on the names we want external) so tests don't
+# duplicate the valid-set inline and drift (N1).
+VALID_CADENCE_TRIGGERS: frozenset[str] = frozenset(
     {"on_eviction", "periodic", "on_activation_complete"}
 )
-_VALID_EMBEDDER_SCHEMES: frozenset[str] = frozenset(
+VALID_EMBEDDER_SCHEMES: frozenset[str] = frozenset(
     {"fts5", "sentence-transformers", "openai"}
 )
+
+# Aliases kept for any caller that still references the underscored
+# names — internal-only module constants keep the underscore.
+_VALID_CADENCE_TRIGGERS = VALID_CADENCE_TRIGGERS
+_VALID_EMBEDDER_SCHEMES = VALID_EMBEDDER_SCHEMES
 
 
 class MemoryConfig(BaseModel):
@@ -115,9 +122,23 @@ class MemoryConfig(BaseModel):
     latency."""
 
     # ── Storage ───────────────────────────────────────────────────
-    storage_db_name: str = "volnix_memory"
+    storage_db_name: str = Field(
+        default="volnix_memory",
+        pattern=r"^[a-zA-Z0-9_]+$",
+        min_length=1,
+    )
     """Logical DB name passed to ``ConnectionManager.get_connection()``.
-    No file suffix — the manager appends ``.db`` itself (G5)."""
+
+    Pattern-enforced: alphanumeric + underscore only. No file suffix
+    — the manager appends ``.db`` itself. No path separators — that
+    would be a traversal vector (C1 of Step 2 review).
+
+    Wire-time resolution: ``app.py`` calls
+    ``connection_manager.get_connection(cfg.memory.storage_db_name)``
+    to turn this logical name into a concrete ``Database`` instance
+    injected into ``SQLiteMemoryStore`` (D1 of Step 2 review; G5 of
+    the Phase 4B gap analysis).
+    """
 
     reset_on_world_start: bool = True
     """When True, memory records for the current world are cleared
@@ -132,27 +153,52 @@ class MemoryConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> MemoryConfig:
-        # Turning memory off must always succeed — the whole point
-        # of default-off is that a pre-4B world with no memory fields
-        # validates cleanly even if every other knob is at its default.
+        # Structural bounds (Field(ge=..., le=..., pattern=...))
+        # always fire, regardless of ``enabled``. Cross-field semantic
+        # validation below only fires when the engine will actually
+        # be constructed — turning memory off must always succeed so
+        # a pre-4B world with default-disabled memory loads cleanly.
         if not self.enabled:
             return self
 
-        # Cadence triggers
+        # Cadence triggers: each must be known, and duplicates are
+        # rejected (C3 of Step 2 review — duplicate "on_eviction"
+        # would fire consolidation twice).
+        seen: set[str] = set()
         for trigger in self.consolidation_triggers:
-            if trigger not in _VALID_CADENCE_TRIGGERS:
+            if trigger not in VALID_CADENCE_TRIGGERS:
                 raise ValueError(
                     f"MemoryConfig.consolidation_triggers: unknown trigger "
                     f"{trigger!r}. Expected one of "
-                    f"{sorted(_VALID_CADENCE_TRIGGERS)}."
+                    f"{sorted(VALID_CADENCE_TRIGGERS)}."
                 )
+            if trigger in seen:
+                raise ValueError(
+                    f"MemoryConfig.consolidation_triggers: duplicate "
+                    f"trigger {trigger!r}. Each trigger may appear at "
+                    f"most once."
+                )
+            seen.add(trigger)
 
-        # Embedder scheme
-        scheme = self.embedder.split(":", 1)[0]
-        if scheme not in _VALID_EMBEDDER_SCHEMES:
+        # Embedder scheme + model. Format is ``<scheme>`` or
+        # ``<scheme>:<model>`` — scheme must be known, and when a
+        # colon appears the suffix must be non-empty (C2 of Step 2
+        # review: ``"openai:"`` is nonsense and would silently call
+        # the provider with an empty model name).
+        embedder_parts = self.embedder.split(":", 1)
+        scheme = embedder_parts[0]
+        if scheme not in VALID_EMBEDDER_SCHEMES:
             raise ValueError(
                 f"MemoryConfig.embedder: unknown scheme {scheme!r}. "
-                f"Expected one of {sorted(_VALID_EMBEDDER_SCHEMES)}."
+                f"Expected format ``<scheme>`` or ``<scheme>:<model>`` "
+                f"where scheme is one of "
+                f"{sorted(VALID_EMBEDDER_SCHEMES)} (M3 of Step 2 review)."
+            )
+        if len(embedder_parts) == 2 and not embedder_parts[1]:
+            raise ValueError(
+                f"MemoryConfig.embedder: empty model suffix in "
+                f"{self.embedder!r}. When the ``:`` separator is "
+                f"present, the model name must be non-empty."
             )
 
         # Consolidation window cannot exceed the ring-buffer cap —
