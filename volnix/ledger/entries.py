@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from volnix.core.memory_types import MemoryScope
 from volnix.core.types import (
     ActorId,
     EntityId,
@@ -490,6 +491,92 @@ class CohortDecisionEntry(LedgerEntry):
 
 
 # ---------------------------------------------------------------------------
+# Memory Engine entries (Phase 4B — PMF Plan)
+# ---------------------------------------------------------------------------
+
+
+class MemoryWriteEntry(LedgerEntry):
+    """Records a single :meth:`MemoryEngineProtocol.remember` call.
+
+    Written on every successful write — explicit (``remember`` tool),
+    implicit (post-activation distiller), or ``consolidated``
+    (periodic consolidation).
+
+    Typed-ID discipline (C3, C4): ``caller_actor_id`` is always an
+    ``ActorId``; ``target_scope`` is the ``MemoryScope`` Literal;
+    ``target_owner`` stays ``str`` because it is polymorphic
+    (``ActorId`` for actor scope, ``TeamId`` for team scope).
+    """
+
+    entry_type: str = "memory_write"
+    caller_actor_id: ActorId
+    target_scope: MemoryScope
+    target_owner: str
+    record_id: str
+    kind: str
+    source: str
+    importance: float = Field(ge=0.0, le=1.0)
+    tick: int = Field(ge=0)
+
+
+class MemoryRecallEntry(LedgerEntry):
+    """Records a single :meth:`MemoryEngineProtocol.recall` call.
+
+    Captures the query mode and result count so replay + cost audits
+    can reason about memory-read pressure per actor.
+    """
+
+    entry_type: str = "memory_recall"
+    caller_actor_id: ActorId
+    target_scope: MemoryScope
+    target_owner: str
+    query_mode: str
+    query_id: str
+    result_count: int = Field(ge=0)
+    tick: int = Field(ge=0)
+
+
+class MemoryConsolidationEntry(LedgerEntry):
+    """Records one episodic → semantic consolidation pass."""
+
+    entry_type: str = "memory_consolidation"
+    actor_id: ActorId
+    episodic_consumed: int = Field(ge=0)
+    semantic_produced: int = Field(ge=0)
+    episodic_pruned: int = Field(ge=0)
+    tick: int = Field(ge=0)
+
+
+class MemoryEvictionEntry(LedgerEntry):
+    """Records a flush-on-demote of one actor's memory buffer."""
+
+    entry_type: str = "memory_eviction"
+    actor_id: ActorId
+
+
+class MemoryHydrationEntry(LedgerEntry):
+    """Records a warm-on-promote of one actor's memory cache."""
+
+    entry_type: str = "memory_hydration"
+    actor_id: ActorId
+
+
+class MemoryAccessDeniedEntry(LedgerEntry):
+    """Records a blocked cross-scope access attempt.
+
+    DESIGN_PRINCIPLES: "if it did not produce a ledger entry, it did
+    not happen." Denied accesses are first-class audit events, not
+    silently swallowed.
+    """
+
+    entry_type: str = "memory_access_denied"
+    caller_actor_id: ActorId
+    target_scope: MemoryScope
+    target_owner: str
+    op: str
+
+
+# ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
 
@@ -517,6 +604,12 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "activation_complete": ActivationCompleteEntry,
     "cohort_rotation": CohortRotationEntry,
     "cohort_decision": CohortDecisionEntry,
+    "memory_write": MemoryWriteEntry,
+    "memory_recall": MemoryRecallEntry,
+    "memory_consolidation": MemoryConsolidationEntry,
+    "memory_eviction": MemoryEvictionEntry,
+    "memory_hydration": MemoryHydrationEntry,
+    "memory_access_denied": MemoryAccessDeniedEntry,
 }
 
 

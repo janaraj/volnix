@@ -12,12 +12,19 @@ from typing import Any, Protocol, runtime_checkable
 
 from volnix.core.context import ActionContext, StepResult
 from volnix.core.events import Event
+from volnix.core.memory_types import (
+    MemoryQuery,
+    MemoryRecall,
+    MemoryScope,
+    MemoryWrite,
+)
 from volnix.core.types import (
     ActorId,
     BudgetState,
     EntityId,
     EventId,
     FidelityTier,
+    MemoryRecordId,
     PolicyId,
     RunResult,
     ServiceId,
@@ -866,4 +873,91 @@ class CohortManagerProtocol(Protocol):
         reached via ``getattr(cm, "_rotation_policy", "unknown")``
         which defeats the Protocol indirection).
         """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Memory Engine (Phase 4B — PMF Plan)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class MemoryEngineProtocol(Protocol):
+    """Caller-agnostic interface to the Memory Engine.
+
+    Any caller (``NPCActivator``, agent activators, research-team
+    primitives, external tools) depends only on this protocol. The
+    concrete :class:`volnix.engines.memory.engine.MemoryEngine` is
+    imported only in :mod:`volnix.registry.composition`.
+
+    Scopes:
+        - ``actor`` — private to a single actor. Cross-actor reads
+          must pass the Permission Engine gate.
+        - ``team`` — shared across team members (plumbed for 4D).
+
+    Determinism contract: same seed + same inputs ⇒ byte-identical
+    memory state at every tick. Implementations must honour this
+    across all retrieval modes.
+
+    Observability contract: every public method emits a ledger entry.
+    See :mod:`volnix.ledger.entries` for the six 4B entry types.
+    """
+
+    async def remember(
+        self,
+        *,
+        caller: ActorId,
+        target_scope: MemoryScope,
+        target_owner: str,
+        write: MemoryWrite,
+        tick: int,
+    ) -> MemoryRecordId:
+        """Persist a new memory record.
+
+        Raises :class:`volnix.core.memory_types.MemoryAccessDenied`
+        when ``caller`` lacks permission to write to the target scope.
+        """
+        ...
+
+    async def recall(
+        self,
+        *,
+        caller: ActorId,
+        target_scope: MemoryScope,
+        target_owner: str,
+        query: MemoryQuery,
+        tick: int,
+    ) -> MemoryRecall:
+        """Retrieve records matching ``query`` from the target scope.
+
+        Graph-mode queries raise ``NotImplementedError`` in 4B
+        (schema plumbed, traversal arrives in 4D).
+        """
+        ...
+
+    async def consolidate(
+        self,
+        actor_id: ActorId,
+        *,
+        force: bool = False,
+        tick: int = 0,
+    ) -> Any:
+        """Distill recent episodic records into semantic facts.
+
+        Returns a ``ConsolidationResult`` (engine-internal type,
+        typed as ``Any`` here to keep the protocol surface free of
+        engine-internal imports).
+        """
+        ...
+
+    async def evict(self, actor_id: ActorId) -> None:
+        """Flush any write buffer for ``actor_id`` and run
+        consolidation if ``"on_eviction"`` is in the cadence config.
+        Called by the :class:`CohortRotationEvent` subscriber.
+        """
+        ...
+
+    async def hydrate(self, actor_id: ActorId) -> None:
+        """Warm any in-memory cache for ``actor_id``. Lazy-on-first-recall
+        is an acceptable implementation — the ledger entry is the contract."""
         ...

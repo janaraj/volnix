@@ -53,6 +53,14 @@ ProfileVersion = NewType("ProfileVersion", str)
 EnvelopeId = NewType("EnvelopeId", str)
 """Unique identifier for an ActionEnvelope."""
 
+MemoryRecordId = NewType("MemoryRecordId", str)
+"""Unique identifier for a single :class:`volnix.core.memory_types.MemoryRecord`.
+Phase 4B (PMF Plan)."""
+
+TeamId = NewType("TeamId", str)
+"""Identifier for a collaborative actor team. Plumbed in Phase 4B
+for team-scope memory; exercised in Phase 4D."""
+
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
