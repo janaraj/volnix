@@ -19,6 +19,7 @@ import uuid
 from typing import Any, ClassVar
 
 from volnix.core.engine import BaseEngine
+from volnix.core.events import CohortRotationEvent
 from volnix.core.memory_types import (
     MemoryAccessDenied,
     MemoryQuery,
@@ -29,6 +30,7 @@ from volnix.core.memory_types import (
     content_hash_of,
 )
 from volnix.core.types import ActorId, MemoryRecordId
+from volnix.engines.memory.config import MemoryConfig
 from volnix.engines.memory.consolidation import ConsolidationResult, Consolidator
 from volnix.engines.memory.embedder import EmbedderProtocol
 from volnix.engines.memory.recall import Recall
@@ -61,14 +63,15 @@ class MemoryEngine(BaseEngine):
     """
 
     engine_name: ClassVar[str] = "memory"
-    # Step 8 appends "cohort.rotated" here and adds a _handle_event
-    # dispatcher for eviction on demote.
-    subscriptions: ClassVar[list[str]] = []
+    # Subscribes to Phase 4A's CohortRotationEvent (Step 8). Per-actor
+    # eviction on demote + optional hydration on promote.
+    subscriptions: ClassVar[list[str]] = ["cohort.rotated"]
     dependencies: ClassVar[list[str]] = []
 
     def __init__(
         self,
         *,
+        memory_config: MemoryConfig,
         store: MemoryStoreProtocol,
         embedder: EmbedderProtocol,
         recall: Recall,
@@ -76,6 +79,7 @@ class MemoryEngine(BaseEngine):
         seed: int,
     ) -> None:
         super().__init__()
+        self._memory_config = memory_config
         self._store = store
         self._embedder = embedder
         self._recall = recall
@@ -112,19 +116,56 @@ class MemoryEngine(BaseEngine):
             logger.warning("MemoryEngine: embedder warmup failed: %s", e)
 
     async def _handle_event(self, event: Any) -> None:
-        """Bus event handler (abstract on BaseEngine).
+        """Dispatch subscribed bus events.
 
-        Step 7 ships ``subscriptions=[]`` so this is never dispatched
-        in practice — the override satisfies the ABC only. Step 8
-        adds ``"cohort.rotated"`` to subscriptions and routes
-        ``CohortRotationEvent`` here for flush-on-demote + hydrate-
-        on-promote.
+        ``cohort.rotated`` (from Phase 4A's
+        ``CohortManager.rotate_cohort``) triggers per-actor eviction
+        + optional consolidation on demote, and optional hydration
+        on promote. Any other event type logs at debug (defence-
+        in-depth — the base class only routes subscribed topics
+        here anyway).
         """
+        if isinstance(event, CohortRotationEvent):
+            await self._on_cohort_rotated(event)
+            return
         logger.debug(
-            "MemoryEngine received unexpected event: %s (subscriptions=%s)",
+            "MemoryEngine received unexpected event type: %s",
             type(event).__name__,
-            self.subscriptions,
         )
+
+    async def _on_cohort_rotated(self, event: CohortRotationEvent) -> None:
+        """Per-actor flush on demote + optional hydrate on promote.
+
+        Per D8-5, a failure for one actor is logged and does not
+        block processing of the rest of the batch.
+        """
+        should_consolidate_on_eviction = "on_eviction" in self._memory_config.consolidation_triggers
+        hydrate_on_promote = self._memory_config.hydrate_on_promote
+
+        # Demote: always evict; conditionally consolidate.
+        for actor_id in event.demoted_ids:
+            try:
+                await self.evict(actor_id)
+                if should_consolidate_on_eviction:
+                    await self.consolidate(actor_id, tick=event.tick)
+            except Exception as e:  # noqa: BLE001 — isolate per-actor failures
+                logger.warning(
+                    "MemoryEngine: evict/consolidate failed for %s: %s",
+                    actor_id,
+                    e,
+                )
+
+        # Promote: hydrate only if configured.
+        if hydrate_on_promote:
+            for actor_id in event.promoted_ids:
+                try:
+                    await self.hydrate(actor_id)
+                except Exception as e:  # noqa: BLE001 — isolate per-actor failures
+                    logger.warning(
+                        "MemoryEngine: hydrate failed for %s: %s",
+                        actor_id,
+                        e,
+                    )
 
     # ------------------------------------------------------------------
     # MemoryEngineProtocol surface

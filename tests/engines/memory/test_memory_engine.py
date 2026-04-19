@@ -9,10 +9,12 @@ tests assert shape + destination per Test Discipline #6
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 import pytest
 
+from volnix.core.events import CohortRotationEvent
 from volnix.core.memory_types import (
     ImportanceQuery,
     MemoryAccessDenied,
@@ -20,7 +22,8 @@ from volnix.core.memory_types import (
     SemanticQuery,
 )
 from volnix.core.protocols import MemoryEngineProtocol
-from volnix.core.types import ActorId
+from volnix.core.types import ActorId, EventId, ServiceId, Timestamp
+from volnix.engines.memory.config import MemoryConfig
 from volnix.engines.memory.consolidation import Consolidator
 from volnix.engines.memory.embedder import FTS5Embedder
 from volnix.engines.memory.engine import MemoryEngine
@@ -94,10 +97,25 @@ def _make_router(provider: LLMProvider | None = None) -> LLMRouter:
     return LLMRouter(config=config, registry=registry)
 
 
-@pytest.fixture
-async def engine_bundle() -> AsyncIterator[tuple[MemoryEngine, _RecordingLedger, Any]]:
-    """Real store + FTS5 embedder + Recall + Consolidator + stub LLM.
-    Returns (engine, ledger_double, db) for teardown."""
+def _make_config(
+    *,
+    hydrate_on_promote: bool = False,
+    consolidation_triggers: list[str] | None = None,
+) -> MemoryConfig:
+    """Step 8 helper — builds an enabled MemoryConfig with selectable
+    cadence triggers + hydrate-on-promote flag."""
+    return MemoryConfig(
+        enabled=True,
+        hydrate_on_promote=hydrate_on_promote,
+        consolidation_triggers=consolidation_triggers
+        if consolidation_triggers is not None
+        else ["on_eviction", "periodic"],
+    )
+
+
+async def _build_bundle(
+    *, config: MemoryConfig, seed: int = 42
+) -> tuple[MemoryEngine, _RecordingLedger, Any]:
     db = await create_database(":memory:", wal_mode=False)
     store = SQLiteMemoryStore(db)
     await store.initialize()
@@ -110,14 +128,47 @@ async def engine_bundle() -> AsyncIterator[tuple[MemoryEngine, _RecordingLedger,
         episodic_window=10,
     )
     engine = MemoryEngine(
+        memory_config=config,
         store=store,
         embedder=embedder,
         recall=recall,
         consolidator=consolidator,
-        seed=42,
+        seed=seed,
     )
     ledger = _RecordingLedger()
     engine._ledger = ledger
+    return engine, ledger, db
+
+
+@pytest.fixture
+async def engine_bundle() -> AsyncIterator[tuple[MemoryEngine, _RecordingLedger, Any]]:
+    """Default: consolidation_triggers includes "on_eviction",
+    hydrate_on_promote=False."""
+    engine, ledger, db = await _build_bundle(config=_make_config())
+    try:
+        yield engine, ledger, db
+    finally:
+        await db.close()
+
+
+@pytest.fixture
+async def engine_bundle_without_eviction_trigger() -> AsyncIterator[
+    tuple[MemoryEngine, _RecordingLedger, Any]
+]:
+    """Variant: "on_eviction" NOT in consolidation_triggers."""
+    engine, ledger, db = await _build_bundle(
+        config=_make_config(consolidation_triggers=["periodic"])
+    )
+    try:
+        yield engine, ledger, db
+    finally:
+        await db.close()
+
+
+@pytest.fixture
+async def engine_bundle_with_hydrate() -> AsyncIterator[tuple[MemoryEngine, _RecordingLedger, Any]]:
+    """Variant: hydrate_on_promote=True."""
+    engine, ledger, db = await _build_bundle(config=_make_config(hydrate_on_promote=True))
     try:
         yield engine, ledger, db
     finally:
@@ -129,24 +180,7 @@ def _write(content: str, *, kind: str = "episodic", importance: float = 0.5) -> 
 
 
 async def _fresh_engine_with_seed(seed: int) -> tuple[MemoryEngine, Any]:
-    db = await create_database(":memory:", wal_mode=False)
-    store = SQLiteMemoryStore(db)
-    await store.initialize()
-    embedder = FTS5Embedder()
-    recall = Recall(store=store, embedder=embedder)
-    consolidator = Consolidator(
-        store=store,
-        llm_router=_make_router(),
-        use_case="memory_distill",
-        episodic_window=10,
-    )
-    engine = MemoryEngine(
-        store=store,
-        embedder=embedder,
-        recall=recall,
-        consolidator=consolidator,
-        seed=seed,
-    )
+    engine, _, db = await _build_bundle(config=_make_config(), seed=seed)
     return engine, db
 
 
@@ -493,3 +527,109 @@ class TestLifecycle:
         # FTS5 embedder skips the warmup path.
         engine, _, _ = engine_bundle
         await engine._on_start()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Step 8 — subscriptions + cohort rotation handler
+# ---------------------------------------------------------------------------
+
+
+class TestSubscriptions:
+    async def test_subscriptions_include_cohort_rotated(self, engine_bundle) -> None:
+        engine, _, _ = engine_bundle
+        assert "cohort.rotated" in engine.subscriptions
+
+
+class TestCohortRotationHandler:
+    """Step 8 — demote triggers evict (+ optional consolidate);
+    promote triggers hydrate (when configured). Errors in one actor
+    don't block the batch (D8-5)."""
+
+    def _event(
+        self,
+        *,
+        demoted: list[str] | None = None,
+        promoted: list[str] | None = None,
+        tick: int = 42,
+    ) -> CohortRotationEvent:
+        now = datetime.now(UTC)
+        return CohortRotationEvent(
+            event_id=EventId("test-event"),
+            event_type="cohort.rotated",
+            timestamp=Timestamp(world_time=now, wall_time=now, tick=tick),
+            actor_id=ActorId("cohort"),
+            service_id=ServiceId("cohort"),
+            promoted_ids=[ActorId(p) for p in (promoted or [])],
+            demoted_ids=[ActorId(d) for d in (demoted or [])],
+            rotation_policy="recency",
+            tick=tick,
+        )
+
+    async def test_demote_triggers_evict_per_actor(self, engine_bundle) -> None:
+        engine, ledger, _ = engine_bundle
+        await engine._handle_event(self._event(demoted=["a", "b", "c"]))
+        evictions = ledger.of_type(MemoryEvictionEntry)
+        assert len(evictions) == 3
+        evicted_ids = {str(e.actor_id) for e in evictions}
+        assert evicted_ids == {"a", "b", "c"}
+
+    async def test_demote_without_on_eviction_trigger_skips_consolidate(
+        self, engine_bundle_without_eviction_trigger
+    ) -> None:
+        engine, ledger, _ = engine_bundle_without_eviction_trigger
+        await engine._handle_event(self._event(demoted=["a"]))
+        assert len(ledger.of_type(MemoryEvictionEntry)) == 1
+        assert len(ledger.of_type(MemoryConsolidationEntry)) == 0
+
+    async def test_demote_with_on_eviction_trigger_runs_consolidate(
+        self,
+        engine_bundle,  # default includes "on_eviction"
+    ) -> None:
+        engine, ledger, _ = engine_bundle
+        await engine._handle_event(self._event(demoted=["a"]))
+        assert len(ledger.of_type(MemoryEvictionEntry)) == 1
+        assert len(ledger.of_type(MemoryConsolidationEntry)) == 1
+
+    async def test_promote_without_hydrate_on_promote_skips(
+        self,
+        engine_bundle,  # default hydrate_on_promote=False
+    ) -> None:
+        engine, ledger, _ = engine_bundle
+        await engine._handle_event(self._event(promoted=["a", "b"]))
+        assert len(ledger.of_type(MemoryHydrationEntry)) == 0
+
+    async def test_promote_with_hydrate_on_promote_fires_per_actor(
+        self, engine_bundle_with_hydrate
+    ) -> None:
+        engine, ledger, _ = engine_bundle_with_hydrate
+        await engine._handle_event(self._event(promoted=["a", "b"]))
+        assert len(ledger.of_type(MemoryHydrationEntry)) == 2
+
+    async def test_unknown_event_type_is_noop(self, engine_bundle) -> None:
+        engine, ledger, _ = engine_bundle
+        before = len(ledger.entries)
+
+        class _Other:
+            event_type = "something.else"
+
+        await engine._handle_event(_Other())
+        assert len(ledger.entries) == before
+
+    async def test_per_actor_error_does_not_block_batch(self, engine_bundle, monkeypatch) -> None:
+        # Force evict() to raise for actor-b; actors a and c should
+        # still be processed. D8-5.
+        engine, ledger, _ = engine_bundle
+        original_evict = engine.evict
+        calls: list[str] = []
+
+        async def _spy(actor_id) -> None:
+            calls.append(str(actor_id))
+            if str(actor_id) == "b":
+                raise RuntimeError("boom")
+            await original_evict(actor_id)
+
+        monkeypatch.setattr(engine, "evict", _spy)
+        await engine._handle_event(self._event(demoted=["a", "b", "c"]))
+        assert calls == ["a", "b", "c"]
+        # a + c succeeded → 2 eviction entries; b crashed before writing.
+        assert len(ledger.of_type(MemoryEvictionEntry)) == 2
