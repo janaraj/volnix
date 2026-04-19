@@ -1,0 +1,291 @@
+"""Tests for MemoryConfig (PMF Plan Phase 4B, Step 2).
+
+Per test discipline (DESIGN_PRINCIPLES.md §Test Discipline):
+negative cases first on every validator.
+"""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from volnix.engines.memory.config import MemoryConfig
+
+
+class TestDefaultsDisabled:
+    """The whole point of default-off is that pre-4B worlds validate
+    without knowing memory exists. A disabled config must accept
+    anything downstream of ``enabled=False`` without validator churn.
+    """
+
+    def test_default_is_disabled(self) -> None:
+        cfg = MemoryConfig()
+        assert cfg.enabled is False
+        assert cfg.tier_mode == "tier2_only"
+        assert cfg.embedder == "fts5"
+        assert cfg.storage_db_name == "volnix_memory"
+        assert cfg.schema_version == 1
+
+    def test_disabled_config_skips_cross_field_validation(self) -> None:
+        # When disabled, even nonsense-by-any-other-measure validates.
+        # Enabling it later would trip the validator — that's the
+        # right order: turn memory on, discover the bad knobs.
+        cfg = MemoryConfig(
+            enabled=False,
+            # These would all fail if enabled=True:
+            embedder="totally-made-up",
+            consolidation_triggers=["never_heard_of_it"],
+            consolidation_episodic_window=9999,
+            max_episodic_per_actor=1,
+        )
+        assert cfg.enabled is False
+
+    def test_frozen(self) -> None:
+        cfg = MemoryConfig()
+        with pytest.raises((ValidationError, AttributeError, TypeError)):
+            cfg.enabled = True  # type: ignore[misc]
+
+
+class TestCadenceTriggers:
+    """Cadence triggers must come from the known set. A typo like
+    'on_evict' silently skipping consolidation is the class of
+    failure the Phase 4A review codified 'negative case first' for."""
+
+    def test_negative_unknown_trigger_rejected_when_enabled(self) -> None:
+        with pytest.raises(ValidationError, match="unknown trigger"):
+            MemoryConfig(
+                enabled=True,
+                consolidation_triggers=["on_evict"],  # typo
+            )
+
+    def test_negative_mixed_valid_and_invalid_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="unknown trigger"):
+            MemoryConfig(
+                enabled=True,
+                consolidation_triggers=["on_eviction", "GARBAGE"],
+            )
+
+    @pytest.mark.parametrize(
+        "triggers",
+        [
+            ["on_eviction"],
+            ["periodic"],
+            ["on_activation_complete"],
+            ["on_eviction", "periodic"],
+            ["on_eviction", "periodic", "on_activation_complete"],
+            [],  # empty is a valid "never consolidate" state
+        ],
+    )
+    def test_positive_valid_trigger_combinations(self, triggers: list[str]) -> None:
+        cfg = MemoryConfig(enabled=True, consolidation_triggers=triggers)
+        assert cfg.consolidation_triggers == triggers
+
+
+class TestEmbedderScheme:
+    """Embedder string is '<scheme>' or '<scheme>:<model>'. Scheme
+    must be one of three known values."""
+
+    @pytest.mark.parametrize("bad_embedder", [
+        "fts",         # close but wrong
+        "FTS5",        # case mismatch
+        "transformer", # partial
+        "huggingface:all-MiniLM-L6-v2",  # wrong prefix
+        "",            # empty
+    ])
+    def test_negative_unknown_scheme_rejected(self, bad_embedder: str) -> None:
+        with pytest.raises(ValidationError, match="unknown scheme"):
+            MemoryConfig(enabled=True, embedder=bad_embedder)
+
+    @pytest.mark.parametrize("good_embedder", [
+        "fts5",
+        "sentence-transformers",
+        "sentence-transformers:all-MiniLM-L6-v2",
+        "openai",
+        "openai:text-embedding-3-small",
+    ])
+    def test_positive_schemes_accepted(self, good_embedder: str) -> None:
+        cfg = MemoryConfig(enabled=True, embedder=good_embedder)
+        assert cfg.embedder == good_embedder
+
+
+class TestSizeCaps:
+    """Caps and windows must be positive. The distiller window can
+    never exceed the ring buffer — that's a silent-truncation trap
+    the 4A plan codified 'fail fast' for."""
+
+    @pytest.mark.parametrize("bad_cap", [0, -1, -100])
+    def test_negative_max_episodic_zero_or_negative_rejected(self, bad_cap: int) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=True, max_episodic_per_actor=bad_cap)
+
+    @pytest.mark.parametrize("bad_cap", [0, -1, -100])
+    def test_negative_max_semantic_zero_or_negative_rejected(self, bad_cap: int) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=True, max_semantic_per_actor=bad_cap)
+
+    def test_negative_consolidation_window_exceeds_cap_rejected(self) -> None:
+        # Ring buffer holds 50; distiller wants 100. Nonsense.
+        with pytest.raises(ValidationError, match="consolidation_episodic_window"):
+            MemoryConfig(
+                enabled=True,
+                max_episodic_per_actor=50,
+                consolidation_episodic_window=100,
+            )
+
+    def test_positive_consolidation_window_equal_to_cap_ok(self) -> None:
+        cfg = MemoryConfig(
+            enabled=True,
+            max_episodic_per_actor=100,
+            consolidation_episodic_window=100,
+        )
+        assert cfg.consolidation_episodic_window == 100
+
+    def test_negative_default_recall_top_k_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=True, default_recall_top_k=0)
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=True, default_recall_top_k=1001)
+
+
+class TestRecallBudget:
+    """G14 tight-bound: recall_p95_budget_ms is a test assertion
+    target. Must be non-negative."""
+
+    @pytest.mark.parametrize("bad_budget", [-1, -100])
+    def test_negative_recall_budget_rejected(self, bad_budget: int) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(enabled=True, recall_p95_budget_ms=bad_budget)
+
+    def test_positive_zero_budget_is_valid_for_contract_testing(self) -> None:
+        # zero is valid — means "recall must be effectively instant";
+        # a test-time override to force tight-bound failure is useful.
+        cfg = MemoryConfig(enabled=True, recall_p95_budget_ms=0)
+        assert cfg.recall_p95_budget_ms == 0
+
+
+class TestSchemaVersion:
+    """G12: schema versioning is plumbed now so migrations are
+    possible later. Only version 1 ships in 4B."""
+
+    def test_negative_future_schema_version_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="unsupported version"):
+            MemoryConfig(enabled=True, schema_version=2)
+
+    def test_negative_zero_schema_version_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(schema_version=0)
+
+    def test_positive_version_1_accepted(self) -> None:
+        cfg = MemoryConfig(enabled=True, schema_version=1)
+        assert cfg.schema_version == 1
+
+
+class TestTierMode:
+    """G-discussion: configurable choice between pure Tier-2 and
+    Tier-1+Tier-2 mix. Tier mode is a Literal so typos fail fast."""
+
+    def test_negative_unknown_tier_mode_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            MemoryConfig(tier_mode="tier_3")  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("mode", ["tier2_only", "mixed"])
+    def test_positive_tier_modes(self, mode: str) -> None:
+        cfg = MemoryConfig(tier_mode=mode)  # type: ignore[arg-type]
+        assert cfg.tier_mode == mode
+
+
+class TestTopLevelNestingInVolnixConfig:
+    """G1: ``memory`` is a top-level field of ``VolnixConfig``, NOT
+    nested under ``agency``. This is a regression guard — the draft
+    plan made this mistake, and the architecture audit must catch
+    any future regression.
+    """
+
+    def test_memory_is_sibling_of_agency_not_child(self) -> None:
+        from volnix.config.schema import VolnixConfig
+
+        cfg = VolnixConfig()
+        # Top-level access works
+        assert isinstance(cfg.memory, MemoryConfig)
+        # And ``agency`` does NOT expose a ``memory`` attribute —
+        # if someone re-introduces the nested layout, this fails.
+        assert not hasattr(cfg.agency, "memory"), (
+            "memory must be a top-level field on VolnixConfig, not "
+            "nested under AgencyConfig (G1)."
+        )
+
+    def test_default_volnix_config_disabled_memory(self) -> None:
+        from volnix.config.schema import VolnixConfig
+
+        cfg = VolnixConfig()
+        assert cfg.memory.enabled is False
+
+
+class TestTomlRoundTrip:
+    """The ``[memory]`` block in ``volnix.toml`` must parse into
+    ``MemoryConfig`` with the documented defaults. This locks in the
+    contract between the config file and the schema so a silent
+    field rename in either direction fails loudly here, not in an
+    integration test at runtime.
+    """
+
+    def test_volnix_toml_memory_block_loads(self) -> None:
+        from volnix.config.loader import ConfigLoader
+        from volnix.config.schema import VolnixConfig
+
+        cfg = ConfigLoader().load()
+        assert isinstance(cfg, VolnixConfig)
+        assert isinstance(cfg.memory, MemoryConfig)
+
+        # Every field documented in volnix.toml [memory] must land
+        # at its expected default.
+        assert cfg.memory.enabled is False
+        assert cfg.memory.tier_mode == "tier2_only"
+        assert cfg.memory.embedder == "fts5"
+        assert cfg.memory.embedder_cache_enabled is True
+        assert cfg.memory.max_episodic_per_actor == 500
+        assert cfg.memory.max_semantic_per_actor == 100
+        assert cfg.memory.consolidation_triggers == ["on_eviction", "periodic"]
+        assert cfg.memory.consolidation_periodic_interval_ticks == 100
+        assert cfg.memory.consolidation_episodic_window == 50
+        assert cfg.memory.distillation_enabled is True
+        assert cfg.memory.distillation_llm_use_case == "memory_distill"
+        assert cfg.memory.default_recall_top_k == 5
+        assert cfg.memory.recall_p95_budget_ms == 10
+        assert cfg.memory.expose_remember_tool is False
+        assert cfg.memory.hydrate_on_promote is False
+        assert cfg.memory.storage_db_name == "volnix_memory"
+        assert cfg.memory.reset_on_world_start is True
+        assert cfg.memory.schema_version == 1
+
+
+class TestBooleanToggles:
+    """Every boolean knob should flip cleanly. These tests fail loudly
+    if a field rename ever silently breaks YAML/TOML deserialization."""
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "embedder_cache_enabled",
+            "distillation_enabled",
+            "expose_remember_tool",
+            "hydrate_on_promote",
+            "reset_on_world_start",
+        ],
+    )
+    @pytest.mark.parametrize("value", [True, False])
+    def test_boolean_toggles_round_trip(self, field: str, value: bool) -> None:
+        cfg = MemoryConfig(**{field: value})
+        assert getattr(cfg, field) is value
+
+
+class TestStorageDbName:
+    """storage_db_name is passed to ConnectionManager.get_connection().
+    Empty string would collide with other DB-less usage; guard it
+    loudly even though defaults are sensible."""
+
+    def test_default_logical_name(self) -> None:
+        cfg = MemoryConfig()
+        assert cfg.storage_db_name == "volnix_memory"
+        assert "/" not in cfg.storage_db_name
+        assert "." not in cfg.storage_db_name  # logical name, no file suffix

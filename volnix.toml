@@ -204,6 +204,29 @@ synthesis_buffer_pct = 0.10
 max_tool_calls_per_activation = 20
 tool_choice_mode = "auto"
 
+# ── Memory Engine (PMF Plan Phase 4B) ─────────────────────
+# Disabled by default; every existing blueprint and the Phase 0
+# regression oracle must stay byte-identical while enabled=false.
+[memory]
+enabled = false
+tier_mode = "tier2_only"            # "tier2_only" | "mixed"
+embedder = "fts5"                   # "fts5" | "sentence-transformers:<model>" | "openai:<model>"
+embedder_cache_enabled = true
+max_episodic_per_actor = 500
+max_semantic_per_actor = 100
+consolidation_triggers = ["on_eviction", "periodic"]
+consolidation_periodic_interval_ticks = 100
+consolidation_episodic_window = 50
+distillation_enabled = true
+distillation_llm_use_case = "memory_distill"
+default_recall_top_k = 5
+recall_p95_budget_ms = 10
+expose_remember_tool = false
+hydrate_on_promote = false
+storage_db_name = "volnix_memory"
+reset_on_world_start = true         # cross-run memory reuse is opt-in only
+schema_version = 1
+
 # ── External Agent Slots ───────────────────────────────────
 [agents]
 max_external_agents = 10

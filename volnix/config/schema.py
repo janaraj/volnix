@@ -16,6 +16,7 @@ from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.animator.config import AnimatorConfig
 from volnix.engines.budget.config import BudgetConfig
 from volnix.engines.feedback.config import FeedbackConfig
+from volnix.engines.memory.config import MemoryConfig
 from volnix.engines.permission.config import PermissionConfig
 from volnix.engines.policy.config import PolicyConfig
 from volnix.engines.reporter.config import ReporterConfig
@@ -112,6 +113,7 @@ class VolnixConfig(BaseModel):
     templates: TemplateConfig = Field(default_factory=TemplateConfig)
     world_compiler: WorldCompilerConfig = Field(default_factory=WorldCompilerConfig)
     agency: AgencyConfig = Field(default_factory=AgencyConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     profiles: ProfileConfig = Field(default_factory=ProfileConfig)
     simulation_runner: SimulationRunnerConfig = Field(default_factory=SimulationRunnerConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
