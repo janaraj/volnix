@@ -27,6 +27,9 @@ from tests.engines.memory.recall.metrics import (
     precision_at_k,
     recall_at_k,
 )
+from volnix.core.memory_types import SemanticQuery
+from volnix.engines.memory.embedder import FTS5Embedder
+from volnix.engines.memory.recall import Recall
 
 # The 9 categories the corpus exercises. Kept explicit so a category
 # rename in the corpus without a test update fails the meta-test.
@@ -59,13 +62,16 @@ CATEGORIES: tuple[str, ...] = (
 # fails cleanly and dense embeddings (Step 13) should shine.
 THRESHOLDS: dict[tuple[str, str], float] = {
     ("exact_keyword", "fts5"): 1.00,
-    ("morphological", "fts5"): 0.95,   # measured 1.00
-    ("multi_keyword", "fts5"): 0.90,   # measured 1.00
+    ("morphological", "fts5"): 0.95,  # measured 1.00
+    ("multi_keyword", "fts5"): 0.90,  # measured 1.00
     ("case_folding", "fts5"): 1.00,
-    ("diacritics", "fts5"): 0.95,      # measured 1.00
-    ("punctuation", "fts5"): 0.90,     # measured 1.00
-    ("paraphrase", "fts5"): 0.90,      # measured 1.00 — shared-token regime
-    ("synonym", "fts5"): 0.00,         # measured 0.33, 1/3 shares a token by coincidence — zero is the true floor
+    ("diacritics", "fts5"): 0.95,  # measured 1.00
+    ("punctuation", "fts5"): 0.90,  # measured 1.00
+    ("paraphrase", "fts5"): 0.90,  # measured 1.00 — shared-token regime
+    (
+        "synonym",
+        "fts5",
+    ): 0.00,  # measured 0.33, 1/3 shares a token by coincidence — zero is the true floor
     ("scope_isolation", "fts5"): 1.00,
     # Step 13 appends ("<category>", "sentence-transformers") entries here
     # — same 9 categories, higher threshold on synonym (expected ~0.60+).
@@ -78,15 +84,15 @@ THRESHOLDS: dict[tuple[str, str], float] = {
 # Categories with multi-relevant queries (morphological, case_folding)
 # can show higher precision when multiple relevants land in top 5.
 PRECISION_FLOOR: dict[tuple[str, str], float] = {
-    ("exact_keyword", "fts5"): 0.20,     # measured 0.20
-    ("morphological", "fts5"): 0.30,     # measured 0.33
-    ("multi_keyword", "fts5"): 0.20,     # measured 0.20
-    ("case_folding", "fts5"): 0.30,      # measured 0.33
-    ("diacritics", "fts5"): 0.20,        # measured 0.20
-    ("punctuation", "fts5"): 0.20,       # measured 0.20
-    ("paraphrase", "fts5"): 0.18,        # measured 0.20
-    ("synonym", "fts5"): 0.00,           # measured 0.07 — zero is honest floor
-    ("scope_isolation", "fts5"): 0.20,   # measured 0.20
+    ("exact_keyword", "fts5"): 0.20,  # measured 0.20
+    ("morphological", "fts5"): 0.30,  # measured 0.33
+    ("multi_keyword", "fts5"): 0.20,  # measured 0.20
+    ("case_folding", "fts5"): 0.30,  # measured 0.33
+    ("diacritics", "fts5"): 0.20,  # measured 0.20
+    ("punctuation", "fts5"): 0.20,  # measured 0.20
+    ("paraphrase", "fts5"): 0.18,  # measured 0.20
+    ("synonym", "fts5"): 0.00,  # measured 0.07 — zero is honest floor
+    ("scope_isolation", "fts5"): 0.20,  # measured 0.20
 }
 
 
@@ -257,3 +263,40 @@ class TestHarnessDeterminism:
         assert first == second, (
             f"Non-deterministic retrieval for {sample['id']!r}: {first} vs {second}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Step 5 integration — route via Recall.dispatch and assert parity with
+# the direct store.fts_search path
+# ---------------------------------------------------------------------------
+
+
+class TestHarnessViaRecallDispatch:
+    """Step 5 integration check: the same corpus queries routed
+    through :class:`Recall.dispatch` must return identical result
+    orderings to the direct ``store.fts_search`` path the harness
+    uses. If they diverge, Recall is dropping or reshaping results
+    somewhere."""
+
+    async def test_recall_dispatch_matches_direct_fts_search(self, seeded_store, corpus) -> None:
+        store, _ = seeded_store
+        r = Recall(store=store, embedder=FTS5Embedder())
+
+        # Cover strong-signal categories — any divergence in dispatch
+        # shape or filtering shows up here.
+        sample_cats = ("exact_keyword", "morphological", "case_folding")
+        for cat in sample_cats:
+            for q in corpus["queries"]:
+                if q["category"] != cat:
+                    continue
+                direct = await store.fts_search(q["owner_id"], q["text"], top_k=5)
+                direct_ids = [str(rec.record_id) for rec, _ in direct]
+                via_recall = await r.dispatch(
+                    q["owner_id"],
+                    SemanticQuery(text=q["text"], top_k=5),
+                )
+                recall_ids = [str(x.record_id) for x in via_recall.records]
+                assert direct_ids == recall_ids, (
+                    f"Dispatch vs direct diverged for {q['id']!r}: "
+                    f"direct={direct_ids} recall={recall_ids}"
+                )
