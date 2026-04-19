@@ -21,16 +21,20 @@ from volnix.core.memory_types import (
     SemanticQuery,
     StructuredQuery,
     TemporalQuery,
+    content_hash_of,
 )
 from volnix.core.types import ActorId, MemoryRecordId
-
-_VALID_HASH = "a" * 64  # 64 lowercase hex chars — satisfies content_hash pattern
 
 
 def _base_record_kwargs(**overrides):
     """Builder for a valid MemoryRecord. Individual tests override
     the fields they're testing — keeps each test focused on its
-    invariant."""
+    invariant.
+
+    ``content_hash`` is recomputed from ``content`` so overrides that
+    change one without the other don't accidentally produce an
+    invalid record (C1 of Step 3 review enforces the hash matches).
+    """
     defaults = {
         "record_id": MemoryRecordId("r1"),
         "scope": "actor",
@@ -39,12 +43,15 @@ def _base_record_kwargs(**overrides):
         "tier": "tier2",
         "source": "explicit",
         "content": "hello",
-        "content_hash": _VALID_HASH,
         "importance": 0.5,
         "tags": [],
         "created_tick": 0,
     }
     defaults.update(overrides)
+    # Compute content_hash from the final content, unless the test
+    # explicitly wants to supply a malformed one.
+    if "content_hash" not in defaults:
+        defaults["content_hash"] = content_hash_of(defaults["content"])
     return defaults
 
 
@@ -95,6 +102,29 @@ class TestMemoryRecord:
     def test_negative_content_hash_pattern_enforced(self, bad_hash: str) -> None:
         with pytest.raises(ValidationError):
             MemoryRecord(**_base_record_kwargs(content_hash=bad_hash))
+
+    # C1 of Step 3 review: content_hash must match sha256(content).
+    # A valid-shaped but wrong digest (e.g., all zeros) must be rejected.
+    def test_negative_content_hash_does_not_match_content_rejected(self) -> None:
+        wrong_but_valid_shape = "0" * 64  # matches pattern, wrong digest
+        with pytest.raises(ValidationError, match="does not match"):
+            MemoryRecord(
+                **_base_record_kwargs(
+                    content="Hello world",
+                    content_hash=wrong_but_valid_shape,
+                )
+            )
+
+    def test_positive_content_hash_of_helper_produces_valid_record(self) -> None:
+        # The canonical way to build a record: compute the hash via
+        # the exported helper so algorithm + encoding stay in sync.
+        rec = MemoryRecord(
+            **_base_record_kwargs(
+                content="canonical content",
+                content_hash=content_hash_of("canonical content"),
+            )
+        )
+        assert rec.content_hash == content_hash_of("canonical content")
 
     def test_positive_consolidated_from_backlink_on_semantic(self) -> None:
         rec = MemoryRecord(

@@ -18,6 +18,7 @@ See:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -30,7 +31,20 @@ from volnix.core.types import ActorId, MemoryRecordId
 _MAX_TOP_K: int = 1000
 _MAX_LIMIT: int = 10_000
 _MAX_GRAPH_DEPTH: int = 10
+_MAX_QUERY_TEXT_LEN: int = 10_000  # M4 of Step 3 review: cap FTS5 query size
 _CONTENT_HASH_PATTERN: str = r"^[a-f0-9]{64}$"
+
+
+def content_hash_of(text: str) -> str:
+    """Canonical SHA-256 hex digest used for ``MemoryRecord.content_hash``
+    and the embedding cache key.
+
+    Single source of truth — every caller (engine, store, tests) that
+    computes a content hash goes through this function so the algorithm
+    and encoding match. Change this and ``MemoryRecord`` validation
+    simultaneously, never one without the other.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 # ---------------------------------------------------------------------------
 # Discriminator literals
@@ -114,6 +128,25 @@ class MemoryRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
+    def _validate_content_hash_matches_content(self) -> MemoryRecord:
+        # C1 of Step 3 review: format-only validation was insufficient.
+        # A caller could pass ``content="Hello", content_hash="a"*64``
+        # and the record would be accepted — then the embedding cache
+        # keys on the stale hash and returns a vector for different
+        # content. Here we verify the hash is the canonical digest of
+        # the content, catching the caller bug at construction time.
+        expected = content_hash_of(self.content)
+        if self.content_hash != expected:
+            raise ValueError(
+                f"MemoryRecord.content_hash ({self.content_hash!r}) does "
+                f"not match sha256(content) ({expected!r}). Use "
+                f"``content_hash_of(content)`` from "
+                f"``volnix.core.memory_types`` rather than computing "
+                f"the digest yourself, so the algorithm stays in sync."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_consolidation_backlink(self) -> MemoryRecord:
         # N2: episodic records MUST NOT carry a consolidated_from link.
         # Back-links are a semantic-record concept — distillation
@@ -169,7 +202,11 @@ class SemanticQuery(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     mode: Literal["semantic"] = "semantic"
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=_MAX_QUERY_TEXT_LEN)
+    """Query text. Capped at ``_MAX_QUERY_TEXT_LEN`` chars so a caller
+    can't DoS the FTS5 MATCH parser with a multi-MB query (M4 of
+    Step 3 review)."""
+
     top_k: int = Field(default=5, ge=1, le=_MAX_TOP_K)
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
@@ -210,7 +247,10 @@ class HybridQuery(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     mode: Literal["hybrid"] = "hybrid"
-    semantic_text: str = Field(min_length=1)
+    semantic_text: str = Field(min_length=1, max_length=_MAX_QUERY_TEXT_LEN)
+    """See ``SemanticQuery.text`` — capped at ``_MAX_QUERY_TEXT_LEN``
+    for the same DoS-guard reason (M4 of Step 3 review)."""
+
     semantic_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     recency_weight: float = Field(default=0.3, ge=0.0, le=1.0)
     importance_weight: float = Field(default=0.2, ge=0.0, le=1.0)
