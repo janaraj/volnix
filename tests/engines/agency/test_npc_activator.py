@@ -669,3 +669,225 @@ class TestInitialNPCState:
         )
         # Not-a-dict properties fall back to empty — no crash.
         assert initial_npc_state(profile) == {}
+
+
+# ---------------------------------------------------------------------------
+# PMF 4B Step 11 — MemoryEngine integration
+# ---------------------------------------------------------------------------
+
+
+def _memory_config_stub(top_k: int = 5):
+    """Minimal ``_memory_config`` attribute used by the activator to
+    read ``default_recall_top_k``. Built as a simple namespace so
+    tests don't need the real MemoryConfig dependency."""
+    return type("Cfg", (), {"default_recall_top_k": top_k})()
+
+
+def _empty_recall():
+    from volnix.core.memory_types import MemoryRecall
+
+    return MemoryRecall(query_id="q-test", records=[], total_matched=0, truncated=False)
+
+
+class TestActivatorMemoryRecall:
+    """Pre-activation recall happens when ``host._memory_engine`` is wired."""
+
+    @pytest.mark.asyncio
+    async def test_positive_recall_called_with_actor_scope(self) -> None:
+        npc = _active_npc()
+        engine, _router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_text_only("skip")],
+        )
+        mock_memory = AsyncMock()
+        mock_memory._memory_config = _memory_config_stub()
+        mock_memory.recall = AsyncMock(return_value=_empty_recall())
+        mock_memory.remember = AsyncMock(return_value="rec-1")
+        engine.set_memory_engine(mock_memory)
+
+        await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+
+        assert mock_memory.recall.await_count == 1
+        call_kwargs = mock_memory.recall.call_args.kwargs
+        assert call_kwargs["target_scope"] == "actor"
+        assert call_kwargs["target_owner"] == str(npc.actor_id)
+        assert call_kwargs["caller"] == npc.actor_id
+        # HybridQuery carries the trigger-description + persona text.
+        assert call_kwargs["query"].mode == "hybrid"
+        assert call_kwargs["query"].top_k == 5
+
+    @pytest.mark.asyncio
+    async def test_negative_no_memory_engine_skips_recall(self) -> None:
+        """Without set_memory_engine, the activator must never
+        attempt a recall. Phase 0 byte-identical guarantee."""
+        npc = _active_npc()
+        engine, _router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_text_only("skip")],
+        )
+        # No set_memory_engine call. Engine's slot stays None.
+        assert engine._memory_engine is None
+
+        envelopes = await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+        # Activation ran to completion with no memory attribute access.
+        assert isinstance(envelopes, list)
+
+
+class TestActivatorImplicitWrite:
+    """Post-activation raw episodic record (D11-7)."""
+
+    @pytest.mark.asyncio
+    async def test_positive_remember_called_after_normal_exit(self) -> None:
+        npc = _active_npc()
+        engine, _router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_with_tool("drop_flare", {"duration_min": 120})],
+        )
+        mock_memory = AsyncMock()
+        mock_memory._memory_config = _memory_config_stub()
+        mock_memory.recall = AsyncMock(return_value=_empty_recall())
+        mock_memory.remember = AsyncMock(return_value="rec-1")
+        engine.set_memory_engine(mock_memory)
+
+        await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+
+        assert mock_memory.remember.await_count == 1
+        write = mock_memory.remember.call_args.kwargs["write"]
+        assert write.kind == "episodic"
+        assert write.source == "implicit"
+        # Invoked a tool → importance 0.5, not 0.2.
+        assert write.importance == 0.5
+        assert write.metadata["terminated_by"]
+        assert write.metadata["activation_id"]
+
+    @pytest.mark.asyncio
+    async def test_positive_remember_called_after_text_only_termination(
+        self,
+    ) -> None:
+        npc = _active_npc()
+        engine, _router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_text_only("I'll pass.")],
+        )
+        mock_memory = AsyncMock()
+        mock_memory._memory_config = _memory_config_stub()
+        mock_memory.recall = AsyncMock(return_value=_empty_recall())
+        mock_memory.remember = AsyncMock(return_value="rec-1")
+        engine.set_memory_engine(mock_memory)
+
+        await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+
+        assert mock_memory.remember.await_count == 1
+        write = mock_memory.remember.call_args.kwargs["write"]
+        # No tool calls → importance 0.2.
+        assert write.importance == 0.2
+        assert write.metadata["terminated_by"] == "text_response"
+
+    @pytest.mark.asyncio
+    async def test_negative_no_memory_engine_no_remember_call(self) -> None:
+        npc = _active_npc()
+        engine, _router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_with_tool("drop_flare", {"duration_min": 120})],
+        )
+        # No set_memory_engine. Activation must not touch memory.
+        envelopes = await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+        assert len(envelopes) == 1
+
+
+class TestActivatorMemoryGracefulDegradation:
+    """D11-6 / D11-9: broken memory must not break activation."""
+
+    @pytest.mark.asyncio
+    async def test_negative_recall_raises_activation_continues(self) -> None:
+        npc = _active_npc()
+        engine, router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_with_tool("drop_flare", {"duration_min": 120})],
+        )
+        mock_memory = AsyncMock()
+        mock_memory._memory_config = _memory_config_stub()
+        mock_memory.recall = AsyncMock(side_effect=RuntimeError("store down"))
+        mock_memory.remember = AsyncMock(return_value="rec-1")
+        engine.set_memory_engine(mock_memory)
+
+        envelopes = await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+        # Activation still produced its envelope despite recall failure.
+        assert router.route.await_count == 1
+        assert len(envelopes) == 1
+        # remember still attempted (post-activation writes don't
+        # depend on pre-activation recall).
+        assert mock_memory.remember.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_negative_remember_raises_activation_continues(self) -> None:
+        npc = _active_npc()
+        engine, router, _executor = await _wired_engine(
+            actors=[npc],
+            llm_responses=[_response_with_tool("drop_flare", {"duration_min": 120})],
+        )
+        mock_memory = AsyncMock()
+        mock_memory._memory_config = _memory_config_stub()
+        mock_memory.recall = AsyncMock(return_value=_empty_recall())
+        mock_memory.remember = AsyncMock(side_effect=RuntimeError("store down"))
+        engine.set_memory_engine(mock_memory)
+
+        envelopes = await engine.activate_for_event(
+            npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+        )
+        # Activation still produced its envelope despite remember failure.
+        assert router.route.await_count == 1
+        assert len(envelopes) == 1
+
+
+class TestSetMemoryEngine:
+    """Setter contract — mirrors set_cohort_manager / set_npc_activator."""
+
+    @pytest.mark.asyncio
+    async def test_positive_set_memory_engine_stores_reference(self) -> None:
+        engine, _router, _executor = await _wired_engine(actors=[_active_npc()], llm_responses=[])
+        assert engine._memory_engine is None
+        sentinel = object()
+        engine.set_memory_engine(sentinel)
+        assert engine._memory_engine is sentinel
+
+
+class TestCurrentTickHelper:
+    """D11-8 lockdown — module helper reads progress defensively."""
+
+    def test_negative_missing_progress_attribute_returns_zero(self) -> None:
+        from volnix.engines.agency.npc_activator import _current_tick
+
+        host = type("H", (), {})()  # no _simulation_progress attribute
+        assert _current_tick(host) == 0
+
+    def test_negative_none_progress_returns_zero(self) -> None:
+        from volnix.engines.agency.npc_activator import _current_tick
+
+        host = type("H", (), {"_simulation_progress": None})()
+        assert _current_tick(host) == 0
+
+    def test_negative_empty_progress_tuple_returns_zero(self) -> None:
+        """Defensive: IndexError on an empty tuple falls back to 0."""
+        from volnix.engines.agency.npc_activator import _current_tick
+
+        host = type("H", (), {"_simulation_progress": ()})()
+        assert _current_tick(host) == 0
+
+    def test_positive_valid_progress_returns_tick(self) -> None:
+        from volnix.engines.agency.npc_activator import _current_tick
+
+        host = type("H", (), {"_simulation_progress": (42, 100)})()
+        assert _current_tick(host) == 42

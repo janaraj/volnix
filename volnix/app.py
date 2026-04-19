@@ -1534,6 +1534,12 @@ class VolnixApp:
                 await memory_engine.initialize({}, self._bus)
                 await memory_engine.start()
                 self._memory_engine = memory_engine
+                # PMF 4B Step 11 — inject into AgencyEngine so
+                # NPCActivator sees it via ``host._memory_engine``
+                # during every activation. ``hasattr`` guard mirrors
+                # the Step-10 cohort-manager wiring pattern.
+                if hasattr(agency, "set_memory_engine"):
+                    agency.set_memory_engine(memory_engine)
 
         await agency.configure(actor_states, world_context, available_actions)
 

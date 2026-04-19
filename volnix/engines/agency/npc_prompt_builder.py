@@ -56,6 +56,7 @@ class NPCPromptBuilder:
         trigger_event: Event | None,
         recent_events: list[dict[str, Any]],
         available_tools: list[dict[str, Any]],
+        recalled_memories: Any = None,
     ) -> str:
         """Render the decision prompt for this NPC activation.
 
@@ -72,6 +73,13 @@ class NPCPromptBuilder:
             available_tools: Tool descriptors scoped by
                 ``profile.tool_scope``. Each dict has ``name`` and
                 ``description``.
+            recalled_memories: PMF 4B Step 11 — optional
+                :class:`volnix.core.memory_types.MemoryRecall`. When
+                ``None`` or empty (``records == []``), the memory
+                section renders as nothing so the pre-Step-11 output
+                stays byte-identical. When non-empty, each record's
+                content is listed under the "Memories you recall"
+                heading between persona and current state.
 
         Returns:
             The rendered prompt string, ready to send to the LLM.
@@ -89,6 +97,7 @@ class NPCPromptBuilder:
             trigger_description=self._describe(trigger_event),
             recent_events=recent_events,
             available_tools=available_tools,
+            recalled_memories=recalled_memories,
         )
 
     @staticmethod

@@ -243,6 +243,11 @@ class AgencyEngine(BaseEngine):
         # ``_activate_with_tool_loop`` applies the per-event-type
         # policy before letting the LLM loop run.
         self._cohort_manager: Any = None
+        # PMF 4B Step 11 — MemoryEngine injection slot. Opt-in via
+        # ``set_memory_engine``. When None (default), NPCActivator's
+        # memory hooks short-circuit and the activation path is
+        # byte-identical to Phase 4A / Step 10.
+        self._memory_engine: Any = None
 
     def set_simulation_progress(self, current: int, total: int) -> None:
         """Update simulation progress for lead agent prompt awareness."""
@@ -284,6 +289,25 @@ class AgencyEngine(BaseEngine):
         never gated by the cohort regardless of this setting.
         """
         self._cohort_manager = manager
+
+    def set_memory_engine(self, engine: Any) -> None:
+        """Opt-in memory integration (PMF 4B Step 11).
+
+        The engine must satisfy
+        :class:`volnix.core.protocols.MemoryEngineProtocol`. When
+        ``None`` (the default), the memory hooks in
+        ``NPCActivator`` short-circuit — every NPC activation is
+        byte-identical to the pre-Step-11 path (locked by the
+        Phase 0 regression oracle at
+        ``tests/integration/test_passive_npc_regression.py``).
+
+        Called by ``app.py`` after ``build_memory_engine`` +
+        lifecycle (``initialize`` + ``start``) succeed. The
+        activator reads it via ``host._memory_engine`` for
+        pre-activation recall and post-activation implicit
+        remember.
+        """
+        self._memory_engine = engine
 
     async def configure(
         self,

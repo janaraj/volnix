@@ -39,6 +39,20 @@ from volnix.core.events import Event, WorldEvent
 logger = logging.getLogger(__name__)
 
 
+def _current_tick(host: Any) -> int:
+    """Read the current tick from ``host._simulation_progress``,
+    defaulting to 0. Mirrors the pattern used at the cohort
+    ``record_activation`` call site (D11-8).
+    """
+    progress = getattr(host, "_simulation_progress", None)
+    if progress is None:
+        return 0
+    try:
+        return int(progress[0])
+    except (IndexError, TypeError, ValueError):
+        return 0
+
+
 class NPCActivator:
     """Orchestrates the Active-NPC LLM loop.
 
@@ -117,6 +131,16 @@ class NPCActivator:
             host._tool_name_map,
         )
 
+        # PMF 4B Step 11 — pre-activation memory recall. Graceful
+        # degradation: any error here logs + continues with None
+        # (D11-6). Memory is additive; a broken memory must not
+        # block the activation loop.
+        recalled_memories = await self._recall_for_activation(
+            actor=actor,
+            trigger_event=trigger_event,
+            host=host,
+        )
+
         system_prompt = self._prompt_builder.build(
             state=actor,
             profile=profile,
@@ -126,6 +150,7 @@ class NPCActivator:
                 {"name": t.name, "description": getattr(t, "description", "") or ""}
                 for t in scoped_tools
             ],
+            recalled_memories=recalled_memories,
         )
         user_prompt = self._user_nudge(reason, trigger_event)
 
@@ -184,6 +209,9 @@ class NPCActivator:
         llm_spend_cap = profile.budget_defaults.llm_spend
         cumulative_spend = 0.0
         final_text = ""
+        # PMF 4B Step 11 — track invoked tool names for the implicit
+        # episodic record written post-activation.
+        tool_names_invoked: list[str] = []
 
         async with host._llm_semaphore:
             # M3: LLM call is the most likely source of runtime failure
@@ -226,6 +254,17 @@ class NPCActivator:
                         final_text=f"llm_error: {type(exc).__name__}",
                     ),
                 )
+                # PMF 4B Step 11 — implicit write on LLM error path.
+                await self._implicit_remember(
+                    actor=actor,
+                    reason=reason,
+                    terminated_by="error",
+                    total_tool_calls=0,
+                    tool_names_invoked=[],
+                    final_text=f"llm_error: {type(exc).__name__}",
+                    activation_id=activation_id,
+                    host=host,
+                )
                 return envelopes
             llm_latency_ms = (time.monotonic() - llm_start) * 1000
 
@@ -261,6 +300,17 @@ class NPCActivator:
                         cache_write_tokens=cache_write_tokens,
                     ),
                 )
+                # PMF 4B Step 11 — implicit write on text-response path.
+                await self._implicit_remember(
+                    actor=actor,
+                    reason=reason,
+                    terminated_by="text_response",
+                    total_tool_calls=0,
+                    tool_names_invoked=[],
+                    final_text=final_text or "",
+                    activation_id=activation_id,
+                    host=host,
+                )
                 return envelopes
 
             for step_index, tc in enumerate(tool_calls):
@@ -281,6 +331,7 @@ class NPCActivator:
                         ),
                     )
                     total_tool_calls += 1
+                    tool_names_invoked.append("do_nothing")
                     terminated_by = "do_nothing"
                     break
 
@@ -301,6 +352,7 @@ class NPCActivator:
                     committed = await tool_executor(env)
 
                 total_tool_calls += 1
+                tool_names_invoked.append(getattr(tc, "name", ""))
                 envelopes.append(env)
 
                 blocked = committed is None
@@ -353,6 +405,20 @@ class NPCActivator:
                 cache_write_tokens=cache_write_tokens,
             ),
         )
+        # PMF 4B Step 11 — implicit write on main-loop exit
+        # (covers do_nothing, max_tool_calls, llm_spend_cap, and
+        # normal completion). LLM-error and text-response paths
+        # have their own explicit remember calls above.
+        await self._implicit_remember(
+            actor=actor,
+            reason=reason,
+            terminated_by=terminated_by,
+            total_tool_calls=total_tool_calls,
+            tool_names_invoked=tool_names_invoked,
+            final_text=final_text or "",
+            activation_id=activation_id,
+            host=host,
+        )
         logger.info(
             "[NPC %s] activation_id=%s reason=%s tool_calls=%d duration_ms=%.1f terminated_by=%s",
             actor.actor_id,
@@ -363,6 +429,119 @@ class NPCActivator:
             terminated_by,
         )
         return envelopes
+
+    # -- PMF 4B Step 11 memory hooks --------------------------------------
+
+    async def _recall_for_activation(
+        self,
+        *,
+        actor: ActorState,
+        trigger_event: Event | None,
+        host: Any,
+    ) -> Any:
+        """Query ``host._memory_engine`` for records relevant to this
+        activation. Returns ``MemoryRecall`` or ``None``. Never raises
+        — failures log and return ``None`` (D11-6).
+
+        Semantic text is the trigger description concatenated with the
+        actor's persona description, capped at 1000 chars to stay
+        safely under ``SemanticQuery._MAX_QUERY_TEXT_LEN``.
+        """
+        memory_engine = getattr(host, "_memory_engine", None)
+        if memory_engine is None:
+            return None
+        from volnix.core.memory_types import HybridQuery
+
+        persona_text = ""
+        if actor.persona:
+            persona_text = actor.persona.get("description") or ""
+        trigger_text = self._prompt_builder._describe(trigger_event)
+        query_text = (trigger_text + " " + persona_text).strip()[:1000]
+        if not query_text:
+            query_text = f"activation for actor {actor.actor_id}"
+
+        top_k = int(
+            getattr(
+                getattr(memory_engine, "_memory_config", None),
+                "default_recall_top_k",
+                5,
+            )
+        )
+        tick = _current_tick(host)
+
+        try:
+            return await memory_engine.recall(
+                caller=actor.actor_id,
+                target_scope="actor",
+                target_owner=str(actor.actor_id),
+                query=HybridQuery(semantic_text=query_text, top_k=top_k),
+                tick=tick,
+            )
+        except Exception as exc:  # noqa: BLE001 — D11-6
+            logger.warning(
+                "NPCActivator: memory recall failed for %s: %s — "
+                "continuing with no recalled memories.",
+                actor.actor_id,
+                exc,
+            )
+            return None
+
+    async def _implicit_remember(
+        self,
+        *,
+        actor: ActorState,
+        reason: str,
+        terminated_by: str,
+        total_tool_calls: int,
+        tool_names_invoked: list[str],
+        final_text: str,
+        activation_id: str,
+        host: Any,
+    ) -> None:
+        """Write a raw episodic record summarising the activation.
+
+        One write per activation, no extra LLM call — Step 6's
+        Consolidator handles episodic→semantic distillation on
+        cohort rotation or periodic cadence. Never raises; failures
+        log + continue (D11-9).
+        """
+        memory_engine = getattr(host, "_memory_engine", None)
+        if memory_engine is None:
+            return
+        from volnix.core.memory_types import MemoryWrite
+
+        content = (
+            f"{reason} → {terminated_by}: used {total_tool_calls} tool(s) "
+            f"{tool_names_invoked}. text={final_text[:120]!r}"
+        )
+        importance = 0.5 if total_tool_calls > 0 else 0.2
+        tags = [reason, *tool_names_invoked, terminated_by]
+        tick = _current_tick(host)
+
+        try:
+            await memory_engine.remember(
+                caller=actor.actor_id,
+                target_scope="actor",
+                target_owner=str(actor.actor_id),
+                write=MemoryWrite(
+                    content=content,
+                    kind="episodic",
+                    importance=importance,
+                    tags=tags,
+                    source="implicit",
+                    metadata={
+                        "activation_id": activation_id,
+                        "terminated_by": terminated_by,
+                    },
+                ),
+                tick=tick,
+            )
+        except Exception as exc:  # noqa: BLE001 — D11-9
+            logger.warning(
+                "NPCActivator: implicit remember failed for %s: %s",
+                actor.actor_id,
+                exc,
+            )
 
     # -- helpers ----------------------------------------------------------
 

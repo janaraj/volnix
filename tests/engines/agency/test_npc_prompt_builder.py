@@ -301,3 +301,133 @@ class TestNPCPromptBuilder:
             available_tools=[],
         )
         assert "meta.noop" in prompt
+
+
+# ---------------------------------------------------------------------------
+# PMF 4B Step 11 — recalled memories rendering
+# ---------------------------------------------------------------------------
+
+
+def _semantic_record(owner: str, content: str, importance: float):
+    """Build a semantic MemoryRecord for prompt-rendering tests."""
+    import hashlib
+
+    from volnix.core.memory_types import MemoryRecord, content_hash_of
+    from volnix.core.types import MemoryRecordId
+
+    return MemoryRecord(
+        record_id=MemoryRecordId(f"sem-{hashlib.sha256(content.encode()).hexdigest()[:8]}"),
+        scope="actor",
+        owner_id=owner,
+        kind="semantic",
+        tier="tier2",
+        source="consolidated",
+        content=content,
+        content_hash=content_hash_of(content),
+        importance=importance,
+        tags=[],
+        created_tick=0,
+        consolidated_from=[MemoryRecordId("episodic-parent-1")],
+    )
+
+
+def _episodic_record(owner: str, content: str, importance: float):
+    import hashlib
+
+    from volnix.core.memory_types import MemoryRecord, content_hash_of
+    from volnix.core.types import MemoryRecordId
+
+    return MemoryRecord(
+        record_id=MemoryRecordId(f"epi-{hashlib.sha256(content.encode()).hexdigest()[:8]}"),
+        scope="actor",
+        owner_id=owner,
+        kind="episodic",
+        tier="tier2",
+        source="implicit",
+        content=content,
+        content_hash=content_hash_of(content),
+        importance=importance,
+        tags=[],
+        created_tick=0,
+        consolidated_from=None,
+    )
+
+
+class TestRecalledMemoriesRendering:
+    """PMF 4B Step 11 — memory injection into NPC prompt.
+
+    Negative-first: None and empty recall must render NOTHING so
+    the Phase 0 regression oracle stays byte-identical.
+    """
+
+    def test_negative_none_recall_renders_no_memory_section(self) -> None:
+        builder = NPCPromptBuilder()
+        out = builder.build(
+            state=_actor(),
+            profile=_profile(),
+            trigger_event=None,
+            recent_events=[],
+            available_tools=[],
+            recalled_memories=None,
+        )
+        assert "Memories you recall" not in out
+
+    def test_negative_empty_recall_renders_no_memory_section(self) -> None:
+        """Empty ``records`` must hide the section (byte-identical
+        to pre-Step-11 behaviour for Phase 0 oracle)."""
+        from volnix.core.memory_types import MemoryRecall
+
+        builder = NPCPromptBuilder()
+        empty = MemoryRecall(query_id="q-1", records=[], total_matched=0, truncated=False)
+        out = builder.build(
+            state=_actor(),
+            profile=_profile(),
+            trigger_event=None,
+            recent_events=[],
+            available_tools=[],
+            recalled_memories=empty,
+        )
+        assert "Memories you recall" not in out
+
+    def test_positive_non_empty_recall_renders_section_with_records(self) -> None:
+        from volnix.core.memory_types import MemoryRecall
+
+        builder = NPCPromptBuilder()
+        rec1 = _semantic_record("npc-1", "Alice prefers quiet coffee shops", 0.8)
+        rec2 = _episodic_record("npc-1", "Had good experience with drop_flare", 0.5)
+        recall = MemoryRecall(
+            query_id="q-1", records=[rec1, rec2], total_matched=2, truncated=False
+        )
+        out = builder.build(
+            state=_actor(),
+            profile=_profile(),
+            trigger_event=None,
+            recent_events=[],
+            available_tools=[],
+            recalled_memories=recall,
+        )
+        assert "Memories you recall" in out
+        assert "Alice prefers quiet coffee shops" in out
+        assert "Had good experience with drop_flare" in out
+
+    def test_positive_memory_section_placed_between_persona_and_state(self) -> None:
+        """Placement invariant — persona first, memories second,
+        current state third."""
+        from volnix.core.memory_types import MemoryRecall
+
+        builder = NPCPromptBuilder()
+        rec = _semantic_record("npc-1", "marker-content-xyz", 0.9)
+        recall = MemoryRecall(query_id="q", records=[rec], total_matched=1, truncated=False)
+        out = builder.build(
+            state=_actor(),
+            profile=_profile(),
+            trigger_event=None,
+            recent_events=[],
+            available_tools=[],
+            recalled_memories=recall,
+        )
+        idx_persona = out.index("## Your persona")
+        idx_memory = out.index("## Memories you recall")
+        idx_state = out.index("## Your current state")
+        assert idx_persona < idx_memory < idx_state
+        assert "marker-content-xyz" in out

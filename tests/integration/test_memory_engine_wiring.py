@@ -278,3 +278,46 @@ class TestStopLifecycle:
         # again; only the memory branch is relevant here.
         await app.stop()
         assert app._memory_engine is None
+
+
+# ---------------------------------------------------------------------------
+# Step 11 — AgencyEngine memory-engine injection
+# ---------------------------------------------------------------------------
+
+
+class TestStep11AgencyIntegration:
+    """PMF 4B Step 11 — app.py must inject the memory engine into
+    the AgencyEngine so NPCActivator sees it as ``host._memory_engine``
+    during every activation."""
+
+    async def test_positive_agency_set_memory_engine_called_after_build(
+        self, tmp_path: Path
+    ) -> None:
+        app = VolnixApp(config=_volnix_config(tmp_path, memory_enabled=True))
+        try:
+            await app.start()
+            app._llm_router = _mock_router()
+            await app.configure_agency(_minimal_plan(), result={"actors": []})
+            agency = app._registry.get("agency")
+            assert agency._memory_engine is app._memory_engine
+            assert agency._memory_engine is not None
+        finally:
+            await app.stop()
+
+    async def test_negative_memory_disabled_agency_memory_engine_stays_none(
+        self, tmp_path: Path
+    ) -> None:
+        """Disabled config → both app._memory_engine and
+        agency._memory_engine stay None."""
+        app = VolnixApp(config=_volnix_config(tmp_path, memory_enabled=False))
+        try:
+            await app.start()
+            app._llm_router = _mock_router()
+            await app.configure_agency(_minimal_plan(), result={"actors": []})
+            agency = app._registry.get("agency")
+            assert app._memory_engine is None
+            # AgencyEngine initialises the slot in _on_initialize; it
+            # stays None when set_memory_engine was never called.
+            assert getattr(agency, "_memory_engine", "missing") is None
+        finally:
+            await app.stop()

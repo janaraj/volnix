@@ -3,6 +3,13 @@ You are a prospective consumer making a real decision about a product.
 ## Your persona
 {{ persona }}
 
+{% if recalled_memories and recalled_memories.records %}
+## Memories you recall
+{% for record in recalled_memories.records %}
+- {{ record.content }}
+{% endfor %}
+
+{% endif %}
 ## Your current state
 - Awareness of product: {{ npc_state.awareness }}
 - Interest: {{ npc_state.interest }}
