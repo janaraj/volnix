@@ -22,8 +22,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 from volnix.core import BaseEngine, Event
-from volnix.core.events import AnimatorEvent
-from volnix.core.types import ActorId, Timestamp
+from volnix.core.events import AnimatorEvent, NPCExposureEvent
+from volnix.core.types import ActorId, ServiceId, Timestamp
 from volnix.engines.animator.config import AnimatorConfig
 from volnix.engines.animator.context import AnimatorContext
 from volnix.engines.animator.generator import OrganicGenerator
@@ -214,6 +214,26 @@ class WorldAnimatorEngine(BaseEngine):
             state_snapshot_exclude=snapshot_exclude,
         )
 
+        # PMF opt-in: when the blueprint sets ``animator_settings.pmf``,
+        # each tick draws against ``expose_rate`` and (on a hit) publishes
+        # an ``NPCExposureEvent`` targeting a configured Active NPC.
+        # Default absent → rate 0.0 → no events generated, which is the
+        # exact pre-Layer-1 behavior the Phase 0 oracle locks. Passive
+        # worlds never see this code path execute a ``publish``.
+        pmf_raw = settings.get("pmf") if isinstance(settings, dict) else None
+        pmf = pmf_raw if isinstance(pmf_raw, dict) else {}
+        try:
+            rate = float(pmf.get("expose_rate", 0.0))
+        except (TypeError, ValueError):
+            rate = 0.0
+        self._pmf_expose_rate: float = max(0.0, min(1.0, rate))
+        raw_features = pmf.get("features") or []
+        raw_npcs = pmf.get("candidate_npcs") or []
+        self._pmf_features: list[str] = [str(f) for f in raw_features if isinstance(f, (str, int))]
+        self._pmf_candidate_npcs: list[str] = [
+            str(n) for n in raw_npcs if isinstance(n, (str, int))
+        ]
+
         # Register scheduled events from YAML animator settings.
         #
         # Three formats are supported:
@@ -353,6 +373,15 @@ class WorldAnimatorEngine(BaseEngine):
                 result = await self._execute_event(event_def, world_time)
                 results.append(result)
 
+        # Layer 1c: PMF exposure events (deterministic, no LLM).
+        # Skipped entirely when ``expose_rate`` is 0 — the default —
+        # which keeps passive-NPC worlds untouched. When configured,
+        # publishes an ``NPCExposureEvent`` per tick with probability
+        # ``expose_rate``; the RNG is seeded from ``world_time`` so a
+        # fixed world replays identically.
+        if self._pmf_expose_rate > 0 and self._pmf_candidate_npcs and self._pmf_features:
+            await self._maybe_publish_exposure(world_time)
+
         # Layer 2: Organic events (LLM, within creativity budget)
         if self._generator and self._behavior in ("dynamic", "reactive"):
             budget = self._typed_config.creativity_budget_per_tick - self._creativity_used_this_tick
@@ -457,6 +486,57 @@ class WorldAnimatorEngine(BaseEngine):
         )
 
         return result
+
+    async def _maybe_publish_exposure(self, world_time: datetime) -> None:
+        """Publish one ``NPCExposureEvent`` per tick with probability ``expose_rate``.
+
+        Called only from ``tick`` and only when rate + candidate NPCs +
+        features are all populated — the guard is at the call site. The
+        draw itself is seeded from ``world_time`` so a fixed simulation
+        replays the same exposure sequence.
+
+        Unlike ``_execute_event``, this does NOT go through the pipeline:
+        ``NPCExposureEvent`` is a *trigger* signal, not a world action.
+        An NPC subscribed via ``filter.event_type == "npc.exposure"``
+        (Phase 2 wiring in app.py) picks it up in ``AgencyEngine.notify``
+        and activates.
+        """
+        tick_seed = int(world_time.timestamp() * 1000)
+        rng = random.Random(tick_seed)
+
+        if rng.random() >= self._pmf_expose_rate:
+            return
+
+        npc_id = rng.choice(self._pmf_candidate_npcs)
+        feature_id = rng.choice(self._pmf_features)
+
+        event = NPCExposureEvent(
+            event_type="npc.exposure",
+            timestamp=Timestamp(
+                world_time=world_time,
+                wall_time=datetime.now(tz=UTC),
+                tick=0,
+            ),
+            actor_id=ActorId("animator"),
+            service_id=ServiceId("npc_system"),
+            action="expose",
+            # ``intended_for`` targets activation to exactly this NPC.
+            # Without it the exposure would record on every subscribed
+            # NPC's inbox but activate none — see AgencyEngine.notify's
+            # ``intended_for`` check at engine.py:629-634.
+            input_data={"intended_for": [npc_id]},
+            npc_id=ActorId(npc_id),
+            feature_id=feature_id,
+            source="animator",
+            medium="animator_tick",
+        )
+        await self.publish(event)
+        logger.info(
+            "Animator PMF exposure: npc=%s feature=%s world_time=%s",
+            npc_id,
+            feature_id,
+            world_time.isoformat(),
+        )
 
     def _generate_probabilistic_events(
         self, context: AnimatorContext, world_time: datetime
