@@ -2,7 +2,56 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class CohortConfig(BaseModel):
+    """Activation-cycling configuration (PMF Plan Phase 4A).
+
+    Disabled by default: ``max_active=None`` means no cohort manager
+    is constructed and every activation follows the existing path.
+    Every existing blueprint and the Phase 0 regression oracle must
+    stay byte-identical when the cohort is disabled — the engine-side
+    gate short-circuits in that case. See
+    ``internal_docs/pmf/phase-4a-activation-cycling.md``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # The cap on actors consuming LLM cycles at any one tick. When
+    # ``None`` (the default), cohort cycling is disabled outright and
+    # no ``CohortManager`` is constructed — behaviour matches pre-4A.
+    max_active: int | None = None
+
+    # How to rank dormant NPCs when choosing who to promote.
+    rotation_policy: Literal["round_robin", "recency", "event_pressure_weighted"] = (
+        "event_pressure_weighted"
+    )
+
+    # Ticks between rotation cycles (wired via ``WorldScheduler``).
+    rotation_interval_ticks: int = 10
+
+    # Number of NPCs demoted + promoted per rotation cycle.
+    rotation_batch_size: int = 5
+
+    # Cap on preempt-promotes within a single rotation window.
+    # Bursts beyond this fall back to ``defer``.
+    promote_budget_per_tick: int = 10
+
+    # Per-dormant-NPC event-queue depth cap. Overflow drops oldest.
+    queue_max_per_npc: int = 20
+
+    # Policy dispatch for events targeting dormant NPCs.
+    # ``default`` always present; per-event-type overrides layer on top.
+    # Values: ``"record_only"`` | ``"defer"`` | ``"promote"``.
+    inactive_event_policies: dict[str, str] = Field(
+        default_factory=lambda: {
+            "default": "defer",
+            "npc.interview_probe": "promote",
+        }
+    )
 
 
 class AgencyConfig(BaseModel):
@@ -89,3 +138,8 @@ class AgencyConfig(BaseModel):
     # kept-verbatim and any new result). Prevents a single huge payload
     # from dominating the prompt.
     max_tool_result_chars: int = 800
+
+    # ── Cohort (PMF Plan Phase 4A) ──────────────────────────────
+    # Nested block for activation cycling. ``max_active=None`` (the
+    # default) means cycling is disabled → pre-4A behavior preserved.
+    cohort: CohortConfig = Field(default_factory=CohortConfig)

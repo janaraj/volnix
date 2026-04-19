@@ -197,6 +197,12 @@ class NPCActivator:
             response_cost = _response_cost_usd(response)
             cumulative_spend += response_cost
 
+            # Phase 4A: capture prompt-cache hit/write token counts so
+            # the ledger can be used to empirically tune cohort K and
+            # rotation_interval. Providers that don't report cache
+            # metadata leave both fields as ``None``.
+            cache_hit_tokens, cache_write_tokens = _cache_tokens(response)
+
             tool_calls = getattr(response, "tool_calls", []) or []
             final_text = getattr(response, "content", "") or ""
 
@@ -212,6 +218,8 @@ class NPCActivator:
                         total_envelopes=0,
                         terminated_by="text_response",
                         final_text=(final_text or "")[:200],
+                        cache_hit_tokens=cache_hit_tokens,
+                        cache_write_tokens=cache_write_tokens,
                     ),
                 )
                 return envelopes
@@ -286,6 +294,24 @@ class NPCActivator:
                     break
 
         duration_ms = (time.monotonic() - loop_start) * 1000
+        # Phase 4A: record activation on the cohort manager (if
+        # present) so ``recency`` + LRU eviction have fresh data for
+        # the next rotation. Guarded — no-op when cohort is absent.
+        cm = getattr(host, "_cohort_manager", None)
+        if cm is not None:
+            tick_now = 0
+            progress = getattr(host, "_simulation_progress", None)
+            if progress is not None:
+                tick_now = progress[0]
+            try:
+                cm.record_activation(actor.actor_id, tick_now)
+            except Exception as exc:  # noqa: BLE001 — non-fatal
+                logger.warning(
+                    "Cohort record_activation failed for %s: %s",
+                    actor.actor_id,
+                    exc,
+                )
+
         await _append_ledger(
             ledger,
             ActivationCompleteEntry(
@@ -296,6 +322,8 @@ class NPCActivator:
                 total_envelopes=len(envelopes),
                 terminated_by=terminated_by,
                 final_text=final_text[:200] if final_text else "",
+                cache_hit_tokens=cache_hit_tokens,
+                cache_write_tokens=cache_write_tokens,
             ),
         )
         logger.info(
@@ -422,3 +450,33 @@ def _response_cost_usd(response: Any) -> float:
         return float(cost)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _cache_tokens(response: Any) -> tuple[int | None, int | None]:
+    """Extract prompt-cache hit + write token counts from an LLM response.
+
+    Anthropic / OpenAI / Google all expose these via ``response.usage``
+    with the canonical Anthropic names:
+    ``cache_read_input_tokens`` and ``cache_creation_input_tokens``.
+    Providers that don't report cache metadata (or responses that
+    bypass the cache entirely) return ``(None, None)``.
+
+    Used by Phase 4A to populate cache observability on
+    ``ActivationCompleteEntry``. Absent metadata stays ``None`` so
+    analytics can distinguish "no-cache-hit" from "no-data".
+    """
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None, None
+    hit = getattr(usage, "cache_read_input_tokens", None)
+    write = getattr(usage, "cache_creation_input_tokens", None)
+
+    def _maybe_int(v: Any) -> int | None:
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    return _maybe_int(hit), _maybe_int(write)

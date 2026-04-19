@@ -435,6 +435,31 @@ class ActivationCompleteEntry(LedgerEntry):
     total_envelopes: int
     terminated_by: str  # "text_response" | "do_nothing" | "max_tool_calls" | "error"
     final_text: str = ""
+    # PMF Plan Phase 4A — prompt-cache observability. Provider
+    # response ``usage`` reports cache-read vs cache-write tokens;
+    # we capture them here so cohort size + rotation interval can
+    # be tuned empirically. Absent metadata → both stay ``None``.
+    cache_hit_tokens: int | None = None
+    cache_write_tokens: int | None = None
+
+
+class CohortRotationEntry(LedgerEntry):
+    """Records one ``CohortManager.rotate()`` cycle (Phase 4A).
+
+    Written by ``AgencyEngine`` immediately after each rotation.
+    The paired :class:`volnix.core.events.CohortRotationEvent` is
+    published on the bus at the same moment — the ledger entry is for
+    audit; the bus event drives the activation-queue drain.
+    """
+
+    entry_type: str = "cohort_rotation"
+    tick: int
+    rotation_policy: str
+    demoted_count: int
+    promoted_count: int
+    active_count: int
+    registered_count: int
+    queue_total_depth: int
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +488,7 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "collaboration_notification": CollaborationNotificationEntry,
     "tool_loop_step": ToolLoopStepEntry,
     "activation_complete": ActivationCompleteEntry,
+    "cohort_rotation": CohortRotationEntry,
 }
 
 

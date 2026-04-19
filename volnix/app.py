@@ -1437,6 +1437,39 @@ class VolnixApp:
 
             agency.set_npc_activator(build_npc_activator())
 
+        # PMF Plan Phase 4A — activation cycling. When
+        # ``agency.config.cohort.max_active`` is set, construct the
+        # cohort manager via the composition root and register every
+        # Active NPC up front. ``max_active=None`` (the default) leaves
+        # the cohort manager as ``None`` on the engine → Phase 0
+        # regression oracle stays byte-identical.
+        #
+        # Rotation trigger is NOT wired here in 4A — rotation is
+        # engine state, not a world action. ``agency.rotate_cohort(tick)``
+        # is the public entry point; the simulation runner (or tests)
+        # call it on whatever cadence the config prescribes.
+        cohort_cfg = None
+        typed_cfg = getattr(agency, "_typed_config", None)
+        if typed_cfg is not None:
+            cohort_cfg = getattr(typed_cfg, "cohort", None)
+        if (
+            cohort_cfg is not None
+            and cohort_cfg.max_active is not None
+            and hasattr(agency, "set_cohort_manager")
+        ):
+            from volnix.registry.composition import build_cohort_manager
+
+            # World seed flows into rotation determinism — no hardcoded
+            # default anywhere on the 4A path.
+            world_seed = getattr(plan, "seed", 42)
+            cm = build_cohort_manager(cohort_cfg, world_seed)
+            if cm is not None:
+                active_npc_ids = [
+                    s.actor_id for s in actor_states if s.activation_profile_name is not None
+                ]
+                cm.register(active_npc_ids)
+                agency.set_cohort_manager(cm)
+
         await agency.configure(actor_states, world_context, available_actions)
 
     async def configure_game(self, plan: Any, internal_profile: Any | None = None) -> None:

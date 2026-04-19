@@ -764,3 +764,69 @@ class NPCActivatorProtocol(Protocol):
             by :meth:`AgencyEngine._activate_with_tool_loop`.
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Active-cohort protocol (PMF Plan Phase 4A — activation cycling)
+#
+# The ``CohortManager`` caps how many Active NPCs consume LLM cycles
+# at any given tick; dormant NPCs either have events queued on them
+# (``defer``) or get preempt-promoted (``promote``). Consumers depend
+# on this protocol, never on the concrete class in
+# ``volnix.actors.cohort_manager``. Only the composition root
+# (``volnix/registry/composition.py``) imports the concrete class.
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class CohortManagerProtocol(Protocol):
+    """Narrow interface used by AgencyEngine for activation cycling.
+
+    Pure logic — no bus, no LLM, no async. Decisions are deterministic
+    at a given seed + tick.
+    """
+
+    @property
+    def enabled(self) -> bool:
+        """True when a non-empty active cohort cap is in force."""
+        ...
+
+    def is_active(self, actor_id: ActorId) -> bool:
+        """Is this NPC in the current active cohort?"""
+        ...
+
+    def policy_for(self, event_type: str) -> str:
+        """Resolve inactive-event policy for ``event_type``.
+
+        Returns one of ``"record_only"``, ``"defer"``, ``"promote"``.
+        """
+        ...
+
+    def enqueue(self, actor_id: ActorId, queued: Any) -> bool:
+        """Append an event to a dormant NPC's queue. Returns True if
+        queued, False if the queue was at capacity and oldest was
+        dropped.
+        """
+        ...
+
+    def drain_queue(self, actor_id: ActorId) -> list[Any]:
+        """Pop and return all queued events for ``actor_id``."""
+        ...
+
+    def queue_depth(self, actor_id: ActorId) -> int: ...
+
+    def try_promote(self, actor_id: ActorId) -> tuple[bool, ActorId | None]:
+        """Preempt-promote a dormant NPC. Returns
+        ``(promoted, evicted_id)``. When the global
+        ``promote_budget_per_tick`` is exhausted, returns
+        ``(False, None)`` and the caller must fall back to ``defer``.
+        """
+        ...
+
+    def rotate(self, tick: int) -> tuple[list[ActorId], list[ActorId]]:
+        """Run one rotation cycle. Returns ``(demoted_ids, promoted_ids)``."""
+        ...
+
+    def record_activation(self, actor_id: ActorId, tick: int) -> None:
+        """Log an activation for the ``recency`` policy and LRU eviction."""
+        ...

@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from volnix.registry.registry import EngineRegistry
 
 if TYPE_CHECKING:
+    from volnix.actors.cohort_manager import CohortManager
+    from volnix.engines.agency.config import CohortConfig
     from volnix.engines.agency.npc_activator import NPCActivator
 
 
@@ -76,4 +78,34 @@ def build_npc_activator() -> NPCActivator:
     return NPCActivator(
         prompt_builder=NPCPromptBuilder(),
         activation_profile_loader=ActivationProfileLoader(),
+    )
+
+
+def build_cohort_manager(
+    cohort_config: CohortConfig,
+    world_seed: int,
+) -> CohortManager | None:
+    """Construct the active-cohort manager when cycling is enabled.
+
+    PMF Plan Phase 4A. Returns ``None`` when ``cohort_config.max_active``
+    is ``None`` so callers can short-circuit the ``set_cohort_manager``
+    handoff. Concrete-class imports (``CohortManager``) are confined
+    here per DESIGN_PRINCIPLES.
+
+    ``world_seed`` flows from ``WorldPlan.seed`` so cohort rotation
+    determinism ties to the world, not a module-level default. No
+    hardcoded seed anywhere in the 4A code path.
+    """
+    if cohort_config.max_active is None:
+        return None
+    from volnix.actors.cohort_manager import CohortManager
+
+    return CohortManager(
+        max_active=cohort_config.max_active,
+        rotation_policy=cohort_config.rotation_policy,
+        rotation_batch_size=cohort_config.rotation_batch_size,
+        promote_budget_per_tick=cohort_config.promote_budget_per_tick,
+        queue_max_per_npc=cohort_config.queue_max_per_npc,
+        inactive_event_policies=cohort_config.inactive_event_policies,  # type: ignore[arg-type]
+        seed=world_seed,
     )

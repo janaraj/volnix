@@ -583,3 +583,30 @@ class NPCDailyTickEvent(Event):
 
     npc_id: ActorId
     sim_day: int
+
+
+# ---------------------------------------------------------------------------
+# Cohort events (PMF Plan Phase 4A — activation cycling)
+#
+# Emitted by ``CohortManager.rotate`` cycles. The AgencyEngine listens
+# for this in ``_handle_event`` and drains each promoted NPC's queue
+# of deferred events through the normal activation path.
+# ---------------------------------------------------------------------------
+
+
+class CohortRotationEvent(Event):
+    """Emitted after each ``CohortManager.rotate()`` cycle.
+
+    Attributes:
+        promoted_ids: NPCs just moved from dormant → active.
+        demoted_ids: NPCs just moved from active → dormant.
+        rotation_policy: Which policy ran this cycle
+            (``round_robin`` / ``recency`` / ``event_pressure_weighted``).
+        tick: Logical tick the rotation happened at.
+    """
+
+    event_type: str = "cohort.rotated"
+    promoted_ids: list[ActorId] = Field(default_factory=list)
+    demoted_ids: list[ActorId] = Field(default_factory=list)
+    rotation_policy: str = ""
+    tick: int = 0
