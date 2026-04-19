@@ -229,6 +229,12 @@ class AgencyEngine(BaseEngine):
         self._actor_activation_locks: dict[ActorId, asyncio.Lock] = {}
         self._tool_executor: Any = None
         self._simulation_progress: tuple[int, int] | None = None  # (current_events, max_events)
+        # Opt-in Active-NPC support. When None (the default), every
+        # activation follows the existing agent path. When set via
+        # ``set_npc_activator``, actors whose ``ActorState`` declares
+        # an ``activation_profile_name`` are dispatched to the NPC
+        # loop in ``activate_for_event`` below.
+        self._npc_activator: Any = None
 
     def set_simulation_progress(self, current: int, total: int) -> None:
         """Update simulation progress for lead agent prompt awareness."""
@@ -242,6 +248,18 @@ class AgencyEngine(BaseEngine):
         WorldEvent on success, or None if the pipeline blocked the action.
         """
         self._tool_executor = executor
+
+    def set_npc_activator(self, activator: Any) -> None:
+        """Opt in Active-NPC activation via the given activator.
+
+        The activator must expose ``async activate_npc(...) ->
+        list[ActionEnvelope]`` per
+        :class:`volnix.core.protocols.NPCActivatorProtocol`. Until this
+        is called, every activation follows the existing agent path —
+        HUMAN actors without an ``activation_profile`` remain passive
+        and their behavior is byte-identical to the pre-Layer-1 state.
+        """
+        self._npc_activator = activator
 
     async def configure(
         self,
@@ -587,6 +605,7 @@ class AgencyEngine(BaseEngine):
             already_activated = {aid for aid, _ in activated}
             intended_for = committed_event.input_data.get("intended_for", [])
             event_service = str(committed_event.service_id)
+            event_type = getattr(committed_event, "event_type", "")
 
             for actor_id, actor in self._actor_states.items():
                 if str(actor_id) == str(committed_event.actor_id):
@@ -594,8 +613,16 @@ class AgencyEngine(BaseEngine):
                 if actor_id in already_activated:
                     continue
 
-                # STEP 1: RECORDING — does this agent subscribe to this service?
-                service_match = any(event_service == sub.service_id for sub in actor.subscriptions)
+                # STEP 1: RECORDING — does this agent subscribe to this service,
+                # or to this event_type via the subscription filter? Active NPCs
+                # subscribe by event_type (e.g. ``npc.exposure``) so the service
+                # emitting the event doesn't have to be known in advance. Agent
+                # subscriptions continue to match by service_id as before.
+                service_match = any(
+                    event_service == sub.service_id
+                    or (event_type and sub.filter.get("event_type") == event_type)
+                    for sub in actor.subscriptions
+                )
                 if service_match:
                     record = self._build_interaction_record(
                         committed_event, actor, source="notified"
@@ -1107,6 +1134,23 @@ class AgencyEngine(BaseEngine):
         Returns:
             List of ActionEnvelopes produced during this activation.
         """
+        # Active-NPC branch — catch both entry points (``notify`` calls
+        # this method directly; ``activate_for_event`` routes through it
+        # after locking). NPCs never play games (game players are filtered
+        # to non-HUMAN types at app.py:1371 [verified]) and must not
+        # acquire the agent prompt-builder context; their loop is
+        # isolated in NPCActivator. Opt-in: the branch fires only when
+        # both an ``activation_profile_name`` is set on the actor and an
+        # ``NPCActivator`` has been injected via ``set_npc_activator``.
+        if actor.activation_profile_name is not None and self._npc_activator is not None:
+            return await self._npc_activator.activate_npc(
+                actor=actor,
+                reason=reason,
+                trigger_event=trigger_event,
+                max_calls_override=max_calls_override,
+                host=self,
+            )
+
         if not self._llm_router or not self._prompt_builder:
             return []
         if not self._tool_executor:

@@ -94,3 +94,30 @@ class ActivationProfile(BaseModel, frozen=True):
     prompt_template: str
     tool_scope: ToolScope
     budget_defaults: BudgetDefaults = Field(default_factory=BudgetDefaults)
+
+
+def initial_npc_state(profile: ActivationProfile) -> dict[str, Any]:
+    """Extract default per-NPC state from ``profile.state_schema``.
+
+    Reads the ``default`` value from each top-level property in the
+    JSON Schema's ``properties`` block. Properties without a default
+    are omitted — the NPC starts with no value for them, and the LLM
+    prompt shows the field unset.
+
+    This is the minimum viable initializer; richer schema-driven
+    initialization (nested objects, conditional defaults) can layer on
+    top if profiles demand it. Kept as a function — not a method — so
+    callers don't have to know whether an ``ActivationProfile`` is the
+    right carrier or some future wrapper type.
+    """
+    state_schema = profile.state_schema or {}
+    raw_props = state_schema.get("properties", {}) if isinstance(state_schema, dict) else {}
+    # ``properties`` must be a mapping per JSON-Schema, but a malformed
+    # profile could hand us anything; refuse to crash on the happy
+    # path callers.
+    props = raw_props if isinstance(raw_props, dict) else {}
+    out: dict[str, Any] = {}
+    for key, spec in props.items():
+        if isinstance(spec, dict) and "default" in spec:
+            out[key] = spec["default"]
+    return out

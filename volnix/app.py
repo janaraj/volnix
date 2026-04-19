@@ -1114,7 +1114,54 @@ class VolnixApp:
                             e for i, e in enumerate(all_entity_ids) if (actor_hash + i) % 3 == 0
                         ][:15]
 
+                    # Layer-1 opt-in: HUMAN actors with an activation
+                    # profile become Active NPCs. The ActorState shape
+                    # is otherwise identical, so passive HUMAN actors
+                    # (profile is None — the default) keep their exact
+                    # pre-Layer-1 behavior. See
+                    # tests/integration/test_passive_npc_regression.py
+                    # for the compile-time oracle that locks this.
+                    if actor_def.activation_profile:
+                        from volnix.actors.activation_profile import initial_npc_state
+                        from volnix.actors.npc_profiles import load_activation_profile
+
+                        profile = load_activation_profile(actor_def.activation_profile)
+                        state.activation_profile_name = actor_def.activation_profile
+                        state.npc_state = initial_npc_state(profile)
+
                     actor_states.append(state)
+
+        # Active NPCs are processed regardless of --internal. When
+        # --internal is set, the block above is skipped entirely, so any
+        # world-plan HUMAN actors with an activation_profile would be
+        # missed. This path picks them up without disturbing the
+        # existing "internal agents drive the world" contract.
+        if internal_profile:
+            existing_ids = {s.actor_id for s in actor_states}
+            for actor_def in actors:
+                if (
+                    str(actor_def.type) == "human"
+                    and actor_def.activation_profile
+                    and actor_def.id not in existing_ids
+                ):
+                    from volnix.actors.activation_profile import initial_npc_state
+                    from volnix.actors.npc_profiles import load_activation_profile
+
+                    profile = load_activation_profile(actor_def.activation_profile)
+                    traits = extract_behavior_traits(actor_def)
+                    actor_states.append(
+                        ActorState(
+                            actor_id=actor_def.id,
+                            role=actor_def.role,
+                            actor_type="internal",
+                            persona=(
+                                actor_def.personality.model_dump() if actor_def.personality else {}
+                            ),
+                            behavior_traits=traits,
+                            activation_profile_name=actor_def.activation_profile,
+                            npc_state=initial_npc_state(profile),
+                        )
+                    )
 
         # Create ActorState for internal agents from --internal profile
         if internal_profile:
@@ -1151,6 +1198,11 @@ class VolnixApp:
                     ),
                     llm_thinking_budget_tokens=agent_def.metadata.get("llm_thinking_budget_tokens"),
                 )
+                # Agents never get activation_profile — load_internal_profile
+                # rejects that at YAML-load time (review M6). If a team
+                # needs NPCs, they belong in world.yaml under
+                # world.actors with type: human + activation_profile,
+                # which flows through the Path-A' block above.
                 actor_states.append(state)
 
             # Give all autonomous agents a Slack subscription for team communication.
@@ -1247,6 +1299,35 @@ class VolnixApp:
                     "actors will have empty subscriptions"
                 )
 
+            # Synthesize subscriptions for Active NPCs from their
+            # activation_triggers. Each ``event:`` trigger becomes a
+            # Subscription with ``service_id=""`` and
+            # ``filter={"event_type": <trigger>}``, matching the extended
+            # service_match check in AgencyEngine.notify. We PREPEND
+            # these so they take precedence over any LLM-generated or
+            # pre-generated subscriptions (which targeted the agent
+            # team channel and aren't appropriate for NPCs).
+            from volnix.actors.npc_profiles import load_activation_profile
+            from volnix.actors.state import Subscription as _NPCSub
+
+            for state in actor_states:
+                if not state.activation_profile_name:
+                    continue
+                profile = load_activation_profile(state.activation_profile_name)
+                trigger_subs: list[_NPCSub] = []
+                for trig in profile.activation_triggers:
+                    if trig.event:
+                        trigger_subs.append(
+                            _NPCSub(
+                                service_id="",  # matched via filter.event_type below
+                                filter={"event_type": trig.event},
+                            )
+                        )
+                    # ``scheduled`` triggers are handled by the scheduler,
+                    # not by subscriptions — skipped here intentionally.
+                if trigger_subs:
+                    state.subscriptions = trigger_subs + list(state.subscriptions)
+
         # Schedule deliverable production for lead actor
         deliverable_cfg = getattr(plan, "deliverable_config", {})
         if deliverable_cfg and actor_states:
@@ -1342,6 +1423,19 @@ class VolnixApp:
                         payload={},
                     )
                 )
+
+        # Layer-1 opt-in: if any actor is an Active NPC, inject the
+        # activator via the composition root (the one file allowed to
+        # import NPCActivator / NPCPromptBuilder / ActivationProfileLoader
+        # per DESIGN_PRINCIPLES). Absent Active NPCs, the block is
+        # skipped and agency stays on the existing agent path — covered
+        # by the Phase 0 regression oracle.
+        if any(s.activation_profile_name for s in actor_states) and hasattr(
+            agency, "set_npc_activator"
+        ):
+            from volnix.registry.composition import build_npc_activator
+
+            agency.set_npc_activator(build_npc_activator())
 
         await agency.configure(actor_states, world_context, available_actions)
 

@@ -67,26 +67,14 @@ class TestInternalProfileActivationProfile:
         path.write_text(yaml.safe_dump(payload))
         return path
 
-    def test_missing_profile_raises(self, tmp_path: Path) -> None:
-        """A YAML that names a non-existent activation_profile must fail at load."""
-        yaml_path = self._write(
-            tmp_path / "team.yaml",
-            {
-                "mission": "test",
-                "deliverable": "synthesis",
-                "agents": [
-                    {
-                        "role": "observer",
-                        "activation_profile": "does_not_exist",
-                    }
-                ],
-            },
-        )
-        with pytest.raises(FileNotFoundError, match="not found"):
-            load_internal_profile(yaml_path)
+    def test_agent_with_activation_profile_is_rejected(self, tmp_path: Path) -> None:
+        """Agents in internal_profile YAML must not declare activation_profile.
 
-    def test_valid_profile_loads(self, tmp_path: Path) -> None:
-        """A YAML referencing a real profile passes through to ActorDefinition."""
+        Mixing agent lifecycle (delegation/synthesis/team-channel) with
+        the NPC tool loop creates a silent behavior swap — the footgun
+        flagged as review M6. Reject with a clear message directing the
+        author to world.yaml instead.
+        """
         yaml_path = self._write(
             tmp_path / "team.yaml",
             {
@@ -100,9 +88,8 @@ class TestInternalProfileActivationProfile:
                 ],
             },
         )
-        profile = load_internal_profile(yaml_path)
-        assert len(profile.agents) == 1
-        assert profile.agents[0].activation_profile == "consumer_user"
+        with pytest.raises(ValueError, match="activation_profile is"):
+            load_internal_profile(yaml_path)
 
     def test_absent_profile_defaults_to_none(self, tmp_path: Path) -> None:
         """Backward-compat: agent YAMLs without activation_profile still load."""

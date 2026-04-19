@@ -124,17 +124,20 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
                 if isinstance(bt, int) and bt > 0:
                     metadata["llm_thinking_budget_tokens"] = bt
 
-        # Optional Layer-1 attachment: an agent YAML may opt a member
-        # into Active-NPC activation by naming a profile. We validate
-        # eagerly at load time so a bad profile name fails fast with
-        # a clear error instead of surfacing later during a run.
-        # Passive path (no activation_profile) leaves the field as None
-        # — identical to the pre-Layer-1 shape.
-        activation_profile_name = entry.get("activation_profile")
-        if activation_profile_name is not None:
-            from volnix.actors.npc_profiles import load_activation_profile
-
-            load_activation_profile(activation_profile_name)  # raises on invalid
+        # Agents are agents; they run the lead/sub-agent tool loop
+        # with delegation, synthesis, and team-channel coordination.
+        # ``activation_profile`` is an NPC opt-in that belongs on
+        # ``world.actors`` entries with ``type: human``, not on agent
+        # team members. Rejecting here prevents a silent behavior swap
+        # where a YAML typo would route an agent through the NPC path
+        # and lose its entire lifecycle (see Phase-2 review M6).
+        if entry.get("activation_profile") is not None:
+            raise ValueError(
+                f"agent '{role}' declares an activation_profile "
+                f"({entry['activation_profile']!r}); activation_profile is "
+                "for world-plan HUMAN actors only. Move the NPC persona "
+                "into world.yaml under world.actors."
+            )
 
         definitions.append(
             ActorDefinition(
@@ -145,7 +148,6 @@ def load_internal_profile(path: str | Path) -> InternalAgentProfile:
                 budget=entry.get("budget"),
                 personality_hint=entry.get("personality", ""),
                 metadata=metadata,
-                activation_profile=activation_profile_name,
             )
         )
 

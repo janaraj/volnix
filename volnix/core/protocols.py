@@ -681,29 +681,86 @@ class ActivationProfileLoaderProtocol(Protocol):
 
 
 @runtime_checkable
+class NPCHostProtocol(Protocol):
+    """The surface an :class:`NPCActivatorProtocol` needs from its hosting
+    engine (in practice, :class:`AgencyEngine`).
+
+    This captures the intra-package coupling between NPCActivator and
+    AgencyEngine explicitly. Both live in ``volnix/engines/agency/``
+    and share tool-loop plumbing (LLM router, tool executor, pipeline
+    lock, ledger, and the tool-call parser). The protocol exists so:
+
+    1. Test stubs can't silently drift from what the real engine exposes.
+    2. A future refactor of ``AgencyEngine`` private internals surfaces
+       as a Protocol mismatch, not a silent NPC-path break.
+    3. The coupling surface is documented in one place.
+
+    Attribute names retain their leading underscore because these are
+    the existing engine internals — the Protocol reflects reality, not
+    an aspirational rewrite.
+    """
+
+    _llm_router: Any
+    _tool_executor: Any
+    _tool_definitions: list[Any]
+    _available_actions: list[dict[str, Any]]
+    _tool_name_map: dict[str, str]
+    _llm_semaphore: Any  # asyncio.Semaphore — kept Any to avoid hard import
+    _pipeline_lock: Any  # asyncio.Lock
+    _typed_config: Any
+    _ledger: Any  # LedgerProtocol-compatible; may be None in tests
+
+    def _parse_tool_call(
+        self,
+        actor: Any,
+        tool_call: Any,
+        reason: str,
+        trigger_event: Any,
+    ) -> Any:
+        """Parse a native LLM tool call into an ActionEnvelope.
+
+        Returns ``None`` for the ``do_nothing`` sentinel; the caller is
+        expected to handle that separately.
+        """
+        ...
+
+
+@runtime_checkable
 class NPCActivatorProtocol(Protocol):
     """Entry point for activating an Active NPC on a trigger event.
 
-    The concrete implementation (Phase 2:
-    ``volnix/engines/agency/npc_activator.py``) reuses the AgencyEngine
-    tool-loop so that every NPC action flows through the same 7-step
-    pipeline as agent actions. There is no NPC-specific fast path.
+    The concrete implementation (``volnix/engines/agency/npc_activator.py``)
+    reuses the hosting agency engine's tool-loop plumbing so that every
+    NPC action flows through the same 7-step pipeline as agent actions.
+    There is no NPC-specific fast path.
     """
 
     async def activate_npc(
         self,
-        actor_id: ActorId,
-        trigger_event: Event,
-        actor_state: Any,
-    ) -> None:
-        """Activate the NPC in response to ``trigger_event``.
+        *,
+        actor: Any,  # ActorState
+        reason: str,
+        trigger_event: Event | None,
+        max_calls_override: int | None,
+        host: NPCHostProtocol,
+    ) -> list[Any]:
+        """Activate the NPC and return any ActionEnvelopes produced.
 
         Args:
-            actor_id: The target NPC's actor id.
-            trigger_event: The event that woke the NPC
-                (e.g. :class:`NPCExposureEvent`).
-            actor_state: The actor's mutable :class:`ActorState`. Its
+            actor: The NPC's mutable ActorState. Its
                 ``activation_profile_name`` must be set — this contract
                 is for Active NPCs only.
+            reason: The activation reason (``"npc_exposure"``,
+                ``"npc_word_of_mouth"``, etc.). Surfaced in the prompt
+                and recorded in the ledger.
+            trigger_event: The event that woke the NPC, if any.
+            max_calls_override: Optional per-activation tool-call cap.
+                ``None`` defers to the profile's ``budget_defaults``.
+            host: The hosting engine, typed as :class:`NPCHostProtocol`.
+
+        Returns:
+            List of :class:`ActionEnvelope` objects that reached the
+            pipeline during this activation. Matches the shape returned
+            by :meth:`AgencyEngine._activate_with_tool_loop`.
         """
         ...

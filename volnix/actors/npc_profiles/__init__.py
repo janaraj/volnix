@@ -94,3 +94,20 @@ def list_profiles() -> list[dict[str, str]]:
 def _clear_cache() -> None:
     """Testing helper — clear the in-memory profile cache."""
     _cache.clear()
+
+
+class ActivationProfileLoader:
+    """Concrete :class:`ActivationProfileLoaderProtocol` adapter.
+
+    Wraps the module-level loader functions so they satisfy the
+    Protocol shape (``load(name) -> ActivationProfile``,
+    ``list_available() -> list[str]``). A class instance — not a module
+    function — is what gets injected via the composition root so the
+    Protocol type-check is satisfied at run time.
+    """
+
+    def load(self, name: str) -> ActivationProfile:
+        return load_activation_profile(name)
+
+    def list_available(self) -> list[str]:
+        return [p["name"] for p in list_profiles()]
