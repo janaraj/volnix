@@ -98,8 +98,14 @@ class MemoryEngine(BaseEngine):
     # ------------------------------------------------------------------
 
     async def _on_initialize(self) -> None:
-        """Create schema on fresh DB, no-op on existing."""
-        await self._store.initialize()
+        """Create schema on fresh DB; truncate data if
+        ``reset_on_world_start`` is configured (G15, D10-5).
+
+        Step 7 shipped this method without forwarding the flag,
+        so ``reset_on_world_start=True`` never fired. Step 10 plumbs
+        it; the paired regression test locks the branch.
+        """
+        await self._store.initialize(reset=self._memory_config.reset_on_world_start)
 
     async def _on_start(self) -> None:
         """Optionally warm the embedder on start (D7-8)."""

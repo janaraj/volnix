@@ -165,12 +165,20 @@ def test_entry_registry_all_types():
     """ENTRY_REGISTRY should contain all concrete entry types."""
     from volnix.ledger.entries import (
         ActivationCompleteEntry,
+        CohortDecisionEntry,
+        CohortRotationEntry,
         CollaborationNotificationEntry,
         FeedbackAnnotationEntry,
         FeedbackCaptureEntry,
         FeedbackPromotionEntry,
         FeedbackSyncEntry,
         FeedbackSyncUpdateEntry,
+        MemoryAccessDeniedEntry,
+        MemoryConsolidationEntry,
+        MemoryEvictionEntry,
+        MemoryHydrationEntry,
+        MemoryRecallEntry,
+        MemoryWriteEntry,
         ProfileInferenceEntry,
         ServiceResolutionEntry,
         SubscriptionMatchEntry,
@@ -200,6 +208,16 @@ def test_entry_registry_all_types():
         "collaboration_notification": CollaborationNotificationEntry,
         "tool_loop_step": ToolLoopStepEntry,
         "activation_complete": ActivationCompleteEntry,
+        # PMF Plan Phase 4A — cohort cycling.
+        "cohort_rotation": CohortRotationEntry,
+        "cohort_decision": CohortDecisionEntry,
+        # PMF Plan Phase 4B — actor memory engine.
+        "memory_write": MemoryWriteEntry,
+        "memory_recall": MemoryRecallEntry,
+        "memory_consolidation": MemoryConsolidationEntry,
+        "memory_eviction": MemoryEvictionEntry,
+        "memory_hydration": MemoryHydrationEntry,
+        "memory_access_denied": MemoryAccessDeniedEntry,
     }
     assert ENTRY_REGISTRY == expected
 

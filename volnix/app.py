@@ -63,6 +63,9 @@ class VolnixApp:
         self._escalation_handler: Any = None
         self._hold_store: Any = None
         self._hold_expiry_task: Any = None
+        # PMF 4B Step 10 — MemoryEngine (opt-in, constructed per-world
+        # in configure_agency when ``config.memory.enabled=True``).
+        self._memory_engine: Any = None
         self._started = False
         self._last_action_time: datetime | None = None
         self._idle_watcher_task: Any = None
@@ -483,6 +486,16 @@ class VolnixApp:
         if self._hold_store:
             await self._hold_store.close()
             self._hold_store = None
+        # PMF 4B Step 10 — tear down MemoryEngine before the
+        # registry/bus teardown so bus unsubscription happens while
+        # the bus is still alive. Wrapped in try/except matching the
+        # best-effort pattern used for other engine shutdowns.
+        if self._memory_engine is not None:
+            try:
+                await self._memory_engine.stop()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("MemoryEngine stop failed: %s", e)
+            self._memory_engine = None
         if hasattr(self, "_webhook_manager") and self._webhook_manager:
             await self._webhook_manager.stop()
         if self._gateway:
@@ -1479,6 +1492,48 @@ class VolnixApp:
                 ]
                 cm.register(active_npc_ids)
                 agency.set_cohort_manager(cm)
+
+        # PMF Plan Phase 4B Step 10 — MemoryEngine wiring.
+        # Opt-in via ``config.memory.enabled`` (default False). When
+        # disabled, no engine is constructed and every activation
+        # follows the Phase-4A path. Phase 0 regression oracle stays
+        # byte-identical.
+        #
+        # When enabled, the composition builder constructs the
+        # engine, app.py attaches ``_ledger``, drives
+        # ``initialize()`` + ``start()`` so the ``cohort.rotated``
+        # subscription wires up, and stashes the engine on
+        # ``self._memory_engine`` for stop() teardown and Step 11's
+        # AgencyEngine injection. Tier-1 fixture loading via
+        # ``fixtures_path`` is reserved for Step 11 / Phase 4C once
+        # pack composition surfaces the path.
+        if self._config.memory.enabled:
+            if not hasattr(plan, "seed") or getattr(plan, "seed") is None:
+                raise RuntimeError(
+                    "MemoryEngine requires ``plan.seed``; WorldPlan was "
+                    "constructed without one — this is a wiring bug."
+                )
+            if self._llm_router is None:
+                raise RuntimeError(
+                    "MemoryEngine requires ``self._llm_router``; the LLM "
+                    "router was never initialised. This is a wiring-order "
+                    "bug — memory depends on step 4 of VolnixApp.start()."
+                )
+            from volnix.registry.composition import build_memory_engine
+
+            memory_engine = await build_memory_engine(
+                memory_config=self._config.memory,
+                world_seed=int(plan.seed),
+                llm_router=self._llm_router,
+                connection_manager=self._conn_mgr,
+            )
+            if memory_engine is not None:
+                # D10-4: ledger BEFORE start() so the EngineLifecycleEntry
+                # row from ``_record_lifecycle("start")`` lands on the ledger.
+                memory_engine._ledger = self._ledger
+                await memory_engine.initialize({}, self._bus)
+                await memory_engine.start()
+                self._memory_engine = memory_engine
 
         await agency.configure(actor_states, world_context, available_actions)
 
