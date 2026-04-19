@@ -12,7 +12,13 @@ import asyncio
 from volnix.core.protocols import LedgerProtocol
 from volnix.core.types import ActorId
 from volnix.ledger.entries import LLMCallEntry
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
+from volnix.llm.types import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    LLMUsage,
+)
 
 
 class UsageTracker:
@@ -132,3 +138,37 @@ class UsageTracker:
         """
         usage = self._by_actor.get(str(actor_id), LLMUsage())
         return usage.cost_usd
+
+    async def record_embedding(
+        self,
+        request: EmbeddingRequest,
+        response: EmbeddingResponse,
+        engine_name: str,
+        actor_id: ActorId | None = None,
+    ) -> None:
+        """Record usage from an embedding call (Phase 4B Step 3.5).
+
+        Writes the same ``LLMCallEntry`` shape the BudgetEngine already
+        reads, so embedding spend aggregates into the same actor/
+        engine/total buckets as generation spend (G10 of the gap
+        analysis — unified budget accounting).
+        """
+        async with self._lock:
+            if self._ledger:
+                entry = LLMCallEntry(
+                    provider=response.provider,
+                    model=response.model,
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                    cached_tokens=response.usage.cached_tokens,
+                    cost_usd=response.usage.cost_usd,
+                    latency_ms=response.latency_ms,
+                    success=response.error is None,
+                    engine_name=engine_name,
+                )
+                await self._ledger.append(entry)
+
+            self._update_aggregate(self._by_engine, engine_name, response.usage)
+            if actor_id:
+                self._update_aggregate(self._by_actor, str(actor_id), response.usage)
+            self._total = self._merge_usage(self._total, response.usage)

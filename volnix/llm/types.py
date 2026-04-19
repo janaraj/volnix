@@ -194,3 +194,84 @@ class ProviderInfo(BaseModel, frozen=True):
     type: str = ""
     base_url: str | None = None
     available_models: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Embeddings (PMF Plan Phase 4B Step 3.5 — G3 of the gap analysis)
+# ---------------------------------------------------------------------------
+#
+# Separate request/response shape from chat completions — embeddings
+# take a list of strings and return a list of vectors, and have no
+# concept of temperature / tool calls / structured output. Reusing
+# LLMRequest/LLMResponse would force bogus defaults everywhere.
+#
+# Usage is reported via the shared ``LLMUsage`` so the tracker + ledger
+# see embedding calls alongside generation calls for unified budget
+# accounting (G10 of the plan — BudgetEngine reads LLMCallEntry rows).
+
+
+class EmbeddingRequest(BaseModel, frozen=True):
+    """Request payload for an embedding call.
+
+    Each input text is capped at ``_MAX_EMBED_TEXT_LEN`` characters and
+    the batch is capped at ``_MAX_EMBED_BATCH`` items so a caller can't
+    accidentally DoS the router or blow the provider's per-request limit.
+    """
+
+    texts: list[str] = Field(min_length=1, max_length=256)
+    """Non-empty batch of texts. Each must be non-empty and bounded
+    in length — validated below."""
+
+    model_override: str | None = None
+    provider_override: str | None = None
+
+    @field_validator("texts")
+    @classmethod
+    def _validate_texts(cls, v: list[str]) -> list[str]:
+        for t in v:
+            if not t:
+                raise ValueError(
+                    "EmbeddingRequest.texts: every input must be a "
+                    "non-empty string (empty/whitespace-only rejected)."
+                )
+            if len(t) > 10_000:
+                raise ValueError(
+                    f"EmbeddingRequest.texts: input length {len(t)} "
+                    f"exceeds the 10000-char cap. Chunk before embedding."
+                )
+        return v
+
+
+class EmbeddingResponse(BaseModel, frozen=True):
+    """Response from an embedding call.
+
+    ``vectors[i]`` is the embedding for ``request.texts[i]``. On
+    transport error, ``error`` is populated and ``vectors`` is empty
+    so callers can branch without a KeyError.
+    """
+
+    vectors: list[list[float]] = Field(default_factory=list)
+    model: str = ""
+    provider: str = ""
+    usage: LLMUsage = LLMUsage()
+    latency_ms: float = 0.0
+    error: str | None = None
+
+    @field_validator("vectors")
+    @classmethod
+    def _validate_vectors(cls, v: list[list[float]]) -> list[list[float]]:
+        # Uniform dimensionality — a response with vectors of mixed
+        # widths is a provider bug. Surface it at the model boundary
+        # so downstream code (cache, cosine similarity) never sees a
+        # ragged list.
+        if not v:
+            return v
+        dims = len(v[0])
+        for i, row in enumerate(v):
+            if len(row) != dims:
+                raise ValueError(
+                    f"EmbeddingResponse.vectors[{i}] has dim={len(row)}, "
+                    f"expected {dims} (first vector's dim). Provider "
+                    f"returned mismatched vector widths."
+                )
+        return v

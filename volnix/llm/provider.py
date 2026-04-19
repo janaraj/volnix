@@ -10,7 +10,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from volnix.llm.types import LLMRequest, LLMResponse, ProviderInfo
+from volnix.llm.types import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    ProviderInfo,
+)
 
 
 class LLMProvider(ABC):
@@ -29,6 +35,24 @@ class LLMProvider(ABC):
             The LLM response including content, usage, and latency.
         """
         ...
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Produce embeddings for the input texts.
+
+        Default raises ``NotImplementedError``. Providers that support
+        embeddings (OpenAI-compatible, mock, and any future ones)
+        override this method. Providers without an embeddings API
+        (e.g., some CLI subprocess wrappers, ACP providers) leave the
+        default in place — the router surfaces the
+        ``NotImplementedError`` as a clean config error.
+
+        Added for PMF Plan Phase 4B Step 3.5 (G3 of the gap analysis).
+        """
+        raise NotImplementedError(
+            f"Provider {self.provider_name!r} does not support embeddings. "
+            f"Configure ``[llm.routing.<engine>_<embed_use_case>]`` to "
+            f"route to a provider that does (e.g. openai, mock)."
+        )
 
     async def validate_connection(self) -> bool:
         """Check that the provider is reachable and credentials are valid.

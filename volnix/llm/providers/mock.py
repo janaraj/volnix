@@ -11,7 +11,14 @@ import time
 from typing import ClassVar
 
 from volnix.llm.provider import LLMProvider
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.types import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    LLMUsage,
+    ProviderInfo,
+)
 
 
 class MockLLMProvider(LLMProvider):
@@ -73,6 +80,47 @@ class MockLLMProvider(LLMProvider):
             usage=usage,
             model=request.model_override or "mock-model-1",
             provider="mock",
+            latency_ms=latency,
+        )
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Deterministic mock embeddings for tests.
+
+        Each vector is derived from a SHA-256 hash of the input text,
+        treating each byte as an integer in [0, 255] then mapped to
+        a float in [-1, 1]. Same text → same vector, always — the
+        contract the content-hash cache depends on (G14 determinism).
+
+        Bytewise (not float-unpack) to avoid bit patterns that
+        materialise as NaN/Inf — those break equality comparisons
+        (NaN != NaN) and poison downstream cosine math.
+        """
+        start = time.monotonic()
+        vectors: list[list[float]] = []
+        for t in request.texts:
+            digest = hashlib.sha256(t.encode("utf-8")).digest()
+            # Take 8 bytes, map each to a float in [-1, 1].
+            # Arbitrary width — keeps tests small while exercising
+            # the vector machinery. Normalise to unit length so
+            # cosine similarity has well-defined semantics.
+            raw = [(b / 127.5) - 1.0 for b in digest[:8]]
+            norm = sum(x * x for x in raw) ** 0.5
+            if norm > 0:
+                raw = [x / norm for x in raw]
+            vectors.append(raw)
+        latency = (time.monotonic() - start) * 1000
+        # Mock usage — rough token-count estimate at 4 chars/token.
+        prompt_tokens = sum(max(1, len(t) // 4) for t in request.texts)
+        return EmbeddingResponse(
+            vectors=vectors,
+            model=request.model_override or "mock-embed-1",
+            provider="mock",
+            usage=LLMUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                total_tokens=prompt_tokens,
+                cost_usd=0.0,
+            ),
             latency_ms=latency,
         )
 

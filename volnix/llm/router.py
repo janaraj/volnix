@@ -17,7 +17,7 @@ from volnix.llm.config import LLMConfig, LLMRoutingEntry
 from volnix.llm.provider import LLMProvider
 from volnix.llm.registry import ProviderRegistry
 from volnix.llm.tracker import UsageTracker
-from volnix.llm.types import LLMRequest, LLMResponse
+from volnix.llm.types import EmbeddingRequest, EmbeddingResponse, LLMRequest, LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +189,120 @@ class LLMRouter:
         """Check if an error message indicates a transient failure."""
         error_lower = error.lower()
         return any(p in error_lower for p in self._TRANSIENT_PATTERNS)
+
+    async def embed(
+        self,
+        request: EmbeddingRequest,
+        engine_name: str,
+        use_case: str = "default",
+    ) -> EmbeddingResponse:
+        """Route an embedding request to the appropriate provider.
+
+        Phase 4B Step 3.5 (G3 of the gap analysis). Mirrors ``route``
+        with the same routing table, retry logic, and tracker hook —
+        symmetry is intentional so operators reason about embeddings
+        and completions identically (same ``[llm.routing.*]`` knob).
+
+        Providers that don't support embeddings raise
+        ``NotImplementedError`` from their default ``embed`` impl;
+        that surfaces as a clean ``error`` field on the response.
+        """
+        routing = self._resolve_routing(engine_name, use_case)
+
+        if routing:
+            provider_name = routing.provider or self._config.defaults.type
+            model = routing.model or self._config.defaults.default_model
+        else:
+            provider_name = self._config.defaults.type
+            model = self._config.defaults.default_model
+
+        if request.provider_override:
+            provider_name = request.provider_override
+        if request.model_override:
+            model = request.model_override
+
+        try:
+            provider = self._registry.get(provider_name)
+        except KeyError:
+            routing_key = (
+                f"{engine_name}_{use_case}" if use_case != "default" else engine_name
+            )
+            raise KeyError(
+                f"No provider '{provider_name}' registered for embedding. "
+                f"Routing: {routing_key} -> "
+                f"{'matched' if routing else 'fell through to defaults'}. "
+                f"Check [llm.routing.{routing_key}] or [llm.defaults] in volnix.toml."
+            )
+
+        if not request.model_override:
+            request = request.model_copy(update={"model_override": model})
+
+        timeout = (
+            getattr(routing, "timeout_seconds", None)
+            or self._config.defaults.timeout_seconds
+            or 120.0
+        )
+        max_retries = self._config.max_retries
+        backoff_base = self._config.retry_backoff_base
+
+        response: EmbeddingResponse
+        for attempt in range(1 + max_retries):
+            async with self._semaphore:
+                try:
+                    response = await asyncio.wait_for(
+                        provider.embed(request),
+                        timeout=timeout,
+                    )
+                except TimeoutError:
+                    response = EmbeddingResponse(
+                        vectors=[],
+                        provider=provider_name,
+                        model=model,
+                        error=f"Embedding call timed out after {int(timeout)}s",
+                    )
+                except NotImplementedError as e:
+                    # Clean error — don't retry. Config pointed at a
+                    # provider that doesn't support embeddings.
+                    response = EmbeddingResponse(
+                        vectors=[],
+                        provider=provider_name,
+                        model=model,
+                        error=f"NotImplementedError: {e}",
+                    )
+                    break
+
+            is_retryable = False
+            if response.error:
+                is_retryable = self._is_transient_error(response.error)
+
+            if response.error and not is_retryable:
+                logger.warning(
+                    "Embedding call failed (non-retryable): %s/%s — %s",
+                    engine_name,
+                    use_case,
+                    response.error,
+                )
+
+            if not is_retryable or attempt >= max_retries:
+                break
+
+            delay = backoff_base * (2**attempt)
+            logger.warning(
+                "Embedding call returned retryable result "
+                "(attempt %d/%d), retrying in %.1fs: %s/%s — %s",
+                attempt + 1,
+                max_retries,
+                delay,
+                engine_name,
+                use_case,
+                response.error,
+            )
+            await asyncio.sleep(delay)
+
+        if self._tracker:
+            await self._tracker.record_embedding(request, response, engine_name)
+
+        return response
 
     def get_provider_for(self, engine_name: str, use_case: str = "default") -> LLMProvider:
         """Resolve the provider for a given engine and use-case.

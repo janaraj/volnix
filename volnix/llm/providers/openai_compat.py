@@ -24,7 +24,14 @@ from openai import AsyncOpenAI
 
 from volnix.llm._tool_pairing import repair_tool_call_pairing as _repair_tool_call_pairing
 from volnix.llm.provider import LLMProvider
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo
+from volnix.llm.types import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    LLMUsage,
+    ProviderInfo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +359,70 @@ class OpenAICompatibleProvider(LLMProvider):
                 latency_ms=latency,
                 error=f"{type(e).__name__}: {str(e)[:500]}",
             )
+
+    # Cost per 1M tokens for embedding models (input only — embeddings
+    # have no completion tokens). [assumed] list prices.
+    EMBEDDING_COST_TABLE: ClassVar[dict[str, float]] = {
+        "text-embedding-3-small": 0.02,
+        "text-embedding-3-large": 0.13,
+        "text-embedding-ada-002": 0.10,
+    }
+    _DEFAULT_EMBEDDING_RATE: ClassVar[float] = 0.02
+    _DEFAULT_EMBEDDING_MODEL: ClassVar[str] = "text-embedding-3-small"
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Produce embeddings via the OpenAI-compatible ``embeddings`` API.
+
+        Added for Phase 4B Step 3.5 (G3 of the gap analysis). Local
+        providers (Ollama, vLLM) may or may not expose this endpoint
+        — if they don't, the SDK raises ``APIError`` and we surface
+        it in ``EmbeddingResponse.error`` (the router treats that
+        path symmetrically with ``generate``'s transient-error
+        retry logic).
+        """
+        model = request.model_override or self._DEFAULT_EMBEDDING_MODEL
+        start = time.monotonic()
+        try:
+            completion = await self._client.embeddings.create(
+                model=model, input=list(request.texts)
+            )
+            latency = (time.monotonic() - start) * 1000
+            vectors = [list(item.embedding) for item in completion.data]
+            usage_obj = getattr(completion, "usage", None)
+            prompt_tokens = int(getattr(usage_obj, "prompt_tokens", 0) or 0)
+            total_tokens = int(getattr(usage_obj, "total_tokens", prompt_tokens) or 0)
+            return EmbeddingResponse(
+                vectors=vectors,
+                model=model,
+                provider=self.provider_name,
+                usage=LLMUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=0,
+                    total_tokens=total_tokens,
+                    cost_usd=self._estimate_embedding_cost(model, prompt_tokens),
+                ),
+                latency_ms=latency,
+            )
+        except Exception as e:  # noqa: BLE001 — surface all errors uniformly
+            # Mirrors the broad catch in ``generate`` at line 352 so
+            # operators see identical error shapes for both paths.
+            # ``openai.APIError`` is a subclass of ``Exception``, so
+            # a separate catch would produce identical output.
+            latency = (time.monotonic() - start) * 1000
+            return EmbeddingResponse(
+                vectors=[],
+                model=model,
+                provider=self.provider_name,
+                latency_ms=latency,
+                error=f"{type(e).__name__}: {str(e)[:500]}",
+            )
+
+    def _estimate_embedding_cost(self, model: str, input_tokens: int) -> float:
+        """Estimate embedding cost in USD. Local providers bill 0."""
+        if self._is_local:
+            return 0.0
+        rate = self.EMBEDDING_COST_TABLE.get(model, self._DEFAULT_EMBEDDING_RATE)
+        return input_tokens * rate / 1_000_000
 
     async def validate_connection(self) -> bool:
         """Validate connectivity to the OpenAI-compatible endpoint.
