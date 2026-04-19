@@ -210,8 +210,12 @@ class TestMemoryQueryVariants:
             HybridQuery(semantic_text="hi"),
         ],
         ids=[
-            "structured", "temporal", "semantic",
-            "importance", "graph", "hybrid",
+            "structured",
+            "temporal",
+            "semantic",
+            "importance",
+            "graph",
+            "hybrid",
         ],
     )
     def test_all_query_variants_frozen(self, query) -> None:
@@ -245,6 +249,23 @@ class TestMemoryQueryVariants:
         with pytest.raises(ValidationError):
             TemporalQuery(tick_start=-1)
 
+    # C4 of the Steps 1-5 bug-bounty review: cross-field validator
+    # rejects backwards ranges. Without this, _temporal silently
+    # matches nothing — Test Discipline #5 anti-pattern.
+    def test_negative_temporal_tick_end_before_start_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="tick_end.*>= tick_start"):
+            TemporalQuery(tick_start=100, tick_end=50)
+
+    def test_positive_temporal_tick_end_equal_to_start_allowed(self) -> None:
+        # Single-tick window is legitimate — not a regression.
+        q = TemporalQuery(tick_start=42, tick_end=42)
+        assert q.tick_start == q.tick_end == 42
+
+    def test_positive_temporal_tick_end_none_is_open_ended(self) -> None:
+        # None means "no upper bound" — validator skips the check.
+        q = TemporalQuery(tick_start=42, tick_end=None)
+        assert q.tick_end is None
+
     # M1 — graph depth bounds
     @pytest.mark.parametrize("bad_depth", [0, -1, 11, 100])
     def test_negative_graph_depth_bounds(self, bad_depth: int) -> None:
@@ -266,9 +287,7 @@ class TestMemoryQueryVariants:
         "weight_name", ["semantic_weight", "recency_weight", "importance_weight"]
     )
     @pytest.mark.parametrize("bad_weight", [-0.1, 1.01])
-    def test_negative_hybrid_weights_bounds(
-        self, weight_name: str, bad_weight: float
-    ) -> None:
+    def test_negative_hybrid_weights_bounds(self, weight_name: str, bad_weight: float) -> None:
         with pytest.raises(ValidationError):
             HybridQuery(semantic_text="x", **{weight_name: bad_weight})
 
@@ -305,21 +324,30 @@ class TestMemoryRecall:
         # Claims truncation but records equal total — contradiction.
         with pytest.raises(ValidationError, match="truncated"):
             MemoryRecall(
-                query_id="q", records=[], total_matched=0, truncated=True,
+                query_id="q",
+                records=[],
+                total_matched=0,
+                truncated=True,
             )
 
     def test_negative_not_truncated_but_records_under_total(self) -> None:
         rec = MemoryRecord(**_base_record_kwargs())
         with pytest.raises(ValidationError, match="truncated"):
             MemoryRecall(
-                query_id="q", records=[rec], total_matched=5, truncated=False,
+                query_id="q",
+                records=[rec],
+                total_matched=5,
+                truncated=False,
             )
 
     def test_negative_records_exceed_total_matched(self) -> None:
         rec = MemoryRecord(**_base_record_kwargs())
         with pytest.raises(ValidationError, match="total_matched"):
             MemoryRecall(
-                query_id="q", records=[rec, rec], total_matched=1, truncated=True,
+                query_id="q",
+                records=[rec, rec],
+                total_matched=1,
+                truncated=True,
             )
 
     def test_negative_empty_query_id_rejected(self) -> None:
@@ -329,7 +357,10 @@ class TestMemoryRecall:
     def test_positive_truncated_consistent(self) -> None:
         rec = MemoryRecord(**_base_record_kwargs())
         r = MemoryRecall(
-            query_id="q", records=[rec], total_matched=5, truncated=True,
+            query_id="q",
+            records=[rec],
+            total_matched=5,
+            truncated=True,
         )
         assert r.truncated is True
 
@@ -345,9 +376,7 @@ class TestMemoryWrite:
 
     # M1 — importance range enforcement symmetric with MemoryRecord (C1)
     @pytest.mark.parametrize("bad_importance", [-0.1, 1.01, -5.0, 42.0])
-    def test_negative_importance_out_of_range_rejected(
-        self, bad_importance: float
-    ) -> None:
+    def test_negative_importance_out_of_range_rejected(self, bad_importance: float) -> None:
         with pytest.raises(ValidationError):
             MemoryWrite(content="x", kind="episodic", importance=bad_importance)
 
@@ -384,6 +413,8 @@ class TestMemoryAccessDenied:
     def test_exception_is_catchable(self) -> None:
         with pytest.raises(MemoryAccessDenied):
             raise MemoryAccessDenied(
-                caller=ActorId("a"), target_scope="actor",
-                target_owner="b", op="write",
+                caller=ActorId("a"),
+                target_scope="actor",
+                target_owner="b",
+                op="write",
             )

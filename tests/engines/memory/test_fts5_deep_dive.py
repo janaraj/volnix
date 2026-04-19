@@ -16,6 +16,8 @@ import asyncio
 import unicodedata
 from pathlib import Path
 
+import pytest
+
 from volnix.core.memory_types import MemoryRecord, content_hash_of
 from volnix.core.types import MemoryRecordId
 from volnix.engines.memory.store import (
@@ -499,6 +501,38 @@ class TestDeterminism:
 # ---------------------------------------------------------------------------
 # Group 13 — Tokenizer drift on re-initialise
 # ---------------------------------------------------------------------------
+
+
+class TestMalformedTokenizerSuffix:
+    """D2 of the Steps 1-5 bug-bounty review: ``MemoryConfig`` only
+    validates the tokenizer prefix, not the full suffix. A
+    malformed suffix (e.g. unknown option, out-of-range value) is
+    passed through to FTS5's DDL, which rejects it with a clear
+    error. This is the second layer of the two-layer defence — the
+    test locks in that SQLite surfaces the error loudly rather than
+    silently accepting garbage.
+    """
+
+    async def test_unknown_unicode61_option_raises_at_initialize(self) -> None:
+        # ``unicode61 remove_diacritics 9`` — out-of-range value.
+        # FTS5 accepts 0, 1, or 2 only.
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db, fts_tokenizer="unicode61 remove_diacritics 9")
+        try:
+            with pytest.raises(Exception):  # sqlite error bubble
+                await store.initialize()
+        finally:
+            await db.close()
+
+    async def test_garbage_option_name_raises_at_initialize(self) -> None:
+        # Known prefix ``unicode61`` followed by an unknown option.
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db, fts_tokenizer="unicode61 totally_made_up_option 1")
+        try:
+            with pytest.raises(Exception):
+                await store.initialize()
+        finally:
+            await db.close()
 
 
 class TestTokenizerDrift:

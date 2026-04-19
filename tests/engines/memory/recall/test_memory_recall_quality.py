@@ -28,8 +28,25 @@ from tests.engines.memory.recall.metrics import (
     recall_at_k,
 )
 from volnix.core.memory_types import SemanticQuery
-from volnix.engines.memory.embedder import FTS5Embedder
+from volnix.engines.memory.embedder import EmbedderProtocol, FTS5Embedder
 from volnix.engines.memory.recall import Recall
+
+
+def _build_embedder(embedder_id: str) -> EmbedderProtocol:
+    """Construct an embedder from its id. M3 of the Steps 1-5
+    bug-bounty review: ``TestHarnessViaRecallDispatch`` previously
+    hardcoded ``FTS5Embedder()`` and ignored the parametrised
+    ``embedder_id``. When Step 13 appends ``sentence-transformers``
+    to the conftest params list, this helper gains a branch and
+    the integration test re-runs on the new embedder automatically.
+    """
+    if embedder_id == "fts5":
+        return FTS5Embedder()
+    raise ValueError(
+        f"unknown embedder_id {embedder_id!r} — add a branch here "
+        f"when Step 13 extends the conftest params list."
+    )
+
 
 # The 9 categories the corpus exercises. Kept explicit so a category
 # rename in the corpus without a test update fails the meta-test.
@@ -279,8 +296,8 @@ class TestHarnessViaRecallDispatch:
     somewhere."""
 
     async def test_recall_dispatch_matches_direct_fts_search(self, seeded_store, corpus) -> None:
-        store, _ = seeded_store
-        r = Recall(store=store, embedder=FTS5Embedder())
+        store, embedder_id = seeded_store
+        r = Recall(store=store, embedder=_build_embedder(embedder_id))
 
         # Cover strong-signal categories — any divergence in dispatch
         # shape or filtering shows up here.

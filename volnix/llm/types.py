@@ -260,13 +260,22 @@ class EmbeddingResponse(BaseModel, frozen=True):
     @field_validator("vectors")
     @classmethod
     def _validate_vectors(cls, v: list[list[float]]) -> list[list[float]]:
-        # Uniform dimensionality — a response with vectors of mixed
-        # widths is a provider bug. Surface it at the model boundary
-        # so downstream code (cache, cosine similarity) never sees a
-        # ragged list.
+        # Uniform non-zero dimensionality. A response with vectors
+        # of mixed widths is a provider bug. A zero-dim vector
+        # (e.g. ``[[]]``) is also a provider bug — downstream
+        # cosine similarity would NaN-propagate. Surface both at
+        # the model boundary so downstream code never sees garbage.
+        # (C3 of the bug-bounty review added the zero-dim rejection.)
         if not v:
             return v
         dims = len(v[0])
+        if dims == 0:
+            raise ValueError(
+                "EmbeddingResponse.vectors contains zero-dimension "
+                "vectors. An embedding vector with no components is "
+                "meaningless and would NaN-propagate through cosine "
+                "similarity. Provider returned malformed data."
+            )
         for i, row in enumerate(v):
             if len(row) != dims:
                 raise ValueError(

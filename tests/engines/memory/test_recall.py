@@ -58,13 +58,15 @@ def _rec(
 
 
 @pytest.fixture
-async def recall() -> AsyncIterator[tuple[Recall, SQLiteMemoryStore, Any]]:
+async def recall() -> AsyncIterator[tuple[Recall, SQLiteMemoryStore]]:
+    # N1 of the bug-bounty review: fixture used to yield ``db`` but
+    # no test read it. Cleanup keeps the fixture signature minimal.
     db = await create_database(":memory:", wal_mode=False)
     store = SQLiteMemoryStore(db)
     await store.initialize()
     r = Recall(store=store, embedder=FTS5Embedder())
     try:
-        yield r, store, db
+        yield r, store
     finally:
         await db.close()
 
@@ -76,7 +78,7 @@ async def recall() -> AsyncIterator[tuple[Recall, SQLiteMemoryStore, Any]]:
 
 class TestDispatchRouting:
     async def test_negative_unknown_mode_raises_value_error(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
 
         class _FakeQuery:
             mode = "not_a_real_mode"
@@ -85,7 +87,7 @@ class TestDispatchRouting:
             await r.dispatch("A", _FakeQuery())  # type: ignore[arg-type]
 
     async def test_dispatches_structured(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         sem = _rec(
             "s1",
             "pref evening",
@@ -106,14 +108,14 @@ class TestDispatchRouting:
 
 class TestStructured:
     async def test_empty_store_returns_empty(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
         out = await r.dispatch("A", StructuredQuery(keys=["x"]))
         assert out.records == []
         assert out.total_matched == 0
         assert out.truncated is False
 
     async def test_only_semantic_records_returned(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         # Episodic with matching tag must be IGNORED — structured
         # only sees semantic records.
         await store.insert(_rec("e1", "episodic event", tags=["preference"]))
@@ -131,7 +133,7 @@ class TestStructured:
         assert [str(x.record_id) for x in out.records] == ["s1"]
 
     async def test_multi_key_and_semantics(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(
             _rec(
                 "s1",
@@ -154,7 +156,7 @@ class TestStructured:
         assert [str(x.record_id) for x in out.records] == ["s1"]
 
     async def test_sorted_by_importance_desc_with_record_id_tie_break(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         # Same importance for z and a — record_id ASC breaks tie.
         await store.insert(
             _rec(
@@ -197,13 +199,13 @@ class TestStructured:
 
 class TestTemporal:
     async def test_empty_window_returns_empty(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("r1", "content", created_tick=10))
         out = await r.dispatch("A", TemporalQuery(tick_start=100, tick_end=200))
         assert out.records == []
 
     async def test_open_ended_tick_end(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         for i in range(5):
             await store.insert(_rec(f"r{i}", f"c{i}", created_tick=i))
         out = await r.dispatch("A", TemporalQuery(tick_start=2, tick_end=None))
@@ -211,7 +213,7 @@ class TestTemporal:
         assert ids == ["r4", "r3", "r2"]
 
     async def test_newest_first_with_record_id_tie_break(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         # Same tick, expect record_id ASC as tie-break.
         await store.insert(_rec("z", "z", created_tick=10))
         await store.insert(_rec("a", "a", created_tick=10))
@@ -220,7 +222,7 @@ class TestTemporal:
         assert [str(x.record_id) for x in out.records] == ["m", "a", "z"]
 
     async def test_truncation_flag_and_total_matched(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         for i in range(10):
             await store.insert(_rec(f"r{i}", f"c{i}", created_tick=i))
         out = await r.dispatch("A", TemporalQuery(tick_start=0, limit=3))
@@ -236,32 +238,49 @@ class TestTemporal:
 
 class TestSemanticFts5:
     async def test_no_match_returns_empty(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("r1", "alpha beta"))
         out = await r.dispatch("A", SemanticQuery(text="nonexistent"))
         assert out.records == []
 
     async def test_single_match(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("r1", "alpha beta gamma"))
         out = await r.dispatch("A", SemanticQuery(text="alpha"))
         assert [str(x.record_id) for x in out.records] == ["r1"]
 
     async def test_top_k_truncation(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         for i in range(5):
             await store.insert(_rec(f"r{i}", "shared term"))
         out = await r.dispatch("A", SemanticQuery(text="shared", top_k=2))
         assert len(out.records) == 2
 
     async def test_query_id_carries_content_hash_prefix(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("r1", "hello world"))
         out = await r.dispatch("A", SemanticQuery(text="hello"))
         # query_id is deterministic for the same text (matches Recall
         # impl: f"semantic:fts5:{content_hash_of(q.text)[:8]}").
         assert out.query_id.startswith("semantic:fts5:")
         assert out.query_id == f"semantic:fts5:{content_hash_of('hello')[:8]}"
+
+    async def test_negative_min_score_on_fts5_raises(self, recall) -> None:
+        # C1 of the bug-bounty review: min_score on FTS5 was silently
+        # ignored. Now it raises so callers surface the contract
+        # mismatch instead of getting no-op behaviour.
+        r, store = recall
+        await store.insert(_rec("r1", "hello world"))
+        with pytest.raises(ValueError, match="min_score"):
+            await r.dispatch("A", SemanticQuery(text="hello", min_score=0.5))
+
+    async def test_positive_min_score_zero_is_accepted(self, recall) -> None:
+        # min_score = 0.0 (the default) must still work — only
+        # non-zero values trigger the C1 guard.
+        r, store = recall
+        await store.insert(_rec("r1", "hello world"))
+        out = await r.dispatch("A", SemanticQuery(text="hello", min_score=0.0))
+        assert len(out.records) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +290,12 @@ class TestSemanticFts5:
 
 class TestImportance:
     async def test_empty_store_returns_empty(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
         out = await r.dispatch("A", ImportanceQuery(min_importance=0.5))
         assert out.records == []
 
     async def test_threshold_filter(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("low", "low imp", importance=0.1))
         await store.insert(_rec("mid", "mid imp", importance=0.5))
         await store.insert(_rec("hi", "hi imp", importance=0.9))
@@ -285,7 +304,7 @@ class TestImportance:
         assert ids == ["hi", "mid"]
 
     async def test_top_k_truncation_and_total_matched(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         for i in range(5):
             await store.insert(_rec(f"r{i}", f"c{i}", importance=0.9))
         out = await r.dispatch("A", ImportanceQuery(top_k=2))
@@ -294,12 +313,26 @@ class TestImportance:
         assert out.truncated is True
 
     async def test_sort_importance_desc_record_id_tie_break(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("z", "z", importance=0.5))
         await store.insert(_rec("a", "a", importance=0.5))
         await store.insert(_rec("m", "m", importance=0.9))
         out = await r.dispatch("A", ImportanceQuery(top_k=10))
         assert [str(x.record_id) for x in out.records] == ["m", "a", "z"]
+
+    async def test_importance_exactly_zero_matches_min_zero(self, recall) -> None:
+        # M2 of the Steps 1-5 bug-bounty review: boundary at 0.0.
+        # ``Recall._importance`` uses ``>=``; a record with
+        # ``importance=0.0`` must match a query with
+        # ``min_importance=0.0``. Untested before; a regression to
+        # ``>`` would pass CI silently without this guard.
+        r, store = recall
+        await store.insert(_rec("zero", "content", importance=0.0))
+        await store.insert(_rec("pos", "content", importance=0.1))
+        out = await r.dispatch("A", ImportanceQuery(min_importance=0.0, top_k=10))
+        ids = [str(x.record_id) for x in out.records]
+        assert "zero" in ids
+        assert "pos" in ids
 
 
 # ---------------------------------------------------------------------------
@@ -309,14 +342,14 @@ class TestImportance:
 
 class TestHybrid:
     async def test_empty_store_returns_empty(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
         out = await r.dispatch("A", HybridQuery(semantic_text="anything"))
         assert out.records == []
 
     async def test_recency_dominates_when_weight_is_one(self, recall) -> None:
         # With recency_weight = 1.0 and others = 0, the newer record
         # with matching text must rank first.
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("old", "matching text", created_tick=1))
         await store.insert(_rec("new", "matching text", created_tick=100))
         out = await r.dispatch(
@@ -334,7 +367,7 @@ class TestHybrid:
         assert ids[0] == "new"
 
     async def test_importance_dominates_when_weight_is_one(self, recall) -> None:
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("lo", "matching text", importance=0.1))
         await store.insert(_rec("hi", "matching text", importance=0.9))
         out = await r.dispatch(
@@ -353,7 +386,7 @@ class TestHybrid:
     async def test_sem_norm_handles_min_equals_max(self, recall) -> None:
         # When all FTS hits have the same bm25 score, the min==max
         # branch in _sem_norm must not divide by zero.
-        r, store, _ = recall
+        r, store = recall
         for i in range(3):
             await store.insert(_rec(f"r{i}", "identical text", importance=i * 0.3))
         # Without crash, should return importance-dominated order.
@@ -372,7 +405,7 @@ class TestHybrid:
 
     async def test_deterministic_tie_break_on_record_id(self, recall) -> None:
         # All signals identical — ties resolve on record_id ASC.
-        r, store, _ = recall
+        r, store = recall
         await store.insert(_rec("z", "same text", importance=0.5, created_tick=5))
         await store.insert(_rec("a", "same text", importance=0.5, created_tick=5))
         out = await r.dispatch(
@@ -383,6 +416,35 @@ class TestHybrid:
         ids = [str(x.record_id) for x in out.records]
         assert ids == sorted(ids)
 
+    async def test_candidate_k_clamped_to_max_top_k(self, recall, monkeypatch) -> None:
+        # C2 of the bug-bounty review: at upper ``top_k=1000``, naive
+        # ``3 * top_k`` would ask the store for 3000 candidates,
+        # bypassing the structural ``_MAX_TOP_K`` cap. The clamp
+        # ensures the request never exceeds the cap. We observe the
+        # clamp by capturing the ``top_k`` argument passed to
+        # ``store.fts_search``.
+        from volnix.core.memory_types import _MAX_TOP_K
+
+        r, store = recall
+        await store.insert(_rec("r1", "hello world"))
+        captured: dict[str, int] = {}
+        original = store.fts_search
+
+        async def _spy(owner_id: str, query: str, top_k: int):
+            captured["top_k"] = top_k
+            return await original(owner_id, query, top_k)
+
+        monkeypatch.setattr(store, "fts_search", _spy)
+        await r.dispatch(
+            "A",
+            HybridQuery(semantic_text="hello", top_k=_MAX_TOP_K),
+            tick=0,
+        )
+        assert captured["top_k"] == _MAX_TOP_K, (
+            f"hybrid asked store for top_k={captured['top_k']}, "
+            f"expected clamp at _MAX_TOP_K={_MAX_TOP_K}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Graph (NotImplementedError)
@@ -391,12 +453,12 @@ class TestHybrid:
 
 class TestGraphRaises:
     async def test_raises_not_implemented_with_context(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
         with pytest.raises(NotImplementedError, match="Phase 4D"):
             await r.dispatch("A", GraphQuery(entity="actor-42", depth=2))
 
     async def test_error_message_includes_entity_and_depth(self, recall) -> None:
-        r, _, _ = recall
+        r, _ = recall
         try:
             await r.dispatch("A", GraphQuery(entity="my-entity", depth=3))
         except NotImplementedError as e:

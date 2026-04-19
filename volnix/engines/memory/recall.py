@@ -28,6 +28,7 @@ Every list-returning path sorts with a deterministic tie-break on
 from __future__ import annotations
 
 from volnix.core.memory_types import (
+    _MAX_TOP_K,
     GraphQuery,
     HybridQuery,
     ImportanceQuery,
@@ -41,6 +42,12 @@ from volnix.core.memory_types import (
 )
 from volnix.engines.memory.embedder import EmbedderProtocol
 from volnix.engines.memory.store import MemoryStoreProtocol
+
+# Hybrid reranking fetches ``HYBRID_CANDIDATE_MULTIPLIER * q.top_k``
+# candidates from FTS5 so the weighted rerank has room. Capped by
+# ``_MAX_TOP_K`` so a caller at the upper bound can't coax a
+# 3000-row scan (C2 of Steps 1-5 bug-bounty review).
+HYBRID_CANDIDATE_MULTIPLIER: int = 3
 
 
 class Recall:
@@ -135,10 +142,24 @@ class Recall:
     async def _semantic(self, owner_id: str, q: SemanticQuery) -> MemoryRecall:
         """Dispatches on embedder provider.
 
-        FTS5: calls ``store.fts_search``; ``min_score`` is ignored
-        because BM25 scores are unbounded. Dense embedders: Step 13.
+        FTS5: calls ``store.fts_search``. ``min_score`` is **not**
+        meaningful on this path — BM25 scores are unbounded and
+        negative-is-better, so a user-supplied ``[0.0, 1.0]`` floor
+        has no sensible mapping. Rather than silently ignore it
+        (C1 of the bug-bounty review), we raise so callers surface
+        the contract mismatch. Step 13's dense-embedder path
+        honours ``min_score`` cleanly and removes this raise.
+
+        Dense embedders: Step 13.
         """
         if self._embedder.provider_id == "fts5":
+            if q.min_score > 0.0:
+                raise ValueError(
+                    "SemanticQuery.min_score is not supported on the "
+                    "FTS5 path (BM25 scores are unbounded — no "
+                    "meaningful [0,1] threshold). Pass min_score=0.0 "
+                    "or use a dense embedder (Step 13+)."
+                )
             hits = await self._store.fts_search(owner_id, q.text, q.top_k)
             records = [r for r, _score in hits]
             return MemoryRecall(
@@ -174,8 +195,11 @@ class Recall:
     async def _hybrid(self, owner_id: str, q: HybridQuery, *, tick: int) -> MemoryRecall:
         """Weighted combo: semantic + recency + importance.
 
-        Semantic candidates fetched from FTS5 at ``3 * top_k`` to
-        give room for reranking. Each signal normalised to ``[0, 1]``
+        Semantic candidates fetched from FTS5 at ``HYBRID_CANDIDATE_MULTIPLIER *
+        top_k`` to give room for reranking, **clamped to
+        ``_MAX_TOP_K``** (C2 of the bug-bounty review — at the upper
+        ``top_k=1000`` bound a naive ``3*top_k=3000`` call bypasses
+        the structural cap). Each signal normalised to ``[0, 1]``
         before the weighted sum; weights don't need to sum to 1.
         """
         if self._embedder.provider_id != "fts5":
@@ -183,7 +207,8 @@ class Recall:
                 f"hybrid retrieval with embedder {self._embedder.provider_id!r} lands in Step 13."
             )
 
-        raw_hits = await self._store.fts_search(owner_id, q.semantic_text, q.top_k * 3)
+        candidate_k = min(q.top_k * HYBRID_CANDIDATE_MULTIPLIER, _MAX_TOP_K)
+        raw_hits = await self._store.fts_search(owner_id, q.semantic_text, candidate_k)
         query_id = f"hybrid:{content_hash_of(q.semantic_text)[:8]}"
         if not raw_hits:
             return MemoryRecall(

@@ -69,6 +69,19 @@ class TestEmbeddingResponse:
         with pytest.raises(ValidationError, match="expected"):
             EmbeddingResponse(vectors=[[1.0, 2.0], [3.0]])
 
+    def test_negative_zero_dimension_vectors_rejected(self) -> None:
+        # C3 of the Steps 1-5 bug-bounty review: a batch-of-one
+        # zero-dim vector (``[[]]``) used to be silently accepted;
+        # cosine similarity on a zero-length vector NaN-propagates.
+        with pytest.raises(ValidationError, match="zero-dimension"):
+            EmbeddingResponse(vectors=[[]])
+
+    def test_negative_all_zero_dim_vectors_rejected(self) -> None:
+        # Extension of C3: multiple zero-dim rows — same class of
+        # malformed provider output.
+        with pytest.raises(ValidationError, match="zero-dimension"):
+            EmbeddingResponse(vectors=[[], [], []])
+
     def test_positive_empty_vectors_on_error(self) -> None:
         # Error path must be representable — empty vectors + error message.
         r = EmbeddingResponse(vectors=[], model="m", provider="p", error="boom")
@@ -141,9 +154,7 @@ class TestMockEmbed:
 
     async def test_model_override_respected(self) -> None:
         provider = MockLLMProvider()
-        r = await provider.embed(
-            EmbeddingRequest(texts=["x"], model_override="custom-mock")
-        )
+        r = await provider.embed(EmbeddingRequest(texts=["x"], model_override="custom-mock"))
         assert r.model == "custom-mock"
 
     async def test_default_model_when_no_override(self) -> None:
@@ -244,12 +255,15 @@ class TestRouterEmbedRetry:
                 self.calls += 1
                 if self.calls == 1:
                     return EmbeddingResponse(
-                        vectors=[], model="x", provider="flaky",
+                        vectors=[],
+                        model="x",
+                        provider="flaky",
                         error="rate limit hit",
                     )
                 return EmbeddingResponse(
                     vectors=[[0.1, 0.2]] * len(request.texts),
-                    model="x", provider="flaky",
+                    model="x",
+                    provider="flaky",
                 )
 
         flaky = _FlakyProvider()
@@ -266,7 +280,9 @@ class TestRouterEmbedRetry:
             async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
                 self.calls += 1
                 return EmbeddingResponse(
-                    vectors=[], model="x", provider="oneshot",
+                    vectors=[],
+                    model="x",
+                    provider="oneshot",
                     error="400 Bad Request: invalid input",
                 )
 
@@ -287,9 +303,7 @@ class TestRouterEmbedRetry:
         # Force short timeout via config
         router._config = router._config.model_copy(
             update={
-                "defaults": router._config.defaults.model_copy(
-                    update={"timeout_seconds": 0.05}
-                ),
+                "defaults": router._config.defaults.model_copy(update={"timeout_seconds": 0.05}),
                 "max_retries": 0,
             }
         )
@@ -315,9 +329,7 @@ class TestRouterEmbedTracker:
         tracker = UsageTracker()
         router = _make_router(tracker=tracker)
         for _ in range(3):
-            await router.embed(
-                EmbeddingRequest(texts=["hi"]), engine_name="memory"
-            )
+            await router.embed(EmbeddingRequest(texts=["hi"]), engine_name="memory")
         usage = await tracker.get_usage_by_engine("memory")
         # 3 calls, each ≥1 token
         assert usage.prompt_tokens >= 3
@@ -345,8 +357,10 @@ class TestTrackerRecordEmbedding:
                 model="mock-embed-1",
                 provider="mock",
                 usage=LLMUsage(
-                    prompt_tokens=5, completion_tokens=0,
-                    total_tokens=5, cost_usd=0.0001,
+                    prompt_tokens=5,
+                    completion_tokens=0,
+                    total_tokens=5,
+                    cost_usd=0.0001,
                 ),
                 latency_ms=12.5,
             ),
@@ -375,9 +389,7 @@ class TestTrackerRecordEmbedding:
         tracker = UsageTracker(ledger=ledger)  # type: ignore[arg-type]
         await tracker.record_embedding(
             EmbeddingRequest(texts=["hello"]),
-            EmbeddingResponse(
-                vectors=[], model="m", provider="p", error="boom"
-            ),
+            EmbeddingResponse(vectors=[], model="m", provider="p", error="boom"),
             engine_name="memory",
         )
         assert ledger.entries[0].success is False

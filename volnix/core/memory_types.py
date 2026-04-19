@@ -46,6 +46,7 @@ def content_hash_of(text: str) -> str:
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+
 # ---------------------------------------------------------------------------
 # Discriminator literals
 # ---------------------------------------------------------------------------
@@ -163,8 +164,7 @@ class MemoryRecord(BaseModel):
         # distilled, so they also must not link back.
         if self.source == "pack_fixture" and self.consolidated_from is not None:
             raise ValueError(
-                "MemoryRecord.consolidated_from must be None for "
-                "pack_fixture records."
+                "MemoryRecord.consolidated_from must be None for pack_fixture records."
             )
         return self
 
@@ -183,13 +183,32 @@ class StructuredQuery(BaseModel):
 
 
 class TemporalQuery(BaseModel):
-    """Records within a tick window, sorted newest-first."""
+    """Records within a tick window, sorted newest-first.
+
+    Cross-field invariant: when ``tick_end`` is provided it must be
+    ``>= tick_start``. A backwards range (e.g. ``tick_start=100,
+    tick_end=50``) silently matches nothing in ``_temporal`` — that
+    is the silent-fail anti-pattern Test Discipline #5 forbids, so
+    the validator rejects at construction (C4 of the bug-bounty
+    review).
+    """
 
     model_config = ConfigDict(frozen=True)
     mode: Literal["temporal"] = "temporal"
     tick_start: int = Field(ge=0)
     tick_end: int | None = Field(default=None, ge=0)
     limit: int = Field(default=50, ge=1, le=_MAX_LIMIT)
+
+    @model_validator(mode="after")
+    def _validate_tick_window(self) -> TemporalQuery:
+        if self.tick_end is not None and self.tick_end < self.tick_start:
+            raise ValueError(
+                f"TemporalQuery: tick_end ({self.tick_end}) must be "
+                f">= tick_start ({self.tick_start}). A backwards "
+                f"range is almost always a caller bug — use a "
+                f"coherent window."
+            )
+        return self
 
 
 class SemanticQuery(BaseModel):
@@ -258,12 +277,7 @@ class HybridQuery(BaseModel):
 
 
 MemoryQuery = (
-    StructuredQuery
-    | TemporalQuery
-    | SemanticQuery
-    | ImportanceQuery
-    | GraphQuery
-    | HybridQuery
+    StructuredQuery | TemporalQuery | SemanticQuery | ImportanceQuery | GraphQuery | HybridQuery
 )
 """Tagged union of query variants dispatched by mode."""
 
@@ -341,8 +355,7 @@ class MemoryAccessDenied(Exception):
         op: str,
     ) -> None:
         super().__init__(
-            f"MemoryAccessDenied: caller={caller} "
-            f"target={target_scope}:{target_owner} op={op}"
+            f"MemoryAccessDenied: caller={caller} target={target_scope}:{target_owner} op={op}"
         )
         self.caller = caller
         self.target_scope = target_scope

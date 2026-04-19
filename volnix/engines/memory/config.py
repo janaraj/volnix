@@ -62,6 +62,27 @@ class MemoryConfig(BaseModel):
       so it cannot exceed the ring-buffer cap).
     - Negative ``recall_p95_budget_ms``.
     - ``schema_version`` other than 1 in 4B.
+
+    **Consumer map (so nobody deletes a "dead" field thinking it's
+    unused).** M1 of the Steps 1-5 bug-bounty review: these fields
+    are defined here but consumed by later steps. If the consumer
+    step lands and forgets to read its field, the silent no-op
+    would ship. The map documents expected consumption:
+
+    - ``storage_db_name``: Step 3 (already consumed — store DI).
+    - ``fts_tokenizer``: Step 4 (already consumed — store DDL).
+    - ``consolidation_triggers`` + ``consolidation_periodic_interval_ticks``
+      + ``consolidation_episodic_window``: Step 6 (Consolidator).
+    - ``distillation_enabled`` + ``distillation_llm_use_case``:
+      Step 6 (Consolidator LLM call).
+    - ``recall_p95_budget_ms``: Step 12 (E2E perf harness).
+    - ``expose_remember_tool``: Step 11 (NPCActivator tool surface).
+    - ``embedder_cache_enabled``: Step 13 (dense embedder cache
+      read/write toggle).
+    - ``hydrate_on_promote``: Step 10 (cohort-promote hook).
+    - ``reset_on_world_start``: Step 10 (app.py wiring — truncate on
+      startup).
+    - ``tier_mode``: Step 9 (Tier-1 fixture loader).
     """
 
     model_config = ConfigDict(frozen=True)
