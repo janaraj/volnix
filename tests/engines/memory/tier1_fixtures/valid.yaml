@@ -1,0 +1,11 @@
+actor-alice:
+  - content: "Actor alice values privacy above all"
+    importance: 0.9
+    tags: [preference, identity]
+  - content: "Actor alice has a strong bond with actor-bob"
+    importance: 0.8
+    tags: [relationship]
+actor-bob:
+  - content: "Actor bob enjoys morning routine"
+    importance: 0.6
+    tags: [preference, routine]

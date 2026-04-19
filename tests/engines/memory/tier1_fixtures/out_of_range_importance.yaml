@@ -1,0 +1,4 @@
+actor-alice:
+  - content: "valid content"
+    importance: 5.0
+    tags: []

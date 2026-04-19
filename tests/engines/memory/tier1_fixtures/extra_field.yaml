@@ -1,0 +1,5 @@
+actor-alice:
+  - content: "valid content"
+    importance: 0.8
+    tags: []
+    unknown_field: "should fail"
