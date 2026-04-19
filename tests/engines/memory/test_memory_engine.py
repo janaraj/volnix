@@ -252,6 +252,33 @@ class TestRemember:
         b = await _run()
         assert a == b, f"non-deterministic IDs: {a} vs {b}"
 
+    async def test_remember_duplicate_content_produces_distinct_records(
+        self, engine_bundle
+    ) -> None:
+        # Two records with identical content share content_hash (by
+        # design — content hash is content-derived). Each remember()
+        # must produce a distinct record_id and land as a separate
+        # row. If the store treated content_hash as primary key,
+        # this would fail loudly.
+        engine, ledger, _ = engine_bundle
+        rid_a = await engine.remember(
+            caller=ActorId("a"),
+            target_scope="actor",
+            target_owner="a",
+            write=_write("same content"),
+            tick=0,
+        )
+        rid_b = await engine.remember(
+            caller=ActorId("a"),
+            target_scope="actor",
+            target_owner="a",
+            write=_write("same content"),
+            tick=1,
+        )
+        assert rid_a != rid_b
+        writes = ledger.of_type(MemoryWriteEntry)
+        assert len(writes) == 2
+
     async def test_remember_different_seeds_produce_different_ids(self) -> None:
         # Control: change the seed → different IDs.
         async def _run(seed: int) -> str:
@@ -323,6 +350,22 @@ class TestRecall:
         recalls = ledger.of_type(MemoryRecallEntry)
         assert recalls[0].query_id.startswith("semantic:fts5:")
 
+    async def test_negative_recall_on_empty_store_returns_empty(self, engine_bundle) -> None:
+        # Empty-store edge case — total_matched=0, records=[].
+        # Ledger entry still written with result_count=0.
+        engine, ledger, _ = engine_bundle
+        result = await engine.recall(
+            caller=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-1",
+            query=SemanticQuery(text="nothing"),
+            tick=0,
+        )
+        assert result.records == []
+        assert result.total_matched == 0
+        recalls = ledger.of_type(MemoryRecallEntry)
+        assert recalls[0].result_count == 0
+
 
 # ---------------------------------------------------------------------------
 # Consolidate — delegates + ledger
@@ -345,6 +388,16 @@ class TestConsolidate:
         assert cons[0].actor_id == ActorId("npc-1")
         assert cons[0].tick == 42
 
+    async def test_consolidate_with_force_on_empty_store_still_ledgers(self, engine_bundle) -> None:
+        # force=True bypasses the empty-episodes short-circuit in
+        # Consolidator. The LLM returns {"facts": []} (stub default),
+        # so semantic_produced=0. Ledger entry must still write.
+        engine, ledger, _ = engine_bundle
+        result = await engine.consolidate(ActorId("a"), tick=5, force=True)
+        assert result.semantic_produced == 0
+        cons = ledger.of_type(MemoryConsolidationEntry)
+        assert len(cons) == 1
+
 
 # ---------------------------------------------------------------------------
 # Evict + Hydrate — ledger-only in Step 7
@@ -359,6 +412,16 @@ class TestEvict:
         assert len(evictions) == 1
         assert evictions[0].actor_id == ActorId("npc-1")
 
+    async def test_evict_same_actor_twice_ledgers_both(self, engine_bundle) -> None:
+        # Idempotency edge case — evict has no store side-effect
+        # in Step 7, only ledger write. Calling twice must produce
+        # two entries, not dedupe.
+        engine, ledger, _ = engine_bundle
+        await engine.evict(ActorId("npc-1"))
+        await engine.evict(ActorId("npc-1"))
+        evictions = ledger.of_type(MemoryEvictionEntry)
+        assert len(evictions) == 2
+
 
 class TestHydrate:
     async def test_hydrate_writes_hydration_entry(self, engine_bundle) -> None:
@@ -367,6 +430,15 @@ class TestHydrate:
         hydrations = ledger.of_type(MemoryHydrationEntry)
         assert len(hydrations) == 1
         assert hydrations[0].actor_id == ActorId("npc-1")
+
+    async def test_hydrate_same_actor_twice_ledgers_both(self, engine_bundle) -> None:
+        # Same idempotency check as evict — hydrate is signal-only
+        # in Step 7, no dedup logic.
+        engine, ledger, _ = engine_bundle
+        await engine.hydrate(ActorId("npc-1"))
+        await engine.hydrate(ActorId("npc-1"))
+        hydrations = ledger.of_type(MemoryHydrationEntry)
+        assert len(hydrations) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -523,10 +595,20 @@ class TestLifecycle:
         # Fixture already initialised; call again — must not crash.
         await engine._on_initialize()
 
-    async def test_on_start_noop_for_fts5(self, engine_bundle) -> None:
-        # FTS5 embedder skips the warmup path.
+    async def test_on_start_noop_for_fts5(self, engine_bundle, monkeypatch) -> None:
+        # FTS5 embedder skips the warmup path. Previous version of
+        # this test only asserted "doesn't raise" — too weak. Now
+        # spy on embedder.embed and assert it was NOT called.
         engine, _, _ = engine_bundle
-        await engine._on_start()  # must not raise
+        embed_calls: list[Any] = []
+
+        async def _spy(*args, **kwargs):
+            embed_calls.append((args, kwargs))
+            raise AssertionError("embedder.embed should not be called for fts5")
+
+        monkeypatch.setattr(engine._embedder, "embed", _spy)
+        await engine._on_start()  # must not raise + must not call embed
+        assert embed_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -633,3 +715,43 @@ class TestCohortRotationHandler:
         assert calls == ["a", "b", "c"]
         # a + c succeeded → 2 eviction entries; b crashed before writing.
         assert len(ledger.of_type(MemoryEvictionEntry)) == 2
+
+    async def test_empty_demoted_and_promoted_is_noop(self, engine_bundle) -> None:
+        # Edge case — cohort emits a rotation event with empty lists
+        # (shouldn't normally happen but defend against it). No
+        # ledger writes of any kind.
+        engine, ledger, _ = engine_bundle
+        before = len(ledger.entries)
+        await engine._handle_event(self._event(demoted=[], promoted=[]))
+        assert len(ledger.entries) == before
+
+    async def test_overlapping_demote_and_promote_both_process(
+        self, engine_bundle_with_hydrate
+    ) -> None:
+        # Defensive edge case — an actor_id could in principle
+        # appear in both lists (cohort bug). Each loop runs
+        # independently: evict then hydrate, both ledgered.
+        engine, ledger, _ = engine_bundle_with_hydrate
+        await engine._handle_event(self._event(demoted=["a"], promoted=["a"]))
+        assert len(ledger.of_type(MemoryEvictionEntry)) == 1
+        assert len(ledger.of_type(MemoryHydrationEntry)) == 1
+
+    async def test_consolidate_raising_inside_handler_caught(
+        self, engine_bundle, monkeypatch
+    ) -> None:
+        # D8-5 extension: the evict+consolidate try/except covers BOTH
+        # calls. If consolidate raises, the batch still progresses.
+        engine, ledger, _ = engine_bundle
+        original_consolidate = engine.consolidate
+
+        async def _spy(actor_id, *, force=False, tick=0):
+            if str(actor_id) == "b":
+                raise RuntimeError("consolidator boom")
+            return await original_consolidate(actor_id, force=force, tick=tick)
+
+        monkeypatch.setattr(engine, "consolidate", _spy)
+        await engine._handle_event(self._event(demoted=["a", "b", "c"]))
+        # All three evict() calls fire regardless of consolidate errors.
+        assert len(ledger.of_type(MemoryEvictionEntry)) == 3
+        # Consolidation: a + c succeed; b raised.
+        assert len(ledger.of_type(MemoryConsolidationEntry)) == 2
