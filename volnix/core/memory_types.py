@@ -71,7 +71,8 @@ MemorySource = Literal["implicit", "explicit", "consolidated", "pack_fixture"]
 
 - ``implicit`` — written by the activator's post-activation distiller.
 - ``explicit`` — agent/NPC called the ``remember`` tool.
-- ``consolidated`` — produced by the periodic consolidation pass.
+- ``consolidated`` — produced by a consolidation pass (``on_eviction``
+  or ``periodic`` — see ``MemoryConfig.consolidation_triggers``).
 - ``pack_fixture`` — Tier 1 fixture loaded at world compile time.
 """
 

@@ -95,15 +95,21 @@ class TestCadenceTriggers:
         [
             ["on_eviction"],
             ["periodic"],
-            ["on_activation_complete"],
             ["on_eviction", "periodic"],
-            ["on_eviction", "periodic", "on_activation_complete"],
             [],  # empty is a valid "never consolidate" state
         ],
     )
     def test_positive_valid_trigger_combinations(self, triggers: list[str]) -> None:
         cfg = MemoryConfig(enabled=True, consolidation_triggers=triggers)
         assert cfg.consolidation_triggers == triggers
+
+    def test_negative_on_activation_complete_trigger_rejected(self) -> None:
+        """Cleanup commit 1: ``on_activation_complete`` was removed from
+        the vocabulary (1 LLM call per activation was too aggressive).
+        Validator must reject the old token loudly so any lingering
+        config files surface the breakage instead of silently no-oping."""
+        with pytest.raises(ValidationError, match="unknown trigger"):
+            MemoryConfig(enabled=True, consolidation_triggers=["on_activation_complete"])
 
     # C3 of Step 2 review: duplicates silently accepted would fire
     # consolidation twice on the same event. Validator rejects.
@@ -340,8 +346,8 @@ class TestTomlRoundTrip:
         assert cfg.memory.distillation_llm_use_case == "memory_distill"
         assert cfg.memory.default_recall_top_k == 5
         assert cfg.memory.recall_p95_budget_ms == 10
-        assert cfg.memory.expose_remember_tool is False
         assert cfg.memory.hydrate_on_promote is False
+        assert cfg.memory.tier1_fixtures_path is None
         assert cfg.memory.storage_db_name == "volnix_memory"
         assert cfg.memory.reset_on_world_start is True
         assert cfg.memory.schema_version == 1
@@ -357,7 +363,6 @@ class TestBooleanToggles:
         [
             "embedder_cache_enabled",
             "distillation_enabled",
-            "expose_remember_tool",
             "hydrate_on_promote",
             "reset_on_world_start",
         ],

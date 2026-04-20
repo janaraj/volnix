@@ -122,6 +122,7 @@ class SQLiteMemoryStore:
         db: Database,
         *,
         fts_tokenizer: str = DEFAULT_FTS_TOKENIZER,
+        embedding_cache_enabled: bool = True,
     ) -> None:
         if db is None:
             raise ValueError(
@@ -130,6 +131,12 @@ class SQLiteMemoryStore:
             )
         self._db = db
         self._fts_tokenizer = fts_tokenizer
+        # When false, ``embedding_cache_get`` always returns None and
+        # ``embedding_cache_put`` is a no-op — every dense recall
+        # recomputes every vector. Useful for tests that need to
+        # exercise the embedder path on every call, and as a debug
+        # knob when cache-invalidation issues are suspected.
+        self._cache_enabled = embedding_cache_enabled
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -384,6 +391,8 @@ class SQLiteMemoryStore:
     # ------------------------------------------------------------------
 
     async def embedding_cache_get(self, content_hash: str, provider_id: str) -> bytes | None:
+        if not self._cache_enabled:
+            return None
         row = await self._db.fetchone(
             f"""
             SELECT vector_blob FROM {TABLE_EMBEDDING_CACHE}
@@ -396,6 +405,8 @@ class SQLiteMemoryStore:
     async def embedding_cache_put(
         self, content_hash: str, provider_id: str, vector_blob: bytes
     ) -> None:
+        if not self._cache_enabled:
+            return
         await self._db.execute(
             f"""
             INSERT OR REPLACE INTO {TABLE_EMBEDDING_CACHE}

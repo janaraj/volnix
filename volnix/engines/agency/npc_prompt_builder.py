@@ -11,8 +11,10 @@ harder to evolve.
 
 Templates live under
 ``volnix/actors/npc_profiles/prompts/`` and are referenced by name in
-each activation profile. The builder is stateless; one instance can
-serve any number of profiles.
+each activation profile. The builder is reusable across profiles and
+holds no per-request state — it does cache compiled Jinja2 templates
+via the embedded ``Environment`` loader, so "no per-call mutation"
+rather than "zero state" is the accurate framing.
 """
 
 from __future__ import annotations

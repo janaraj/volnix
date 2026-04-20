@@ -109,8 +109,12 @@ class MemoryEngine(BaseEngine):
 
     async def _on_start(self) -> None:
         """Optionally warm the embedder on start (D7-8)."""
-        # FTS5 embedder has no cold-start cost; skip.
-        if self._embedder.provider_id == "fts5":
+        from volnix.engines.memory.embedder import FTS5Embedder
+
+        # FTS5 embedder has no cold-start cost; skip. Use isinstance
+        # rather than a string-literal provider_id compare so a future
+        # FTS5V2Embedder inherits the skip automatically.
+        if isinstance(self._embedder, FTS5Embedder):
             return
         # Step 13's dense embedders do a model-load on first embed().
         # Calling once at start amortises the cost off the hot path.

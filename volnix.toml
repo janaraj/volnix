@@ -221,9 +221,12 @@ distillation_enabled = true
 distillation_llm_use_case = "memory_distill"
 default_recall_top_k = 5
 recall_p95_budget_ms = 10
-expose_remember_tool = false
 hydrate_on_promote = false
 storage_db_name = "volnix_memory"
+# tier1_fixtures_path: path to pack's Tier-1 fixtures YAML; used only
+# when tier_mode == "mixed". Leave unset (null/absent) for packs that
+# ship no fixtures. Example:
+#   tier1_fixtures_path = "/abs/path/to/pack/memory_fixtures.yaml"
 reset_on_world_start = true         # cross-run memory reuse is opt-in only
 schema_version = 1
 # FTS5 tokenizer spec — substituted into virtual-table DDL.

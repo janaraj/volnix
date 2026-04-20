@@ -88,6 +88,24 @@ class NPCActivator:
         during this activation (matches
         :meth:`AgencyEngine._activate_with_tool_loop`'s return type so
         the caller treats both paths uniformly).
+
+        **Termination-path ordering.** Every path ends with
+        (1) ``_record_cohort_activation()`` — so LRU-eviction
+        counters stay fresh even if memory write fails —
+        (2) ``ActivationCompleteEntry`` ledger row, and finally
+        (3) ``_implicit_remember()`` — wrapped in try/except so a
+        broken memory store never masks successful pipeline work.
+        Each hook is independently isolated; partial failure leaves
+        observability consistent.
+
+        **Memory coverage bias.** Only actors the cohort gate admits
+        reach this method. Dormant / gated NPCs receiving events via
+        ``CohortConfig.inactive_event_policies`` (``record_only``,
+        ``defer``) never produce episodic memory records for those
+        events. Memory represents "what the NPC processed," not "what
+        the NPC was adjacent to." Tuning inactive_event_policies is
+        therefore also tuning memory coverage — documented so
+        operators understand the coupling.
         """
         if actor.activation_profile_name is None:
             logger.warning(

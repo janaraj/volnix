@@ -186,7 +186,11 @@ async def build_memory_engine(
         )
 
     db = await connection_manager.get_connection(memory_config.storage_db_name)
-    store = SQLiteMemoryStore(db, fts_tokenizer=memory_config.fts_tokenizer)
+    store = SQLiteMemoryStore(
+        db,
+        fts_tokenizer=memory_config.fts_tokenizer,
+        embedding_cache_enabled=memory_config.embedder_cache_enabled,
+    )
 
     consolidator = Consolidator(
         store=store,
@@ -194,6 +198,7 @@ async def build_memory_engine(
         use_case=memory_config.distillation_llm_use_case,
         episodic_window=memory_config.consolidation_episodic_window,
         prune_after_consolidation=True,
+        distillation_enabled=memory_config.distillation_enabled,
     )
 
     recall = Recall(store=store, embedder=embedder)

@@ -28,9 +28,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # numeric literal leaks into code outside this module. Exported (no
 # leading underscore on the names we want external) so tests don't
 # duplicate the valid-set inline and drift (N1).
-VALID_CADENCE_TRIGGERS: frozenset[str] = frozenset(
-    {"on_eviction", "periodic", "on_activation_complete"}
-)
+VALID_CADENCE_TRIGGERS: frozenset[str] = frozenset({"on_eviction", "periodic"})
+"""Consolidation-trigger vocabulary.
+
+* ``on_eviction``: fire consolidation for an actor when the cohort
+  rotates them out of the active set. Dispatched from
+  ``MemoryEngine._on_cohort_rotated``.
+* ``periodic``: fire consolidation on a tick cadence. Dispatched from
+  ``SimulationRunner``'s memory-tick hook (see Phase 4B cleanup
+  commit 6). Cadence controlled by ``consolidation_periodic_interval_ticks``.
+
+Earlier drafts listed ``"on_activation_complete"`` as a third
+option; it was removed because firing one LLM distillation call per
+activation turned out to be too aggressive for any realistic
+workload (10k NPCs × high-frequency activations ≈ budget blowout).
+Re-introduce only when a concrete caller earns it.
+"""
 VALID_EMBEDDER_SCHEMES: frozenset[str] = frozenset({"fts5", "sentence-transformers", "openai"})
 
 # FTS5 tokenizer prefixes (Phase 4B Step 4). The first whitespace-
@@ -63,26 +76,51 @@ class MemoryConfig(BaseModel):
     - Negative ``recall_p95_budget_ms``.
     - ``schema_version`` other than 1 in 4B.
 
-    **Consumer map (so nobody deletes a "dead" field thinking it's
-    unused).** M1 of the Steps 1-5 bug-bounty review: these fields
-    are defined here but consumed by later steps. If the consumer
-    step lands and forgets to read its field, the silent no-op
-    would ship. The map documents expected consumption:
+    **Consumer map.** Every field below is consumed somewhere in
+    the codebase. Deleting a field here without removing its readers
+    will break those callers. When adding a new field, wire it at
+    the same time — dead knobs are lies the code tells the user.
 
-    - ``storage_db_name``: Step 3 (already consumed — store DI).
-    - ``fts_tokenizer``: Step 4 (already consumed — store DDL).
-    - ``consolidation_triggers`` + ``consolidation_periodic_interval_ticks``
-      + ``consolidation_episodic_window``: Step 6 (Consolidator).
-    - ``distillation_enabled`` + ``distillation_llm_use_case``:
-      Step 6 (Consolidator LLM call).
-    - ``recall_p95_budget_ms``: Step 12 (E2E perf harness).
-    - ``expose_remember_tool``: Step 11 (NPCActivator tool surface).
-    - ``embedder_cache_enabled``: Step 13 (dense embedder cache
-      read/write toggle).
-    - ``hydrate_on_promote``: Step 10 (cohort-promote hook).
-    - ``reset_on_world_start``: Step 10 (app.py wiring — truncate on
-      startup).
-    - ``tier_mode``: Step 9 (Tier-1 fixture loader).
+    - ``storage_db_name``: ``ConnectionManager.get_connection`` in
+      ``build_memory_engine`` (volnix/registry/composition.py).
+    - ``fts_tokenizer``: FTS5 virtual-table DDL in
+      ``SQLiteMemoryStore.initialize`` (volnix/engines/memory/store.py).
+    - ``consolidation_triggers``: dispatched on in
+      ``MemoryEngine._on_cohort_rotated`` (``on_eviction``) and
+      in ``SimulationRunner``'s memory-tick hook (``periodic``).
+    - ``consolidation_periodic_interval_ticks``: period between
+      ``periodic``-trigger consolidation passes (driven by
+      ``SimulationRunner``).
+    - ``consolidation_episodic_window``: distiller read-window in
+      ``Consolidator``.
+    - ``distillation_enabled``: checked in
+      ``Consolidator.consolidate`` — when false, ``_distill`` is
+      short-circuited and zero semantic records are produced.
+    - ``distillation_llm_use_case``: used by ``Consolidator``'s
+      ``LLMRouter.route`` call (BudgetEngine integration — G10).
+    - ``recall_p95_budget_ms``: asserted by
+      ``test_memory_e2e.py::TestRecallPerformance`` over a real
+      recall sample (cleanup commit 8).
+    - ``embedder_cache_enabled``: checked by the store's embedding
+      cache read/write path — when false, every embed() recomputes.
+    - ``hydrate_on_promote``: ``MemoryEngine._on_cohort_rotated``
+      triggers a real pre-warm recall on every promoted actor when
+      true; default false (lazy-on-first-recall).
+    - ``reset_on_world_start``: forwarded to
+      ``SQLiteMemoryStore.initialize(reset=...)`` by
+      ``MemoryEngine._on_initialize``.
+    - ``tier_mode``: ``build_memory_engine`` calls
+      ``load_tier1_fixtures`` when ``"mixed"`` and
+      ``tier1_fixtures_path`` is configured.
+    - ``tier1_fixtures_path``: path to the pack's tier-1 fixtures
+      YAML. ``build_memory_engine`` respects it when ``tier_mode``
+      is ``"mixed"``.
+    - ``default_recall_top_k``: read by ``NPCActivator._recall_for_activation``.
+    - ``max_episodic_per_actor``: ring-buffer cap enforced by
+      ``SQLiteMemoryStore.insert`` — on overflow, the oldest
+      episodic record for the owner is dropped.
+    - ``max_semantic_per_actor``: enforced by the same path; on
+      overflow, the lowest-importance semantic record is dropped.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -97,6 +135,14 @@ class MemoryConfig(BaseModel):
     """``tier2_only``: Tier-1 pack fixtures ignored even if present.
     ``mixed``: Tier-1 fixtures loaded at world compile, Tier-2 layers
     on top. Useful for benchmarking Tier-2 in isolation."""
+
+    tier1_fixtures_path: str | None = None
+    """Absolute path to the pack's Tier-1 fixtures YAML. Consumed by
+    ``build_memory_engine`` only when ``tier_mode == "mixed"``.
+    ``None`` means "no pack fixtures to load" — loader returns 0
+    and the DB stays Tier-2 only. When ``tier_mode == "mixed"`` and
+    this path is ``None``, the composition still succeeds but logs
+    at INFO that no fixtures were loaded."""
 
     # ── Embedder ──────────────────────────────────────────────────
     embedder: str = "fts5"
@@ -135,7 +181,8 @@ class MemoryConfig(BaseModel):
 
     # ── Consolidation ─────────────────────────────────────────────
     consolidation_triggers: list[str] = Field(default_factory=lambda: ["on_eviction", "periodic"])
-    """Subset of ``on_eviction``, ``periodic``, ``on_activation_complete``."""
+    """Subset of ``on_eviction``, ``periodic``. See
+    ``VALID_CADENCE_TRIGGERS`` for per-trigger semantics."""
 
     consolidation_periodic_interval_ticks: int = Field(default=100, ge=1)
     consolidation_episodic_window: int = Field(default=50, ge=1)
@@ -153,13 +200,6 @@ class MemoryConfig(BaseModel):
     recall_p95_budget_ms: int = Field(default=10, ge=0)
     """Test-discipline tight bound — integration tests assert recall
     p95 actually meets this, not a lazy ``< 1s``."""
-
-    # ── Write / exposure ──────────────────────────────────────────
-    expose_remember_tool: bool = False
-    """Per-profile override. When true, agents/NPCs see a ``remember``
-    tool in their tool scope. Off by default — implicit distillation
-    covers most cases and the tool is opt-in for agents that need
-    explicit memory control (W3 hybrid write policy)."""
 
     # ── Hydration ─────────────────────────────────────────────────
     hydrate_on_promote: bool = False

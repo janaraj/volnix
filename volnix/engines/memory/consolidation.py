@@ -103,6 +103,7 @@ class Consolidator:
         use_case: str,
         episodic_window: int,
         prune_after_consolidation: bool = True,
+        distillation_enabled: bool = True,
     ) -> None:
         if episodic_window < 1:
             raise ValueError(f"episodic_window must be >= 1, got {episodic_window}")
@@ -111,6 +112,13 @@ class Consolidator:
         self._use_case = use_case
         self._episodic_window = episodic_window
         self._prune = prune_after_consolidation
+        # When false, ``consolidate()`` short-circuits before the LLM
+        # call — zero semantic records produced, zero pruned. The
+        # MemoryEvictionEntry / consolidate ledger row still lands so
+        # operators can distinguish "distiller disabled" from
+        # "distiller silently broken". Wired from
+        # ``MemoryConfig.distillation_enabled``.
+        self._distillation_enabled = distillation_enabled
 
     async def consolidate(
         self,
@@ -139,6 +147,23 @@ class Consolidator:
             return ConsolidationResult(
                 actor_id=owner_id,
                 episodic_consumed=0,
+                semantic_produced=0,
+                episodic_pruned=0,
+            )
+
+        # MemoryConfig.distillation_enabled gate — short-circuits the
+        # LLM call path. ``episodic_consumed`` still reports the read
+        # so the ledger shows the work the Consolidator observed.
+        if not self._distillation_enabled:
+            logger.info(
+                "Consolidator: distillation_enabled=False for %s — "
+                "skipping LLM call; %d episodes observed, 0 produced.",
+                owner_id,
+                len(episodes),
+            )
+            return ConsolidationResult(
+                actor_id=owner_id,
+                episodic_consumed=len(episodes),
                 semantic_produced=0,
                 episodic_pruned=0,
             )
