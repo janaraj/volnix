@@ -65,6 +65,7 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         # Ledger
         "LedgerEntry",
         "LedgerQuery",
+        "UnknownLedgerEntry",
         # Simulation
         "SimulationRunner",
         "SimulationRunnerConfig",

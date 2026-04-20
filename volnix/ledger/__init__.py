@@ -19,6 +19,7 @@ from volnix.ledger.entries import (
     PipelineStepEntry,
     SnapshotEntry,
     StateMutationEntry,
+    UnknownLedgerEntry,
     ValidationEntry,
     deserialize_entry,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "PipelineStepEntry",
     "SnapshotEntry",
     "StateMutationEntry",
+    "UnknownLedgerEntry",
     "ValidationEntry",
     # Internal (exported for advanced use / testing)
     "ENTRY_REGISTRY",

@@ -238,12 +238,20 @@ def test_deserialize_entry_typed():
 
 
 def test_deserialize_entry_unknown_type():
-    """deserialize_entry should fall back to LedgerEntry for unknown types."""
+    """PMF Plan Phase 4C Step 3: unknown entry_type now wraps in
+    ``UnknownLedgerEntry`` instead of silently degrading to a bare
+    ``LedgerEntry``. The original discriminator is preserved in
+    ``raw_entry_type``; the wrapper's own ``entry_type`` is the
+    sentinel ``"unknown"``. Exhaustive forward-compat behavior is
+    covered in ``tests/ledger/test_forward_compat.py``."""
+    from volnix.ledger.entries import UnknownLedgerEntry
+
     entry = LedgerEntry(entry_type="unknown_type")
     row = {"entry_type": "unknown_type", "payload": entry.model_dump_json()}
     restored = deserialize_entry(row)
-    assert isinstance(restored, LedgerEntry)
-    assert restored.entry_type == "unknown_type"
+    assert isinstance(restored, UnknownLedgerEntry)
+    assert restored.raw_entry_type == "unknown_type"
+    assert restored.entry_type == "unknown"
 
 
 def test_actor_activation_entry():

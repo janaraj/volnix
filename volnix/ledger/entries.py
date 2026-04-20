@@ -7,8 +7,9 @@ Pydantic model carrying a timestamp and structured metadata.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -33,14 +34,69 @@ class LedgerEntry(BaseModel, frozen=True):
     Attributes:
         entry_id: Auto-assigned unique identifier for this entry.
         entry_type: Discriminator string for the entry subtype.
+        schema_version: Monotonically-increasing schema version of this
+            entry type (PMF Plan Phase 4C Step 3). Baseline for every
+            current entry type is ``1``. When a subclass bumps its
+            shape incompatibly, it MUST (a) bump ``LATEST_SCHEMA_VERSION``
+            on that subclass, and (b) accept either the old or the new
+            shape in its own validator. A reader that sees
+            ``schema_version > LATEST_SCHEMA_VERSION`` will wrap the
+            row in ``UnknownLedgerEntry`` rather than silently dropping
+            fields — see ``deserialize_entry``.
         timestamp: Wall-clock time when the entry was created.
         metadata: Arbitrary additional metadata.
+
+    Class attributes:
+        LATEST_SCHEMA_VERSION: Highest ``schema_version`` this reader
+            knows how to parse for this subclass. Override on a
+            subclass when you bump its shape; leave at 1 otherwise.
     """
+
+    LATEST_SCHEMA_VERSION: ClassVar[int] = 1
 
     entry_id: int = 0
     entry_type: str
+    schema_version: int = Field(default=1, ge=1)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+#: Reserved discriminator used by ``UnknownLedgerEntry`` as its own
+#: ``entry_type``. New entry types MUST NOT register under this name —
+#: ``deserialize_entry`` uses it to route wrapper-passthrough on
+#: re-read, so a collision would create a wrapping loop.
+_UNKNOWN_ENTRY_TYPE_SENTINEL = "unknown"
+
+
+class UnknownLedgerEntry(LedgerEntry):
+    """Forward-compat wrapper for a ledger entry whose ``entry_type``
+    is not registered in ``ENTRY_REGISTRY`` OR whose ``schema_version``
+    exceeds the reader's ``LATEST_SCHEMA_VERSION`` (PMF Plan Phase 4C
+    Step 3).
+
+    Older Volnix readers may encounter ledger rows produced by newer
+    writers (after an engine upgrade, or when a consumer embeds a
+    newer Volnix against an older data file). Pre-4C behaviour
+    silently degraded unknown rows to a bare ``LedgerEntry``, dropping
+    every subclass-specific field. This wrapper preserves the
+    original ``entry_type`` discriminator AND the entire parsed JSON
+    payload so consumers can introspect unknown rows without data loss.
+
+    Attributes:
+        entry_type: Always the sentinel ``"unknown"`` (reserved — see
+            ``_UNKNOWN_ENTRY_TYPE_SENTINEL``). The ORIGINAL discriminator
+            is preserved in ``raw_entry_type`` so a consumer can branch
+            on it.
+        raw_entry_type: The discriminator string emitted by the
+            newer writer (e.g. ``"session.started"`` against a reader
+            that hasn't been taught that type yet).
+        raw_payload: Full parsed JSON payload of the row. All
+            unknown fields land here intact for forensic/audit use.
+    """
+
+    entry_type: str = _UNKNOWN_ENTRY_TYPE_SENTINEL
+    raw_entry_type: str
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -616,9 +672,79 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
 def deserialize_entry(row: dict) -> LedgerEntry:
     """Typed deserialization via entry registry.
 
-    Looks up the entry_type in the row, finds the correct LedgerEntry
-    subclass, and deserializes the JSON payload to that type.
+    PMF Plan Phase 4C Step 3 — contract:
+
+    - **Known type, known schema_version**: parse as the concrete
+      subclass via ``cls.model_validate(payload)``.
+    - **Known type, newer schema_version** (``schema_version >
+      cls.LATEST_SCHEMA_VERSION``): wrap in ``UnknownLedgerEntry``
+      preserving the original ``entry_type`` in ``raw_entry_type``.
+      This honours the docstring promise that elevated
+      schema_versions wrap rather than silently drop fields.
+    - **Unknown type**: wrap in ``UnknownLedgerEntry``.
+    - **Wrapper-passthrough**: when reading back a previously-stored
+      ``UnknownLedgerEntry`` (row ``entry_type`` is the reserved
+      sentinel and the payload carries ``raw_entry_type`` +
+      ``raw_payload``), re-route with the original discriminator
+      before registry lookup. Avoids the ``raw_payload`` nesting loop
+      identified in review M1; also means a reader upgraded to know
+      the original type recovers the concrete class on the next read.
+
+    Error handling:
+
+    - Missing ``payload`` key → ``ValueError`` naming the row shape.
+    - Malformed JSON in payload → ``ValueError`` with the underlying
+      decoder message and the row's ``entry_type``. Both replace the
+      pre-fix ``KeyError`` / ``json.JSONDecodeError`` bubbles that
+      aborted an entire ``Ledger.query()`` on one corrupt row.
     """
     entry_type = row.get("entry_type", "")
-    cls = ENTRY_REGISTRY.get(entry_type, LedgerEntry)
-    return cls.model_validate_json(row["payload"])
+    payload_raw = row.get("payload")
+    if payload_raw is None:
+        raise ValueError(
+            f"deserialize_entry: row missing 'payload' key (entry_type={entry_type!r})"
+        )
+    try:
+        payload: Any = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"deserialize_entry: malformed JSON payload for entry_type={entry_type!r}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"deserialize_entry: payload must decode to a dict, "
+            f"got {type(payload).__name__} for entry_type={entry_type!r}"
+        )
+
+    # Wrapper-passthrough: unnest a previously-wrapped row so the next
+    # read sees the original discriminator again (review M1 fix).
+    if (
+        entry_type == _UNKNOWN_ENTRY_TYPE_SENTINEL
+        and "raw_entry_type" in payload
+        and "raw_payload" in payload
+    ):
+        entry_type = payload["raw_entry_type"]
+        payload = payload["raw_payload"]
+        if not isinstance(payload, dict):
+            payload = {}
+
+    cls = ENTRY_REGISTRY.get(entry_type)
+    schema_version = payload.get("schema_version", 1)
+    if cls is not None and schema_version <= cls.LATEST_SCHEMA_VERSION:
+        return cls.model_validate(payload)
+
+    # Unknown type OR schema_version exceeds what we know → wrap.
+    # Lift only the base fields that are actually present; missing
+    # fields fall through to the base-class defaults rather than
+    # getting a misleading fresh ``datetime.now()`` fallback
+    # (review L2 fix).
+    base_kwargs = {
+        k: payload[k]
+        for k in ("entry_id", "schema_version", "timestamp", "metadata")
+        if k in payload
+    }
+    return UnknownLedgerEntry(
+        raw_entry_type=entry_type,
+        raw_payload=payload,
+        **base_kwargs,
+    )

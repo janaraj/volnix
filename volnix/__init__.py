@@ -76,7 +76,7 @@ from volnix.core.types import (
     ToolName,
     WorldId,
 )
-from volnix.ledger.entries import LedgerEntry
+from volnix.ledger.entries import LedgerEntry, UnknownLedgerEntry
 from volnix.ledger.query import LedgerQuery
 from volnix.packs.base import ServicePack, ServiceProfile
 from volnix.packs.registry import PackRegistry
@@ -124,6 +124,7 @@ __all__ = [
     # Ledger
     "LedgerEntry",
     "LedgerQuery",
+    "UnknownLedgerEntry",
     # Simulation
     "SimulationRunner",
     "SimulationRunnerConfig",
