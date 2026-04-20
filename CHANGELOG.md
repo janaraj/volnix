@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-04-19
+
+### Added — Phase 4B: Actor Memory Engine (11th Volnix engine)
+
+- **MemoryEngine** — episodic + semantic records keyed by actor scope, gated by an in-engine permission check, backed by SQLite + FTS5. Opt-in via `memory.enabled=true`; disabled by default keeps every existing blueprint byte-identical (Phase 0 regression oracle passes 3×).
+- **Protocol surface** (`MemoryEngineProtocol` in `volnix/core/protocols.py`): `remember`, `recall`, `consolidate`, `evict`, `hydrate`. Runtime-checkable.
+- **Retrieval modes**: six query variants (`structured`, `temporal`, `semantic`, `importance`, `hybrid`, `graph`) dispatched via `MemoryQuery` tagged union. `graph` raises `NotImplementedError` pending Phase 4D.
+- **Embedders**: `FTS5Embedder` (default, zero-dep, deterministic) + `SentenceTransformersEmbedder` (opt-in via `volnix[embeddings]` extras — `sentence-transformers>=2.2,<4.0`). Dense recall path implements cosine similarity with on-miss embedding-cache population.
+- **Consolidation**: `Consolidator` drives episodic → semantic distillation via `LLMRouter.route` (budget + ledger integration automatic). Dedicated `asyncio.Semaphore` caps concurrent distill calls via `MemoryConfig.max_concurrent_distill`.
+- **Tier-1 fixtures**: `load_tier1_fixtures` loads pack-authored YAML beliefs when `tier_mode="mixed"` + `tier1_fixtures_path` is set. Records immune from runtime trimming.
+- **NPCActivator integration**: pre-activation recall injects `MemoryRecall` into the prompt (`## Memories you recall` section); post-activation implicit write persists a raw episodic record on every termination path. Wrapped in try/except — memory failures never block activation.
+- **Cohort rotation seam**: `MemoryEngine.subscriptions = ["cohort.rotated"]` subscribes to Phase 4A's rotation bus event; demoted actors get `evict()` (real store trim to half the episodic cap) + optional `consolidate()` (`consolidation_triggers=["on_eviction"]`); promoted actors optionally get `hydrate()` (pre-warm embedding cache).
+- **Ring-buffer enforcement**: `max_episodic_per_actor` / `max_semantic_per_actor` enforced synchronously in `SQLiteMemoryStore.insert` — tier-2 overflow drops oldest episodic or lowest-importance semantic. Tier-1 records exempt.
+- **Determinism**: same seed + same event sequence → byte-identical record IDs + content hashes. Proven under concurrent writes via the seeded `random.Random` + asyncio/GIL serialization.
+- **SimulationRunner integration**: runner now calls `agency.rotate_cohort(tick)` on `cohort.rotation_interval_ticks` cadence. Pre-4B, `rotate_cohort` had no production driver; this release makes the 4A × 4B seam live in `volnix serve` runs.
+- **`try_promote` publishes CohortRotationEvent**: preempt-demote path now also notifies memory subscribers, not just scheduled rotations.
+- **Six new ledger entry types**: `MemoryWriteEntry`, `MemoryRecallEntry`, `MemoryConsolidationEntry`, `MemoryEvictionEntry`, `MemoryHydrationEntry`, `MemoryAccessDeniedEntry`.
+- **`volnix.toml` `[memory]` section**: 19 knobs, each with a documented consumer site — no dead fields.
+
+### Changed
+
+- `AgencyEngine.set_memory_engine(engine)` — new setter; idempotent replacement: stops the prior engine before overwriting so long-lived processes don't leak bus subscriptions.
+- `AgencyEngine.rotate_cohort` — `await self.publish(...)` now wrapped in narrow `try/except (OSError, RuntimeError, ValueError)`; symmetric with the existing ledger-append guard.
+- `NPCPromptBuilder.build` — new `recalled_memories` keyword; template adds `## Memories you recall` section (hidden when `None` or empty, preserving Phase 0 byte-identity).
+
+### Verification
+
+- 3,552 tests pass across 15 suites (actors, core, integration, blueprints, architecture, engines, packs, registry, ledger, bus, config, pipeline, validation, llm, simulation). Zero regressions against pre-4B.
+- Phase 0 oracle byte-identical 3×.
+- Ruff check + format clean.
+- Two adversarial principal-engineer audits (4B-only + 4A × 4B integration) completed pre-release; 20+ findings all addressed across 7 follow-up cleanup commits before tagging.
+
 ## [0.1.8] - 2026-04-13
 
 ### Added
