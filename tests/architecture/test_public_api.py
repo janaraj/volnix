@@ -49,6 +49,8 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "SessionStartedEvent",
         "SessionStatus",
         "SessionType",
+        "SessionManager",
+        "SlotAssignment",
         "ActorId",
         "ActorType",
         "EntityId",
@@ -84,6 +86,7 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "VolnixError",
         "DuplicatePackError",
         "PackNotFoundError",
+        "SessionNotFoundError",
     }
 )
 

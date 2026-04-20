@@ -636,6 +636,31 @@ class SessionStartedEvent(Event):
     seed_strategy: str
 
 
+class SessionPausedEvent(Event):
+    """Emitted by ``SessionManager.pause()`` (Step 5) when a
+    session transitions from ``ACTIVE`` to ``PAUSED``.
+
+    Carries ``world_id`` for bus-consumer symmetry with
+    ``SessionStartedEvent`` and ``SessionResumedEvent`` — a
+    subscriber filtering by world shouldn't need a state lookup to
+    route pause events.
+
+    PMF Plan Phase 4C Step 5 audit-fold H5.
+
+    Attributes:
+        session_id: The paused session's identifier.
+        world_id: The world the session belongs to.
+        paused_at_tick: Logical tick at pause.
+        note: Optional caller-supplied note (e.g. "awaiting input").
+    """
+
+    event_type: str = "session.paused"
+    session_id: SessionId
+    world_id: WorldId
+    paused_at_tick: int = 0
+    note: str = ""
+
+
 class SessionEndedEvent(Event):
     """Emitted when a session transitions to a terminal status
     (``COMPLETED`` / ``ABANDONED``). Consumers subscribed via
@@ -645,6 +670,9 @@ class SessionEndedEvent(Event):
 
     Attributes:
         session_id: The session that ended.
+        world_id: The world the session belonged to. Optional
+            (defaults to ``None``) to preserve backward compatibility
+            with Step-4 rows that pre-date the field — review H3.
         status: Terminal status — ``completed`` or ``abandoned``.
         end_tick: Logical tick at session end. ``None`` when a
             paused session is abandoned across a process restart
@@ -655,6 +683,7 @@ class SessionEndedEvent(Event):
 
     event_type: str = "session.ended"
     session_id: SessionId
+    world_id: WorldId | None = None
     status: str
     end_tick: int | None = None
     reason: str = ""

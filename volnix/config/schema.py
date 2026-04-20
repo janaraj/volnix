@@ -35,6 +35,7 @@ from volnix.persistence.config import PersistenceConfig
 from volnix.pipeline.config import PipelineConfig
 from volnix.reality.config import RealityConfig, SeedConfig
 from volnix.runs.config import RunConfig
+from volnix.sessions.config import SessionsConfig
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.templates.config import TemplateConfig
 from volnix.validation.config import ValidationConfig
@@ -183,6 +184,7 @@ class VolnixConfig(BaseModel):
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     worlds: WorldsConfig = Field(default_factory=WorldsConfig)
+    sessions: SessionsConfig = Field(default_factory=SessionsConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VolnixConfig:

@@ -14,12 +14,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from volnix.actors.cohort_manager import CohortManager
+    from volnix.actors.slot_manager import SlotManager
+    from volnix.bus.bus import EventBus
     from volnix.engines.agency.config import CohortConfig
     from volnix.engines.agency.npc_activator import NPCActivator
     from volnix.engines.memory.config import MemoryConfig
     from volnix.engines.memory.engine import MemoryEngine
+    from volnix.ledger.ledger import Ledger
     from volnix.llm.router import LLMRouter
     from volnix.persistence.manager import ConnectionManager
+    from volnix.sessions.config import SessionsConfig
+    from volnix.sessions.manager import SessionManager
 
 
 def create_default_registry() -> EngineRegistry:
@@ -221,4 +226,36 @@ async def build_memory_engine(
         recall=recall,
         consolidator=consolidator,
         seed=world_seed,
+    )
+
+
+async def build_session_manager(
+    connection_manager: ConnectionManager,
+    *,
+    sessions_config: SessionsConfig,
+    slot_manager: SlotManager | None = None,
+    bus: EventBus | None = None,
+    ledger: Ledger | None = None,
+) -> SessionManager:
+    """Construct the platform ``SessionManager`` + its
+    ``SessionStore`` (PMF Plan Phase 4C Step 5).
+
+    Sessions are always available at app start — no ``enabled``
+    flag gating construction. Unused sessions cost only an empty
+    SQLite file until a caller invokes ``start()``.
+
+    Concrete-class imports confined to this function body per
+    composition-root discipline.
+    """
+    from volnix.sessions.manager import SessionManager as _SessionManager
+    from volnix.sessions.store import SessionStore
+
+    db = await connection_manager.get_connection(sessions_config.storage_db_name)
+    store = SessionStore(db)
+    await store.initialize()
+    return _SessionManager(
+        store=store,
+        slot_manager=slot_manager,
+        bus=bus,
+        ledger=ledger,
     )

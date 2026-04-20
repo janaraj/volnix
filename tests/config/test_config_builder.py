@@ -342,6 +342,7 @@ _INTENTIONAL_DEFERRED_SECTIONS: frozenset[str] = frozenset(
         "reporter",
         "responder",
         "runs",
+        "sessions",  # Step 5 — consumers use raw() until a method is earned
         "simulation_runner",
         "state",
         "templates",

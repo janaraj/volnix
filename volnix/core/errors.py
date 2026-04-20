@@ -335,6 +335,29 @@ class ActorGenerationError(ActorError):
 
 
 # ---------------------------------------------------------------------------
+# Session errors (PMF Plan Phase 4C Step 5)
+# ---------------------------------------------------------------------------
+
+
+class SessionNotFoundError(VolnixError):
+    """Raised when ``SessionManager`` is asked for a session id
+    that isn't in the store.
+
+    Subclass of ``VolnixError`` so consumers catching the root still
+    catch it — locked by
+    ``tests/architecture/test_public_api.py::
+    test_negative_every_exported_error_inherits_volnix_error``.
+    """
+
+    def __init__(self, session_id: str, message: str = "") -> None:
+        super().__init__(
+            message or f"Session {session_id!r} not found",
+            context={"session_id": session_id},
+        )
+        self.session_id = session_id
+
+
+# ---------------------------------------------------------------------------
 # Kernel errors
 # ---------------------------------------------------------------------------
 

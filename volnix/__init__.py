@@ -14,7 +14,6 @@ are sorted alphabetically by module path for linter compatibility.
 Additional exports land in later Phase 4C steps — see
 ``internal_docs/pmf/phase-4c-platform-hardening.md`` for the roadmap.
 Reserved for future steps (not yet exported):
-    Step 5 — SessionManager, SessionNotFoundError
     Step 9 — TrajectoryFieldNotFound
     Step 10 — ObservationQuery, UnifiedTimeline, TrajectoryPoint,
               IntentBehaviorGap, PersonaContribution,
@@ -45,6 +44,7 @@ from volnix.core.envelope import ActionEnvelope
 from volnix.core.errors import (
     DuplicatePackError,
     PackNotFoundError,
+    SessionNotFoundError,
     VolnixError,
 )
 from volnix.core.events import (
@@ -84,6 +84,7 @@ from volnix.ledger.entries import LedgerEntry, UnknownLedgerEntry
 from volnix.ledger.query import LedgerQuery
 from volnix.packs.base import ServicePack, ServiceProfile
 from volnix.packs.registry import PackRegistry
+from volnix.sessions import SessionManager, SlotAssignment
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.runner import SimulationRunner, SimulationType, StopReason
 
@@ -109,6 +110,8 @@ __all__ = [
     "SessionStartedEvent",
     "SessionStatus",
     "SessionType",
+    "SessionManager",
+    "SlotAssignment",
     "ActorId",
     "ActorType",
     "EntityId",
@@ -147,4 +150,5 @@ __all__ = [
     "VolnixError",
     "DuplicatePackError",
     "PackNotFoundError",
+    "SessionNotFoundError",
 ]

@@ -735,10 +735,16 @@ class SessionEndedEntry(LedgerEntry):
     ``end_tick`` mirrors ``SessionEndedEvent.end_tick``: optional
     because abandonment from ``PAUSED`` across a process restart
     may not have a meaningful tick (review M8 / D4k).
+
+    ``world_id`` is optional (Step 5 audit-fold H3) so consumers
+    can filter the ledger by world without joining back to
+    ``session.started``. Optional-default preserves backward
+    compatibility with Step-4-era rows that pre-date the field.
     """
 
     entry_type: str = "session.ended"
     session_id: SessionId
+    world_id: WorldId | None = None
     status: str
     end_tick: int | None = None
     reason: str = ""

@@ -154,6 +154,43 @@ class SlotManager:
             budget=budget if isinstance(budget, dict) else None,
         )
 
+    def restore_assignment(
+        self,
+        *,
+        actor_id: ActorId,
+        agent_name: str,
+        token: str,
+    ) -> None:
+        """Re-hydrate a persisted ``(actor, agent, token)`` tuple into
+        in-memory state (PMF Plan Phase 4C Step 5, audit-fold H2).
+
+        Used by ``SessionManager.resume`` to restore slot pinnings
+        after a process restart. Populates the two dicts AND calls
+        ``self._binding.claim_slot(actor_id, token)`` so
+        ``discover_slots()`` correctly reports the slot as
+        ``claimed``. Skipping the binding step (pre-audit) would
+        have let a second agent steal a restored slot.
+
+        Idempotent: a duplicate call with the same ``token`` is a
+        no-op; a call with a DIFFERENT token for the same
+        ``actor_id`` overwrites the prior token (matches the
+        ``register`` reassign semantics).
+
+        Does NOT consult the actor registry — restore trusts the
+        persisted data, supporting the case where the registry has
+        been re-populated since the original pinning.
+        """
+        self._tokens[token] = (actor_id, agent_name)
+        self._actor_tokens[str(actor_id)] = token
+        # Idempotent claim: if the binding already exists for this
+        # (actor, token) pair, ``claim_slot`` returns True. A stale
+        # token for the same actor is cleared first.
+        if self._binding.is_slot_claimed(actor_id):
+            existing_session = self._binding.get_session_for_actor(actor_id)
+            if existing_session != token:
+                self._binding.release_slot(existing_session or "")
+        self._binding.claim_slot(actor_id, token)
+
     def auto_assign(
         self,
         agent_name: str,

@@ -85,6 +85,11 @@ class VolnixApp:
         self._scheduler: Any = None
         self._run_manager: Any = None
         self._artifact_store: Any = None
+        # PMF Plan Phase 4C Step 5 — platform SessionManager.
+        # Constructed in start() after WorldManager. Slot-manager
+        # wiring lands in Step 6 when SimulationRunner becomes
+        # session-aware.
+        self._session_manager: Any = None
         self._current_run_id: str | None = None
         self._current_world_id: str | None = None
         self._world_manager: Any = None
@@ -142,6 +147,21 @@ class VolnixApp:
 
             self._world_manager = WorldManager(
                 data_dir=self._config.worlds.data_dir,
+            )
+
+            # 5b. SessionManager (PMF Plan Phase 4C Step 5).
+            # Always-construct, opt-in-use — unused sessions cost
+            # only an empty sessions.db file. Slot-manager wiring
+            # lands in Step 6 when SimulationRunner becomes
+            # session-aware.
+            from volnix.registry.composition import build_session_manager
+
+            self._session_manager = await build_session_manager(
+                self._conn_mgr,
+                sessions_config=self._config.sessions,
+                slot_manager=None,
+                bus=self._bus,
+                ledger=self._ledger,
             )
 
             # 6. Engine registry + wiring
