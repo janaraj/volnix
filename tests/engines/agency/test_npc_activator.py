@@ -916,6 +916,103 @@ class TestSetMemoryEngine:
         assert stop_calls == 0
 
 
+class TestActivatorWithRealMemoryEngine:
+    """PMF 4B cleanup commit 7 — audit (M3-4B) found the activator's
+    memory hooks were only tested with AsyncMock, violating "don't
+    mock the path under test." This class anchors the real path:
+    a real MemoryEngine + real FTS5 SQLiteMemoryStore wired into
+    the activator, with activation producing a persisted episodic
+    record that's then observable via list_by_owner."""
+
+    @pytest.mark.asyncio
+    async def test_positive_activation_persists_implicit_episodic_record(
+        self,
+    ) -> None:
+        from volnix.engines.memory.config import MemoryConfig
+        from volnix.engines.memory.consolidation import Consolidator
+        from volnix.engines.memory.embedder import FTS5Embedder
+        from volnix.engines.memory.engine import MemoryEngine
+        from volnix.engines.memory.recall import Recall
+        from volnix.engines.memory.store import SQLiteMemoryStore
+        from volnix.llm.config import LLMConfig, LLMProviderEntry
+        from volnix.llm.provider import LLMProvider
+        from volnix.llm.registry import ProviderRegistry
+        from volnix.llm.router import LLMRouter
+        from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
+        from volnix.persistence.manager import create_database
+
+        # Minimal real LLM router + stub provider for the Consolidator's
+        # construction (consolidation isn't exercised here).
+        class _StubLLM(LLMProvider):
+            provider_name = "stub"
+
+            async def generate(self, request: LLMRequest) -> LLMResponse:
+                return LLMResponse(
+                    content='{"facts": []}',
+                    usage=LLMUsage(prompt_tokens=1, completion_tokens=1),
+                    model="stub",
+                    provider="stub",
+                )
+
+        llm_cfg = LLMConfig(
+            defaults=LLMProviderEntry(type="stub", default_model="stub"),
+            providers={"stub": LLMProviderEntry(type="stub")},
+            routing={},
+            max_retries=0,
+        )
+        llm_registry = ProviderRegistry()
+        llm_registry.register("stub", _StubLLM())
+        router = LLMRouter(config=llm_cfg, registry=llm_registry)
+
+        # Real memory stack.
+        db = await create_database(":memory:", wal_mode=False)
+        try:
+            store = SQLiteMemoryStore(db)
+            await store.initialize()
+            embedder = FTS5Embedder()
+            memory_engine = MemoryEngine(
+                memory_config=MemoryConfig(enabled=True),
+                store=store,
+                embedder=embedder,
+                recall=Recall(store=store, embedder=embedder),
+                consolidator=Consolidator(
+                    store=store,
+                    llm_router=router,
+                    use_case="memory_distill",
+                    episodic_window=10,
+                ),
+                seed=42,
+            )
+
+            npc = _active_npc()
+            engine, _agency_router, _executor = await _wired_engine(
+                actors=[npc],
+                llm_responses=[_response_with_tool("drop_flare", {"duration_min": 120})],
+            )
+            engine.set_memory_engine(memory_engine)
+
+            await engine.activate_for_event(
+                npc.actor_id, reason="npc_exposure", trigger_event=_exposure()
+            )
+
+            # Real assertion: the implicit remember() persisted a
+            # tier-2 episodic record for this actor. AsyncMock
+            # assertions only prove the method was called; this
+            # proves the ROUND TRIP worked.
+            rows = await store.list_by_owner(str(npc.actor_id), kind="episodic")
+            assert len(rows) == 1
+            rec = rows[0]
+            assert rec.tier == "tier2"
+            assert rec.source == "implicit"
+            # Tool invoked → importance 0.5 per D11-7.
+            assert rec.importance == 0.5
+            # Activation summary content includes the reason + tool name.
+            assert "npc_exposure" in rec.content
+            assert "drop_flare" in rec.content
+        finally:
+            await db.close()
+
+
 class TestCurrentTickHelper:
     """D11-8 lockdown — module helper reads progress defensively."""
 

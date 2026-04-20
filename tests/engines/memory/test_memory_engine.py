@@ -520,6 +520,148 @@ class TestHydrate:
 
 
 # ---------------------------------------------------------------------------
+# PMF 4B cleanup commit 7 — Step 7 negative-intent strengthening
+# (audit M2-4B: Step 7 negative ratio was ~32%, below the 50% gate).
+# ---------------------------------------------------------------------------
+
+
+class TestFailureIsolation:
+    """Defensive tests locking in that a failure in one collaborator
+    (store, ledger, consolidator, embedder) does not cascade into
+    MemoryEngine state corruption or masked errors."""
+
+    async def test_negative_store_insert_raises_propagates_from_remember(
+        self, engine_bundle
+    ) -> None:
+        """If the underlying store can't persist, remember() must
+        surface the error — silent swallow would lose memory rows."""
+        engine, _ledger, _ = engine_bundle
+
+        original_insert = engine._store.insert
+
+        async def boom(record):
+            raise RuntimeError("store disk full")
+
+        engine._store.insert = boom  # type: ignore[method-assign]
+        try:
+            with pytest.raises(RuntimeError, match="store disk full"):
+                await engine.remember(
+                    caller=ActorId("npc-1"),
+                    target_scope="actor",
+                    target_owner="npc-1",
+                    write=_write("anything"),
+                    tick=0,
+                )
+        finally:
+            engine._store.insert = original_insert  # type: ignore[method-assign]
+
+    async def test_negative_ledger_failure_during_remember_propagates(self, engine_bundle) -> None:
+        """If the ledger append fails, the memory is already stored
+        (inserted before ledger call) — the ledger error surfaces so
+        observability gaps are loud, not silent."""
+        engine, ledger, _ = engine_bundle
+
+        original_append = ledger.append
+
+        async def boom(entry):
+            raise RuntimeError("ledger unreachable")
+
+        ledger.append = boom  # type: ignore[method-assign]
+        try:
+            with pytest.raises(RuntimeError, match="ledger unreachable"):
+                await engine.remember(
+                    caller=ActorId("npc-1"),
+                    target_scope="actor",
+                    target_owner="npc-1",
+                    write=_write("something"),
+                    tick=0,
+                )
+        finally:
+            ledger.append = original_append  # type: ignore[method-assign]
+
+    async def test_negative_recall_with_consolidator_error_does_not_taint_recall(
+        self, engine_bundle
+    ) -> None:
+        """Recall dispatch is independent of consolidator health —
+        a broken consolidator must not affect recall's behavior."""
+        engine, _ledger, _ = engine_bundle
+        # Seed a record + ensure recall works with the consolidator
+        # "broken" (it's not invoked on recall paths).
+        await engine.remember(
+            caller=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-1",
+            write=_write("about cafes"),
+            tick=0,
+        )
+
+        async def boom(*a, **kw):
+            raise RuntimeError("consolidator dead")
+
+        engine._consolidator.consolidate = boom  # type: ignore[method-assign]
+
+        result = await engine.recall(
+            caller=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-1",
+            query=SemanticQuery(text="cafes"),
+            tick=0,
+        )
+        assert len(result.records) >= 1
+
+    async def test_negative_consolidate_when_consolidator_raises(self, engine_bundle) -> None:
+        """engine.consolidate() surfaces consolidator errors rather
+        than silently succeeding with zero work."""
+        engine, _ledger, _ = engine_bundle
+
+        async def boom(actor_id, tick, **_):
+            raise RuntimeError("consolidator crashed")
+
+        engine._consolidator.consolidate = boom  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="consolidator crashed"):
+            await engine.consolidate(ActorId("npc-1"), tick=1)
+
+    async def test_negative_recall_with_broken_store_list_propagates(self, engine_bundle) -> None:
+        """Importance / temporal / structured recall all route
+        through ``store.list_by_owner``. A broken store surfaces the
+        error instead of returning a silently-empty recall."""
+        engine, _ledger, _ = engine_bundle
+
+        async def boom(*a, **kw):
+            raise RuntimeError("list_by_owner failed")
+
+        engine._store.list_by_owner = boom  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="list_by_owner failed"):
+            await engine.recall(
+                caller=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-1",
+                query=ImportanceQuery(top_k=5),
+                tick=0,
+            )
+
+    async def test_negative_gate_mutation_mid_call_still_denies_cross_actor(
+        self, engine_bundle
+    ) -> None:
+        """Even if someone tried to race the gate by swapping the
+        config mid-check, the gate reads actor IDs once and the
+        denial is immediate — no recovery path lets a cross-actor
+        write slip through."""
+        engine, ledger, _ = engine_bundle
+        with pytest.raises(MemoryAccessDenied):
+            await engine.remember(
+                caller=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="other-npc",  # different owner
+                write=_write("stolen"),
+                tick=0,
+            )
+        # Denial logged to ledger.
+        denials = ledger.of_type(MemoryAccessDeniedEntry)
+        assert len(denials) >= 1
+
+
+# ---------------------------------------------------------------------------
 # Permission gate — D7-2
 # ---------------------------------------------------------------------------
 

@@ -434,3 +434,101 @@ class TestConsolidatorLLMBudgetFlow:
             assert str(mc_entries[0].actor_id) == "actor-Y"
         finally:
             await db.close()
+
+
+# ---------------------------------------------------------------------------
+# 6. Recall p95 budget — ``recall_p95_budget_ms`` config knob
+# ---------------------------------------------------------------------------
+
+
+class TestRecallPerformance:
+    """PMF 4B cleanup commit 7 — the
+    ``MemoryConfig.recall_p95_budget_ms`` field was advertised as
+    "test-discipline tight bound — integration tests assert recall
+    p95 actually meets this, not a lazy < 1s" but no test actually
+    checked it. This class fills that gap."""
+
+    async def test_positive_recall_p95_meets_config_budget(self) -> None:
+        """Run N recalls on a pre-seeded store, compute p95 latency,
+        assert it clears the configured budget. Bound is intentionally
+        tight (default 10ms on FTS5 in-memory SQLite) — catches a
+        regression where recall slows by an order of magnitude."""
+        import statistics
+
+        from volnix.engines.memory.config import MemoryConfig
+
+        cfg = MemoryConfig(enabled=True)  # default recall_p95_budget_ms = 10
+        engine, _store, db = await _make_engine(memory_config=cfg)
+        try:
+            # Seed 100 records for one actor so recall has realistic work.
+            for i in range(100):
+                await engine.remember(**_write("actor-perf", f"content {i}"))
+            # Warm + sample.
+            await engine.recall(
+                caller=ActorId("actor-perf"),
+                target_scope="actor",
+                target_owner="actor-perf",
+                query=HybridQuery(semantic_text="content", top_k=5),
+                tick=0,
+            )
+            latencies_ms: list[float] = []
+            for _ in range(50):
+                start = time.monotonic()
+                await engine.recall(
+                    caller=ActorId("actor-perf"),
+                    target_scope="actor",
+                    target_owner="actor-perf",
+                    query=HybridQuery(semantic_text="content", top_k=5),
+                    tick=0,
+                )
+                latencies_ms.append((time.monotonic() - start) * 1000.0)
+            # p95 via quantiles[18] of 20-bucket split.
+            latencies_ms.sort()
+            p95 = statistics.quantiles(latencies_ms, n=20)[18]
+            assert p95 <= float(cfg.recall_p95_budget_ms), (
+                f"recall p95={p95:.2f}ms exceeds "
+                f"recall_p95_budget_ms={cfg.recall_p95_budget_ms}ms; "
+                f"full distribution: min={latencies_ms[0]:.2f} "
+                f"median={latencies_ms[len(latencies_ms) // 2]:.2f} "
+                f"max={latencies_ms[-1]:.2f}"
+            )
+        finally:
+            await db.close()
+
+
+# ---------------------------------------------------------------------------
+# 7. Seeded concurrent determinism — two runs of 50 concurrent writes
+#    with the same seed must produce the SAME set of record_ids (D7-5).
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentSeededDeterminism:
+    """PMF 4B cleanup commit 7 — locks the D7-5 claim under
+    concurrency. The existing ``test_negative_fifty_concurrent_writes_distinct_record_ids``
+    proved distinctness but not reproducibility. This test proves
+    two runs with the same seed + identical call sequence produce
+    the same ID set (asyncio + GIL serializing the RNG's
+    ``getrandbits`` call)."""
+
+    async def _run_concurrent(self, seed: int) -> set[str]:
+        engine, _store, db = await _make_engine(seed=seed)
+        try:
+            coros = [
+                engine.remember(**_write(f"actor-{i % 10}", f"content-{i}")) for i in range(50)
+            ]
+            record_ids = await asyncio.gather(*coros)
+            return {str(rid) for rid in record_ids}
+        finally:
+            await db.close()
+
+    async def test_positive_two_concurrent_runs_same_seed_same_ids(self) -> None:
+        a = await self._run_concurrent(seed=42)
+        b = await self._run_concurrent(seed=42)
+        assert a == b, f"seeded RNG under concurrency is NOT reproducible. symmetric diff: {a ^ b}"
+
+    async def test_negative_two_concurrent_runs_different_seed_different_ids(
+        self,
+    ) -> None:
+        a = await self._run_concurrent(seed=42)
+        b = await self._run_concurrent(seed=9999)
+        assert a != b
