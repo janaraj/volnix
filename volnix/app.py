@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from volnix.bus.bus import EventBus
+from volnix.config.builder import ConfigBuilder
 from volnix.config.schema import VolnixConfig
 from volnix.core.context import ActionContext
 from volnix.core.errors import VolnixError
@@ -40,8 +41,36 @@ logger = logging.getLogger(__name__)
 class VolnixApp:
     """Full Volnix system bootstrap and lifecycle manager."""
 
-    def __init__(self, config: VolnixConfig | None = None) -> None:
-        self._config = config or VolnixConfig()
+    def __init__(
+        self,
+        config: VolnixConfig | ConfigBuilder | dict[str, Any] | None = None,
+    ) -> None:
+        """Bootstrap a VolnixApp.
+
+        PMF Plan Phase 4C Step 2 — the constructor accepts the
+        programmatic shapes library consumers actually have on hand:
+
+        - ``VolnixConfig`` (the classic path; unchanged for existing callers)
+        - ``ConfigBuilder`` (calls ``.build()``)
+        - ``dict`` (passed through ``VolnixConfig.from_dict``)
+        - ``None`` (all defaults)
+
+        Any other type raises ``TypeError`` loudly rather than silently
+        defaulting.
+        """
+        if config is None:
+            self._config = VolnixConfig()
+        elif isinstance(config, VolnixConfig):
+            self._config = config
+        elif isinstance(config, ConfigBuilder):
+            self._config = config.build()
+        elif isinstance(config, dict):
+            self._config = VolnixConfig.from_dict(config)
+        else:
+            raise TypeError(
+                "VolnixApp(config=...) must be VolnixConfig | ConfigBuilder | "
+                f"dict | None, got {type(config).__name__}"
+            )
         self._conn_mgr: ConnectionManager | None = None
         self._bus: EventBus | None = None
         self._ledger: Ledger | None = None
@@ -120,11 +149,39 @@ class VolnixApp:
             # letting StateEngine construct SQLiteDatabase directly
             state_db = await self._conn_mgr.get_connection("state")
             self._registry = create_default_registry()
+            # PMF Plan Phase 4C Step 2 — forward root-level
+            # ``pack_search_paths`` to the responder via an override
+            # entry. The responder dict-config owns ``profiles_dir``;
+            # the root owns ``pack_search_paths`` (library consumers
+            # register external catalogs here). We split by presence
+            # of ``package_prefix``: bundled-mode entries go into
+            # ``bundled_pack_paths``, external-mode entries go into
+            # ``external_pack_paths`` (list of [path, prefix] pairs).
+            # The "responder" key is a known engine name — drift is
+            # caught by the E2E integration test
+            # ``test_positive_external_pack_registered_after_app_start``.
+            engine_overrides: dict[str, dict[str, Any]] = {
+                "state": {"_db": state_db},
+            }
+            if self._config.pack_search_paths:
+                bundled: list[str] = []
+                external: list[tuple[str, str]] = []
+                for entry in self._config.pack_search_paths:
+                    if entry.package_prefix is None:
+                        bundled.append(entry.path)
+                    else:
+                        external.append((entry.path, entry.package_prefix))
+                responder_override: dict[str, Any] = {}
+                if bundled:
+                    responder_override["bundled_pack_paths"] = bundled
+                if external:
+                    responder_override["external_pack_paths"] = external
+                engine_overrides["responder"] = responder_override
             await wire_engines(
                 self._registry,
                 self._bus,
                 self._config,
-                engine_overrides={"state": {"_db": state_db}},
+                engine_overrides=engine_overrides,
             )
 
             # 7. Post-wiring dependency injection

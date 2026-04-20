@@ -49,15 +49,36 @@ class WorldResponderEngine(BaseEngine):
         from volnix.packs.registry import PackRegistry
         from volnix.packs.runtime import PackRuntime
 
-        # Tier 1: Verified packs
+        # Tier 1: Verified packs.
+        # PMF Plan Phase 4C Step 2 — discovery accepts a list of paths
+        # for bundled-mode AND an ``external_paths`` list of
+        # (path, package_prefix) pairs for Rehearse-style catalogs
+        # that live outside the volnix namespace. Both come from the
+        # root VolnixConfig via engine_overrides (see VolnixApp.start).
         self._pack_registry = PackRegistry()
         verified_dir = self._config.get("verified_packs_dir")
+        bundled_path = str(Path(__file__).resolve().parents[2] / "packs" / "verified")
+        bundled_paths: list[str] = []
         if verified_dir:
-            self._pack_registry.discover(verified_dir)
-        else:
-            pack_base = Path(__file__).resolve().parents[2] / "packs" / "verified"
-            if pack_base.is_dir():
-                self._pack_registry.discover(str(pack_base))
+            bundled_paths.append(str(verified_dir))
+        elif Path(bundled_path).is_dir():
+            bundled_paths.append(bundled_path)
+
+        for extra in self._config.get("bundled_pack_paths", []) or []:
+            extra_str = str(extra)
+            if extra_str not in bundled_paths:
+                bundled_paths.append(extra_str)
+
+        external_paths_raw = self._config.get("external_pack_paths") or []
+        external_paths: list[tuple[str, str]] = [
+            (str(path), str(prefix)) for path, prefix in external_paths_raw
+        ]
+
+        if bundled_paths or external_paths:
+            self._pack_registry.discover(
+                bundled_paths,
+                external_paths=external_paths or None,
+            )
 
         self._pack_runtime = PackRuntime(self._pack_registry)
         self._tier1 = Tier1Dispatcher(self._pack_runtime)

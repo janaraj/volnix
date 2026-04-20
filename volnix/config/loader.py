@@ -12,6 +12,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from volnix.config._utils import deep_merge
 from volnix.config.schema import VolnixConfig
 
 
@@ -47,19 +48,19 @@ class ConfigLoader:
         # Layer 1: project-level config (overrides bundled defaults)
         base_path = self._base_dir / "volnix.toml"
         if base_path.is_file():
-            config = self._deep_merge(config, self._load_toml(base_path))
+            config = deep_merge(config, self._load_toml(base_path))
 
         # Layer 2: environment-specific overrides
         env_path = self._base_dir / f"volnix.{self._env}.toml"
         if env_path.is_file():
             env_config = self._load_toml(env_path)
-            config = self._deep_merge(config, env_config)
+            config = deep_merge(config, env_config)
 
         # Layer 3: local overrides
         local_path = self._base_dir / "volnix.local.toml"
         if local_path.is_file():
             local_config = self._load_toml(local_path)
-            config = self._deep_merge(config, local_config)
+            config = deep_merge(config, local_config)
 
         # Layer 4: environment variable overrides
         config = self._apply_env_overrides(config)
@@ -70,7 +71,7 @@ class ConfigLoader:
         # Layer 6: default data paths to ~/.volnix/data/ (if not overridden)
         config = self._apply_user_data_defaults(config)
 
-        return VolnixConfig.model_validate(config)
+        return VolnixConfig.from_dict(config)
 
     @staticmethod
     def _load_toml(path: Path) -> dict[str, Any]:
@@ -107,25 +108,6 @@ class ConfigLoader:
         for (section, key), default_val in defaults.items():
             config.setdefault(section, {}).setdefault(key, default_val)
         return config
-
-    @staticmethod
-    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-        """Recursively merge *override* into *base*, returning a new dict.
-
-        Args:
-            base: The base configuration dictionary.
-            override: The overriding configuration dictionary.
-
-        Returns:
-            A new merged dictionary.
-        """
-        merged = dict(base)
-        for key, value in override.items():
-            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-                merged[key] = ConfigLoader._deep_merge(merged[key], value)
-            else:
-                merged[key] = value
-        return merged
 
     def _apply_env_overrides(self, config: dict[str, Any]) -> dict[str, Any]:
         """Apply environment-variable overrides to the configuration dict.

@@ -11,6 +11,7 @@ Contains ZERO pack-specific logic. All indexing derived from ServicePack ABC.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from volnix.core.errors import DuplicatePackError, PackNotFoundError
@@ -89,11 +90,45 @@ class PackRegistry:
         self._profiles[profile.profile_name] = profile
         self._profile_pack_index.setdefault(profile.extends_pack, []).append(profile.profile_name)
 
-    def discover(self, verified_path: str, profiled_path: str | None = None) -> None:
-        """Scan filesystem directories and register all discovered packs/profiles."""
-        for pack in discover_packs(verified_path):
-            if pack.pack_name not in self._packs:
-                self.register(pack)
+    def discover(
+        self,
+        verified_path: str | Path | list[str | Path],
+        profiled_path: str | None = None,
+        *,
+        external_paths: list[tuple[str | Path, str]] | None = None,
+    ) -> None:
+        """Scan filesystem directories and register all discovered packs/profiles.
+
+        Args:
+            verified_path: A single path or a list of paths to scan for
+                bundled-style ``pack.py`` files under the ``volnix`` namespace
+                (PMF Plan Phase 4C Step 2 — accepts list for pack-path
+                extensibility). Duplicate pack names across paths are silently
+                skipped (first-path wins) — matches the pre-Step-2 behaviour.
+            profiled_path: Optional directory of YAML profile files.
+            external_paths: (Step 2) List of ``(path, package_prefix)`` pairs
+                for packs outside the ``volnix`` namespace. Consumer is
+                responsible for placing ``path`` on ``sys.path`` (use
+                ``ConfigBuilder.pack_search_path`` for the opt-in helper).
+        """
+        # Normalise verified_path to a list; accept str / Path / list for
+        # backward compatibility with pre-Step-2 single-path callers.
+        if isinstance(verified_path, (str, Path)):
+            verified_paths: list[str | Path] = [verified_path]
+        else:
+            verified_paths = list(verified_path)
+
+        for path in verified_paths:
+            for pack in discover_packs(path):
+                if pack.pack_name not in self._packs:
+                    self.register(pack)
+
+        if external_paths:
+            for path, package_prefix in external_paths:
+                for pack in discover_packs(path, package_prefix=package_prefix):
+                    if pack.pack_name not in self._packs:
+                        self.register(pack)
+
         if profiled_path:
             for profile in discover_profiles(profiled_path):
                 if profile.profile_name not in self._profiles:

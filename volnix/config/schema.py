@@ -7,6 +7,8 @@ its config definition (SRP). No duplicate definitions.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from volnix.actors.config import ActorConfig, SlotManagerConfig
@@ -86,10 +88,50 @@ class SimulationConfig(BaseModel):
     seeds: list[SeedConfig] = Field(default_factory=list)
 
 
+class PackSearchPath(BaseModel):
+    """One additive pack search entry for a library consumer.
+
+    PMF Plan Phase 4C Step 2. Two modes:
+
+    - **Bundled mode** (``package_prefix=None``): the path lives under
+      a directory that contains an importable ``volnix`` package —
+      module names are derived via the pre-existing ``volnix.packs.*``
+      namespace walk. Rare: almost no external consumer ships their
+      catalog under ``volnix/``.
+    - **External mode** (``package_prefix`` set): the path is the
+      directory whose subdirectories hold ``pack.py`` modules that
+      import as ``{package_prefix}.<subdir>.pack``. The consumer must
+      have placed the PARENT of this directory on ``sys.path``
+      (``ConfigBuilder.pack_search_path(..., ensure_on_syspath=True)``
+      does this automatically — see that method's docstring).
+
+    Example (Rehearse)::
+
+        PackSearchPath(
+            path="/opt/rehearse/characters",
+            package_prefix="characters",
+        )
+        # sys.path must contain /opt/rehearse; modules import as
+        # characters.interviewer.pack, etc.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    path: str
+    package_prefix: str | None = None
+
+
 class VolnixConfig(BaseModel):
     """Root configuration — assembles all subsystem configs."""
 
     model_config = ConfigDict(frozen=True)
+
+    # PMF Plan Phase 4C Step 2 — additive pack search paths for library
+    # consumers (Rehearse-style embedding). Paths are searched on top of
+    # the bundled ``volnix/packs/verified/`` directory. Entries with
+    # ``package_prefix`` are routed via the external-prefix loader;
+    # entries without are treated as bundled-mode (rare for consumers).
+    pack_search_paths: list[PackSearchPath] = Field(default_factory=list)
+
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     bus: BusConfig = Field(default_factory=BusConfig)
@@ -121,3 +163,17 @@ class VolnixConfig(BaseModel):
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     worlds: WorldsConfig = Field(default_factory=WorldsConfig)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VolnixConfig:
+        """Construct a ``VolnixConfig`` from a nested dict.
+
+        Canonical programmatic constructor (PMF Plan Phase 4C Step 2).
+        Runs full Pydantic validation; raises ``ValidationError`` on
+        malformed input.
+
+        The file-based ``ConfigLoader`` remains the entry point for TOML
+        workflows — it performs its layered merge and then calls this
+        method as the final validation pass.
+        """
+        return cls.model_validate(data)

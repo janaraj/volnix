@@ -68,9 +68,14 @@ def test_resolve_secure_refs(monkeypatch, tmp_path: Path):
 
 def test_deep_merge_nested():
     """Nested dicts are merged recursively, not replaced."""
+    # PMF Plan Phase 4C Step 2: `_deep_merge` moved from
+    # ``ConfigLoader._deep_merge`` to ``volnix.config._utils.deep_merge``
+    # (shared with ``ConfigBuilder``). Tests now point at the new home.
+    from volnix.config._utils import deep_merge
+
     base = {"simulation": {"seed": 42, "mode": "governed"}, "bus": {"db_path": "a.db"}}
     override = {"simulation": {"seed": 99}}
-    result = ConfigLoader._deep_merge(base, override)
+    result = deep_merge(base, override)
     assert result["simulation"]["seed"] == 99
     assert result["simulation"]["mode"] == "governed"
     assert result["bus"]["db_path"] == "a.db"
@@ -78,9 +83,11 @@ def test_deep_merge_nested():
 
 def test_deep_merge_override():
     """Scalar values in override win over base."""
+    from volnix.config._utils import deep_merge
+
     base = {"a": 1, "b": 2}
     override = {"b": 99}
-    result = ConfigLoader._deep_merge(base, override)
+    result = deep_merge(base, override)
     assert result["a"] == 1
     assert result["b"] == 99
 

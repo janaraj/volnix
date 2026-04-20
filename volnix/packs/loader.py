@@ -18,11 +18,20 @@ from volnix.packs.base import ServicePack, ServiceProfile
 logger = logging.getLogger(__name__)
 
 
-def discover_packs(base_dir: str | Path) -> list[ServicePack]:
+def discover_packs(
+    base_dir: str | Path,
+    *,
+    package_prefix: str | None = None,
+) -> list[ServicePack]:
     """Scan subdirectories of base_dir for pack.py files.
 
     For each subdirectory containing pack.py:
-    1. Compute dotted module path: volnix.packs.verified.{subdir}.pack
+    1. Compute dotted module path. Bundled packs resolve to
+       ``volnix.packs.verified.{subdir}.pack`` via the ``volnix``
+       namespace detector. External paths (PMF Plan Phase 4C Step 2)
+       supply ``package_prefix`` to derive ``{prefix}.{subdir}.pack``
+       — the consumer is responsible for placing the external path on
+       ``sys.path`` (see ``ConfigBuilder.pack_search_path``).
     2. Import via importlib.import_module
     3. Find all ServicePack subclasses (not the ABC itself)
     4. Instantiate each (zero-arg constructor)
@@ -40,7 +49,7 @@ def discover_packs(base_dir: str | Path) -> list[ServicePack]:
         pack_file = subdir / "pack.py"
         if not pack_file.exists():
             continue
-        module_path = _module_path_from_filepath(pack_file)
+        module_path = _module_path_from_filepath(pack_file, package_prefix=package_prefix)
         if module_path is None:
             logger.warning("Could not determine module path for %s", pack_file)
             continue
@@ -57,7 +66,11 @@ def discover_packs(base_dir: str | Path) -> list[ServicePack]:
     return results
 
 
-def discover_profiles(base_dir: str | Path) -> list[ServiceProfile]:
+def discover_profiles(
+    base_dir: str | Path,
+    *,
+    package_prefix: str | None = None,
+) -> list[ServiceProfile]:
     """Same pattern as discover_packs but for profile.py / ServiceProfile."""
     results: list[ServiceProfile] = []
     base = Path(base_dir)
@@ -70,7 +83,7 @@ def discover_profiles(base_dir: str | Path) -> list[ServiceProfile]:
         profile_file = subdir / "profile.py"
         if not profile_file.exists():
             continue
-        module_path = _module_path_from_filepath(profile_file)
+        module_path = _module_path_from_filepath(profile_file, package_prefix=package_prefix)
         if module_path is None:
             continue
         try:
@@ -95,32 +108,75 @@ def _find_subclasses(module: object, base_class: type) -> list[type]:
     return found
 
 
-def _module_path_from_filepath(filepath: Path) -> str | None:
+def _module_path_from_filepath(
+    filepath: Path,
+    *,
+    package_prefix: str | None = None,
+) -> str | None:
     """Convert filesystem path to dotted module path.
 
-    Finds the 'volnix' PACKAGE directory (the one containing __init__.py)
-    and builds the module path from there.
-    Example: /Users/.../volnix/packs/verified/gmail/pack.py
-           -> volnix.packs.verified.gmail.pack
+    Bundled-pack mode (``package_prefix=None``): finds the 'volnix'
+    PACKAGE directory (the one containing ``__init__.py``) and builds
+    the module path from there.
+    Example: ``/Users/.../volnix/packs/verified/gmail/pack.py``
+           → ``volnix.packs.verified.gmail.pack``
+
+    External-pack mode (``package_prefix`` supplied, PMF Plan Phase 4C
+    Step 2): walks up from the file's parent directory to find the
+    first ancestor whose name equals the final segment of
+    ``package_prefix`` and contains an ``__init__.py``. The module path
+    is then ``{package_prefix}.<remaining path components>.<filename>``.
+    The external root must already be on ``sys.path`` — discovery does
+    NOT modify ``sys.path`` (that is ``ConfigBuilder``'s documented
+    side effect).
     """
-    parts = filepath.resolve().parts
-    # Find the FIRST 'volnix' in the path that has an __init__.py
-    # (distinguishes the Python package from the project root dir)
-    idx = None
-    for i, part in enumerate(parts):
-        if part == "volnix":
-            candidate = Path(*parts[: i + 1])
-            if (candidate / "__init__.py").exists():
-                idx = i
-                break  # Use the first volnix that is a Python package
-    if idx is None:
-        # Fallback: use the last occurrence
-        for i in range(len(parts) - 1, -1, -1):
-            if parts[i] == "volnix":
-                idx = i
-                break
-    if idx is None:
+    resolved = filepath.resolve()
+    parts = resolved.parts
+
+    if package_prefix is None:
+        # Bundled-pack mode: locate the volnix package root.
+        idx = None
+        for i, part in enumerate(parts):
+            if part == "volnix":
+                candidate = Path(*parts[: i + 1])
+                if (candidate / "__init__.py").exists():
+                    idx = i
+                    break  # Use the first volnix that is a Python package
+        if idx is None:
+            # Fallback: use the last occurrence
+            for i in range(len(parts) - 1, -1, -1):
+                if parts[i] == "volnix":
+                    idx = i
+                    break
+        if idx is None:
+            return None
+        module_parts = list(parts[idx:])
+        module_parts[-1] = module_parts[-1].replace(".py", "")
+        return ".".join(module_parts)
+
+    # External-pack mode: anchor at the final segment of package_prefix.
+    # Example: package_prefix="rehearse.characters" + file
+    # /opt/catalog/rehearse/characters/interviewer/pack.py →
+    # rehearse.characters.interviewer.pack. Consumer places
+    # /opt/catalog on sys.path (done by ConfigBuilder.pack_search_path).
+    if not package_prefix:
         return None
-    module_parts = list(parts[idx:])
-    module_parts[-1] = module_parts[-1].replace(".py", "")
-    return ".".join(module_parts)
+    anchor = package_prefix.rsplit(".", 1)[-1]
+    idx = None
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == anchor:
+            idx = i
+            break
+    if idx is None:
+        # Anchor name not in path — fall back to prefix + subdir + file stem,
+        # using the file's immediate parent name.
+        subdir = resolved.parent.name
+        stem = resolved.stem
+        return f"{package_prefix}.{subdir}.{stem}"
+
+    # Replace the anchor's head-of-path with the full dotted prefix.
+    tail_parts = list(parts[idx + 1 :])
+    tail_parts[-1] = tail_parts[-1].replace(".py", "")
+    if tail_parts:
+        return f"{package_prefix}." + ".".join(tail_parts)
+    return package_prefix
