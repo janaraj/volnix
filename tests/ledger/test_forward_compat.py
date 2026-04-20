@@ -224,6 +224,28 @@ class TestDeserializeEntryEdgeCases:
         with pytest.raises(ValueError, match="must decode to a dict"):
             deserialize_entry({"entry_type": "pipeline_step", "payload": "[1, 2, 3]"})
 
+    def test_negative_partial_wrapper_does_not_passthrough(self) -> None:
+        """Audit-fold L1: a corrupt row with ``entry_type="unknown"``
+        and ``raw_entry_type`` but no ``raw_payload`` must NOT invoke
+        the passthrough — otherwise a half-wrapper could smuggle an
+        arbitrary discriminator past the registry. Falls through to
+        the normal wrap path (``raw_entry_type`` becomes the sentinel
+        ``"unknown"`` so a consumer can distinguish corruption from
+        a legitimately-unknown type)."""
+        corrupt_payload = {
+            "entry_type": "unknown",
+            "raw_entry_type": "pipeline_step",  # no raw_payload accompanying
+        }
+        row = {"entry_type": "unknown", "payload": json.dumps(corrupt_payload)}
+        result = deserialize_entry(row)
+        assert isinstance(result, UnknownLedgerEntry)
+        # Critical: does NOT recover as PipelineStepEntry — the missing
+        # raw_payload means we cannot trust the claimed raw_entry_type.
+        assert not isinstance(result, PipelineStepEntry)
+        # ``raw_entry_type`` is the sentinel, signalling "this was a
+        # wrapper-looking row but we couldn't trust it".
+        assert result.raw_entry_type == "unknown"
+
     def test_negative_wrapper_passthrough_unnests_on_read(self) -> None:
         """Review M1: reading back a stored wrapper returns a wrapper
         with the ORIGINAL ``raw_entry_type`` / ``raw_payload`` — NOT

@@ -29,11 +29,18 @@ Semantics of ``.build()``:
 - No shared state between build() calls; each call produces an
   independently-equal config (deep-copy on build).
 
-Section coverage: the builder ships fluent methods ONLY for sections
-that exist in ``VolnixConfig`` today (memory, agency, llm, persistence).
-Future 4C steps add sections (privacy, sessions, character catalog) and
-will extend this builder in lockstep — per the "earn the method"
-principle, speculative methods are not shipped.
+Section coverage: the builder ships fluent methods only for sections
+that (a) exist in ``VolnixConfig`` today AND (b) have been requested
+by a consumer. As of Step 2 that set is ``memory``, ``agency``,
+``llm``, ``persistence``, and ``simulation``. Sections without a
+dedicated setter can still be overridden via :meth:`raw`. Drift
+between ``VolnixConfig.model_fields`` and ``ConfigBuilder`` methods
+is guarded by the ``TestSectionMethodDriftGuard`` class in
+``tests/config/test_config_builder.py``, which enforces that every
+top-level section is either covered by a method or on an explicit
+deferral allowlist. Future 4C steps extend
+both the schema and this builder in lockstep — per the "earn the
+method" principle, speculative methods are not shipped.
 """
 
 from __future__ import annotations

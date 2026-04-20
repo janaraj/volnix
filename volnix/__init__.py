@@ -14,8 +14,6 @@ are sorted alphabetically by module path for linter compatibility.
 Additional exports land in later Phase 4C steps — see
 ``internal_docs/pmf/phase-4c-platform-hardening.md`` for the roadmap.
 Reserved for future steps (not yet exported):
-    Step 2 — ConfigBuilder
-    Step 3 — UnknownLedgerEntry
     Step 4 — Session, SessionId, SessionStatus, SessionType,
              Session{Started,Ended,Resumed}Event
     Step 5 — SessionManager, SessionNotFoundError
@@ -43,7 +41,8 @@ except PackageNotFoundError:  # running from source tree, unpackaged
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.state import ActorState
 from volnix.app import VolnixApp
-from volnix.config.schema import VolnixConfig
+from volnix.config.builder import ConfigBuilder
+from volnix.config.schema import PackSearchPath, VolnixConfig
 from volnix.core.envelope import ActionEnvelope
 from volnix.core.errors import (
     DuplicatePackError,
@@ -88,6 +87,8 @@ __all__ = [
     # Entry points
     "VolnixApp",
     "VolnixConfig",
+    "ConfigBuilder",
+    "PackSearchPath",
     # Core value objects
     "ActionEnvelope",
     "WorldEvent",

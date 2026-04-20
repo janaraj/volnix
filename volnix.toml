@@ -4,6 +4,17 @@
 # Override per-environment with volnix.{env}.toml
 # Override locally (git-ignored) with volnix.local.toml
 
+# PMF Plan Phase 4C Step 2 — additive pack search paths for library
+# consumers (Rehearse-style embedding). Empty by default; consumers
+# register external catalogs via ``ConfigBuilder.pack_search_path()``
+# in code, or by appending entries here. Each entry needs ``path``
+# and optional ``package_prefix`` (see ``PackSearchPath``).
+#
+# Example (commented out):
+#   [[pack_search_paths]]
+#   path = "/opt/rehearse/characters"
+#   package_prefix = "characters"
+
 # ── Simulation ───────────────────────────────────────────────
 
 [simulation]

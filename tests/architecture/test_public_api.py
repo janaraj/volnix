@@ -32,6 +32,8 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         # Entry points
         "VolnixApp",
         "VolnixConfig",
+        "ConfigBuilder",
+        "PackSearchPath",
         # Core value objects
         "ActionEnvelope",
         "WorldEvent",

@@ -718,6 +718,11 @@ def deserialize_entry(row: dict) -> LedgerEntry:
 
     # Wrapper-passthrough: unnest a previously-wrapped row so the next
     # read sees the original discriminator again (review M1 fix).
+    # Requires BOTH raw_entry_type AND raw_payload — a partial/corrupt
+    # wrapper falls through to the else branch (audit L1: surfaces as
+    # an ``UnknownLedgerEntry`` with ``raw_entry_type="unknown"`` so a
+    # consumer inspecting ``raw_entry_type`` can distinguish corruption
+    # from a legitimately-unknown type).
     if (
         entry_type == _UNKNOWN_ENTRY_TYPE_SENTINEL
         and "raw_entry_type" in payload

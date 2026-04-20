@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from volnix.actors.config import ActorConfig, SlotManagerConfig
 from volnix.bus.config import BusConfig
@@ -131,6 +131,26 @@ class VolnixConfig(BaseModel):
     # ``package_prefix`` are routed via the external-prefix loader;
     # entries without are treated as bundled-mode (rare for consumers).
     pack_search_paths: list[PackSearchPath] = Field(default_factory=list)
+
+    @field_validator("pack_search_paths", mode="after")
+    @classmethod
+    def _dedupe_pack_search_paths(cls, value: list[PackSearchPath]) -> list[PackSearchPath]:
+        """Dedupe ``pack_search_paths`` on ``(path, package_prefix)``,
+        preserving first-seen order. Closes the ``from_dict`` / TOML
+        path gap identified in the Step-2/3 post-ship audit — the
+        ``ConfigBuilder`` side dedupes at construction, but this
+        validator ensures the same guarantee applies when a consumer
+        reaches the schema directly (dict round-trip, TOML layering).
+        """
+        seen: set[tuple[str, str | None]] = set()
+        deduped: list[PackSearchPath] = []
+        for entry in value:
+            key = (entry.path, entry.package_prefix)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(entry)
+        return deduped
 
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
