@@ -42,12 +42,19 @@ from volnix.core.memory_types import (
 )
 from volnix.engines.memory.embedder import EmbedderProtocol
 from volnix.engines.memory.store import MemoryStoreProtocol
+from volnix.llm.types import EmbeddingRequest
 
 # Hybrid reranking fetches ``HYBRID_CANDIDATE_MULTIPLIER * q.top_k``
 # candidates from FTS5 so the weighted rerank has room. Capped by
 # ``_MAX_TOP_K`` so a caller at the upper bound can't coax a
 # 3000-row scan (C2 of Steps 1-5 bug-bounty review).
 HYBRID_CANDIDATE_MULTIPLIER: int = 3
+
+# Dense-embedder candidate cap. For dense semantic / hybrid, we
+# score every record owned by the actor (there's no FTS5-style
+# pre-filter). Capping at ``_MAX_TOP_K`` keeps a pathological "1M
+# records per actor" world from blowing up one recall call.
+_DENSE_MAX_CANDIDATES: int = _MAX_TOP_K
 
 
 class Recall:
@@ -172,10 +179,21 @@ class Recall:
                 total_matched=len(records),
                 truncated=False,
             )
-        raise NotImplementedError(
-            f"semantic retrieval with embedder "
-            f"{self._embedder.provider_id!r} lands in Step 13. "
-            f"Phase 4B Step 5 ships FTS5 only."
+
+        # Dense-embedder path (PMF 4B Step 13). Cosine-similarity
+        # scoring with the embedding cache populated on-miss.
+        scored = await self._dense_score(owner_id, q.text)
+        # Filter by min_score threshold.
+        filtered = [(r, s) for r, s in scored if s >= q.min_score]
+        # Sort: similarity DESC, record_id ASC tie-break.
+        filtered.sort(key=lambda p: (-p[1], p[0].record_id))
+        total = len(filtered)
+        records = [r for r, _ in filtered[: q.top_k]]
+        return MemoryRecall(
+            query_id=f"semantic:{self._embedder.provider_id}:{content_hash_of(q.text)[:8]}",
+            records=records,
+            total_matched=total,
+            truncated=len(records) < total,
         )
 
     async def _importance(self, owner_id: str, q: ImportanceQuery) -> MemoryRecall:
@@ -195,38 +213,52 @@ class Recall:
     async def _hybrid(self, owner_id: str, q: HybridQuery, *, tick: int) -> MemoryRecall:
         """Weighted combo: semantic + recency + importance.
 
-        Semantic candidates fetched from FTS5 at ``HYBRID_CANDIDATE_MULTIPLIER *
-        top_k`` to give room for reranking, **clamped to
-        ``_MAX_TOP_K``** (C2 of the bug-bounty review — at the upper
-        ``top_k=1000`` bound a naive ``3*top_k=3000`` call bypasses
-        the structural cap). Each signal normalised to ``[0, 1]``
-        before the weighted sum; weights don't need to sum to 1.
+        FTS5 path: candidates fetched at ``HYBRID_CANDIDATE_MULTIPLIER *
+        top_k`` for reranking, clamped to ``_MAX_TOP_K`` (C2 of the
+        bug-bounty review). BM25 scores flipped + rescaled to [0, 1].
+
+        Dense path (PMF 4B Step 13): cosine-similarity over all
+        owner records (capped at ``_DENSE_MAX_CANDIDATES``). Already
+        on [0, 1] — no normalisation needed. Combined with recency +
+        importance the same way as the FTS5 path.
+
+        Each signal normalised to ``[0, 1]`` before the weighted
+        sum; weights don't need to sum to 1.
         """
-        if self._embedder.provider_id != "fts5":
-            raise NotImplementedError(
-                f"hybrid retrieval with embedder {self._embedder.provider_id!r} lands in Step 13."
-            )
+        query_id = f"hybrid:{self._embedder.provider_id}:{content_hash_of(q.semantic_text)[:8]}"
 
-        candidate_k = min(q.top_k * HYBRID_CANDIDATE_MULTIPLIER, _MAX_TOP_K)
-        raw_hits = await self._store.fts_search(owner_id, q.semantic_text, candidate_k)
-        query_id = f"hybrid:{content_hash_of(q.semantic_text)[:8]}"
-        if not raw_hits:
-            return MemoryRecall(
-                query_id=query_id,
-                records=[],
-                total_matched=0,
-                truncated=False,
-            )
+        # Fetch candidate (record, semantic_score) pairs — path-specific.
+        if self._embedder.provider_id == "fts5":
+            candidate_k = min(q.top_k * HYBRID_CANDIDATE_MULTIPLIER, _MAX_TOP_K)
+            raw_hits = await self._store.fts_search(owner_id, q.semantic_text, candidate_k)
+            if not raw_hits:
+                return MemoryRecall(
+                    query_id=query_id,
+                    records=[],
+                    total_matched=0,
+                    truncated=False,
+                )
+            scores = [s for _, s in raw_hits]
+            min_s, max_s = min(scores), max(scores)
 
-        # Normalise semantic scores. BM25: lower == better match.
-        # Flip sign and rescale to [0, 1] over observed min/max.
-        scores = [s for _, s in raw_hits]
-        min_s, max_s = min(scores), max(scores)
+            def _sem_norm(s: float) -> float:
+                if min_s == max_s:
+                    return 1.0
+                return (max_s - s) / (max_s - min_s)
 
-        def _sem_norm(s: float) -> float:
-            if min_s == max_s:
-                return 1.0
-            return (max_s - s) / (max_s - min_s)
+            normalised = [(r, _sem_norm(s)) for r, s in raw_hits]
+        else:
+            # Dense path. Cosine is already in [-1, 1] (normalised
+            # to [0, 1] by the scoring helper). No min/max rescale
+            # needed. Candidate cap = _DENSE_MAX_CANDIDATES.
+            normalised = await self._dense_score(owner_id, q.semantic_text)
+            if not normalised:
+                return MemoryRecall(
+                    query_id=query_id,
+                    records=[],
+                    total_matched=0,
+                    truncated=False,
+                )
 
         # Recency: 1 / (1 + age_in_ticks). Current-tick records
         # score 1.0; unbounded age decays toward 0.
@@ -237,11 +269,11 @@ class Recall:
         combined: list[tuple[MemoryRecord, float]] = [
             (
                 r,
-                q.semantic_weight * _sem_norm(s)
+                q.semantic_weight * sem
                 + q.recency_weight * _rec_norm(r)
                 + q.importance_weight * r.importance,
             )
-            for r, s in raw_hits
+            for r, sem in normalised
         ]
         # Sort: combined score DESC, record_id ASC for tie-break.
         combined.sort(key=lambda p: (-p[1], p[0].record_id))
@@ -253,6 +285,76 @@ class Recall:
             total_matched=total,
             truncated=len(records) < total,
         )
+
+    async def _dense_score(
+        self, owner_id: str, query_text: str
+    ) -> list[tuple[MemoryRecord, float]]:
+        """Embed ``query_text`` + every candidate record for ``owner_id``;
+        return ``[(record, cosine_sim_in_0_1), ...]``.
+
+        Record embeddings are cached in the store's ``embedding_cache``
+        keyed by ``(content_hash, provider_id)`` — first recall pays
+        the embed cost, subsequent recalls hit the cache.
+
+        Batch-embeds cache misses in a single call (ST + OpenAI both
+        handle batches natively, much faster than per-text calls).
+
+        Cosine similarity is rescaled from ``[-1, 1]`` to ``[0, 1]``
+        so ``min_score`` thresholds and ``HybridQuery`` weights
+        compose cleanly.
+        """
+        import numpy as np  # numpy ships with sentence-transformers
+
+        records = await self._store.list_by_owner(owner_id, limit=_DENSE_MAX_CANDIDATES)
+        if not records:
+            return []
+
+        provider_id = self._embedder.provider_id
+
+        # Load cached vectors; collect cache misses for batch embed.
+        cached_vectors: dict[int, list[float]] = {}
+        miss_indices: list[int] = []
+        miss_texts: list[str] = []
+        for i, r in enumerate(records):
+            blob = await self._store.embedding_cache_get(r.content_hash, provider_id)
+            if blob is not None:
+                cached_vectors[i] = np.frombuffer(blob, dtype=np.float32).tolist()
+            else:
+                miss_indices.append(i)
+                miss_texts.append(r.content)
+
+        # Batch-embed any misses in one call + populate cache.
+        if miss_texts:
+            resp = await self._embedder.embed(EmbeddingRequest(texts=miss_texts))
+            for local_i, vec in zip(miss_indices, resp.vectors, strict=True):
+                cached_vectors[local_i] = vec
+                blob = np.asarray(vec, dtype=np.float32).tobytes()
+                await self._store.embedding_cache_put(
+                    records[local_i].content_hash, provider_id, blob
+                )
+
+        # Embed the query (separately — not cached since queries are
+        # typically one-shot and rarely repeat byte-for-byte).
+        q_resp = await self._embedder.embed(EmbeddingRequest(texts=[query_text]))
+        q_vec = np.asarray(q_resp.vectors[0], dtype=np.float32)
+        q_norm = float(np.linalg.norm(q_vec))
+        if q_norm == 0.0:
+            # Degenerate zero-vector query — no meaningful similarity.
+            return [(r, 0.0) for r in records]
+
+        # Compute cosine for every record, rescaled to [0, 1].
+        scored: list[tuple[MemoryRecord, float]] = []
+        for i, r in enumerate(records):
+            v = np.asarray(cached_vectors[i], dtype=np.float32)
+            v_norm = float(np.linalg.norm(v))
+            if v_norm == 0.0:
+                scored.append((r, 0.0))
+                continue
+            cos = float(np.dot(q_vec, v) / (q_norm * v_norm))
+            # Rescale [-1, 1] → [0, 1].
+            score = (cos + 1.0) / 2.0
+            scored.append((r, score))
+        return scored
 
     async def _graph(self, owner_id: str, q: GraphQuery) -> MemoryRecall:
         """Graph traversal — Phase 4D. G11: fail fast, don't silently

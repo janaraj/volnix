@@ -165,10 +165,24 @@ async def build_memory_engine(
     scheme, _, _model = memory_config.embedder.partition(":")
     if scheme == "fts5":
         embedder = FTS5Embedder()
+    elif scheme == "sentence-transformers":
+        # PMF 4B Step 13 — opt-in dense embedder via
+        # ``volnix[embeddings]``. ImportError is re-raised from
+        # ``SentenceTransformersEmbedder.__init__`` with an install
+        # hint when the extras aren't present.
+        from volnix.engines.memory.embedder import SentenceTransformersEmbedder
+
+        model_name = _model or "all-MiniLM-L6-v2"
+        embedder = SentenceTransformersEmbedder(model_name=model_name)
     else:
+        # OpenAI intentionally deferred — no caller asked for it yet
+        # (D13-1). Keep this branch loud: silent fallback to FTS5
+        # would diverge from what the user configured.
         raise NotImplementedError(
-            f"MemoryEngine embedder {scheme!r} lands in Step 13; "
-            f"4B ships FTS5 only. Configured: {memory_config.embedder!r}."
+            f"MemoryEngine embedder {scheme!r} is not shipped. Phase 4B "
+            f"supports `fts5` (default) and `sentence-transformers` (via "
+            f"`volnix[embeddings]`). OpenAI embeddings are a future-phase "
+            f"concern. Configured: {memory_config.embedder!r}."
         )
 
     db = await connection_manager.get_connection(memory_config.storage_db_name)

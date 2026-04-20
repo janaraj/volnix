@@ -70,8 +70,9 @@ class TestUnknownEmbedderRaises:
     ) -> None:
         """Short-circuit contract: when ``enabled=False``, the builder
         returns ``None`` BEFORE touching the embedder. Even a
-        Step-13-only ``sentence-transformers`` value that would raise
-        when enabled must simply return None when disabled."""
+        dense-embedder value that would load a model when enabled
+        must simply return None when disabled — no model download,
+        no import of extras."""
         cfg = MemoryConfig(enabled=False, embedder="sentence-transformers:all-MiniLM-L6-v2")
         out = await build_memory_engine(
             memory_config=cfg,
@@ -81,11 +82,12 @@ class TestUnknownEmbedderRaises:
         )
         assert out is None
 
-    async def test_negative_dense_embedder_raises_not_implemented(
-        self, conn_mgr: ConnectionManager
-    ) -> None:
-        cfg = MemoryConfig(enabled=True, embedder="sentence-transformers:all-MiniLM-L6-v2")
-        with pytest.raises(NotImplementedError, match="Step 13"):
+    async def test_negative_openai_embedder_still_raises(self, conn_mgr: ConnectionManager) -> None:
+        """D13-1: OpenAI intentionally deferred beyond 4B. Builder
+        must still raise a loud NotImplementedError — silent FTS5
+        fallback would diverge from what the user configured."""
+        cfg = MemoryConfig(enabled=True, embedder="openai:text-embedding-3-small")
+        with pytest.raises(NotImplementedError, match="OpenAI"):
             await build_memory_engine(
                 memory_config=cfg,
                 world_seed=1,
@@ -93,17 +95,46 @@ class TestUnknownEmbedderRaises:
                 connection_manager=conn_mgr,
             )
 
-    async def test_negative_openai_embedder_raises_not_implemented(
+
+class TestSentenceTransformersComposition:
+    """PMF 4B Step 13 — composition constructs a real
+    ``SentenceTransformersEmbedder`` when the config opts in.
+
+    Skipped cleanly when the ``embeddings`` extra is missing."""
+
+    async def test_positive_sentence_transformers_builds_engine(
         self, conn_mgr: ConnectionManager
     ) -> None:
-        cfg = MemoryConfig(enabled=True, embedder="openai:text-embedding-3-small")
-        with pytest.raises(NotImplementedError, match="Step 13"):
-            await build_memory_engine(
-                memory_config=cfg,
-                world_seed=1,
-                llm_router=_router(),
-                connection_manager=conn_mgr,
-            )
+        pytest.importorskip("sentence_transformers")
+        from volnix.engines.memory.embedder import SentenceTransformersEmbedder
+
+        cfg = MemoryConfig(enabled=True, embedder="sentence-transformers:all-MiniLM-L6-v2")
+        engine = await build_memory_engine(
+            memory_config=cfg,
+            world_seed=1,
+            llm_router=_router(),
+            connection_manager=conn_mgr,
+        )
+        assert engine is not None
+        assert isinstance(engine._embedder, SentenceTransformersEmbedder)
+        assert engine._embedder.provider_id == "sentence-transformers:all-MiniLM-L6-v2"
+        assert engine._embedder.dimensions == 384
+
+    async def test_positive_sentence_transformers_default_model_when_no_colon(
+        self, conn_mgr: ConnectionManager
+    ) -> None:
+        """D13-3: bare ``sentence-transformers`` (no colon suffix)
+        falls back to ``all-MiniLM-L6-v2``."""
+        pytest.importorskip("sentence_transformers")
+        cfg = MemoryConfig(enabled=True, embedder="sentence-transformers")
+        engine = await build_memory_engine(
+            memory_config=cfg,
+            world_seed=1,
+            llm_router=_router(),
+            connection_manager=conn_mgr,
+        )
+        assert engine is not None
+        assert engine._embedder.provider_id == "sentence-transformers:all-MiniLM-L6-v2"
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,13 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.5",
 ]
+# PMF Plan Phase 4B Step 13 — opt-in dense embedder for MemoryEngine.
+# Enable via: `uv sync --extra embeddings` or `pip install volnix[embeddings]`.
+# Without this extra, the base install stays dep-free and the
+# MemoryEngine falls back to the FTS5 embedder (which is the default).
+embeddings = [
+    "sentence-transformers>=2.2,<4.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/janaraj/volnix"

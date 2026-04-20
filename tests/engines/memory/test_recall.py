@@ -7,7 +7,7 @@ under test (Test Discipline #3). Negative-case first per mode.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -470,46 +470,199 @@ class TestGraphRaises:
 
 
 # ---------------------------------------------------------------------------
-# Non-FTS5 embedder — Step-13 deferred paths
+# Dense embedder — Step 13 active paths (semantic + hybrid over cosine)
 # ---------------------------------------------------------------------------
 
 
-class _DenseStubEmbedder:
-    """Stub with a non-fts5 provider_id — exercises the Step-13
-    deferred code paths in semantic + hybrid."""
+class _DeterministicDenseEmbedder:
+    """Tiny deterministic dense embedder for recall tests. Produces
+    hash-derived fixed-dim vectors so tests are fully repeatable
+    without dragging in the real sentence-transformers package.
+
+    Query-text determinism: ``embed(["foo"])`` always returns the
+    same vector. Different texts → different vectors (via
+    ``hash-of-content`` seeding). Zero-norm edge case avoided by
+    always setting the first component to 1.0."""
+
+    _DIM: ClassVar[int] = 8
+
+    def __init__(self) -> None:
+        self.embed_call_count = 0
+        self.embed_batch_sizes: list[int] = []
 
     @property
     def provider_id(self) -> str:
-        return "sentence-transformers:stub"
+        return "test-dense:stub"
 
     @property
     def dimensions(self) -> int:
-        return 8
+        return self._DIM
 
-    async def embed(self, request: Any) -> Any:  # pragma: no cover — unused
-        raise AssertionError("stub embedder.embed should not be called")
+    async def embed(self, request: Any) -> Any:
+        import hashlib
+
+        from volnix.llm.types import EmbeddingResponse, LLMUsage
+
+        self.embed_call_count += 1
+        self.embed_batch_sizes.append(len(request.texts))
+        vectors: list[list[float]] = []
+        for t in request.texts:
+            digest = hashlib.sha256(t.encode()).digest()
+            # Deterministic 8-float vector derived from digest bytes.
+            vec = [1.0] + [((digest[i] / 255.0) * 2.0 - 1.0) for i in range(self._DIM - 1)]
+            vectors.append(vec)
+        return EmbeddingResponse(
+            vectors=vectors,
+            model="stub",
+            provider="test-dense",
+            usage=LLMUsage(prompt_tokens=len(request.texts)),
+        )
 
 
-class TestDenseEmbedderDeferred:
-    async def test_semantic_raises_with_step_13_message(self) -> None:
+class TestDenseSemanticRecall:
+    """PMF 4B Step 13 — Recall._semantic dense-embedder path.
+
+    Cosine-similarity scoring with on-miss cached embeddings.
+    Deterministic stub embedder makes these tests cheap + repeatable.
+    """
+
+    async def test_positive_semantic_returns_records_ranked_by_similarity(self) -> None:
         db = await create_database(":memory:", wal_mode=False)
         store = SQLiteMemoryStore(db)
         await store.initialize()
-        r = Recall(store=store, embedder=_DenseStubEmbedder())
         try:
-            with pytest.raises(NotImplementedError, match="Step 13"):
-                await r.dispatch("A", SemanticQuery(text="foo"))
+            for i, content in enumerate(["alpha content", "beta content", "gamma"]):
+                await store.insert(_rec(f"r{i}", content, owner_id="A", created_tick=i))
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            result = await r.dispatch("A", SemanticQuery(text="alpha content", top_k=3))
+            # Deterministic: identical text matches score 1.0 cosine —
+            # "alpha content" ranks first.
+            assert result.records[0].content == "alpha content"
+            assert result.total_matched == 3
         finally:
             await db.close()
 
-    async def test_hybrid_raises_with_step_13_message(self) -> None:
+    async def test_negative_semantic_empty_store_returns_empty_recall(self) -> None:
         db = await create_database(":memory:", wal_mode=False)
         store = SQLiteMemoryStore(db)
         await store.initialize()
-        r = Recall(store=store, embedder=_DenseStubEmbedder())
         try:
-            with pytest.raises(NotImplementedError, match="Step 13"):
-                await r.dispatch("A", HybridQuery(semantic_text="foo"))
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            result = await r.dispatch("empty-actor", SemanticQuery(text="anything"))
+            assert result.records == []
+            assert result.total_matched == 0
+            # No records → no embed calls for records. Query isn't
+            # embedded either (early return when candidate list empty).
+            assert embedder.embed_call_count == 0
+        finally:
+            await db.close()
+
+    async def test_positive_semantic_min_score_filters_low_similarity(
+        self,
+    ) -> None:
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db)
+        await store.initialize()
+        try:
+            for i, content in enumerate(["match-me", "unrelated", "also-different"]):
+                await store.insert(_rec(f"r{i}", content, owner_id="A"))
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            # min_score = 0.99 filters out everything except self-match.
+            result = await r.dispatch("A", SemanticQuery(text="match-me", top_k=10, min_score=0.99))
+            # Self-match scores 1.0; others score < 0.99 (hash-derived).
+            assert len(result.records) == 1
+            assert result.records[0].content == "match-me"
+        finally:
+            await db.close()
+
+    async def test_positive_embedding_cache_reuses_on_second_recall(self) -> None:
+        """First recall batch-embeds N records. Second recall should
+        hit the cache and embed only the new query text (1 call)."""
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db)
+        await store.initialize()
+        try:
+            for i in range(5):
+                await store.insert(_rec(f"r{i}", f"content-{i}", owner_id="A"))
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+
+            await r.dispatch("A", SemanticQuery(text="first query", top_k=3))
+            after_first = embedder.embed_call_count
+            batches_after_first = list(embedder.embed_batch_sizes)
+
+            await r.dispatch("A", SemanticQuery(text="second query", top_k=3))
+            after_second = embedder.embed_call_count
+
+            # First recall: 2 embed calls (batch of 5 records + 1 query).
+            assert batches_after_first == [5, 1]
+            # Second recall: cache hits on all 5 records → only the
+            # query text is embedded → 1 additional call.
+            assert after_second - after_first == 1
+        finally:
+            await db.close()
+
+
+class TestDenseHybridRecall:
+    """PMF 4B Step 13 — Recall._hybrid dense-embedder path."""
+
+    async def test_positive_hybrid_ranks_by_combined_score(self) -> None:
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db)
+        await store.initialize()
+        try:
+            # Two records: one old + low importance; one new + high importance.
+            await store.insert(
+                _rec("r-old", "old content", owner_id="A", created_tick=0, importance=0.1)
+            )
+            await store.insert(
+                _rec("r-new", "new content", owner_id="A", created_tick=10, importance=0.9)
+            )
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            result = await r.dispatch(
+                "A",
+                HybridQuery(
+                    semantic_text="something generic",
+                    semantic_weight=0.1,
+                    recency_weight=0.45,
+                    importance_weight=0.45,
+                    top_k=2,
+                ),
+                tick=10,
+            )
+            # Recency + importance dominate; new record ranks first.
+            assert result.records[0].record_id == MemoryRecordId("r-new")
+        finally:
+            await db.close()
+
+    async def test_negative_hybrid_empty_store_returns_empty_recall(self) -> None:
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db)
+        await store.initialize()
+        try:
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            result = await r.dispatch("nobody", HybridQuery(semantic_text="anything"), tick=0)
+            assert result.records == []
+            assert result.total_matched == 0
+        finally:
+            await db.close()
+
+    async def test_positive_hybrid_query_id_includes_provider(self) -> None:
+        """Query ID disambiguates FTS5 vs dense runs for ledger joins."""
+        db = await create_database(":memory:", wal_mode=False)
+        store = SQLiteMemoryStore(db)
+        await store.initialize()
+        try:
+            await store.insert(_rec("r1", "some content", owner_id="A", created_tick=0))
+            embedder = _DeterministicDenseEmbedder()
+            r = Recall(store=store, embedder=embedder)
+            result = await r.dispatch("A", HybridQuery(semantic_text="query"), tick=0)
+            assert "test-dense:stub" in result.query_id
         finally:
             await db.close()
 
