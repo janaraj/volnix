@@ -740,15 +740,28 @@ class AgencyEngine(BaseEngine):
         # which reached a private attribute and defeated the Protocol.
         rotation_policy = getattr(stats, "rotation_policy", "unknown")
 
-        await self.publish(
-            CohortRotationEvent(
-                timestamp=Timestamp(world_time=now, wall_time=now, tick=tick),
-                promoted_ids=list(promoted),
-                demoted_ids=list(demoted),
-                rotation_policy=rotation_policy,
-                tick=tick,
+        # PMF 4B cleanup commit 5 — wrap publish in a narrow
+        # try/except. Pre-cleanup this was unwrapped; a bus failure
+        # would leave cohort state mutated but subscribers
+        # (MemoryEngine) uninformed. Now a failure logs + continues;
+        # the ledger write below still records the rotation as an
+        # audit trail.
+        try:
+            await self.publish(
+                CohortRotationEvent(
+                    timestamp=Timestamp(world_time=now, wall_time=now, tick=tick),
+                    promoted_ids=list(promoted),
+                    demoted_ids=list(demoted),
+                    rotation_policy=rotation_policy,
+                    tick=tick,
+                )
             )
-        )
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.warning(
+                "rotate_cohort: CohortRotationEvent publish failed "
+                "(cohort state still mutated; ledger still records): %s",
+                exc,
+            )
         # Await the ledger write directly (not fire-and-forget) so
         # callers / tests can observe the rotation record immediately
         # after ``rotate_cohort`` returns. Rotations are low-frequency
@@ -1525,6 +1538,36 @@ class AgencyEngine(BaseEngine):
                     cm,
                     evicted_actor_id=evicted,
                 )
+                # PMF 4B cleanup commit 5 — publish CohortRotationEvent
+                # on preempt-promote too, not just scheduled rotations.
+                # Previously MemoryEngine (subscribed to cohort.rotated)
+                # never saw try_promote evictions, so demoted actors
+                # bypassed the memory-eviction/consolidation pathway
+                # entirely (4A+4B audit M4).
+                if evicted is not None:
+                    from datetime import UTC, datetime
+
+                    from volnix.core.events import CohortRotationEvent
+                    from volnix.core.types import Timestamp
+
+                    now = datetime.now(UTC)
+                    tick_now = self._current_tick()
+                    try:
+                        await self.publish(
+                            CohortRotationEvent(
+                                timestamp=Timestamp(world_time=now, wall_time=now, tick=tick_now),
+                                promoted_ids=[actor.actor_id],
+                                demoted_ids=[evicted],
+                                rotation_policy="preempt_promote",
+                                tick=tick_now,
+                            )
+                        )
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        logger.warning(
+                            "try_promote: CohortRotationEvent publish "
+                            "failed (cohort state still mutated): %s",
+                            exc,
+                        )
 
         # Active-NPC branch — catch both entry points (``notify`` calls
         # this method directly; ``activate_for_event`` routes through it

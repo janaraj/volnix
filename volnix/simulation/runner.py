@@ -459,6 +459,14 @@ class SimulationRunner:
                     float(self._current_tick) * self._config.tick_interval_seconds
                 )
 
+            # PMF 4B cleanup commit 5 — drive cohort rotation on the
+            # configured cadence. Pre-cleanup ``agency.rotate_cohort``
+            # had no production caller; every 4A × 4B seam
+            # (evict / consolidate-on-demote / hydrate-on-promote)
+            # was dark in live runs. This wiring makes those seams
+            # fire at ``cohort.rotation_interval_ticks`` cadence.
+            await self._maybe_rotate_cohort()
+
         return RunResult(
             reason=self._stop_reason.value if self._stop_reason else "unknown",
             runner_kind="simulation",
@@ -570,6 +578,52 @@ class SimulationRunner:
             self._consecutive_idle_ticks += 1
         else:
             self._consecutive_idle_ticks = 0
+
+    async def _maybe_rotate_cohort(self) -> None:
+        """PMF 4B cleanup commit 5 — drive ``agency.rotate_cohort`` on
+        the configured cadence.
+
+        Fires when:
+          * agency is wired AND
+          * agency has a ``rotate_cohort`` method AND
+          * current_tick > 0 (skip tick 0 — no activations yet) AND
+          * current_tick % rotation_interval_ticks == 0.
+
+        A rotation failure logs and continues; one bad rotation
+        must not kill the sim loop.
+        """
+        if self._agency is None:
+            return
+        # ``rotate_cohort`` exists on the real AgencyEngine; AsyncMock
+        # test doubles may not declare it. Same for the typed-config
+        # path. Type-check every attribute because the existing test
+        # suite passes plain ``AsyncMock()`` agencies that
+        # "have everything" — attribute access there returns more
+        # AsyncMocks, which would break the ``<= 0`` check and the
+        # modulo below.
+        rotate = getattr(self._agency, "rotate_cohort", None)
+        if not callable(rotate):
+            return
+        typed_cfg = getattr(self._agency, "_typed_config", None)
+        cohort_cfg = getattr(typed_cfg, "cohort", None) if typed_cfg else None
+        if cohort_cfg is None:
+            return
+        max_active = getattr(cohort_cfg, "max_active", None)
+        if not isinstance(max_active, int):
+            return  # cohort disabled or test-double noise
+        interval = getattr(cohort_cfg, "rotation_interval_ticks", 0)
+        if not isinstance(interval, int) or interval <= 0:
+            return
+        if self._current_tick == 0 or self._current_tick % interval != 0:
+            return
+        try:
+            await rotate(self._current_tick)
+        except Exception as exc:  # noqa: BLE001 — rotation failure must not halt the sim
+            logger.warning(
+                "SimulationRunner: rotate_cohort failed at tick %d: %s",
+                self._current_tick,
+                exc,
+            )
 
     def _get_next_scheduled_time(self) -> float | None:
         """Earliest scheduled time across agency and animator, or None."""

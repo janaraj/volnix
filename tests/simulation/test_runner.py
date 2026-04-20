@@ -971,3 +971,85 @@ class TestAnimatorGate:
         # total = 1 initial + 3 from notify responses = 4 pipeline events.
         assert runner._organic_events_generated == 3
         assert runner.total_events_processed == 4
+
+
+# ---------------------------------------------------------------------------
+# PMF 4B cleanup commit 5 — cohort-rotation drive
+# ---------------------------------------------------------------------------
+
+
+class TestCohortRotationDrive:
+    """Runner must call ``agency.rotate_cohort(tick)`` at
+    ``cohort.rotation_interval_ticks`` cadence when cohort is wired.
+    Pre-cleanup, ``rotate_cohort`` had no production caller; this
+    locks the fix."""
+
+    async def test_negative_no_agency_does_not_call_rotate(self) -> None:
+        runner = _make_runner(agency_engine=None)
+        # Should not raise.
+        await runner._maybe_rotate_cohort()
+
+    async def test_negative_agency_without_rotate_method_skipped(self) -> None:
+        agency = AsyncMock(spec=[])  # no rotate_cohort attr
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 10
+        await runner._maybe_rotate_cohort()  # must not raise
+        # Nothing to assert beyond "no crash".
+
+    async def test_negative_cohort_disabled_skipped(self) -> None:
+        """``cohort.max_active=None`` means cohort is disabled for
+        this world — rotation must not fire even if agency has the
+        method."""
+        agency = AsyncMock()
+        agency.rotate_cohort = AsyncMock()
+        # Typed config with max_active=None → cohort disabled.
+        cohort_cfg = type("C", (), {"max_active": None, "rotation_interval_ticks": 10})()
+        agency._typed_config = type("TC", (), {"cohort": cohort_cfg})()
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 10
+        await runner._maybe_rotate_cohort()
+        agency.rotate_cohort.assert_not_awaited()
+
+    async def test_negative_zero_tick_does_not_rotate(self) -> None:
+        """Tick 0 is pre-any-activation; rotating is meaningless."""
+        agency = AsyncMock()
+        agency.rotate_cohort = AsyncMock()
+        cohort_cfg = type("C", (), {"max_active": 10, "rotation_interval_ticks": 5})()
+        agency._typed_config = type("TC", (), {"cohort": cohort_cfg})()
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 0
+        await runner._maybe_rotate_cohort()
+        agency.rotate_cohort.assert_not_awaited()
+
+    async def test_negative_mid_interval_does_not_rotate(self) -> None:
+        agency = AsyncMock()
+        agency.rotate_cohort = AsyncMock()
+        cohort_cfg = type("C", (), {"max_active": 10, "rotation_interval_ticks": 5})()
+        agency._typed_config = type("TC", (), {"cohort": cohort_cfg})()
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 7  # not a multiple of 5
+        await runner._maybe_rotate_cohort()
+        agency.rotate_cohort.assert_not_awaited()
+
+    async def test_positive_interval_match_rotates_with_current_tick(self) -> None:
+        agency = AsyncMock()
+        agency.rotate_cohort = AsyncMock()
+        cohort_cfg = type("C", (), {"max_active": 10, "rotation_interval_ticks": 5})()
+        agency._typed_config = type("TC", (), {"cohort": cohort_cfg})()
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 15  # multiple of 5
+        await runner._maybe_rotate_cohort()
+        agency.rotate_cohort.assert_awaited_once_with(15)
+
+    async def test_negative_rotate_failure_does_not_halt_sim(self) -> None:
+        """A rotation raising must log + continue. The sim loop must
+        not die because of a single bad rotation."""
+        agency = AsyncMock()
+        agency.rotate_cohort = AsyncMock(side_effect=RuntimeError("boom"))
+        cohort_cfg = type("C", (), {"max_active": 10, "rotation_interval_ticks": 5})()
+        agency._typed_config = type("TC", (), {"cohort": cohort_cfg})()
+        runner = _make_runner(agency_engine=agency)
+        runner._current_tick = 10
+        # Must not raise.
+        await runner._maybe_rotate_cohort()
+        agency.rotate_cohort.assert_awaited_once()
