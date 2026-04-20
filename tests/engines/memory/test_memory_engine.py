@@ -413,14 +413,80 @@ class TestEvict:
         assert evictions[0].actor_id == ActorId("npc-1")
 
     async def test_evict_same_actor_twice_ledgers_both(self, engine_bundle) -> None:
-        # Idempotency edge case — evict has no store side-effect
-        # in Step 7, only ledger write. Calling twice must produce
-        # two entries, not dedupe.
+        # Idempotency check — eviction is a signal, not a deduped
+        # operation. Two demote signals produce two ledger rows.
         engine, ledger, _ = engine_bundle
         await engine.evict(ActorId("npc-1"))
         await engine.evict(ActorId("npc-1"))
         evictions = ledger.of_type(MemoryEvictionEntry)
         assert len(evictions) == 2
+
+    async def test_negative_evict_trims_episodic_to_half_cap(self, engine_bundle) -> None:
+        """Cleanup commit 2: ``evict()`` is no longer a pure ledger
+        no-op — it aggressively trims the demoted actor's tier-2
+        episodic buffer to half the configured cap. Assert the store
+        actually shrinks."""
+        engine, _ledger, _ = engine_bundle
+        # Write more than half the cap (config default: 500; half = 250).
+        # The fixture's default cap is the config default.
+        cap_half = max(1, engine._memory_config.max_episodic_per_actor // 2)
+        # Write cap_half + 10 records so evict has something to trim.
+        for i in range(cap_half + 10):
+            await engine.remember(
+                caller=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-1",
+                write=_write(f"ep-{i}"),
+                tick=i,
+            )
+        before = await engine._store.list_by_owner("npc-1", kind="episodic")
+        await engine.evict(ActorId("npc-1"))
+        after = await engine._store.list_by_owner("npc-1", kind="episodic")
+        assert len(after) <= cap_half
+        assert len(after) < len(before)
+
+    async def test_negative_evict_preserves_tier1_fixtures(self, engine_bundle) -> None:
+        """Tier-1 records are immutable pack-authored beliefs; evict
+        must never drop them. ``prune_oldest_episodic`` at the store
+        level already excludes tier-1 — this test guards that
+        invariant via the engine surface."""
+        engine, _ledger, _ = engine_bundle
+        from volnix.core.memory_types import MemoryRecord, content_hash_of
+        from volnix.core.types import MemoryRecordId
+
+        # Direct-store insert because the engine's remember() creates
+        # tier-2 episodic only. Tier-1 records arrive via the
+        # tier1_loader path (Step 9).
+        await engine._store.insert(
+            MemoryRecord(
+                record_id=MemoryRecordId("tier1:npc-1:0"),
+                scope="actor",
+                owner_id="npc-1",
+                kind="episodic",
+                tier="tier1",
+                source="pack_fixture",
+                content="pack belief",
+                content_hash=content_hash_of("pack belief"),
+                importance=0.9,
+                tags=[],
+                created_tick=0,
+                consolidated_from=None,
+            )
+        )
+        # Plenty of tier-2 so evict has lots to work with.
+        for i in range(20):
+            await engine.remember(
+                caller=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-1",
+                write=_write(f"ep-{i}"),
+                tick=i + 10,
+            )
+        await engine.evict(ActorId("npc-1"))
+        rows = await engine._store.list_by_owner("npc-1", kind="episodic")
+        tier_ones = [r for r in rows if r.tier == "tier1"]
+        assert len(tier_ones) == 1
+        assert str(tier_ones[0].record_id) == "tier1:npc-1:0"
 
 
 class TestHydrate:
@@ -432,13 +498,25 @@ class TestHydrate:
         assert hydrations[0].actor_id == ActorId("npc-1")
 
     async def test_hydrate_same_actor_twice_ledgers_both(self, engine_bundle) -> None:
-        # Same idempotency check as evict — hydrate is signal-only
-        # in Step 7, no dedup logic.
         engine, ledger, _ = engine_bundle
         await engine.hydrate(ActorId("npc-1"))
         await engine.hydrate(ActorId("npc-1"))
         hydrations = ledger.of_type(MemoryHydrationEntry)
         assert len(hydrations) == 2
+
+    async def test_negative_hydrate_with_fts5_embedder_is_noop_beyond_ledger(
+        self, engine_bundle
+    ) -> None:
+        """FTS5 embedder has no vectors to cache — hydrate lands the
+        ledger entry but performs no store work. Proves the fast-path
+        exit is taken for the default embedder."""
+        engine, _ledger, _ = engine_bundle
+        from volnix.engines.memory.embedder import FTS5Embedder
+
+        assert isinstance(engine._embedder, FTS5Embedder)
+        # Hydrate with no records — must not raise even though there's
+        # nothing to warm.
+        await engine.hydrate(ActorId("npc-empty"))
 
 
 # ---------------------------------------------------------------------------

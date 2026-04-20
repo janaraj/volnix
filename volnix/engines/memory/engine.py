@@ -279,14 +279,85 @@ class MemoryEngine(BaseEngine):
         return result
 
     async def evict(self, actor_id: ActorId) -> None:
-        """Flush-on-demote signal. Step 7 writes the ledger entry
-        only (D7-9); Step 8 wires the actual consolidation trigger
-        based on ``config.memory.consolidation_triggers``."""
+        """Flush-on-demote signal. Aggressively trims the actor's
+        tier-2 episodic buffer to half the configured cap — the
+        cohort considers them dormant, so freeing memory footprint
+        dominates over preserving breadth of recall. Tier-1 records
+        (immutable pack-authored beliefs) are exempt per the store's
+        trimming rules. Consolidation is a separate concern driven by
+        ``consolidation_triggers`` in ``_on_cohort_rotated``.
+
+        Writes ``MemoryEvictionEntry`` to the ledger regardless of
+        how many records were actually dropped — the ledger row is
+        the "eviction intent" signal, trimming is the mechanism.
+        """
+        keep = max(1, self._memory_config.max_episodic_per_actor // 2)
+        try:
+            pruned = await self._store.prune_oldest_episodic(str(actor_id), keep=keep)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MemoryEngine.evict: prune failed for %s: %s", actor_id, exc)
+            pruned = []
         await self._record_to_ledger(MemoryEvictionEntry(actor_id=actor_id))
+        if pruned:
+            logger.debug(
+                "MemoryEngine.evict: trimmed %d episodic records for %s",
+                len(pruned),
+                actor_id,
+            )
 
     async def hydrate(self, actor_id: ActorId) -> None:
-        """Warm-on-promote signal. Step 7 writes the ledger entry
-        only (D7-10 — lazy-on-recall is the default)."""
+        """Warm-on-promote signal. Pre-embeds the actor's most
+        recent semantic+episodic records so the first post-promote
+        recall hits a warm cache. When using ``FTS5Embedder``, this
+        is a no-op (no vectors to cache) — the ledger entry still
+        lands so operators can tell "hydrate fired, just nothing to
+        warm" apart from "hydrate never fired".
+
+        Lazy-on-first-recall remains the default (D7-10);
+        ``hydrate_on_promote=True`` opts an actor into this eager
+        path from ``_on_cohort_rotated``.
+        """
+        from volnix.engines.memory.embedder import FTS5Embedder
+        from volnix.llm.types import EmbeddingRequest
+
+        if not isinstance(self._embedder, FTS5Embedder):
+            try:
+                records = await self._store.list_by_owner(
+                    str(actor_id),
+                    limit=self._memory_config.default_recall_top_k,
+                )
+                if records:
+                    # Embed will populate the content-hash cache via
+                    # store hooks on the dense-recall code path; here
+                    # we force-seed the cache directly to avoid
+                    # depending on a recall firing first.
+                    provider_id = self._embedder.provider_id
+                    # Cache misses only — avoid re-embedding already
+                    # cached content.
+                    misses_texts: list[str] = []
+                    miss_records: list = []
+                    for rec in records:
+                        cached = await self._store.embedding_cache_get(
+                            rec.content_hash, provider_id
+                        )
+                        if cached is None:
+                            misses_texts.append(rec.content)
+                            miss_records.append(rec)
+                    if misses_texts:
+                        import numpy as np
+
+                        resp = await self._embedder.embed(EmbeddingRequest(texts=misses_texts))
+                        for rec, vec in zip(miss_records, resp.vectors, strict=True):
+                            blob = np.asarray(vec, dtype=np.float32).tobytes()
+                            await self._store.embedding_cache_put(
+                                rec.content_hash, provider_id, blob
+                            )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "MemoryEngine.hydrate: cache warm failed for %s: %s",
+                    actor_id,
+                    exc,
+                )
         await self._record_to_ledger(MemoryHydrationEntry(actor_id=actor_id))
 
     # ------------------------------------------------------------------

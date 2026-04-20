@@ -123,6 +123,8 @@ class SQLiteMemoryStore:
         *,
         fts_tokenizer: str = DEFAULT_FTS_TOKENIZER,
         embedding_cache_enabled: bool = True,
+        max_episodic_per_owner: int | None = None,
+        max_semantic_per_owner: int | None = None,
     ) -> None:
         if db is None:
             raise ValueError(
@@ -137,6 +139,15 @@ class SQLiteMemoryStore:
         # exercise the embedder path on every call, and as a debug
         # knob when cache-invalidation issues are suspected.
         self._cache_enabled = embedding_cache_enabled
+        # Ring-buffer caps (cleanup commit 2). ``insert()`` enforces
+        # them synchronously: on overflow, the oldest episodic or the
+        # lowest-importance semantic record is removed. ``None`` keeps
+        # the uncapped behavior (useful for tests that need to
+        # observe intermediate states). Configured from
+        # ``MemoryConfig.max_episodic_per_actor`` /
+        # ``max_semantic_per_actor`` at composition time.
+        self._max_episodic_per_owner = max_episodic_per_owner
+        self._max_semantic_per_owner = max_semantic_per_owner
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -286,6 +297,106 @@ class SQLiteMemoryStore:
             await self._db.execute(
                 f"INSERT INTO {TABLE_FTS} (record_id, content) VALUES (?, ?)",
                 (str(record.record_id), record.content),
+            )
+
+        # Ring-buffer enforcement (cleanup commit 2). Runs AFTER the
+        # insert committed, not inside the transaction, so the write
+        # is observable before the trim — the "eventually consistent"
+        # semantics are: any observer that reads mid-overflow sees
+        # cap+1 records, then cap. Tier-1 (pack_fixture) records are
+        # exempt from trimming — they are immutable pack-authored
+        # beliefs and must never be silently dropped.
+        if (
+            record.kind == "episodic"
+            and self._max_episodic_per_owner is not None
+            and record.tier != "tier1"
+        ):
+            await self._trim_episodic_overflow(record.owner_id)
+        elif (
+            record.kind == "semantic"
+            and self._max_semantic_per_owner is not None
+            and record.tier != "tier1"
+        ):
+            await self._trim_semantic_overflow(record.owner_id)
+
+    async def _trim_episodic_overflow(self, owner_id: str) -> None:
+        """If tier-2 episodic count for ``owner_id`` exceeds the cap,
+        drop the oldest tier-2 episodic records until it doesn't.
+        Tier-1 records are never pruned."""
+        assert self._max_episodic_per_owner is not None
+        count_row = await self._db.fetchone(
+            f"""
+            SELECT COUNT(*) AS n FROM {TABLE_RECORDS}
+            WHERE owner_id = ? AND kind = 'episodic' AND tier != 'tier1'
+            """,
+            (owner_id,),
+        )
+        count = int(count_row["n"]) if count_row else 0
+        if count <= self._max_episodic_per_owner:
+            return
+        # Select the oldest overflow rows explicitly + delete by ID.
+        overflow = count - self._max_episodic_per_owner
+        rows = await self._db.fetchall(
+            f"""
+            SELECT record_id FROM {TABLE_RECORDS}
+            WHERE owner_id = ? AND kind = 'episodic' AND tier != 'tier1'
+            ORDER BY created_tick ASC, record_id ASC
+            LIMIT ?
+            """,
+            (owner_id, overflow),
+        )
+        if not rows:
+            return
+        ids = [r["record_id"] for r in rows]
+        placeholders = ",".join("?" * len(ids))
+        async with self._db.transaction():
+            await self._db.execute(
+                f"DELETE FROM {TABLE_RECORDS} WHERE record_id IN ({placeholders})",
+                tuple(ids),
+            )
+            await self._db.execute(
+                f"DELETE FROM {TABLE_FTS} WHERE record_id IN ({placeholders})",
+                tuple(ids),
+            )
+
+    async def _trim_semantic_overflow(self, owner_id: str) -> None:
+        """If tier-2 semantic count for ``owner_id`` exceeds the cap,
+        drop the lowest-importance tier-2 semantic records until it
+        doesn't. Ties broken by oldest-first, then record_id ASC for
+        determinism. Tier-1 records are never pruned."""
+        assert self._max_semantic_per_owner is not None
+        count_row = await self._db.fetchone(
+            f"""
+            SELECT COUNT(*) AS n FROM {TABLE_RECORDS}
+            WHERE owner_id = ? AND kind = 'semantic' AND tier != 'tier1'
+            """,
+            (owner_id,),
+        )
+        count = int(count_row["n"]) if count_row else 0
+        if count <= self._max_semantic_per_owner:
+            return
+        overflow = count - self._max_semantic_per_owner
+        rows = await self._db.fetchall(
+            f"""
+            SELECT record_id FROM {TABLE_RECORDS}
+            WHERE owner_id = ? AND kind = 'semantic' AND tier != 'tier1'
+            ORDER BY importance ASC, created_tick ASC, record_id ASC
+            LIMIT ?
+            """,
+            (owner_id, overflow),
+        )
+        if not rows:
+            return
+        ids = [r["record_id"] for r in rows]
+        placeholders = ",".join("?" * len(ids))
+        async with self._db.transaction():
+            await self._db.execute(
+                f"DELETE FROM {TABLE_RECORDS} WHERE record_id IN ({placeholders})",
+                tuple(ids),
+            )
+            await self._db.execute(
+                f"DELETE FROM {TABLE_FTS} WHERE record_id IN ({placeholders})",
+                tuple(ids),
             )
 
     # ------------------------------------------------------------------

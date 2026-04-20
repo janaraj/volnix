@@ -414,6 +414,135 @@ class TestEmbeddingCache:
         await store.embedding_cache_put("a" * 64, "fts5", b"second")
         assert await store.embedding_cache_get("a" * 64, "fts5") == b"second"
 
+    async def test_negative_cache_disabled_get_returns_none_even_with_row(self, db) -> None:
+        """Cleanup commit 1: ``embedding_cache_enabled=False`` makes
+        ``get`` return None unconditionally, regardless of what's in
+        the DB. Proves the config gate is honored."""
+        # First populate via a cache-enabled store.
+        store_on = SQLiteMemoryStore(db, embedding_cache_enabled=True)
+        await store_on.initialize()
+        await store_on.embedding_cache_put("a" * 64, "fts5", b"present")
+        assert await store_on.embedding_cache_get("a" * 64, "fts5") == b"present"
+        # Now a second store on the same DB with cache disabled.
+        store_off = SQLiteMemoryStore(db, embedding_cache_enabled=False)
+        assert await store_off.embedding_cache_get("a" * 64, "fts5") is None
+
+    async def test_negative_cache_disabled_put_is_noop(self, db) -> None:
+        store_off = SQLiteMemoryStore(db, embedding_cache_enabled=False)
+        await store_off.initialize()
+        await store_off.embedding_cache_put("a" * 64, "fts5", b"should-not-land")
+        # Re-enable and confirm nothing was written.
+        store_on = SQLiteMemoryStore(db, embedding_cache_enabled=True)
+        assert await store_on.embedding_cache_get("a" * 64, "fts5") is None
+
+
+# ---------------------------------------------------------------------------
+# Ring-buffer overflow enforcement (cleanup commit 2)
+# ---------------------------------------------------------------------------
+
+
+class TestRingBufferOverflow:
+    """``max_episodic_per_owner`` / ``max_semantic_per_owner`` in the
+    store constructor enforce a hard cap per owner. Overflow is
+    resolved synchronously on insert — oldest episodic, lowest-
+    importance semantic. Tier-1 records are exempt.
+    """
+
+    async def test_negative_episodic_overflow_drops_oldest(self, db) -> None:
+        store = SQLiteMemoryStore(db, max_episodic_per_owner=3)
+        await store.initialize()
+        for i in range(5):
+            await store.insert(
+                _record(
+                    record_id=f"r-{i}",
+                    owner_id="npc-cap",
+                    kind="episodic",
+                    content=f"c-{i}",
+                    created_tick=i,
+                )
+            )
+        rows = await store.list_by_owner("npc-cap", kind="episodic")
+        assert len(rows) == 3
+        # Newest 3 preserved (ticks 2, 3, 4); oldest 2 (ticks 0, 1) dropped.
+        ticks = sorted(r.created_tick for r in rows)
+        assert ticks == [2, 3, 4]
+
+    async def test_negative_semantic_overflow_drops_lowest_importance(self, db) -> None:
+        store = SQLiteMemoryStore(db, max_semantic_per_owner=2)
+        await store.initialize()
+        for i, imp in enumerate([0.1, 0.9, 0.5, 0.3]):
+            await store.insert(
+                _record(
+                    record_id=f"s-{i}",
+                    owner_id="npc-cap",
+                    kind="semantic",
+                    content=f"c-{i}",
+                    importance=imp,
+                    created_tick=i,
+                )
+            )
+        rows = await store.list_by_owner("npc-cap", kind="semantic")
+        assert len(rows) == 2
+        kept_imps = sorted(r.importance for r in rows)
+        # Kept the two highest-importance (0.5, 0.9); dropped 0.1 + 0.3.
+        assert kept_imps == [0.5, 0.9]
+
+    async def test_negative_tier1_records_never_trimmed(self, db) -> None:
+        """Tier-1 pack fixtures are immutable beliefs. Overflow
+        enforcement must skip them — only tier-2 records get
+        trimmed."""
+        store = SQLiteMemoryStore(db, max_episodic_per_owner=2)
+        await store.initialize()
+        # 3 tier-1 records (immutable) — should all survive.
+        for i in range(3):
+            await store.insert(
+                _record(
+                    record_id=f"t1-{i}",
+                    owner_id="npc-cap",
+                    kind="episodic",
+                    tier="tier1",
+                    source="pack_fixture",
+                    content=f"fixture {i}",
+                    created_tick=i,
+                )
+            )
+        # 3 tier-2 records — only 2 most-recent should survive.
+        for i in range(3):
+            await store.insert(
+                _record(
+                    record_id=f"t2-{i}",
+                    owner_id="npc-cap",
+                    kind="episodic",
+                    content=f"runtime {i}",
+                    created_tick=10 + i,
+                )
+            )
+        rows = await store.list_by_owner("npc-cap", kind="episodic")
+        tier_counts = {"tier1": 0, "tier2": 0}
+        for r in rows:
+            tier_counts[r.tier] += 1
+        assert tier_counts["tier1"] == 3, "tier-1 must never be trimmed"
+        assert tier_counts["tier2"] == 2, "tier-2 overflow trimmed to cap"
+
+    async def test_positive_no_cap_unbounded_growth(self, db) -> None:
+        """When caps are None (default test fixture), no trim happens.
+        Proves the feature is opt-in and backwards-compatible with
+        tests that need to observe N records."""
+        store = SQLiteMemoryStore(db)  # no caps
+        await store.initialize()
+        for i in range(10):
+            await store.insert(
+                _record(
+                    record_id=f"r-{i}",
+                    owner_id="npc-unbounded",
+                    kind="episodic",
+                    content=f"c-{i}",
+                    created_tick=i,
+                )
+            )
+        rows = await store.list_by_owner("npc-unbounded", kind="episodic")
+        assert len(rows) == 10
+
 
 # ---------------------------------------------------------------------------
 # Protocol conformance

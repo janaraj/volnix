@@ -190,6 +190,8 @@ async def build_memory_engine(
         db,
         fts_tokenizer=memory_config.fts_tokenizer,
         embedding_cache_enabled=memory_config.embedder_cache_enabled,
+        max_episodic_per_owner=memory_config.max_episodic_per_actor,
+        max_semantic_per_owner=memory_config.max_semantic_per_actor,
     )
 
     consolidator = Consolidator(
