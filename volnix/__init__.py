@@ -14,8 +14,6 @@ are sorted alphabetically by module path for linter compatibility.
 Additional exports land in later Phase 4C steps — see
 ``internal_docs/pmf/phase-4c-platform-hardening.md`` for the roadmap.
 Reserved for future steps (not yet exported):
-    Step 4 — Session, SessionId, SessionStatus, SessionType,
-             Session{Started,Ended,Resumed}Event
     Step 5 — SessionManager, SessionNotFoundError
     Step 9 — TrajectoryFieldNotFound
     Step 10 — ObservationQuery, UnifiedTimeline, TrajectoryPoint,
@@ -49,7 +47,12 @@ from volnix.core.errors import (
     PackNotFoundError,
     VolnixError,
 )
-from volnix.core.events import WorldEvent
+from volnix.core.events import (
+    SessionEndedEvent,
+    SessionResumedEvent,
+    SessionStartedEvent,
+    WorldEvent,
+)
 from volnix.core.memory_types import (
     MemoryQuery,
     MemoryRecall,
@@ -62,6 +65,7 @@ from volnix.core.protocols import (
     NPCActivatorProtocol,
     PermissionEngineProtocol,
 )
+from volnix.core.session import Session, SessionStatus, SessionType
 from volnix.core.types import (
     ActorId,
     ActorType,
@@ -70,6 +74,7 @@ from volnix.core.types import (
     MemoryRecordId,
     RunId,
     ServiceId,
+    SessionId,
     SnapshotId,
     Timestamp,
     ToolName,
@@ -97,6 +102,13 @@ __all__ = [
     "MemoryRecall",
     "MemoryScope",
     "MemoryWrite",
+    "Session",
+    "SessionEndedEvent",
+    "SessionId",
+    "SessionResumedEvent",
+    "SessionStartedEvent",
+    "SessionStatus",
+    "SessionType",
     "ActorId",
     "ActorType",
     "EntityId",

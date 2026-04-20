@@ -9,7 +9,11 @@ Re-exports the primary public API surface::
     from volnix.llm import LLMRouter, LLMRequest, LLMResponse, ProviderRegistry
 """
 
-from volnix.llm.conversation import ConversationManager, ConversationTurn, Session
+from volnix.llm.conversation import (
+    ConversationManager,
+    ConversationTurn,
+    LLMConversationSession,
+)
 from volnix.llm.provider import LLMProvider
 from volnix.llm.providers.acp_client import ACPClientProvider
 from volnix.llm.providers.cli_subprocess import CLISubprocessProvider
@@ -27,6 +31,7 @@ __all__ = [
     "ConversationTurn",
     "EnvVarResolver",
     "FileResolver",
+    "LLMConversationSession",
     "LLMProvider",
     "LLMRequest",
     "LLMResponse",
@@ -36,6 +41,5 @@ __all__ = [
     "ProviderRegistry",
     "ProviderType",
     "SecretResolver",
-    "Session",
     "UsageTracker",
 ]

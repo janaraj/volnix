@@ -2,7 +2,11 @@
 
 import pytest
 
-from volnix.llm.conversation import ConversationManager, ConversationTurn, Session
+from volnix.llm.conversation import (
+    ConversationManager,
+    ConversationTurn,
+    LLMConversationSession,
+)
 from volnix.llm.providers.mock import MockLLMProvider
 from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage
 
@@ -155,7 +159,7 @@ async def test_multi_turn_context_included():
 
 @pytest.mark.asyncio
 async def test_session_dataclass():
-    session = Session(session_id="test", system_prompt="prompt")
+    session = LLMConversationSession(session_id="test", system_prompt="prompt")
     assert session.session_id == "test"
     assert session.system_prompt == "prompt"
     assert session.history == []

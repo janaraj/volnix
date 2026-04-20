@@ -173,6 +173,7 @@ def test_entry_registry_all_types():
         FeedbackPromotionEntry,
         FeedbackSyncEntry,
         FeedbackSyncUpdateEntry,
+        LLMUtteranceEntry,
         MemoryAccessDeniedEntry,
         MemoryConsolidationEntry,
         MemoryEvictionEntry,
@@ -181,6 +182,9 @@ def test_entry_registry_all_types():
         MemoryWriteEntry,
         ProfileInferenceEntry,
         ServiceResolutionEntry,
+        SessionCheckpointEntry,
+        SessionEndedEntry,
+        SessionStartedEntry,
         SubscriptionMatchEntry,
         ToolLoopStepEntry,
         WorldCompilationEntry,
@@ -190,6 +194,8 @@ def test_entry_registry_all_types():
         "pipeline_step": PipelineStepEntry,
         "state_mutation": StateMutationEntry,
         "llm_call": LLMCallEntry,
+        # PMF Plan Phase 4C Step 4 — LLM utterance skeleton.
+        "llm.utterance": LLMUtteranceEntry,
         "gateway_request": GatewayRequestEntry,
         "validation": ValidationEntry,
         "engine_lifecycle": EngineLifecycleEntry,
@@ -218,6 +224,10 @@ def test_entry_registry_all_types():
         "memory_eviction": MemoryEvictionEntry,
         "memory_hydration": MemoryHydrationEntry,
         "memory_access_denied": MemoryAccessDeniedEntry,
+        # PMF Plan Phase 4C Step 4 — session lifecycle.
+        "session.started": SessionStartedEntry,
+        "session.ended": SessionEndedEntry,
+        "session.checkpoint": SessionCheckpointEntry,
     }
     assert ENTRY_REGISTRY == expected
 

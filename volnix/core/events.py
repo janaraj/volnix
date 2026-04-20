@@ -30,6 +30,7 @@ from volnix.core.types import (
     FidelityTier,
     PolicyId,
     ServiceId,
+    SessionId,
     Timestamp,
     ToolName,
     WorldId,
@@ -610,3 +611,72 @@ class CohortRotationEvent(Event):
     demoted_ids: list[ActorId] = Field(default_factory=list)
     rotation_policy: str = ""
     tick: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Session lifecycle events (PMF Plan Phase 4C Step 4)
+# ---------------------------------------------------------------------------
+
+
+class SessionStartedEvent(Event):
+    """Emitted by ``SessionManager.start()`` (Step 5) when a new
+    platform Session begins.
+
+    Attributes:
+        session_id: The new session's identifier.
+        world_id: The world the session was started against.
+        session_type: ``bounded`` | ``open`` | ``resumable``.
+        seed_strategy: ``inherit`` | ``fresh`` | ``explicit``.
+    """
+
+    event_type: str = "session.started"
+    session_id: SessionId
+    world_id: WorldId
+    session_type: str
+    seed_strategy: str
+
+
+class SessionEndedEvent(Event):
+    """Emitted when a session transitions to a terminal status
+    (``COMPLETED`` / ``ABANDONED``). Consumers subscribed via
+    ``SessionManager.register_on_session_end(cb)`` (Step 5) receive
+    both the callback AND this bus event — not either/or (PMF Plan
+    D4 audit-fold).
+
+    Attributes:
+        session_id: The session that ended.
+        status: Terminal status — ``completed`` or ``abandoned``.
+        end_tick: Logical tick at session end. ``None`` when a
+            paused session is abandoned across a process restart
+            before a new run began (review M8 / D4k).
+        reason: Optional human-readable reason (e.g. "goal_reached",
+            "budget_exhausted", "manual").
+    """
+
+    event_type: str = "session.ended"
+    session_id: SessionId
+    status: str
+    end_tick: int | None = None
+    reason: str = ""
+
+
+class SessionResumedEvent(Event):
+    """Emitted by ``SessionManager.resume()`` (Step 5) when a paused
+    session transitions back to ``ACTIVE``.
+
+    Carries ``world_id`` for bus-consumer symmetry with
+    ``SessionStartedEvent`` (review M5): a subscriber filtering by
+    world shouldn't need a state lookup to route resume events.
+
+    Attributes:
+        session_id: The resumed session's identifier.
+        world_id: The world the session belongs to.
+        resumed_at_tick: Logical tick at resumption — equal to the
+            session's preserved ``start_tick`` on first resume,
+            advanced by prior runs on subsequent resumes.
+    """
+
+    event_type: str = "session.resumed"
+    session_id: SessionId
+    world_id: WorldId
+    resumed_at_tick: int

@@ -8,19 +8,24 @@ Pydantic model carrying a timestamp and structured metadata.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from volnix.core.memory_types import MemoryScope
+from volnix.core.session import SessionCheckpointKind
 from volnix.core.types import (
+    ActivationId,
     ActorId,
     EntityId,
     EnvelopeId,
     EventId,
     RunId,
+    SessionId,
     SnapshotId,
+    WorldId,
 )
 
 # ---------------------------------------------------------------------------
@@ -173,6 +178,75 @@ class LLMCallEntry(LedgerEntry):
     success: bool = True
     engine_name: str = ""
     use_case: str = ""
+
+
+class LLMUtteranceEntry(LedgerEntry):
+    """Records a single LLM message exchange (prompt, response,
+    system, or tool-result). Schema defined in Step 4; write sites
+    wired in Step 7 — gated by
+    ``memory.utterance_journal_enabled: bool = False`` (default OFF
+    for privacy).
+
+    Feeds the ``ReplayLLMProvider`` (Step 8): every activation can
+    be replayed bit-identically from this journal using
+    ``(session_id, actor_id, activation_id, sequence)`` as the
+    lookup key. Uniqueness guarantee:
+
+    - ``activation_id`` is unique per activation (uuid5-derived in
+      Step 7 from ``(session_id, actor_id, tick, seq)``).
+    - ``sequence`` is monotonic per-``activation_id`` — NOT globally
+      unique. Two parallel activations cannot collide because their
+      ``activation_id`` values differ.
+
+    Attributes:
+        actor_id: The actor whose activation produced this utterance.
+        activation_id: Deterministic activation identifier.
+        session_id: The owning platform Session, if any. ``None``
+            outside a session (pre-Step-5 legacy paths during the
+            migration window).
+        role: One of ``system`` | ``user`` | ``assistant`` | ``tool``.
+        content: Full text content.
+        content_hash: Stable hash of ``content`` in ``<alg>:<hex>``
+            form (e.g., ``"sha256:a1b2..."``). Format validated —
+            empty string or prefix-less hashes are rejected so
+            algorithm rotation is a deliberate, detectable change
+            (review H1). Step 7 chooses the algorithm.
+        tokens: Token count for this utterance (prompt-side or
+            completion-side, depending on role).
+        tick: Logical tick at time of emission.
+        sequence: Monotonic per-activation index (0, 1, 2, …).
+    """
+
+    # Format: <lowercase-alphanum-algorithm>:<hex-digits>. Rotation
+    # to a new algorithm is a deliberate change (the prefix makes it
+    # greppable across the ledger).
+    _CONTENT_HASH_RE: ClassVar[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]+:[0-9a-f]+$")
+
+    entry_type: str = "llm.utterance"
+    actor_id: ActorId
+    activation_id: ActivationId
+    session_id: SessionId | None = None
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+    content_hash: str
+    tokens: int = Field(default=0, ge=0)
+    tick: int = Field(default=0, ge=0)
+    sequence: int = Field(default=0, ge=0)
+
+    @field_validator("content_hash")
+    @classmethod
+    def _validate_content_hash(cls, value: str) -> str:
+        if not value:
+            raise ValueError(
+                "LLMUtteranceEntry.content_hash must be non-empty — "
+                "a hash is required for replay-journal dedup."
+            )
+        if not cls._CONTENT_HASH_RE.match(value):
+            raise ValueError(
+                "LLMUtteranceEntry.content_hash must be "
+                f"'<alg>:<hex>' (e.g., 'sha256:a1b2...'); got {value!r}."
+            )
+        return value
 
 
 class GatewayRequestEntry(LedgerEntry):
@@ -471,7 +545,7 @@ class ToolLoopStepEntry(LedgerEntry):
 
     entry_type: str = "tool_loop_step"
     actor_id: ActorId
-    activation_id: str
+    activation_id: ActivationId
     step_index: int
     tool_name: str
     tool_arguments: dict[str, Any] = Field(default_factory=dict)
@@ -486,7 +560,7 @@ class ActivationCompleteEntry(LedgerEntry):
 
     entry_type: str = "activation_complete"
     actor_id: ActorId
-    activation_id: str
+    activation_id: ActivationId
     activation_reason: str
     total_tool_calls: int
     total_envelopes: int
@@ -633,6 +707,60 @@ class MemoryAccessDeniedEntry(LedgerEntry):
 
 
 # ---------------------------------------------------------------------------
+# Session lifecycle entries (PMF Plan Phase 4C Step 4)
+# ---------------------------------------------------------------------------
+
+
+class SessionStartedEntry(LedgerEntry):
+    """Records ``SessionManager.start()``.
+
+    Forward-compat: ``schema_version`` inherited from base (``1``).
+    Step 6 may add ``run_id: RunId | None`` once SimulationRunner
+    stamps session context onto runs; that bump would be
+    ``schema_version=2`` and ``LATEST_SCHEMA_VERSION=2`` on this
+    class only.
+    """
+
+    entry_type: str = "session.started"
+    session_id: SessionId
+    world_id: WorldId
+    session_type: str
+    seed_strategy: str
+    seed: int
+
+
+class SessionEndedEntry(LedgerEntry):
+    """Records a session's terminal transition.
+
+    ``end_tick`` mirrors ``SessionEndedEvent.end_tick``: optional
+    because abandonment from ``PAUSED`` across a process restart
+    may not have a meaningful tick (review M8 / D4k).
+    """
+
+    entry_type: str = "session.ended"
+    session_id: SessionId
+    status: str
+    end_tick: int | None = None
+    reason: str = ""
+
+
+class SessionCheckpointEntry(LedgerEntry):
+    """Records a session checkpoint, pause, or resume (PMF Plan D4
+    audit-fold D-Find-6: one class, three kinds — pause and resume
+    are significant transitions, not separate entry types).
+
+    ``kind`` is a ``StrEnum`` (not ``Literal``) per codebase
+    discipline for closed-set discriminators (review H2).
+    """
+
+    entry_type: str = "session.checkpoint"
+    session_id: SessionId
+    kind: SessionCheckpointKind
+    tick: int
+    note: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Entry registry for typed deserialization
 # ---------------------------------------------------------------------------
 
@@ -640,6 +768,8 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "pipeline_step": PipelineStepEntry,
     "state_mutation": StateMutationEntry,
     "llm_call": LLMCallEntry,
+    # PMF Plan Phase 4C Step 4 — LLM utterance skeleton (adjacent to llm_call).
+    "llm.utterance": LLMUtteranceEntry,
     "gateway_request": GatewayRequestEntry,
     "validation": ValidationEntry,
     "engine_lifecycle": EngineLifecycleEntry,
@@ -666,6 +796,10 @@ ENTRY_REGISTRY: dict[str, type[LedgerEntry]] = {
     "memory_eviction": MemoryEvictionEntry,
     "memory_hydration": MemoryHydrationEntry,
     "memory_access_denied": MemoryAccessDeniedEntry,
+    # PMF Plan Phase 4C Step 4 — session lifecycle family.
+    "session.started": SessionStartedEntry,
+    "session.ended": SessionEndedEntry,
+    "session.checkpoint": SessionCheckpointEntry,
 }
 
 

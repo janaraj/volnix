@@ -37,8 +37,16 @@ class ConversationTurn:
 
 
 @dataclass
-class Session:
-    """A conversation session with history and provider-specific state."""
+class LLMConversationSession:
+    """A conversation session with history and provider-specific state.
+
+    PMF Plan Phase 4C Step 4 rename: the pre-4C class name
+    ``Session`` clashed with the new platform
+    ``volnix.core.session.Session`` primitive. A module-level
+    ``__getattr__`` preserves the old name as a deprecation alias
+    during the 0.2.0 migration window; the alias is removed in
+    0.3.0.
+    """
 
     session_id: str
     system_prompt: str = ""
@@ -65,7 +73,7 @@ class ConversationManager:
 
     def __init__(self, max_history: int = 50) -> None:
         self._max_history = max_history
-        self._sessions: dict[str, Session] = {}
+        self._sessions: dict[str, LLMConversationSession] = {}
 
     def create_session(
         self,
@@ -82,7 +90,7 @@ class ConversationManager:
             A unique session ID.
         """
         session_id = f"conv_{uuid.uuid4().hex[:12]}"
-        self._sessions[session_id] = Session(
+        self._sessions[session_id] = LLMConversationSession(
             session_id=session_id,
             system_prompt=system_prompt,
             metadata=metadata or {},
@@ -154,7 +162,7 @@ class ConversationManager:
 
     async def _generate_anthropic(
         self,
-        session: Session,
+        session: LLMConversationSession,
         router: Any,
         user_content: str,
         engine_name: str,
@@ -191,7 +199,7 @@ class ConversationManager:
 
     async def _generate_openai(
         self,
-        session: Session,
+        session: LLMConversationSession,
         router: Any,
         user_content: str,
         engine_name: str,
@@ -226,7 +234,7 @@ class ConversationManager:
 
     async def _generate_with_history(
         self,
-        session: Session,
+        session: LLMConversationSession,
         router: Any,
         user_content: str,
         engine_name: str,
@@ -253,11 +261,11 @@ class ConversationManager:
         )
         return await router.route(request, engine_name, use_case)
 
-    def end_session(self, session_id: str) -> Session | None:
+    def end_session(self, session_id: str) -> LLMConversationSession | None:
         """End a session and return its data."""
         return self._sessions.pop(session_id, None)
 
-    def get_session(self, session_id: str) -> Session | None:
+    def get_session(self, session_id: str) -> LLMConversationSession | None:
         """Get a session by ID without ending it."""
         return self._sessions.get(session_id)
 
@@ -275,3 +283,31 @@ class ConversationManager:
         session = self._sessions.get(session_id)
         if session:
             session.history.clear()
+
+
+# ─── Deprecation alias (PMF Plan Phase 4C Step 4) ────────────────────
+#
+# The pre-4C ``Session`` class name was renamed to
+# ``LLMConversationSession`` to avoid namespace collision with the
+# new platform Session primitive at ``volnix.core.session.Session``.
+# A module-level ``__getattr__`` (PEP 562) preserves the old name as
+# a deprecation alias during the 0.2.0 migration window; the alias
+# is removed in 0.3.0.
+
+
+def __getattr__(name: str) -> Any:
+    """Deprecation alias for the pre-4C ``Session`` dataclass."""
+    if name == "Session":
+        import warnings
+
+        warnings.warn(
+            "volnix.llm.conversation.Session has been renamed to "
+            "LLMConversationSession in Volnix 0.2.0 to avoid namespace "
+            "collision with the platform Session primitive "
+            "(volnix.core.session.Session). The deprecation alias "
+            "will be removed in 0.3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return LLMConversationSession
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

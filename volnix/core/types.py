@@ -47,6 +47,24 @@ ToolName = NewType("ToolName", str)
 RunId = NewType("RunId", str)
 """Identifier for a single evaluation / interaction run."""
 
+SessionId = NewType("SessionId", str)
+"""Identifier for a platform Session — a container for ≥1 Run within
+one World. Session spans activations, persists memory, survives
+process restarts (``SessionManager`` owns the backing store).
+PMF Plan Phase 4C Step 4."""
+
+ActivationId = NewType("ActivationId", str)
+"""Identifier for a single NPC/agent activation — the atomic unit
+of LLM invocation inside a Run. Deterministically derived via
+``uuid5(SESSION_NAMESPACE, f"{session_id}:{actor_id}:{tick}:{seq}")``
+in Step 7 (PMF Plan D8); currently ``uuid4().hex[:12]`` at the two
+call sites (``engines/agency/engine.py`` + ``npc_activator.py``).
+Typed here ahead of Step 7 so the ``LLMUtteranceEntry`` schema
+(Step 4) and the two pre-existing entries (``ToolLoopStepEntry``,
+``ActivationCompleteEntry``) don't carry raw ``str`` activation
+identifiers — closes CLAUDE.md's "never pass raw strings for
+domain identifiers" violation."""
+
 ProfileVersion = NewType("ProfileVersion", str)
 """Version tag for a service fidelity profile."""
 

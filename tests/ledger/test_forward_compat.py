@@ -76,8 +76,15 @@ class TestUnknownLedgerEntryWrapper:
         return an ``UnknownLedgerEntry`` instance — NOT a bare
         ``LedgerEntry`` (which was the pre-4C silent-degradation
         behaviour)."""
+        # Probe: a known type (session.started) at schema_version=2
+        # — beyond the reader's ``LATEST_SCHEMA_VERSION=1``. Step-3's
+        # contract wraps this case the same way as a truly-unknown
+        # entry_type (see ``TestDeserializeEntryEdgeCases``). A
+        # previous iteration of this test used an unregistered
+        # ``session.started`` key; Step 4 registered the key, and
+        # the test now exercises the schema-version gate branch.
         payload = {
-            "entry_type": "session.started",  # Step-4 type, not yet registered
+            "entry_type": "session.started",
             "schema_version": 2,
             "session_id": "sess-123",
             "world_id": "world-abc",
@@ -372,3 +379,49 @@ class TestUnknownLedgerEntryDirectConstruction:
         entry = UnknownLedgerEntry(raw_entry_type="future.empty")
         assert entry.raw_payload == {}
         assert entry.raw_entry_type == "future.empty"
+
+
+# ─── Cross-step 4 → 3 forward-compat (audit-fold M2) ────────────────
+
+
+class TestCrossStep4To3Compat:
+    """Verifies that Step-4's new ``session.*`` ledger entries
+    interact correctly with Step-3's ``UnknownLedgerEntry`` forward-
+    compat wrapping. Placed here (not in ``test_session_types.py``)
+    because the behaviour under test is the Step-3 contract —
+    ``SessionStartedEntry`` is just a convenient probe fixture."""
+
+    def test_negative_session_entry_with_key_removed_wraps_not_crashes(
+        self,
+    ) -> None:
+        """An older reader that hasn't been taught ``session.started``
+        must wrap the row in ``UnknownLedgerEntry``. We simulate the
+        older reader by popping the key for the test's duration."""
+        from volnix.core.session import SessionId
+        from volnix.core.types import WorldId
+        from volnix.ledger.entries import (
+            ENTRY_REGISTRY,
+            SessionStartedEntry,
+            UnknownLedgerEntry,
+            deserialize_entry,
+        )
+
+        entry = SessionStartedEntry(
+            session_id=SessionId("s-1"),
+            world_id=WorldId("w-1"),
+            session_type="bounded",
+            seed_strategy="inherit",
+            seed=42,
+        )
+        row = {
+            "entry_type": "session.started",
+            "payload": entry.model_dump_json(),
+        }
+        original = ENTRY_REGISTRY.pop("session.started")
+        try:
+            restored = deserialize_entry(row)
+            assert isinstance(restored, UnknownLedgerEntry)
+            assert restored.raw_entry_type == "session.started"
+            assert restored.raw_payload["seed"] == 42
+        finally:
+            ENTRY_REGISTRY["session.started"] = original
