@@ -306,8 +306,52 @@ class AgencyEngine(BaseEngine):
         activator reads it via ``host._memory_engine`` for
         pre-activation recall and post-activation implicit
         remember.
+
+        **Idempotent replacement (PMF 4B cleanup commit 4).** If a
+        MemoryEngine is already installed, it is ``await stop()``-d
+        before the new one is stored. Without this guard, long-lived
+        processes (``volnix serve`` running multiple worlds, test
+        harnesses re-entering ``configure_agency``) would leak
+        ``cohort.rotated`` bus subscriptions on every world reset —
+        each rotation would fire on a pile of dead engines.
+
+        The stop is scheduled as an ``asyncio`` task and awaited
+        inline so the caller sees a clean swap before control
+        returns. A stop failure is logged and does NOT block the
+        replacement; the new engine still takes the slot.
         """
+        prior = self._memory_engine
         self._memory_engine = engine
+        if prior is not None and prior is not engine and hasattr(prior, "stop"):
+            # Fire-and-log pattern: we cannot block a synchronous
+            # setter on async teardown. Schedule the stop; if the
+            # caller needs deterministic teardown, they can await
+            # prior.stop() themselves before calling the setter.
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # Not inside an event loop — fall back to logging.
+                # Real callers (app.py) always hold a loop.
+                logger.warning(
+                    "AgencyEngine.set_memory_engine called outside an "
+                    "event loop with a prior engine installed; the "
+                    "prior engine is being replaced without being "
+                    "stopped. Call ``await prior.stop()`` explicitly "
+                    "before the setter if deterministic teardown is "
+                    "required."
+                )
+                return
+
+            async def _stop_prior() -> None:
+                try:
+                    await prior.stop()
+                except Exception as exc:  # noqa: BLE001 — stop is best-effort
+                    logger.warning(
+                        "AgencyEngine.set_memory_engine: prior memory engine stop failed: %s",
+                        exc,
+                    )
+
+            loop.create_task(_stop_prior())
 
     async def configure(
         self,

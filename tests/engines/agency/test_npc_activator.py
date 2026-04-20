@@ -863,6 +863,58 @@ class TestSetMemoryEngine:
         engine.set_memory_engine(sentinel)
         assert engine._memory_engine is sentinel
 
+    @pytest.mark.asyncio
+    async def test_negative_replacing_prior_engine_stops_prior(self) -> None:
+        """Cleanup commit 4: long-lived processes calling
+        configure_agency multiple times must not leak bus
+        subscriptions. Setter schedules ``await prior.stop()``
+        before (logically) the slot swap."""
+        import asyncio
+
+        engine, _router, _executor = await _wired_engine(actors=[_active_npc()], llm_responses=[])
+
+        # First install: an engine whose stop() we can observe.
+        prior_stop_called = asyncio.Event()
+
+        class _FakeMemoryEngine:
+            async def stop(self) -> None:
+                prior_stop_called.set()
+
+        prior = _FakeMemoryEngine()
+        engine.set_memory_engine(prior)
+        assert engine._memory_engine is prior
+
+        # Install a replacement — the setter must schedule prior.stop().
+        replacement = _FakeMemoryEngine()
+        engine.set_memory_engine(replacement)
+        assert engine._memory_engine is replacement
+
+        # Give the scheduled task a chance to run.
+        await asyncio.wait_for(prior_stop_called.wait(), timeout=2.0)
+        assert prior_stop_called.is_set()
+
+    @pytest.mark.asyncio
+    async def test_negative_replacing_with_same_reference_does_not_stop(self) -> None:
+        """Idempotent no-op: passing the SAME engine twice must not
+        stop it. Otherwise a benign re-wire would tear down the
+        still-needed engine."""
+        engine, _router, _executor = await _wired_engine(actors=[_active_npc()], llm_responses=[])
+        stop_calls = 0
+
+        class _CountingEngine:
+            async def stop(self) -> None:
+                nonlocal stop_calls
+                stop_calls += 1
+
+        eng = _CountingEngine()
+        engine.set_memory_engine(eng)
+        engine.set_memory_engine(eng)  # same reference
+        # Give any scheduled tasks a tick to run.
+        import asyncio
+
+        await asyncio.sleep(0.01)
+        assert stop_calls == 0
+
 
 class TestCurrentTickHelper:
     """D11-8 lockdown — module helper reads progress defensively."""
