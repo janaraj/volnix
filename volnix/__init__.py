@@ -49,6 +49,7 @@ from volnix.core.errors import (
 )
 from volnix.core.events import (
     SessionEndedEvent,
+    SessionPausedEvent,
     SessionResumedEvent,
     SessionStartedEvent,
     WorldEvent,
@@ -106,6 +107,7 @@ __all__ = [
     "Session",
     "SessionEndedEvent",
     "SessionId",
+    "SessionPausedEvent",
     "SessionResumedEvent",
     "SessionStartedEvent",
     "SessionStatus",

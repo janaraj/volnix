@@ -395,6 +395,5 @@ class TestLLMUtteranceEntry:
         tolerated the violation it claimed to lock down."""
         field = LLMUtteranceEntry.model_fields["activation_id"]
         assert field.annotation is ActivationId, (
-            f"LLMUtteranceEntry.activation_id must be ActivationId, "
-            f"got {field.annotation}"
+            f"LLMUtteranceEntry.activation_id must be ActivationId, got {field.annotation}"
         )

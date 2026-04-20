@@ -1,11 +1,12 @@
 """Phase 4C Step 5 — SessionManager lifecycle tests.
 
 Covers start/pause/resume/end, end-hook semantics (callback list +
-bus event), checkpoint guards, seed-strategy derivation, and the
+bus event), checkpoint guards, seed-strategy derivation, the
 audit-fold C3 guarantee that ledger + store agree after a hook
-raises.
+raises, and the post-ship M3 guarantee that ledger failures
+propagate (not swallowed).
 
-Negative ratio: 9/16 = 56%.
+Negative ratio: 10/18 = 55%.
 """
 
 from __future__ import annotations
@@ -251,8 +252,14 @@ async def test_positive_end_completed_publishes_invokes_callbacks() -> None:
 async def test_positive_end_abandoned_publishes_event_and_invokes_callbacks() -> None:
     """Audit-fold M7: the ``ABANDONED`` path is symmetric with
     ``COMPLETED`` — it must also fire the bus event AND invoke
-    registered callbacks."""
-    mgr, bus, _ = await _make_manager()
+    registered callbacks.
+
+    Post-ship audit-fold M-NEW-4: also asserts that a matching
+    ``SessionEndedEntry`` with ``status='abandoned'`` lands on the
+    ledger — symmetry with the ``COMPLETED`` test which checks the
+    ledger, and a guard against the audit's "ledger and event must
+    agree" contract."""
+    mgr, bus, ledger = await _make_manager()
     s = await mgr.start(WorldId("w-1"), world_seed=1)
     called: list[Session] = []
 
@@ -266,6 +273,34 @@ async def test_positive_end_abandoned_publishes_event_and_invokes_callbacks() ->
     assert bus is not None
     ev = [e for e in bus.events if type(e).__name__ == "SessionEndedEvent"]
     assert ev and ev[-1].status == "abandoned"
+    # M-NEW-4: ledger has a SessionEndedEntry with status=abandoned.
+    assert ledger is not None
+    ended_entries = [e for e in ledger.entries if type(e).__name__ == "SessionEndedEntry"]
+    assert ended_entries and ended_entries[-1].status == "abandoned"
+
+
+async def test_negative_ledger_failure_propagates_not_swallowed() -> None:
+    """Audit-fold M-NEW-1 (Step-5 post-ship): the plan-audit M3
+    fix made ``_append_ledger`` propagate exceptions instead of
+    swallowing them (DESIGN_PRINCIPLES: "if it didn't produce a
+    ledger entry, it didn't happen"). Without a test, a future
+    refactor could silently restore the narrow-except pattern
+    and break the flight-recorder invariant."""
+    from volnix.persistence.manager import create_database
+    from volnix.sessions.manager import SessionManager
+    from volnix.sessions.store import SessionStore
+
+    class _FailingLedger:
+        async def append(self, entry: Any) -> int:
+            raise RuntimeError("ledger disk full")
+
+    db = await create_database(":memory:", wal_mode=False)
+    store = SessionStore(db)
+    await store.initialize()
+    mgr = SessionManager(store=store, ledger=_FailingLedger())  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="ledger disk full"):
+        await mgr.start(WorldId("w-1"), world_seed=1)
 
 
 # ─── Checkpoint ──────────────────────────────────────────────────

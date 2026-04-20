@@ -250,7 +250,17 @@ class SessionManager:
         tick: int | None = None,
     ) -> Session:
         """Transition PAUSED → ACTIVE + re-hydrate slot assignments
-        into the injected ``SlotManager`` (D5d)."""
+        into the injected ``SlotManager`` (D5d).
+
+        **Slot rehydration requires a SlotManager.** When
+        ``slot_manager=None`` (the default — Step 6 wires it in
+        ``VolnixApp``), the session still transitions to ``ACTIVE``
+        and the bus event fires, but persisted slot pinnings are
+        silently NOT restored. A consumer that relies on
+        pin-and-restore MUST inject a ``SlotManager`` at
+        construction; otherwise slot-aware resume is a no-op
+        (post-ship audit M-NEW-5).
+        """
         session = await self.get_session(session_id)
         if session.status is not SessionStatus.PAUSED:
             raise ValueError(

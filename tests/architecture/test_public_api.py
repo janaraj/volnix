@@ -45,6 +45,7 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "Session",
         "SessionEndedEvent",
         "SessionId",
+        "SessionPausedEvent",
         "SessionResumedEvent",
         "SessionStartedEvent",
         "SessionStatus",

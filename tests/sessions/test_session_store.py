@@ -4,7 +4,9 @@ Exercises the CRUD surface directly against in-memory SQLite so
 the orchestration layer (SessionManager) has a trustworthy
 foundation to build on.
 
-Negative ratio: 3/6 = 50%.
+Negative ratio: 5/10 = 50% (counted over unique test functions;
+one uses ``pytest.parametrize`` so the collected-test count is
+higher).
 """
 
 from __future__ import annotations
@@ -60,10 +62,14 @@ async def test_negative_list_sessions_unknown_world_returns_empty() -> None:
     assert rows == []
 
 
-async def test_negative_initialize_is_idempotent_across_calls() -> None:
+async def test_positive_initialize_is_idempotent_across_calls() -> None:
     """Calling ``initialize`` twice must be a no-op — ``CREATE
     TABLE IF NOT EXISTS`` makes the SQL idempotent and the
-    instance-level flag avoids round-trips."""
+    instance-level flag avoids round-trips.
+
+    Audit-fold M-NEW-2 (Step-5 post-ship): renamed from
+    ``test_negative_*`` — this is a positive "doesn't crash"
+    assertion, not a rejection/error-path test."""
     store = await _make_store()
     # Second call: must not raise.
     await store.initialize()
