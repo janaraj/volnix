@@ -285,6 +285,94 @@ class TestStopLifecycle:
 # ---------------------------------------------------------------------------
 
 
+class TestTier1FixtureWiring:
+    """Cleanup commit 3 — ``tier_mode="mixed"`` +
+    ``tier1_fixtures_path`` must actually load pack-authored
+    fixtures during app startup. Previously the loader existed but
+    was orphaned in the live flow (audit H3)."""
+
+    async def test_positive_mixed_mode_loads_fixtures_from_path(self, tmp_path: Path) -> None:
+        # Author a minimal fixtures YAML.
+        fixtures = tmp_path / "memory_fixtures.yaml"
+        fixtures.write_text(
+            "actor-hero:\n"
+            '  - content: "hero prefers quiet"\n'
+            "    importance: 0.8\n"
+            "    tags: [preference]\n"
+        )
+
+        app = VolnixApp(
+            config=_volnix_config(
+                tmp_path,
+                memory_enabled=True,
+                tier_mode="mixed",
+                tier1_fixtures_path=str(fixtures),
+            )
+        )
+        try:
+            await app.start()
+            app._llm_router = _mock_router()
+            await app.configure_agency(_minimal_plan(), result={"actors": []})
+            engine = app._memory_engine
+            assert engine is not None
+            rows = await engine._store.list_by_owner("actor-hero", kind="semantic")
+            assert len(rows) == 1
+            assert rows[0].tier == "tier1"
+            assert rows[0].source == "pack_fixture"
+            assert "quiet" in rows[0].content
+        finally:
+            await app.stop()
+
+    async def test_negative_tier2_only_ignores_fixtures_path(self, tmp_path: Path) -> None:
+        """``tier_mode="tier2_only"`` (default) MUST ignore the
+        fixtures path even when it's set — proves the tier_mode
+        gate is honoured."""
+        fixtures = tmp_path / "memory_fixtures.yaml"
+        fixtures.write_text(
+            'actor-hero:\n  - content: "should not load"\n    importance: 0.5\n    tags: []\n'
+        )
+
+        app = VolnixApp(
+            config=_volnix_config(
+                tmp_path,
+                memory_enabled=True,
+                tier_mode="tier2_only",  # NOT mixed
+                tier1_fixtures_path=str(fixtures),
+            )
+        )
+        try:
+            await app.start()
+            app._llm_router = _mock_router()
+            await app.configure_agency(_minimal_plan(), result={"actors": []})
+            engine = app._memory_engine
+            assert engine is not None
+            rows = await engine._store.list_by_owner("actor-hero", kind="semantic")
+            assert rows == []
+        finally:
+            await app.stop()
+
+    async def test_negative_mixed_mode_without_path_loads_nothing(self, tmp_path: Path) -> None:
+        """``tier_mode="mixed"`` with ``tier1_fixtures_path=None``
+        still succeeds — no pack fixtures to load is a valid state.
+        Composition must NOT fail; the app boots cleanly."""
+        app = VolnixApp(
+            config=_volnix_config(
+                tmp_path,
+                memory_enabled=True,
+                tier_mode="mixed",
+                # tier1_fixtures_path unset → None
+            )
+        )
+        try:
+            await app.start()
+            app._llm_router = _mock_router()
+            # Should not raise.
+            await app.configure_agency(_minimal_plan(), result={"actors": []})
+            assert app._memory_engine is not None
+        finally:
+            await app.stop()
+
+
 class TestStep11AgencyIntegration:
     """PMF 4B Step 11 — app.py must inject the memory engine into
     the AgencyEngine so NPCActivator sees it as ``host._memory_engine``

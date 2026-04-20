@@ -1532,6 +1532,32 @@ class VolnixApp:
                 # row from ``_record_lifecycle("start")`` lands on the ledger.
                 memory_engine._ledger = self._ledger
                 await memory_engine.initialize({}, self._bus)
+                # PMF 4B cleanup commit 3 — load Tier-1 pack fixtures
+                # between initialize() and start(). Ordering matters:
+                # initialize runs store.initialize(reset=...) first
+                # (Commit 2's reset behaviour), THEN the loader
+                # populates tier-1 rows, THEN start() wires the
+                # cohort-rotated subscription. Load failures are
+                # raised loudly — a bad fixtures file is a pack-
+                # authoring bug that should surface at startup, not
+                # silently skip.
+                mem_cfg = self._config.memory
+                if mem_cfg.tier_mode == "mixed" and mem_cfg.tier1_fixtures_path:
+                    from pathlib import Path as _Path
+
+                    from volnix.engines.memory.tier1_loader import (
+                        load_tier1_fixtures,
+                    )
+
+                    count = await load_tier1_fixtures(
+                        _Path(mem_cfg.tier1_fixtures_path),
+                        memory_engine._store,
+                    )
+                    logger.info(
+                        "MemoryEngine: loaded %d Tier-1 fixture records from %s",
+                        count,
+                        mem_cfg.tier1_fixtures_path,
+                    )
                 await memory_engine.start()
                 self._memory_engine = memory_engine
                 # PMF 4B Step 11 — inject into AgencyEngine so
