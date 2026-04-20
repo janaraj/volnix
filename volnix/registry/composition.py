@@ -194,6 +194,14 @@ async def build_memory_engine(
         max_semantic_per_owner=memory_config.max_semantic_per_actor,
     )
 
+    # PMF 4B cleanup commit 6 — dedicated semaphore for distill
+    # concurrency. ``max_concurrent_distill`` is a MemoryConfig
+    # field (default 4, clamped [1, 64]) — not shared with
+    # agency's llm_semaphore to avoid cross-engine coupling.
+    import asyncio as _asyncio
+
+    distill_semaphore = _asyncio.Semaphore(memory_config.max_concurrent_distill)
+
     consolidator = Consolidator(
         store=store,
         llm_router=llm_router,
@@ -201,6 +209,7 @@ async def build_memory_engine(
         episodic_window=memory_config.consolidation_episodic_window,
         prune_after_consolidation=True,
         distillation_enabled=memory_config.distillation_enabled,
+        llm_semaphore=distill_semaphore,
     )
 
     recall = Recall(store=store, embedder=embedder)

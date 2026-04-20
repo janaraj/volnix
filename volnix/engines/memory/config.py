@@ -195,6 +195,17 @@ class MemoryConfig(BaseModel):
     selection flow through the existing stack. BudgetEngine integration
     is automatic — see G10 of the gap analysis."""
 
+    max_concurrent_distill: int = Field(default=4, ge=1, le=64)
+    """Cap on concurrent ``Consolidator._distill`` LLM calls
+    (PMF 4B cleanup commit 6). Pre-cleanup, consolidation LLM
+    calls were unthrottled — at cohort rotation with K=20 demoted
+    actors and ``on_eviction`` trigger, the engine fired 20
+    sequential distill calls racing past ``AgencyEngine``'s
+    ``llm_semaphore`` (which only throttles activation LLM calls).
+    A dedicated memory semaphore keeps distill concurrency
+    bounded without cross-engine coupling into agency's semaphore.
+    Clamped [1, 64]."""
+
     # ── Recall defaults ───────────────────────────────────────────
     default_recall_top_k: int = Field(default=5, ge=1, le=1000)
     recall_p95_budget_ms: int = Field(default=10, ge=0)

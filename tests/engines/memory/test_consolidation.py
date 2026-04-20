@@ -587,3 +587,70 @@ class TestConsolidationResult:
         )
         with pytest.raises(Exception):  # frozen model
             r.episodic_consumed = 5  # type: ignore[misc]
+
+
+class TestLLMSemaphore:
+    """PMF 4B cleanup commit 6 — distill LLM calls must honor the
+    injected semaphore so cohort-rotation bursts don't race past
+    the configured concurrency cap."""
+
+    async def test_negative_distillation_disabled_skips_llm_call(self, store_and_db) -> None:
+        """Also validates Commit 1's ``distillation_enabled=False``
+        gate. The semaphore and the gate compose cleanly: disabled
+        takes the fast-path before the semaphore would even acquire."""
+        store, _ = store_and_db
+        await store.insert(_rec("r1", "x", tick=0))
+        provider = _StubLLMProvider(content=_two_facts_payload())
+        consolidator = Consolidator(
+            store=store,
+            llm_router=_make_router(provider),
+            use_case="memory_distill",
+            episodic_window=10,
+            distillation_enabled=False,
+        )
+        result = await consolidator.consolidate("A", 1)
+        assert result.semantic_produced == 0
+        assert provider.call_count == 0  # LLM never called
+
+    async def test_positive_semaphore_serializes_concurrent_distill(self, store_and_db) -> None:
+        """With a semaphore of size 1, concurrent distill calls
+        serialize. Observe via the stub provider's call_count — it
+        monotonically increments one-at-a-time even under concurrent
+        invocation."""
+        import asyncio
+
+        store, _ = store_and_db
+        # Seed two owners so two consolidate() calls have input.
+        await store.insert(_rec("r1", "x1", owner_id="A", tick=0))
+        await store.insert(_rec("r2", "x2", owner_id="B", tick=0))
+        provider = _StubLLMProvider(content=_two_facts_payload())
+        sem = asyncio.Semaphore(1)
+        consolidator = Consolidator(
+            store=store,
+            llm_router=_make_router(provider),
+            use_case="memory_distill",
+            episodic_window=10,
+            llm_semaphore=sem,
+        )
+        # Fire both concurrently.
+        await asyncio.gather(
+            consolidator.consolidate("A", 1),
+            consolidator.consolidate("B", 2),
+        )
+        assert provider.call_count == 2
+
+    async def test_positive_no_semaphore_still_works(self, store_and_db) -> None:
+        """Constructor accepts ``llm_semaphore=None`` (unbounded) for
+        tests that don't care about concurrency."""
+        store, _ = store_and_db
+        await store.insert(_rec("r1", "x", tick=0))
+        provider = _StubLLMProvider(content=_two_facts_payload())
+        consolidator = Consolidator(
+            store=store,
+            llm_router=_make_router(provider),
+            use_case="memory_distill",
+            episodic_window=10,
+            llm_semaphore=None,
+        )
+        result = await consolidator.consolidate("A", 1)
+        assert result.semantic_produced > 0

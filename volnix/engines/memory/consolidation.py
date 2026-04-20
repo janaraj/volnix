@@ -15,6 +15,7 @@ MemoryEngine) decides when to fire based on cadence config.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -104,6 +105,7 @@ class Consolidator:
         episodic_window: int,
         prune_after_consolidation: bool = True,
         distillation_enabled: bool = True,
+        llm_semaphore: asyncio.Semaphore | None = None,
     ) -> None:
         if episodic_window < 1:
             raise ValueError(f"episodic_window must be >= 1, got {episodic_window}")
@@ -119,6 +121,11 @@ class Consolidator:
         # "distiller silently broken". Wired from
         # ``MemoryConfig.distillation_enabled``.
         self._distillation_enabled = distillation_enabled
+        # PMF 4B cleanup commit 6 — cap concurrent distill LLM calls.
+        # None falls back to "unbounded" (useful for tests that
+        # don't care); composition always passes a real semaphore
+        # built from ``MemoryConfig.max_concurrent_distill``.
+        self._llm_semaphore = llm_semaphore
 
     async def consolidate(
         self,
@@ -198,7 +205,20 @@ class Consolidator:
         Determinism (D6-3): episodes sorted by ``record_id`` before
         prompt construction so the same set produces the same prompt
         regardless of insertion order.
+
+        Concurrency (PMF 4B cleanup commit 6): when a semaphore is
+        injected at construction, the LLM call is guarded by it so
+        cohort-rotation-driven bursts (K demoted actors → K distill
+        calls) don't blow past the configured concurrency cap.
         """
+        if self._llm_semaphore is not None:
+            async with self._llm_semaphore:
+                return await self._distill_inner(episodes, tick=tick)
+        return await self._distill_inner(episodes, tick=tick)
+
+    async def _distill_inner(
+        self, episodes: list[MemoryRecord], *, tick: int
+    ) -> list[dict[str, Any]]:
         ordered = sorted(episodes, key=lambda r: r.record_id)
         request = LLMRequest(
             system_prompt=_DISTILL_SYSTEM_PROMPT,
