@@ -181,3 +181,119 @@ def test_negative_load_bearing_personas_single_no_flip() -> None:
     )
     # Removing any one still leaves 2 — verdict stays "approved".
     assert all(not c.is_load_bearing for c in contributions)
+
+
+# ─── Cleanup 3: primitive guards ──────────────────────────────────
+
+
+def test_positive_intent_behavior_gap_detects_zero_as_value() -> None:
+    """Step 10 audit M4: ``0`` / ``False`` / ``""`` are legitimate
+    extracted values — the ``is None`` check must preserve them
+    as non-skip. Regression test against a future refactor to
+    truthiness pruning."""
+    tl = _tl([_ev(1, {"intent": 0, "did": 1})])
+    gaps = intent_behavior_gap(
+        tl,
+        intent_extractor=lambda e: e.payload.get("intent"),
+        behavior_extractor=lambda e: e.payload.get("did"),
+    )
+    assert len(gaps) == 1
+    assert gaps[0].intent == 0
+    assert gaps[0].behavior == 1
+
+
+def test_positive_intent_behavior_gap_detects_empty_string_divergence() -> None:
+    tl = _tl([_ev(1, {"intent": "", "did": "something"})])
+    gaps = intent_behavior_gap(
+        tl,
+        intent_extractor=lambda e: e.payload.get("intent"),
+        behavior_extractor=lambda e: e.payload.get("did"),
+    )
+    assert len(gaps) == 1
+
+
+def test_negative_variant_delta_nan_metric_raises() -> None:
+    """Step 10 audit M1: non-finite metric values poison downstream
+    comparisons silently. ``variant_delta`` raises at the boundary."""
+    import pytest
+
+    tl = _tl([_ev(1, {})])
+    with pytest.raises(ValueError, match="non-finite"):
+        variant_delta(tl, tl, metric_fn=lambda t: float("nan"))
+
+
+def test_negative_variant_delta_inf_metric_raises() -> None:
+    import pytest
+
+    tl = _tl([_ev(1, {})])
+    with pytest.raises(ValueError, match="non-finite"):
+        variant_delta(tl, tl, metric_fn=lambda t: float("inf"))
+
+
+def test_positive_load_bearing_float_verdict_epsilon_not_flagged() -> None:
+    """Step 10 audit M2: float verdicts must NOT flag every
+    persona as load-bearing due to floating-point rounding. Two
+    verdicts differing by 1e-15 are treated as equal under the
+    default epsilon tolerance."""
+    alice = _tl([_ev(1, {"score": 0.1})])
+    bob = _tl([_ev(1, {"score": 0.2})])
+
+    def verdict(timelines: list[UnifiedTimeline]) -> float:
+        return sum(e.payload.get("score", 0.0) for t in timelines for e in t.events)
+
+    contributions = load_bearing_personas(
+        {"alice": alice, "bob": bob},
+        verdict_fn=verdict,
+    )
+    # verdict_with = 0.3, verdict_without_alice = 0.2
+    # These differ by 0.1 >> epsilon → alice IS load-bearing.
+    alice_c = next(c for c in contributions if c.persona == "alice")
+    assert alice_c.is_load_bearing is True
+
+
+def test_positive_load_bearing_float_rounding_noise_not_flagged() -> None:
+    """The default equality_fn is tolerant to pure FP noise."""
+    tl = _tl([_ev(1, {})])
+
+    # Verdict that differs only by rounding error across calls.
+    calls = {"n": 0}
+
+    def verdict(timelines: list[UnifiedTimeline]) -> float:
+        calls["n"] += 1
+        # Return 1.0 with ε noise on odd calls.
+        return 1.0 + (1e-15 if calls["n"] % 2 else 0.0)
+
+    contributions = load_bearing_personas(
+        {"alice": tl, "bob": tl},
+        verdict_fn=verdict,
+    )
+    # Noise-driven diffs must NOT flag load-bearing.
+    assert all(not c.is_load_bearing for c in contributions)
+
+
+def test_positive_load_bearing_custom_equality_fn() -> None:
+    """Caller-supplied ``equality_fn`` overrides the default."""
+    tl = _tl([_ev(1, {})])
+
+    calls = [0.0, 1.0, 2.0]  # verdict_with=0.0, then 1.0, 2.0 per persona
+
+    def verdict(timelines: list[UnifiedTimeline]) -> float:
+        return calls.pop(0)
+
+    # Custom tolerance treats anything within ±10 as equal.
+    contributions = load_bearing_personas(
+        {"alice": tl, "bob": tl},
+        verdict_fn=verdict,
+        equality_fn=lambda a, b: abs(a - b) < 10.0,
+    )
+    assert all(not c.is_load_bearing for c in contributions)
+
+
+def test_negative_load_bearing_empty_mapping_returns_empty() -> None:
+    """Step 10 audit L1: empty input returns empty list —
+    undocumented edge case now locked."""
+    contributions = load_bearing_personas(
+        {},
+        verdict_fn=lambda ts: len(ts),
+    )
+    assert contributions == []
