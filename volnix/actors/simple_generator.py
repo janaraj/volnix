@@ -86,8 +86,22 @@ class SimpleActorGenerator:
             permissions = spec.get("permissions", {})
             budget = spec.get("budget")
             team = spec.get("team")
+            # Phase 4C Step 11 post-ship cleanup (audit C1): thread
+            # ``activation_profile`` through so CharacterDefinition
+            # consumers can opt a catalog character into the NPC
+            # activation path. Also consume ``id`` / ``name`` as
+            # known keys — they're catalog-scope metadata, not
+            # actor identity (the generator mints its own actor_id
+            # with count expansion), and shouldn't land in the
+            # metadata bag as junk.
+            activation_profile = spec.get("activation_profile")
 
-            # Anything not in known keys goes to metadata
+            # Anything not in known keys goes to metadata; an
+            # explicit ``metadata`` sub-dict on the spec is merged
+            # in (Step-11 cleanup audit C1: prevents the nested
+            # ``{"metadata": {"metadata": {...}}}`` shape that
+            # CharacterDefinition.to_actor_spec() would otherwise
+            # produce).
             known_keys = {
                 "role",
                 "type",
@@ -97,8 +111,15 @@ class SimpleActorGenerator:
                 "budget",
                 "team",
                 "visibility",
+                "activation_profile",
+                "id",
+                "name",
+                "metadata",
             }
             metadata = {k: v for k, v in spec.items() if k not in known_keys}
+            explicit_meta = spec.get("metadata")
+            if isinstance(explicit_meta, dict):
+                metadata = {**metadata, **explicit_meta}
 
             # Determine friction distribution for non-agent actors
             if actor_type != ActorType.AGENT:
@@ -135,6 +156,13 @@ class SimpleActorGenerator:
                         friction_profile=friction_profile,
                         metadata=metadata,
                         personality_hint=hint,
+                        # Phase 4C Step 11 cleanup (audit C1): thread
+                        # activation_profile from catalog spec through
+                        # to ActorDefinition so a CharacterDefinition
+                        # with ``activation_profile="consumer_user"``
+                        # actually becomes an active NPC rather than
+                        # a passive metadata entry.
+                        activation_profile=activation_profile,
                     )
                 )
 
