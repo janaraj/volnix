@@ -38,6 +38,18 @@ class LLMRouter:
             config.max_concurrent if hasattr(config, "max_concurrent") else 10
         )
 
+    def register_provider(self, name: str, provider: Any) -> None:
+        """Register an LLM provider under a given name (PMF Plan
+        Phase 4C Step 8 — post-impl audit H4/L2).
+
+        Public wrapper over ``self._registry.register`` so callers
+        (e.g., ``VolnixApp`` registering the replay provider)
+        don't reach into the router's private ``_registry``
+        attribute. Composition root continues to own provider
+        construction; this method is pure glue.
+        """
+        self._registry.register(name, provider)
+
     def _resolve_routing(
         self, engine_name: str, use_case: str = "default"
     ) -> LLMRoutingEntry | None:
@@ -74,6 +86,39 @@ class LLMRouter:
         Returns:
             The LLM response from the selected provider.
         """
+        # PMF Plan Phase 4C Step 8 — replay-mode interception. When
+        # the caller sets ``replay_mode=True`` on the request, bypass
+        # engine/use-case routing entirely and delegate to the
+        # registered ``"replay"`` provider. Preserves the normal
+        # path bit-identically when ``replay_mode=False`` (default).
+        if request.replay_mode:
+            # Post-impl audit H3: reject conflicting overrides
+            # loudly. A caller that sets both ``replay_mode=True``
+            # AND ``provider_override="<something else>"`` has a
+            # bug — the current code would silently drop the
+            # override; surface it as an error instead.
+            if request.provider_override and request.provider_override != "replay":
+                from volnix.core.errors import ReplayProviderNotFound
+
+                raise ReplayProviderNotFound(
+                    f"LLMRouter: replay_mode=True with "
+                    f"provider_override={request.provider_override!r} "
+                    f"is ambiguous — clear provider_override or set "
+                    f"replay_mode=False."
+                )
+            try:
+                replay_provider = self._registry.get("replay")
+            except KeyError as exc:
+                from volnix.core.errors import ReplayProviderNotFound
+
+                raise ReplayProviderNotFound(
+                    "LLMRouter: 'replay' provider not registered; "
+                    "cannot service replay_mode=True request. "
+                    "App startup must register ReplayLLMProvider after "
+                    "the ledger is initialized."
+                ) from exc
+            return await replay_provider.generate(request)
+
         routing = self._resolve_routing(engine_name, use_case)
 
         if routing:
@@ -224,9 +269,7 @@ class LLMRouter:
         try:
             provider = self._registry.get(provider_name)
         except KeyError:
-            routing_key = (
-                f"{engine_name}_{use_case}" if use_case != "default" else engine_name
-            )
+            routing_key = f"{engine_name}_{use_case}" if use_case != "default" else engine_name
             raise KeyError(
                 f"No provider '{provider_name}' registered for embedding. "
                 f"Routing: {routing_key} -> "

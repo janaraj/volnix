@@ -87,6 +87,8 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "VolnixError",
         "DuplicatePackError",
         "PackNotFoundError",
+        "ReplayJournalMismatch",
+        "ReplayProviderNotFound",
         "SessionNotFoundError",
     }
 )

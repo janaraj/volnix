@@ -149,6 +149,17 @@ class LLMRequest(BaseModel, frozen=True):
     thinking_enabled: bool = False
     thinking_budget_tokens: int = 2048  # Anthropic min is 1024 (clamped at provider)
 
+    # PMF Plan Phase 4C Step 8 — ReplayLLMProvider interception.
+    # When ``replay_mode=True``, ``LLMRouter.route`` delegates to
+    # the registered ``"replay"`` provider instead of resolving
+    # via engine/use-case routing. Default False preserves
+    # non-replay behaviour exactly.
+    replay_mode: bool = False
+    # Lookup key for ReplayLLMProvider. Expected keys:
+    # ``session_id``, ``actor_id``, ``activation_id``. Ignored
+    # when ``replay_mode=False``.
+    replay_context: dict[str, Any] | None = None
+
 
 class LLMResponse(BaseModel, frozen=True):
     """Response returned from an LLM provider.

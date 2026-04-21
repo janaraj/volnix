@@ -133,6 +133,17 @@ class VolnixApp:
             # 4. LLM infrastructure (before engines — engines may need it)
             self._llm_router = await self._initialize_llm()
 
+            # 4b. Register ReplayLLMProvider (PMF Plan Phase 4C Step 8).
+            # Ledger + router both required — the replay provider
+            # queries the utterance journal for recorded assistant
+            # responses. ``self._llm_router`` is None when no LLM
+            # providers are configured (e.g., offline tests);
+            # replay is simply unavailable in that case.
+            if self._ledger is not None and self._llm_router is not None:
+                from volnix.llm.providers.replay import ReplayLLMProvider
+
+                self._llm_router.register_provider("replay", ReplayLLMProvider(self._ledger))
+
             # 5. Run management + artifacts (before engine wiring — engines need these)
             from volnix.runs.artifacts import ArtifactStore as RunArtifactStore
             from volnix.runs.manager import RunManager
@@ -1769,11 +1780,20 @@ class VolnixApp:
         compiled_plan: Any,
         event_queue: Any,
         pipeline_executor: Any,
+        *,
+        session_id: Any = None,  # SessionId | None — forward to runner
+        initial_tick: int = 0,
     ) -> tuple[Any, dict[str, Any]] | None:
         """Create the appropriate runner for this blueprint.
 
         Composition-root factory: resolves game detection and concrete
         runner selection so the CLI never imports engine classes.
+
+        ``session_id`` + ``initial_tick`` (PMF Plan Phase 4C Step 8
+        post-impl audit C2) propagate into ``SimulationRunner``,
+        which in turn wires them onto the agency engine for
+        deterministic ``activation_id`` derivation. Defaults
+        preserve the pre-Step-8 non-session behaviour byte-identical.
 
         Returns ``(runner, metadata)`` or ``None`` if no game engine
         is registered for a game blueprint.  ``metadata`` contains
@@ -1822,6 +1842,8 @@ class VolnixApp:
             config=self._config.simulation_runner,
             ledger=self._ledger,
             actor_specs=plan_actors,
+            session_id=session_id,
+            initial_tick=initial_tick,
         )
         return runner, {"runner_kind": "simulation"}
 

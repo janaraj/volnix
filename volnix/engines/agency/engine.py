@@ -23,6 +23,8 @@ from volnix.core.types import (
     ActorId,
     EnvelopePriority,
     ServiceId,
+    SessionId,
+    generate_activation_id,
 )
 from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
@@ -248,6 +250,13 @@ class AgencyEngine(BaseEngine):
         # memory hooks short-circuit and the activation path is
         # byte-identical to Phase 4A / Step 10.
         self._memory_engine: Any = None
+        # PMF Plan Phase 4C Step 8 — session correlation for
+        # deterministic ``activation_id`` derivation. When None
+        # (default), activation IDs fall back to ``uuid4`` (existing
+        # non-session behaviour). ``SimulationRunner`` calls
+        # ``set_session_id`` during its configure pass when the
+        # runner is constructed with a session_id.
+        self._session_id: SessionId | None = None
 
     def set_simulation_progress(self, current: int, total: int) -> None:
         """Update simulation progress for lead agent prompt awareness."""
@@ -352,6 +361,21 @@ class AgencyEngine(BaseEngine):
                     )
 
             loop.create_task(_stop_prior())
+
+    def set_session_id(self, session_id: SessionId | None) -> None:
+        """Opt-in session correlation for deterministic activation
+        IDs (PMF Plan Phase 4C Step 8).
+
+        Called by ``SimulationRunner`` when it is constructed with
+        a ``session_id``. ``activation_id`` generation at the lead-
+        actor tool-loop entry uses ``generate_activation_id`` so a
+        future ``ReplayLLMProvider`` can reproduce the same run
+        bit-identically from the utterance journal.
+
+        Idempotent — last call wins. Passing ``None`` explicitly
+        resets to the uuid4 fallback path.
+        """
+        self._session_id = session_id
 
     async def configure(
         self,
@@ -1596,11 +1620,20 @@ class AgencyEngine(BaseEngine):
             return []
 
         import time as _time
-        import uuid
 
         from volnix.ledger.entries import ActivationCompleteEntry, ToolLoopStepEntry
 
-        activation_id = str(uuid.uuid4())[:12]
+        # PMF Plan Phase 4C Step 8 — deterministic activation_id when
+        # a session is active. Falls back to uuid4 (via
+        # ``generate_activation_id(session_id=None, ...)``) when no
+        # session is wired, preserving non-session behaviour
+        # byte-identical to pre-Step-8 runs.
+        activation_id = generate_activation_id(
+            session_id=self._session_id,
+            actor_id=actor.actor_id,
+            tick=self._current_tick(),
+            activation_index=0,
+        )
         # Per-activation tool-call budget. Override (from game runner's
         # actions_per_turn) wins when set; otherwise use the global default.
         max_calls = (

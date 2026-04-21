@@ -36,6 +36,11 @@ class Ledger:
         # Nullable: pre-session entries (engine_lifecycle, etc.) and
         # runs outside a session both persist NULL.
         ("session_id", "TEXT"),
+        # PMF Plan Phase 4C Step 8 — activation correlation for
+        # ReplayLLMProvider journal lookup. Nullable: entries not
+        # tied to an activation (e.g., state_mutation) persist NULL.
+        # Indexed on initialize() for O(log N) replay lookups.
+        ("activation_id", "TEXT"),
         ("payload", "TEXT NOT NULL"),
     ]
 
@@ -57,6 +62,9 @@ class Ledger:
         await self._log.create_index("actor_id")
         # PMF Plan Phase 4C Step 6 — session_id filter primary index.
         await self._log.create_index("session_id")
+        # PMF Plan Phase 4C Step 8 — activation_id index for
+        # ReplayLLMProvider journal lookups.
+        await self._log.create_index("activation_id")
 
     async def shutdown(self) -> None:
         """No-op -- Database lifecycle is managed by ConnectionManager."""
@@ -80,6 +88,7 @@ class Ledger:
                 "actor_id": _extract_actor_id(entry),
                 "engine_name": _extract_engine_name(entry),
                 "session_id": _extract_session_id(entry),
+                "activation_id": _extract_activation_id(entry),
                 "payload": entry.model_dump_json(),
             }
         )
@@ -110,6 +119,9 @@ class Ledger:
         # PMF Plan Phase 4C Step 6 — session_id equality filter.
         if filters.session_id:
             sql_filters["session_id"] = str(filters.session_id)
+        # PMF Plan Phase 4C Step 8 — activation_id equality filter.
+        if filters.activation_id:
+            sql_filters["activation_id"] = str(filters.activation_id)
 
         # Range filters → SQL WHERE col >= ? AND col <= ?
         range_filters: list[tuple[str, str, str]] = []
@@ -164,6 +176,23 @@ def _extract_session_id(entry: LedgerEntry) -> str | None:
     ``WHERE session_id IS NULL`` for unsessioned entries.
     """
     raw = getattr(entry, "session_id", None)
+    if raw is None:
+        return None
+    return str(raw)
+
+
+def _extract_activation_id(entry: LedgerEntry) -> str | None:
+    """Extract ``activation_id`` from an entry if it has one
+    (PMF Plan Phase 4C Step 8). Same module-level pattern as
+    ``_extract_session_id``. Feeds the ``activation_id`` indexed
+    column that ``ReplayLLMProvider`` uses to look up utterance
+    rows for a specific activation.
+
+    Returns ``None`` for entries without an ``activation_id``
+    field (most; only ``LLMUtteranceEntry`` / ``ToolLoopStepEntry`` /
+    ``ActivationCompleteEntry`` carry it).
+    """
+    raw = getattr(entry, "activation_id", None)
     if raw is None:
         return None
     return str(raw)

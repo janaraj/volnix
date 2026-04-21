@@ -339,6 +339,28 @@ class ActorGenerationError(ActorError):
 # ---------------------------------------------------------------------------
 
 
+class ReplayJournalMismatch(VolnixError):
+    """Raised by ``ReplayLLMProvider`` when the utterance journal
+    does not contain the expected entries for a replay lookup key.
+
+    Subclass of ``VolnixError`` per Step-1 error-hierarchy lock.
+    PMF Plan Phase 4C Step 8.
+    """
+
+    pass
+
+
+class ReplayProviderNotFound(VolnixError):
+    """Raised by ``LLMRouter.route`` when ``replay_mode=True`` is
+    requested but no ``"replay"`` provider is registered in the
+    provider registry.
+
+    PMF Plan Phase 4C Step 8.
+    """
+
+    pass
+
+
 class SessionNotFoundError(VolnixError):
     """Raised when ``SessionManager`` is asked for a session id
     that isn't in the store.

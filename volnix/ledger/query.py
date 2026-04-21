@@ -11,7 +11,7 @@ from typing import Self
 
 from pydantic import BaseModel
 
-from volnix.core.types import ActorId, SessionId
+from volnix.core.types import ActivationId, ActorId, SessionId
 
 # ---------------------------------------------------------------------------
 # Query models
@@ -40,6 +40,9 @@ class LedgerQuery(BaseModel):
     # Typed ``SessionId | None`` per CLAUDE.md typed-ID discipline
     # (audit-fold H1).
     session_id: SessionId | None = None
+    # PMF Plan Phase 4C Step 8 — activation correlation filter for
+    # ReplayLLMProvider journal lookups.
+    activation_id: ActivationId | None = None
     limit: int = 100  # default; callers can override per-query
     offset: int = 0
 
@@ -73,6 +76,8 @@ class LedgerQueryBuilder:
         self._engine_name: str | None = None
         # PMF Plan Phase 4C Step 6 — session filter.
         self._session_id: SessionId | None = None
+        # PMF Plan Phase 4C Step 8 — activation filter.
+        self._activation_id: ActivationId | None = None
         self._limit: int = 100
         self._offset: int = 0
         self._aggregation: LedgerAggregation | None = None
@@ -115,6 +120,17 @@ class LedgerQueryBuilder:
             This builder for chaining.
         """
         self._actor_id = actor_id
+        return self
+
+    def filter_activation(self, activation_id: ActivationId | str) -> Self:
+        """Filter entries by ``activation_id`` (PMF Plan Phase 4C
+        Step 8). Used by ``ReplayLLMProvider`` to look up the
+        utterance rows for a specific activation.
+
+        Accepts either ``ActivationId`` or a raw ``str``; stored
+        as ``ActivationId`` for type-safe downstream consumption.
+        """
+        self._activation_id = ActivationId(str(activation_id))
         return self
 
     def filter_session(self, session_id: SessionId | str) -> Self:
@@ -200,6 +216,7 @@ class LedgerQueryBuilder:
             actor_id=self._actor_id,
             engine_name=self._engine_name,
             session_id=self._session_id,
+            activation_id=self._activation_id,
             limit=self._limit,
             offset=self._offset,
         )

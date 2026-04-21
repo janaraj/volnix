@@ -44,6 +44,8 @@ from volnix.core.envelope import ActionEnvelope
 from volnix.core.errors import (
     DuplicatePackError,
     PackNotFoundError,
+    ReplayJournalMismatch,
+    ReplayProviderNotFound,
     SessionNotFoundError,
     VolnixError,
 )
@@ -152,5 +154,7 @@ __all__ = [
     "VolnixError",
     "DuplicatePackError",
     "PackNotFoundError",
+    "ReplayJournalMismatch",
+    "ReplayProviderNotFound",
     "SessionNotFoundError",
 ]

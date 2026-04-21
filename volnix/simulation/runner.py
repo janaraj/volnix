@@ -101,6 +101,12 @@ class SimulationRunner:
         # Wire pipeline executor into agency for inline tool execution
         if self._agency and hasattr(self._agency, "set_tool_executor"):
             self._agency.set_tool_executor(self._execute_pipeline)
+        # PMF Plan Phase 4C Step 8 — propagate session_id so the
+        # agency engine can derive deterministic activation IDs for
+        # the lead-actor tool loop. Safe no-op when either side
+        # lacks the method (older engine instances or test doubles).
+        if self._agency and hasattr(self._agency, "set_session_id"):
+            self._agency.set_session_id(session_id)
         self._animator = animator
         self._budget_checker = budget_checker
         self._config = config or SimulationRunnerConfig()
