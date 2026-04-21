@@ -27,11 +27,8 @@ def test_core_does_not_import_from_engines() -> None:
     """
     core_dir = PRODUCT_ROOT / "core"
     offenders = find_import_offenders(core_dir, _core_file_importing_engines)
-    assert not offenders, (
-        "volnix/core/* must not import from volnix/engines/*:\n"
-        + "\n".join(
-            f"  {path}: {', '.join(mods)}" for path, mods in sorted(offenders.items())
-        )
+    assert not offenders, "volnix/core/* must not import from volnix/engines/*:\n" + "\n".join(
+        f"  {path}: {', '.join(mods)}" for path, mods in sorted(offenders.items())
     )
 
 
@@ -45,7 +42,9 @@ def test_core_protocols_only_imports_core() -> None:
 
     protocols_file = PRODUCT_ROOT / "core" / "protocols.py"
     mods = imported_modules(protocols_file)
-    offenders = sorted(m for m in mods if m.startswith("volnix.") and not m.startswith("volnix.core"))
+    offenders = sorted(
+        m for m in mods if m.startswith("volnix.") and not m.startswith("volnix.core")
+    )
     assert not offenders, (
         f"{rel_repo_path(protocols_file)} imports from non-core volnix modules: "
         f"{offenders}. Protocol types must live in volnix.core.*."

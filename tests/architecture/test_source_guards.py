@@ -49,14 +49,16 @@ def test_dynamic_imports_are_confined_to_pack_loader():
     """Dynamic imports are sanctioned only for:
     - Pack discovery (``volnix/packs/loader.py``).
     - Product-supplied hook resolution — ``trait_extractor_hook``
-      (Step 12) resolves a dotted-path string to a caller-provided
-      callable. Consumers pass a fully-qualified name; the platform
-      imports it lazily at hook-resolve time.
+      (Step 12) and ``ledger_redactor`` (Step 14) resolve a
+      dotted-path string to a caller-provided callable. Consumers
+      pass a fully-qualified name; the platform imports it lazily
+      at hook-resolve time.
     """
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"importlib.import_module"}))
     assert offenders == {
         "volnix/packs/loader.py",
         "volnix/actors/trait_extractor.py",
+        "volnix/privacy/redaction.py",
     }
 
 

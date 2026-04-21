@@ -11,6 +11,8 @@ by :class:`ConnectionManager`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from volnix.ledger.config import LedgerConfig
 from volnix.ledger.entries import LedgerEntry, deserialize_entry
 from volnix.ledger.query import LedgerQuery
@@ -44,7 +46,14 @@ class Ledger:
         ("payload", "TEXT NOT NULL"),
     ]
 
-    def __init__(self, config: LedgerConfig, db: Database) -> None:
+    def __init__(
+        self,
+        config: LedgerConfig,
+        db: Database,
+        *,
+        redactor: Any = None,  # Callable[[LedgerEntry], LedgerEntry] | None
+        ephemeral: bool = False,
+    ) -> None:
         self._config = config
         self._db = db
         self._log = AppendOnlyLog(db=db, table_name="ledger_log", columns=self.COLUMNS)
@@ -53,6 +62,21 @@ class Ledger:
         self._entry_types_enabled: set[str] | None = (
             set(config.entry_types_enabled) if config.entry_types_enabled else None
         )
+        # PMF Plan Phase 4C Step 14 — privacy hooks.
+        # ``redactor``: optional callable run before every append
+        # so products can strip sensitive fields. Injected via DI
+        # (NOT imported from volnix.privacy) so Ledger stays
+        # domain-neutral. Post-impl audit H5: validate callability
+        # at DI time so misinjection surfaces at boot rather than
+        # at first ``append``.
+        # ``ephemeral``: when True, append() returns -1 and writes
+        # nothing. Guards disk writes for no-persistence sessions.
+        if redactor is not None and not callable(redactor):
+            raise TypeError(
+                f"Ledger redactor must be callable or None, got {type(redactor).__name__}"
+            )
+        self._redactor: Any = redactor
+        self._ephemeral: bool = ephemeral
 
     async def initialize(self) -> None:
         """Open the backing store and ensure the schema exists."""
@@ -81,6 +105,39 @@ class Ledger:
         """
         if self._entry_types_enabled and entry.entry_type not in self._entry_types_enabled:
             return -1
+        # PMF Plan Phase 4C Step 14 — ephemeral mode suppresses
+        # disk writes entirely so a consumer running a private
+        # session never accidentally persists the ledger.
+        if self._ephemeral:
+            return -1
+        # PMF Plan Phase 4C Step 14 — run the redactor BEFORE
+        # extracting indexed columns so redaction on fields like
+        # ``actor_id`` / ``session_id`` propagates to the SQL
+        # columns too. Returning None from a redactor is a
+        # programming error — refuse loudly rather than writing a
+        # NoneType payload.
+        if self._redactor is not None:
+            _original_type = entry.entry_type
+            entry = self._redactor(entry)
+            if entry is None:
+                raise TypeError(
+                    "Ledger redactor returned None; the hook must "
+                    "return a LedgerEntry. Fix the ledger_redactor "
+                    "registered in VolnixConfig.privacy."
+                )
+            # Post-impl audit H2: the type filter above has already
+            # run. A redactor that rewrote ``entry_type`` would
+            # sneak a disabled type past the gate — refuse loudly
+            # so the contract ("redactor doesn't change type") is
+            # machine-enforced, not documented-only.
+            if entry.entry_type != _original_type:
+                raise TypeError(
+                    f"Ledger redactor changed entry_type from "
+                    f"{_original_type!r} to {entry.entry_type!r}. "
+                    f"Redactors MUST preserve entry_type — the "
+                    f"type filter runs before the redactor, so a "
+                    f"rewrite would bypass the consumer's allowlist."
+                )
         return await self._log.append(
             {
                 "entry_type": entry.entry_type,

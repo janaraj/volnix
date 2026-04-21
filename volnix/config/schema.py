@@ -36,6 +36,45 @@ from volnix.pipeline.config import PipelineConfig
 from volnix.reality.config import RealityConfig, SeedConfig
 from volnix.runs.config import RunConfig
 from volnix.sessions.config import SessionsConfig
+
+
+class PrivacyConfig(BaseModel):
+    """Privacy knobs (PMF Plan Phase 4C Step 14).
+
+    Attributes:
+        ephemeral: When ``True``, suppresses ledger disk writes
+            for the life of the process. **SCOPE LIMIT AT 0.2.0**:
+            ONLY ``Ledger.append`` honours this flag today. Bus
+            persistence, snapshot store, run artifacts, and the
+            ``llm_debug`` flat-files all continue to write. A
+            full per-sink ephemeral mode lands in a follow-up
+            step; until then a privacy-sensitive consumer who
+            needs zero disk writes should also set
+            ``bus.persistence_enabled=False`` and disable the
+            run-artifact / snapshot sinks directly.
+        ledger_redactor: Dotted-path string
+            (``"package.module:callable_name"``) resolving to a
+            callable ``(LedgerEntry) -> LedgerEntry``. Called by
+            the ledger before every ``append``. ``None`` (default)
+            uses the identity redactor (no-op). Invalid paths
+            raise ``LedgerRedactorError`` at resolve time.
+            Contract: the redactor MUST return a fresh
+            ``LedgerEntry`` (mutation of the input is undefined
+            behaviour) and MUST NOT change ``entry_type`` (the
+            type filter runs BEFORE the redactor — see
+            :meth:`Ledger.append`).
+    """
+
+    # Post-impl audit H1: ``extra="forbid"`` catches typo'd
+    # fields (``ephemaral=True``) at config-load time — matches
+    # the discipline applied to ``CharacterDefinition`` (Step 11)
+    # and ``PackManifest`` (Step 13).
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ephemeral: bool = False
+    ledger_redactor: str | None = None
+
+
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.templates.config import TemplateConfig
 from volnix.validation.config import ValidationConfig
@@ -185,6 +224,7 @@ class VolnixConfig(BaseModel):
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     worlds: WorldsConfig = Field(default_factory=WorldsConfig)
     sessions: SessionsConfig = Field(default_factory=SessionsConfig)
+    privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
 
     # PMF Plan Phase 4C Step 12 — product-side extractor hook.
     # Dotted-path string in the form ``"package.module:callable"``

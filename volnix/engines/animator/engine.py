@@ -557,7 +557,17 @@ class WorldAnimatorEngine(BaseEngine):
             List of event definition dicts for events that passed probability checks.
         """
         events: list[dict[str, Any]] = []
-        rng = random.Random(hash(world_time.isoformat()))
+        # PMF Plan Phase 4C Step 14 (audit D17): Python's built-in
+        # ``hash()`` is PYTHONHASHSEED-randomized per process, so
+        # the previous ``hash(world_time.isoformat())`` seed gave
+        # different results across replays of the same logical
+        # simulation. blake2b of the isoformat is stable across
+        # processes, preserving the replay determinism the engine
+        # promises.
+        import hashlib
+
+        digest = hashlib.blake2b(world_time.isoformat().encode("utf-8"), digest_size=8).digest()
+        rng = random.Random(int.from_bytes(digest, "big"))
 
         # Classify available tools by http_method for mapping
         write_tools = [

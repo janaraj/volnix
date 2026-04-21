@@ -127,7 +127,19 @@ class VolnixApp:
 
             # 3. Ledger
             ledger_db = await self._conn_mgr.get_connection("ledger")
-            self._ledger = Ledger(self._config.ledger, ledger_db)
+            # PMF Plan Phase 4C Step 14 — privacy hooks. Resolve
+            # the optional ledger redactor once; pass the ephemeral
+            # flag through so the ledger skips writes when the
+            # consumer asked for no-persistence mode.
+            from volnix.privacy.redaction import resolve_ledger_redactor
+
+            _redactor = resolve_ledger_redactor(self._config.privacy.ledger_redactor)
+            self._ledger = Ledger(
+                self._config.ledger,
+                ledger_db,
+                redactor=_redactor,
+                ephemeral=self._config.privacy.ephemeral,
+            )
             await self._ledger.initialize()
 
             # 4. LLM infrastructure (before engines — engines may need it)

@@ -49,7 +49,7 @@ from volnix.actors.trait_extractor import (
 )
 from volnix.app import VolnixApp
 from volnix.config.builder import ConfigBuilder
-from volnix.config.schema import PackSearchPath, VolnixConfig
+from volnix.config.schema import PackSearchPath, PrivacyConfig, VolnixConfig
 from volnix.core.envelope import ActionEnvelope
 from volnix.core.errors import (
     DuplicatePackError,
@@ -114,6 +114,11 @@ from volnix.observation import (
 from volnix.packs.base import ServicePack, ServiceProfile
 from volnix.packs.manifest import PackManifest, PackManifestLoadError
 from volnix.packs.registry import PackRegistry
+from volnix.privacy.redaction import (
+    LedgerRedactorError,
+    identity_redactor,
+    resolve_ledger_redactor,
+)
 from volnix.sessions import SessionManager, SlotAssignment
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.runner import SimulationRunner, SimulationType, StopReason
@@ -187,6 +192,11 @@ __all__ = [
     "ActorBehaviorTraits",
     "TraitExtractorHookError",
     "resolve_extractor_hook",
+    # Privacy (PMF Plan Phase 4C Step 14)
+    "PrivacyConfig",
+    "LedgerRedactorError",
+    "identity_redactor",
+    "resolve_ledger_redactor",
     # State trajectory (PMF Plan Phase 4C Step 9)
     "TrajectoryPoint",
     # Observation (PMF Plan Phase 4C Step 10)

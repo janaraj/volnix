@@ -93,6 +93,11 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "ActorBehaviorTraits",
         "TraitExtractorHookError",
         "resolve_extractor_hook",
+        # Privacy (Step 14)
+        "PrivacyConfig",
+        "LedgerRedactorError",
+        "identity_redactor",
+        "resolve_ledger_redactor",
         # State trajectory (Step 9)
         "TrajectoryPoint",
         # Observation (Step 10)

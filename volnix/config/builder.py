@@ -80,6 +80,13 @@ class ConfigBuilder:
         self._merge_section("memory", kwargs)
         return self
 
+    def privacy(self, **kwargs: Any) -> ConfigBuilder:
+        """Merge into the ``[privacy]`` section (PMF Plan Phase 4C
+        Step 14). Accepts ``ephemeral: bool`` and
+        ``ledger_redactor: str | None``."""
+        self._merge_section("privacy", kwargs)
+        return self
+
     def agency(self, **kwargs: Any) -> ConfigBuilder:
         """Merge into the ``[agency]`` section."""
         self._merge_section("agency", kwargs)
