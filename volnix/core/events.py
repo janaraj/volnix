@@ -105,6 +105,13 @@ class Event(BaseModel, frozen=True):
     caused_by: EventId | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     run_id: str | None = None
+    # PMF Plan Phase 4C Step 6 — platform Session correlation.
+    # Stamped by upstream code (e.g., ``SimulationRunner`` / engines
+    # that construct events during a session) from
+    # ``SimulationRunner.session_id``. ``None`` outside a session.
+    # Join key for ``ObservationQuery`` (Step 10) and
+    # ``ReplayLLMProvider`` (Step 8).
+    session_id: SessionId | None = None
     action: str = ""
     service_id: str = ""
 
@@ -615,6 +622,19 @@ class CohortRotationEvent(Event):
 
 # ---------------------------------------------------------------------------
 # Session lifecycle events (PMF Plan Phase 4C Step 4)
+#
+# Note on ``session_id`` field narrowing (Step 6 post-impl audit
+# H-NEW-1): these four lifecycle events re-declare ``session_id``
+# as REQUIRED (no None default), narrowing the base
+# ``Event.session_id: SessionId | None = None``. This is
+# intentional — for these events ``session_id`` serves BOTH as the
+# base-class correlation key AND as the domain field ("which
+# session started/paused/resumed/ended"). A ``None`` here would
+# be semantically meaningless. Step 10 ObservationQuery consumers
+# should type-hint against the subclass when domain access is
+# required; against ``Event`` when correlation-only. The apparent
+# LSP narrowing is safe at runtime (Pydantic accepts it) and
+# preserves typed-ID discipline on the domain field.
 # ---------------------------------------------------------------------------
 
 

@@ -32,6 +32,10 @@ class Ledger:
         ("timestamp", "TEXT NOT NULL"),
         ("actor_id", "TEXT"),
         ("engine_name", "TEXT"),
+        # PMF Plan Phase 4C Step 6 — platform Session correlation.
+        # Nullable: pre-session entries (engine_lifecycle, etc.) and
+        # runs outside a session both persist NULL.
+        ("session_id", "TEXT"),
         ("payload", "TEXT NOT NULL"),
     ]
 
@@ -51,6 +55,8 @@ class Ledger:
         await self._log.create_index("entry_type")
         await self._log.create_index("timestamp")
         await self._log.create_index("actor_id")
+        # PMF Plan Phase 4C Step 6 — session_id filter primary index.
+        await self._log.create_index("session_id")
 
     async def shutdown(self) -> None:
         """No-op -- Database lifecycle is managed by ConnectionManager."""
@@ -73,6 +79,7 @@ class Ledger:
                 "timestamp": entry.timestamp.isoformat(),
                 "actor_id": _extract_actor_id(entry),
                 "engine_name": _extract_engine_name(entry),
+                "session_id": _extract_session_id(entry),
                 "payload": entry.model_dump_json(),
             }
         )
@@ -100,6 +107,9 @@ class Ledger:
             sql_filters["actor_id"] = str(filters.actor_id)
         if filters.engine_name:
             sql_filters["engine_name"] = filters.engine_name
+        # PMF Plan Phase 4C Step 6 — session_id equality filter.
+        if filters.session_id:
+            sql_filters["session_id"] = str(filters.session_id)
 
         # Range filters → SQL WHERE col >= ? AND col <= ?
         range_filters: list[tuple[str, str, str]] = []
@@ -141,3 +151,19 @@ def _extract_actor_id(entry: LedgerEntry) -> str:
 def _extract_engine_name(entry: LedgerEntry) -> str:
     """Extract engine_name from an entry if it has one."""
     return getattr(entry, "engine_name", None) or ""
+
+
+def _extract_session_id(entry: LedgerEntry) -> str | None:
+    """Extract ``session_id`` from an entry if it has one
+    (PMF Plan Phase 4C Step 6). Module-level function matching the
+    existing ``_extract_actor_id`` / ``_extract_engine_name``
+    helpers (audit-fold C2 — not an instance method).
+
+    Returns ``None`` (not empty string) so a NULL column value
+    signals "no session" — enabling consumers to query
+    ``WHERE session_id IS NULL`` for unsessioned entries.
+    """
+    raw = getattr(entry, "session_id", None)
+    if raw is None:
+        return None
+    return str(raw)

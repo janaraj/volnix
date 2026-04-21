@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import Any
 
 from volnix.core.envelope import ActionEnvelope
-from volnix.core.types import ActionSource, ActorId, RunResult
+from volnix.core.types import ActionSource, ActorId, RunResult, SessionId
 from volnix.simulation.config import SimulationRunnerConfig
 from volnix.simulation.event_queue import EventQueue
 
@@ -77,7 +77,24 @@ class SimulationRunner:
         ledger: Any | None = None,
         replay_log: Any | None = None,
         actor_specs: list[dict[str, Any]] | None = None,
+        session_id: SessionId | None = None,
+        initial_tick: int = 0,
     ) -> None:
+        """Construct a SimulationRunner.
+
+        PMF Plan Phase 4C Step 6 — new session-awareness kwargs:
+
+        - ``session_id``: The platform Session this run belongs to.
+          Exposed via the ``session_id`` property for upstream
+          code (engines, activators) to stamp onto envelopes and
+          events they construct during the run. The runner does
+          NOT mutate envelopes — ``ActionEnvelope`` is frozen.
+          ``None`` outside a session.
+        - ``initial_tick``: Seed value for ``_current_tick``. Lets
+          a caller resume a session without resetting logical time
+          — the next run inherits the prior run's end tick
+          (cross-run tick continuity, PMF Plan G8).
+        """
         self._queue = event_queue
         self._execute_pipeline = pipeline_executor
         self._agency = agency_engine
@@ -110,7 +127,9 @@ class SimulationRunner:
         self._consecutive_idle_ticks: int = 0
         self._deliverable_produced: bool = False
         self._deliverable_content: dict | None = None
-        self._current_tick: int = 0
+        # PMF Plan Phase 4C Step 6 — session correlation.
+        self._session_id: SessionId | None = session_id
+        self._current_tick: int = initial_tick
         # Animator tick gating: fire at most once per animator_tick_interval ticks.
         # Initial value ensures the first tick fires immediately.
         self._last_animator_tick: int = -(self._config.animator_tick_interval)
@@ -125,6 +144,22 @@ class SimulationRunner:
     def stop_reason(self) -> StopReason | None:
         """Reason the simulation stopped, or None if still running."""
         return self._stop_reason
+
+    @property
+    def session_id(self) -> SessionId | None:
+        """Platform Session this run belongs to, or ``None`` outside
+        a session. Read-only post-construction — resuming a session
+        constructs a NEW runner with ``initial_tick`` set to the
+        prior run's end tick (PMF Plan Phase 4C Step 6, D6c)."""
+        return self._session_id
+
+    @property
+    def current_tick(self) -> int:
+        """Current logical tick. Seeded from ``initial_tick`` at
+        construction; advanced by the runner during ``run()``
+        (PMF Plan Phase 4C Step 6, D6d — cross-run tick
+        continuity)."""
+        return self._current_tick
 
     @property
     def total_events_processed(self) -> int:

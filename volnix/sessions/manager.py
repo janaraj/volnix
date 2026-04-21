@@ -436,6 +436,27 @@ class SessionManager:
         """List current slot pinnings for a session in pin-order."""
         return await self._store.list_slot_assignments(session_id)
 
+    # ── Dependency injection ─────────────────────────────────────
+
+    def set_slot_manager(self, slot_manager: SlotManager | None) -> None:
+        """Attach (or detach) a ``SlotManager`` to this
+        ``SessionManager``. Idempotent — the last call wins.
+
+        PMF Plan Phase 4C Step 6 — used by ``VolnixApp`` to complete
+        the Step-5 deferral: ``SessionManager`` is constructed at
+        ``start()`` but ``SlotManager`` is built later in
+        ``configure_agency()``. This setter bridges the gap without
+        forcing ``SessionManager`` construction to wait.
+
+        **Timing contract (audit-fold M5):** MUST be called BEFORE
+        any ``pin_slot`` invocation. Calling mid-session with a
+        different ``SlotManager`` orphans previously-issued tokens
+        on the prior instance — ``resume()`` rehydrates only into
+        the current ``SlotManager``, so orphaned tokens are
+        effectively lost.
+        """
+        self._slot_manager = slot_manager
+
     # ── End-hook registration ────────────────────────────────────
 
     def register_on_session_end(self, hook: SessionEndHook) -> None:

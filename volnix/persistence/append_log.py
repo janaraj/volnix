@@ -51,7 +51,21 @@ class AppendOnlyLog:
         )
 
     async def initialize(self) -> None:
-        """Create the backing table if it does not already exist."""
+        """Create the backing table + ALTER TABLE ADD COLUMN for any
+        declared column not present in the live table.
+
+        PMF Plan Phase 4C Step 6 — lightweight migration-on-connect
+        so the schema can grow without an out-of-band tool. SQLite
+        ``ADD COLUMN`` with no ``NOT NULL``/``DEFAULT`` is a
+        metadata-only operation, safe on every connect.
+
+        **Caveat (audit M1):** ``ADD COLUMN`` does not carry
+        ``DEFAULT`` from the declared type — the application layer
+        must handle missing values on existing rows. Acceptable for
+        Step 6's nullable ``session_id`` column; future non-null
+        columns requiring ``DEFAULT`` should use a proper migration
+        tool, not this on-connect pass.
+        """
         cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
         await self._db.execute(f"""
             CREATE TABLE IF NOT EXISTS {self._table} (
@@ -60,6 +74,23 @@ class AppendOnlyLog:
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+        # Migration-on-connect: read live columns, add any missing.
+        live_rows = await self._db.fetchall(f"PRAGMA table_info({self._table})")
+        live_names = {row["name"] for row in live_rows}
+        for col_name, col_type in self._columns:
+            if col_name not in live_names:
+                # Strip NOT NULL / DEFAULT clauses — ADD COLUMN on
+                # an existing table cannot accept NOT NULL without
+                # a default.
+                bare_type = col_type.split()[0]
+                await self._db.execute(
+                    f"ALTER TABLE {self._table} ADD COLUMN {col_name} {bare_type}"
+                )
+                # Audit C1: update _column_names so subsequent
+                # append() calls recognise the new column — without
+                # this, every append() with the new column raises
+                # ValueError("Unknown column(s)").
+                self._column_names.add(col_name)
 
     async def append(self, values: dict[str, Any]) -> int:
         """Append a row and return its auto-generated sequence ID.

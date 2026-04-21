@@ -11,7 +11,7 @@ from typing import Self
 
 from pydantic import BaseModel
 
-from volnix.core.types import ActorId
+from volnix.core.types import ActorId, SessionId
 
 # ---------------------------------------------------------------------------
 # Query models
@@ -36,6 +36,10 @@ class LedgerQuery(BaseModel):
     end_time: datetime | None = None
     actor_id: ActorId | None = None
     engine_name: str | None = None
+    # PMF Plan Phase 4C Step 6 — platform Session correlation filter.
+    # Typed ``SessionId | None`` per CLAUDE.md typed-ID discipline
+    # (audit-fold H1).
+    session_id: SessionId | None = None
     limit: int = 100  # default; callers can override per-query
     offset: int = 0
 
@@ -67,6 +71,8 @@ class LedgerQueryBuilder:
         self._end_time: datetime | None = None
         self._actor_id: ActorId | None = None
         self._engine_name: str | None = None
+        # PMF Plan Phase 4C Step 6 — session filter.
+        self._session_id: SessionId | None = None
         self._limit: int = 100
         self._offset: int = 0
         self._aggregation: LedgerAggregation | None = None
@@ -109,6 +115,23 @@ class LedgerQueryBuilder:
             This builder for chaining.
         """
         self._actor_id = actor_id
+        return self
+
+    def filter_session(self, session_id: SessionId | str) -> Self:
+        """Filter entries by the platform Session they belong to
+        (PMF Plan Phase 4C Step 6).
+
+        Accepts either a ``SessionId`` or a raw ``str``; stored as
+        ``SessionId`` on the built query for type-safe downstream
+        consumption.
+
+        Args:
+            session_id: The session to filter on.
+
+        Returns:
+            This builder for chaining.
+        """
+        self._session_id = SessionId(str(session_id))
         return self
 
     def filter_engine(self, engine_name: str) -> Self:
@@ -176,6 +199,7 @@ class LedgerQueryBuilder:
             end_time=self._end_time,
             actor_id=self._actor_id,
             engine_name=self._engine_name,
+            session_id=self._session_id,
             limit=self._limit,
             offset=self._offset,
         )

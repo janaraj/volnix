@@ -18,6 +18,7 @@ from volnix.core.types import (
     EnvelopePriority,
     EventId,
     ServiceId,
+    SessionId,
 )
 
 
@@ -39,3 +40,7 @@ class ActionEnvelope(BaseModel, frozen=True):
     priority: EnvelopePriority = EnvelopePriority.INTERNAL
     parent_event_ids: list[EventId] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # PMF Plan Phase 4C Step 6 — platform Session correlation.
+    # Stamped by upstream construction sites when the envelope is
+    # built during a session. ``None`` outside a session.
+    session_id: SessionId | None = None

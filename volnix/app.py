@@ -433,6 +433,12 @@ class VolnixApp:
         # Pass to gateway for HTTP/MCP token resolution
         if self._gateway:
             self._gateway._slot_manager = self._slot_manager
+        # PMF Plan Phase 4C Step 6 — complete the Step-5 deferral.
+        # No-op when called before app.start() (e.g., direct
+        # configure_agency() invocation in tests) — _session_manager
+        # is None in that path.
+        if self._session_manager is not None:
+            self._session_manager.set_slot_manager(self._slot_manager)
         compiler._ledger = self._ledger  # Same pattern as state_engine
 
         # Register system actor (always needed) and default gateway actors
