@@ -331,3 +331,70 @@ def test_negative_source_extensions_mutation_does_not_leak() -> None:
     source["added"] = "later"
     assert m.extensions["nested"]["key"] == "orig"
     assert "added" not in m.extensions
+
+
+# ─── Step 13 cleanup (audit H4 / L3 / L4) ──────────────────────────
+
+
+class TestFidelityTierAgreement:
+    """Post-impl audit H4: ``check_manifest_matches_pack`` now
+    cross-checks ``fidelity_tier`` when the manifest declares it."""
+
+    def test_positive_matching_tier_accepted(self) -> None:
+        registry = PackRegistry()
+        manifest = _manifest(fidelity_tier=1)
+        registry.register(_MockPack(), manifest=manifest)
+        assert registry.has_pack("mock_manifest_test")
+
+    def test_negative_mismatched_tier_raises(self) -> None:
+        registry = PackRegistry()
+        manifest = _manifest(fidelity_tier=2)  # Pack ClassVar is 1
+        with pytest.raises(PackManifestMismatchError, match="fidelity_tier"):
+            registry.register(_MockPack(), manifest=manifest)
+        assert not registry.has_pack("mock_manifest_test")
+
+    def test_positive_tier_zero_skips_check(self) -> None:
+        """Author opted out of the tier check — registration succeeds
+        even though the pack's tier is 1 and the manifest's is 0."""
+        registry = PackRegistry()
+        manifest = _manifest()  # fidelity_tier defaults to 0
+        registry.register(_MockPack(), manifest=manifest)
+        assert registry.has_pack("mock_manifest_test")
+
+
+def test_positive_check_compatibility_empty_pack_name_uses_unknown() -> None:
+    """Post-impl audit L3: pack_name='' produces a readable error
+    via the ``<unknown>`` fallback — actionable diagnostics in logs."""
+    with pytest.raises(IncompatiblePackError, match="<unknown>"):
+        check_compatibility(
+            "0.5.0",
+            compatible_with=">=0.1,<0.3",
+            pack_name="",
+        )
+
+
+def test_positive_current_volnix_version_falls_back_on_missing_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Post-impl audit M5: when ``importlib.metadata.version``
+    raises ``PackageNotFoundError``, ``_current_volnix_version``
+    returns the ``0.0.0+source`` sentinel. This sentinel fails
+    any ``>=0.1`` specifier — intentional per audit C3 so
+    source-tree runs against manifest-bearing packs surface
+    'package not installed' at register time."""
+    import importlib.metadata
+
+    from volnix.packs import registry as registry_module
+
+    def _force_not_found(package_name: str) -> str:
+        if package_name == "volnix":
+            raise importlib.metadata.PackageNotFoundError(package_name)
+        return importlib.metadata.version(package_name)
+
+    # Patch the low-level metadata lookup so the function's own
+    # try/except fires.
+    monkeypatch.setattr(
+        "importlib.metadata.version",
+        _force_not_found,
+    )
+    assert registry_module._current_volnix_version() == "0.0.0+source"

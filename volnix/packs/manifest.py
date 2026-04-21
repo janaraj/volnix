@@ -107,17 +107,28 @@ class PackManifest(BaseModel):
     Attributes:
         name: Pack name (matches ``ServicePack.pack_name`` or
             ``ServiceProfile.profile_name``).
-        version: SemVer string for the pack itself. Validated
-            via ``packaging.version.Version``.
+        version: PEP-440 version string for the pack itself
+            (e.g. ``"1.2.0"``, ``"2.0.0a1"``). Note: the
+            validator accepts any PEP-440 string including
+            local versions (``+local``); those are technically
+            valid but discouraged for published packs (audit L1).
         compatible_with: PEP-440 specifier set the pack requires
             on the installed ``volnix`` version (e.g.
             ``">=0.2,<0.3"``). Validated via
-            ``packaging.specifiers.SpecifierSet``.
+            ``packaging.specifiers.SpecifierSet``. Empty strings
+            and accept-all specs are rejected (audit H2).
         author: Free-form author / team string.
         description: One-line pack description.
         category: Semantic category. Must match
             ``ServicePack.category`` at load time (see
             :class:`PackManifestMismatchError`).
+        fidelity_tier: Optional pack-declared fidelity tier
+            (``1`` = verified, ``2`` = profiled).
+            ``check_manifest_matches_pack`` cross-checks this
+            against ``ServicePack.fidelity_tier`` when non-zero
+            so manifest and class can't drift (audit H4). ``0``
+            (the default) skips the check for authors who
+            haven't opted in.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -128,6 +139,7 @@ class PackManifest(BaseModel):
     author: str = ""
     description: str = ""
     category: str = ""
+    fidelity_tier: int = 0
     extensions: dict[str, Any] = Field(default_factory=dict)
     """Free-form product-scoped metadata — the platform ignores
     this but products can record release-notes URLs, changelog
@@ -237,7 +249,13 @@ def check_compatibility(
     ``compatible_with`` specifier. Raises
     ``IncompatiblePackError`` on mismatch with an actionable
     message — surfaces at register time, not at call time.
+
+    ``pack_name`` is embedded in error messages for actionable
+    diagnostics; an empty string defaults to ``<unknown>`` so
+    log output stays readable (post-impl audit L3).
     """
+    if not pack_name or not pack_name.strip():
+        pack_name = "<unknown>"
     try:
         spec = SpecifierSet(compatible_with)
     except InvalidSpecifier as exc:
@@ -267,10 +285,17 @@ def check_manifest_matches_pack(
     *,
     pack_name: str,
     pack_category: str,
+    pack_fidelity_tier: int = 0,
 ) -> None:
     """Validate that ``pack.yaml`` values agree with the Python
     ``ServicePack`` / ``ServiceProfile`` ClassVars. Raises
     ``PackManifestMismatchError`` on drift.
+
+    Checked fields: ``name``, ``category``, ``fidelity_tier``
+    (post-impl audit H4). Fields with ``0`` / ``""`` on the
+    manifest side are treated as "author opted out" and skipped —
+    authors who want strict agreement set every field on the
+    manifest.
     """
     if manifest.name != pack_name:
         raise PackManifestMismatchError(
@@ -280,6 +305,11 @@ def check_manifest_matches_pack(
         raise PackManifestMismatchError(
             f"pack.yaml category {manifest.category!r} does not match "
             f"pack ClassVar {pack_category!r}"
+        )
+    if manifest.fidelity_tier and manifest.fidelity_tier != pack_fidelity_tier:
+        raise PackManifestMismatchError(
+            f"pack.yaml fidelity_tier {manifest.fidelity_tier!r} does "
+            f"not match pack ClassVar {pack_fidelity_tier!r}"
         )
 
 

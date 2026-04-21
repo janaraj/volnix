@@ -162,6 +162,7 @@ class PackRegistry:
             manifest,
             pack_name=pack.pack_name,
             pack_category=pack.category,
+            pack_fidelity_tier=pack.fidelity_tier,
         )
         check_compatibility(
             _current_volnix_version(),
@@ -170,8 +171,22 @@ class PackRegistry:
         )
         self._manifests[pack.pack_name] = manifest
 
-    def register_profile(self, profile: ServiceProfile) -> None:
-        """Register a service profile. Validates extends_pack and uniqueness."""
+    def register_profile(
+        self,
+        profile: ServiceProfile,
+        *,
+        manifest: PackManifest | None = None,
+    ) -> None:
+        """Register a service profile. Validates extends_pack and uniqueness.
+
+        Post-impl audit M2 (Step 13): profiles now accept an
+        optional ``manifest`` the same way packs do. Compat
+        semantics match ``register(pack, manifest=...)``:
+        manifest present → hard enforcement of
+        ``compatible_with`` against current volnix; manifest
+        absent → permissive with a ``DeprecationWarning``
+        recommending manifest authorship.
+        """
         if not profile.profile_name:
             raise ValueError("ServiceProfile must have a non-empty profile_name")
         if profile.profile_name in self._profiles:
@@ -181,6 +196,32 @@ class PackRegistry:
                 f"Profile '{profile.profile_name}' extends pack '{profile.extends_pack}' "
                 f"which is not registered"
             )
+        # Step-13 cleanup — run the compat gate before indexing
+        # (parallel to pack registration).
+        if manifest is None:
+            import warnings
+
+            warnings.warn(
+                f"Profile {profile.profile_name!r} registered without a "
+                f"pack.yaml manifest. Manifest declaration will become "
+                f"required in a future volnix major release.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        else:
+            check_manifest_matches_pack(
+                manifest,
+                pack_name=profile.profile_name,
+                pack_category=profile.category,
+                pack_fidelity_tier=profile.fidelity_tier,
+            )
+            check_compatibility(
+                _current_volnix_version(),
+                compatible_with=manifest.compatible_with,
+                pack_name=profile.profile_name,
+            )
+            self._manifests[profile.profile_name] = manifest
+
         self._profiles[profile.profile_name] = profile
         self._profile_pack_index.setdefault(profile.extends_pack, []).append(profile.profile_name)
 
