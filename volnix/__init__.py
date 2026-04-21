@@ -47,6 +47,7 @@ from volnix.core.errors import (
     ReplayJournalMismatch,
     ReplayProviderNotFound,
     SessionNotFoundError,
+    TrajectoryFieldNotFound,
     VolnixError,
 )
 from volnix.core.events import (
@@ -83,6 +84,7 @@ from volnix.core.types import (
     ToolName,
     WorldId,
 )
+from volnix.engines.state.trajectory import TrajectoryPoint
 from volnix.ledger.entries import LedgerEntry, UnknownLedgerEntry
 from volnix.ledger.query import LedgerQuery
 from volnix.packs.base import ServicePack, ServiceProfile
@@ -150,6 +152,8 @@ __all__ = [
     "SimulationRunnerConfig",
     "SimulationType",
     "StopReason",
+    # State trajectory (PMF Plan Phase 4C Step 9)
+    "TrajectoryPoint",
     # Errors
     "VolnixError",
     "DuplicatePackError",
@@ -157,4 +161,5 @@ __all__ = [
     "ReplayJournalMismatch",
     "ReplayProviderNotFound",
     "SessionNotFoundError",
+    "TrajectoryFieldNotFound",
 ]

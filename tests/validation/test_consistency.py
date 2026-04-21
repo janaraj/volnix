@@ -52,6 +52,9 @@ class MockStateEngine:
     async def get_timeline(self, entity_id, start=None, end=None):
         return []
 
+    async def get_trajectory(self, entity_id, field_path, tick_range=None):
+        return []
+
 
 ENTITY_SCHEMA = {
     "fields": {

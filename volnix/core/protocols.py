@@ -123,8 +123,14 @@ class StateEngineProtocol(Protocol):
         """Persist an event and record its causal edges. Returns the event ID."""
         ...
 
-    async def snapshot(self, label: str = "default") -> SnapshotId:
-        """Create an immutable point-in-time snapshot of the entire world state."""
+    async def snapshot(self, label: str = "default", tick: int = 0) -> SnapshotId:
+        """Create an immutable point-in-time snapshot of the entire world state.
+
+        ``tick`` (PMF Plan Phase 4C Step 9) stamps the logical tick
+        onto the ledger's ``SnapshotEntry`` so consumers can
+        correlate snapshots with simulation time. Default ``0``
+        preserves pre-Step-9 callers byte-identical.
+        """
         ...
 
     async def fork(self, snapshot_id: SnapshotId) -> WorldId:
@@ -150,6 +156,25 @@ class StateEngineProtocol(Protocol):
         entity_id: EntityId | None = None,
     ) -> list[Event]:
         """Return the ordered event timeline, optionally filtered by entity."""
+        ...
+
+    async def get_trajectory(
+        self,
+        entity_id: EntityId,
+        field_path: str,
+        tick_range: tuple[int, int] | None = None,
+    ) -> list[Any]:
+        """Reconstruct a field's historical-value sequence on an
+        entity from committed ``state_deltas`` (PMF Plan Phase 4C
+        Step 9). Returns an ordered list of
+        ``volnix.engines.state.trajectory.TrajectoryPoint`` values.
+
+        Return type is ``list[Any]`` on the protocol surface to
+        avoid pulling ``TrajectoryPoint`` into the ``core``
+        layer (``core.protocols`` must stay free of engine
+        imports). Consumers type-hint against the concrete class
+        when they need the narrower type.
+        """
         ...
 
 

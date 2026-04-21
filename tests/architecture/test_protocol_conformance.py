@@ -38,6 +38,8 @@ def test_state_engine_matches_state_protocol():
             "diff",
             "get_causal_chain",
             "get_timeline",
+            # Phase 4C Step 9 — historical-value projection.
+            "get_trajectory",
         ],
     )
 
@@ -105,7 +107,7 @@ class StrictStateEngine:
     async def commit_event(self, event):
         return "evt-test"
 
-    async def snapshot(self, label: str = "default"):
+    async def snapshot(self, label: str = "default", tick: int = 0):
         return "snap-test"
 
     async def fork(self, snapshot_id):
@@ -118,6 +120,16 @@ class StrictStateEngine:
         return []
 
     async def get_timeline(self, start=None, end=None, entity_id=None):
+        return []
+
+    async def get_trajectory(
+        self,
+        entity_id,
+        field_path: str,
+        tick_range=None,
+    ):
+        # Phase 4C Step 9 — stub returns empty for the protocol-
+        # conformance mock. Real engine walks committed state_deltas.
         return []
 
 

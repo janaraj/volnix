@@ -98,6 +98,16 @@ class _GeneratedEntityState(StateEngineProtocol):
     async def get_timeline(self, entity_id, start=None, end=None):
         return []
 
+    async def get_trajectory(
+        self,
+        entity_id,
+        field_path: str,
+        tick_range=None,
+    ):
+        # PMF Plan Phase 4C Step 9 — compile-time state has no
+        # committed event stream; trajectory is always empty.
+        return []
+
 
 class CompilerWorldValidator:
     """Strict, metadata-driven compiler validator."""

@@ -99,6 +99,49 @@ class EventLog:
         rows = await self._db.fetchall(sql, tuple(params))
         return [self._deserialize(row["payload"]) for row in rows]
 
+    async def query_by_tick_range(
+        self,
+        start_tick: int | None = None,
+        end_tick: int | None = None,
+    ) -> list[Event]:
+        """Query events by logical tick range (PMF Plan Phase 4C
+        Step 9). Feeds ``StateEngine.get_trajectory``; the ordering
+        MUST be stable under tick collisions so the reconstructed
+        value sequence is deterministic — ties are broken by
+        ``rowid ASC`` (insertion order), matching the append-only
+        log semantics (audit-fold C2).
+
+        Args:
+            start_tick: Inclusive lower bound; ``None`` = no lower bound.
+            end_tick: Inclusive upper bound; ``None`` = no upper bound.
+
+        Returns:
+            Events within the range, ordered by tick then insertion.
+        """
+        sql = "SELECT payload FROM events WHERE 1=1"
+        params: list[Any] = []
+        if start_tick is not None:
+            sql += " AND tick >= ?"
+            params.append(start_tick)
+        if end_tick is not None:
+            sql += " AND tick <= ?"
+            params.append(end_tick)
+        # Stable tiebreaker: within a single tick, events appear in
+        # the order they were appended (rowid monotonic on the
+        # AUTOINCREMENT primary key).
+        #
+        # NOTE (Step-9 post-impl audit M3): entity_id filtering is
+        # intentionally deferred to Python in ``get_trajectory``
+        # because state_deltas are JSON-packed in the ``payload``
+        # column — the indexed ``target_entity`` column only stores
+        # a single target, not the entity set for multi-delta
+        # events. A future composite ``(tick, target_entity)``
+        # index could fast-path the single-target common case when
+        # the trajectory API becomes a hot path.
+        sql += " ORDER BY tick ASC, rowid ASC"
+        rows = await self._db.fetchall(sql, tuple(params))
+        return [self._deserialize(row["payload"]) for row in rows]
+
     async def get_by_entity(self, entity_type: str, entity_id: EntityId) -> list[Event]:
         """Return all events that affected a specific entity.
 

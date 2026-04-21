@@ -83,6 +83,8 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "SimulationRunnerConfig",
         "SimulationType",
         "StopReason",
+        # State trajectory (Step 9)
+        "TrajectoryPoint",
         # Errors
         "VolnixError",
         "DuplicatePackError",
@@ -90,6 +92,7 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "ReplayJournalMismatch",
         "ReplayProviderNotFound",
         "SessionNotFoundError",
+        "TrajectoryFieldNotFound",
     }
 )
 

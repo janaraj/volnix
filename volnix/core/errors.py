@@ -196,6 +196,26 @@ class InvalidTransitionError(StateError):
     pass
 
 
+class TrajectoryFieldNotFound(StateError):
+    """Raised by ``StateEngine.get_trajectory`` for a malformed
+    ``field_path`` — empty string, whitespace-only, or containing
+    empty segments (``".foo"``, ``"a..b"``, ``"a."``).
+
+    Absence of data in the journal is NOT an error —
+    ``get_trajectory`` returns an empty list when no matching
+    events exist, the field never appears on any delta, or a
+    purely numeric segment (list index) is encountered (not
+    supported at 0.2.0 — returns empty rather than raises).
+    Only static path problems raise this error.
+
+    Subclass of ``StateError`` (which inherits from
+    ``VolnixError``) per the error-hierarchy lock.
+    PMF Plan Phase 4C Step 9.
+    """
+
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Pack errors
 # ---------------------------------------------------------------------------

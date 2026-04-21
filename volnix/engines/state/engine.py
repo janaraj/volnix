@@ -28,7 +28,12 @@ from volnix.core import (
     WorldEvent,
     WorldId,
 )
-from volnix.core.errors import EntityNotFoundError
+from volnix.core.errors import EntityNotFoundError, TrajectoryFieldNotFound
+from volnix.engines.state.trajectory import (
+    _MISSING,
+    TrajectoryPoint,
+    _extract_dotted,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -462,10 +467,20 @@ class StateEngine(BaseEngine):
                 await self._causal_graph.add_edge(cause_id, event.event_id)
         return event_id
 
-    async def snapshot(self, label: str) -> SnapshotId:
+    async def snapshot(self, label: str = "default", tick: int = 0) -> SnapshotId:
         """Create an immutable point-in-time snapshot of the world state.
 
-        Records to Ledger (SnapshotEntry) and publishes to EventBus.
+        Records to Ledger (``SnapshotEntry``) and publishes to
+        EventBus. The ``tick`` kwarg stamps the logical tick onto
+        the ledger entry so consumers auditing snapshots know WHEN
+        the snapshot was taken in simulation time, not just the
+        label (PMF Plan Phase 4C Step 9). Defaults to ``0``
+        preserving pre-Step-9 behaviour byte-identical.
+
+        Args:
+            label: Human-readable identifier for this snapshot.
+            tick: Logical tick at snapshot capture. ``0`` when
+                unknown / pre-simulation.
         """
         from volnix.core.types import RunId
 
@@ -480,12 +495,12 @@ class StateEngine(BaseEngine):
             entry = SnapshotEntry(
                 snapshot_id=snapshot_id,
                 run_id=run_id,
-                tick=0,
+                tick=tick,
                 entity_count=entity_count,
             )
             await self._ledger.append(entry)
 
-        logger.info("Snapshot '%s' created: %s", label, snapshot_id)
+        logger.info("Snapshot '%s' created at tick %d: %s", label, tick, snapshot_id)
         return snapshot_id
 
     async def _get_total_entity_count(self) -> int:
@@ -532,3 +547,87 @@ class StateEngine(BaseEngine):
         """Return the ordered event timeline, optionally filtered by entity and time range."""
         events = await self._event_log.query(start=start, end=end, entity_id=entity_id)
         return events
+
+    async def get_trajectory(
+        self,
+        entity_id: EntityId,
+        field_path: str,
+        tick_range: tuple[int, int] | None = None,
+    ) -> list[TrajectoryPoint]:
+        """Reconstruct the historical value sequence of one field
+        on one entity from committed ``state_deltas`` (PMF Plan
+        Phase 4C Step 9).
+
+        Walks ``WorldEvent.state_deltas`` in tick order for every
+        committed event within ``tick_range``; for each delta whose
+        ``entity_id`` matches, extracts ``field_path`` from
+        ``delta["fields"]`` via dotted-path navigation; yields one
+        :class:`TrajectoryPoint` per mutation that set the field.
+
+        Args:
+            entity_id: The entity being tracked. Actors are entities
+                in volnix — pass ``ActorId("npc-alice")`` directly
+                if tracking an actor's own state field.
+            field_path: Dotted path on ``delta["fields"]``
+                (e.g., ``"budget.remaining_usd"``). Numeric segments
+                / list indexing NOT supported — reserved for a later
+                step (audit-fold M1).
+            tick_range: Inclusive ``(start, end)`` tick bounds.
+                ``None`` includes all ticks. ``start > end`` raises
+                ``ValueError``.
+
+        Returns:
+            Ordered trajectory points. Empty list when no matching
+            events / deltas / field-values exist — ALL data-absence
+            cases return ``[]`` (never raise). Only malformed
+            ``field_path`` (empty or containing empty segments from
+            ``..``) raises :class:`TrajectoryFieldNotFound`.
+
+        Raises:
+            TrajectoryFieldNotFound: When ``field_path`` is empty,
+                purely whitespace, or contains empty segments
+                (e.g. ``".foo"`` or ``"a..b"``).
+            ValueError: When ``tick_range`` has ``start > end``.
+        """
+        # Path-level validation — the ONLY case that raises
+        # (audit-fold H1/M1). Data absence is empty-list, not exception.
+        path = field_path.strip() if isinstance(field_path, str) else ""
+        if not path:
+            raise TrajectoryFieldNotFound("field_path must be a non-empty dotted string")
+        segments = path.split(".")
+        if any(not seg.strip() for seg in segments):
+            raise TrajectoryFieldNotFound(
+                f"field_path {field_path!r} contains empty segments — "
+                f"reject before journal walk to avoid silent misreads"
+            )
+
+        start_tick: int | None = None
+        end_tick: int | None = None
+        if tick_range is not None:
+            start_tick, end_tick = tick_range
+            if start_tick > end_tick:
+                raise ValueError(f"tick_range start ({start_tick}) must be <= end ({end_tick})")
+
+        events = await self._event_log.query_by_tick_range(start_tick=start_tick, end_tick=end_tick)
+        target = str(entity_id)
+        results: list[TrajectoryPoint] = []
+        for evt in events:
+            # Only WorldEvent subclasses carry state_deltas. Plain
+            # Event instances (permission / policy / etc.) don't.
+            deltas = getattr(evt, "state_deltas", None) or []
+            for delta in deltas:
+                if str(delta.get("entity_id", "")) != target:
+                    continue
+                value = _extract_dotted(delta.get("fields") or {}, segments)
+                if value is _MISSING:
+                    continue
+                results.append(
+                    TrajectoryPoint(
+                        tick=evt.timestamp.tick,
+                        value=value,
+                        event_id=evt.event_id,
+                        entity_id=EntityId(target),
+                        field_path=path,
+                    )
+                )
+        return results
