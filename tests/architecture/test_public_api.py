@@ -83,6 +83,10 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "SimulationRunnerConfig",
         "SimulationType",
         "StopReason",
+        # Character catalog (Step 11)
+        "CharacterDefinition",
+        "CharacterLoader",
+        "CharacterCatalogError",
         # State trajectory (Step 9)
         "TrajectoryPoint",
         # Observation (Step 10)

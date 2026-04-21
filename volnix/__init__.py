@@ -35,6 +35,8 @@ try:
 except PackageNotFoundError:  # running from source tree, unpackaged
     __version__ = "0.0.0+source"
 
+from volnix.actors.character import CharacterDefinition
+from volnix.actors.character_loader import CharacterCatalogError, CharacterLoader
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.state import ActorState
 from volnix.app import VolnixApp
@@ -164,6 +166,10 @@ __all__ = [
     "SimulationRunnerConfig",
     "SimulationType",
     "StopReason",
+    # Character catalog (PMF Plan Phase 4C Step 11)
+    "CharacterDefinition",
+    "CharacterLoader",
+    "CharacterCatalogError",
     # State trajectory (PMF Plan Phase 4C Step 9)
     "TrajectoryPoint",
     # Observation (PMF Plan Phase 4C Step 10)

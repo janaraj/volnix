@@ -52,6 +52,17 @@ class WorldPlan(BaseModel, frozen=True):
     # ── Actor specs (raw, D4b expands) ──
     actor_specs: list[dict[str, Any]] = Field(default_factory=list)
 
+    # ── Character catalog references (PMF Plan Phase 4C Step 11) ──
+    # Optional list of ``CharacterDefinition.id`` values referring
+    # to entries in a product-side catalog. Consumers that use a
+    # ``CharacterLoader`` catalog populate this field instead of
+    # inlining actor specs; the consumer dereferences at plan-build
+    # time via ``CharacterDefinition.to_actor_spec()`` and appends
+    # to ``actor_specs``. Compiler integration (auto-dereference)
+    # is deferred to a later step; until then the field is a
+    # structured marker.
+    characters: list[str] = Field(default_factory=list)
+
     # ── Reality (D1) ──
     conditions: WorldConditions = Field(default_factory=WorldConditions)
     reality_prompt_context: dict[str, Any] = Field(default_factory=dict)
