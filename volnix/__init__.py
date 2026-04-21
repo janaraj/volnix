@@ -87,6 +87,18 @@ from volnix.core.types import (
 from volnix.engines.state.trajectory import TrajectoryPoint
 from volnix.ledger.entries import LedgerEntry, UnknownLedgerEntry
 from volnix.ledger.query import LedgerQuery
+from volnix.observation import (
+    IntentBehaviorGap,
+    ObservationQuery,
+    PersonaContribution,
+    TimelineEvent,
+    TimelineSource,
+    UnifiedTimeline,
+    VariantDeltaReport,
+    intent_behavior_gap,
+    load_bearing_personas,
+    variant_delta,
+)
 from volnix.packs.base import ServicePack, ServiceProfile
 from volnix.packs.registry import PackRegistry
 from volnix.sessions import SessionManager, SlotAssignment
@@ -154,6 +166,17 @@ __all__ = [
     "StopReason",
     # State trajectory (PMF Plan Phase 4C Step 9)
     "TrajectoryPoint",
+    # Observation (PMF Plan Phase 4C Step 10)
+    "ObservationQuery",
+    "UnifiedTimeline",
+    "TimelineEvent",
+    "TimelineSource",
+    "IntentBehaviorGap",
+    "PersonaContribution",
+    "VariantDeltaReport",
+    "intent_behavior_gap",
+    "load_bearing_personas",
+    "variant_delta",
     # Errors
     "VolnixError",
     "DuplicatePackError",

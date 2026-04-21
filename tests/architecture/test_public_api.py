@@ -85,6 +85,17 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "StopReason",
         # State trajectory (Step 9)
         "TrajectoryPoint",
+        # Observation (Step 10)
+        "ObservationQuery",
+        "UnifiedTimeline",
+        "TimelineEvent",
+        "TimelineSource",
+        "IntentBehaviorGap",
+        "PersonaContribution",
+        "VariantDeltaReport",
+        "intent_behavior_gap",
+        "load_bearing_personas",
+        "variant_delta",
         # Errors
         "VolnixError",
         "DuplicatePackError",
