@@ -12,10 +12,10 @@ is the DEFAULT extractor. Products can override via
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from volnix._internal.hook_resolver import resolve_dotted_hook
 from volnix.actors.behavioral_signature import BehavioralSignature
 from volnix.actors.state import ActorBehaviorTraits
 from volnix.core.errors import VolnixError
@@ -47,42 +47,19 @@ def resolve_extractor_hook(hook: str | None) -> TraitExtractor:
 
     Format: ``"package.module:callable_name"`` (Python entry-point
     convention — colon separator between module path and attribute).
+    Delegates parsing / import / validation to the shared
+    :func:`volnix._internal.hook_resolver.resolve_dotted_hook`.
 
     Raises:
         TraitExtractorHookError: on missing colon, invalid module,
             missing attribute, or non-callable resolved target.
     """
-    if hook is None or not hook.strip():
-        return extract_behavior_traits
-    raw = hook.strip()
-    if ":" not in raw:
-        raise TraitExtractorHookError(
-            f"trait_extractor_hook {raw!r}: expected "
-            f"'package.module:callable_name' (colon separator)."
-        )
-    module_path, _, attr = raw.partition(":")
-    if not module_path or not attr:
-        raise TraitExtractorHookError(
-            f"trait_extractor_hook {raw!r}: module path and callable name must both be non-empty."
-        )
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        raise TraitExtractorHookError(
-            f"trait_extractor_hook {raw!r}: import failed: {exc}"
-        ) from exc
-    try:
-        resolved = getattr(module, attr)
-    except AttributeError as exc:
-        raise TraitExtractorHookError(
-            f"trait_extractor_hook {raw!r}: module {module_path!r} has no attribute {attr!r}"
-        ) from exc
-    if not callable(resolved):
-        raise TraitExtractorHookError(
-            f"trait_extractor_hook {raw!r}: resolved target is not "
-            f"callable (got {type(resolved).__name__})."
-        )
-    return resolved
+    return resolve_dotted_hook(
+        hook,
+        default=extract_behavior_traits,
+        error_cls=TraitExtractorHookError,
+        hook_name="trait_extractor_hook",
+    )
 
 
 # Friction category -> cooperation / deception mappings

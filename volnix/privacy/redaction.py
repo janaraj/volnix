@@ -22,10 +22,10 @@ layer their own hook at the LLM-router / activator boundary.
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from volnix._internal.hook_resolver import resolve_dotted_hook
 from volnix.core.errors import VolnixError
 
 if TYPE_CHECKING:
@@ -61,37 +61,17 @@ def resolve_ledger_redactor(hook: str | None) -> LedgerRedactor:
 
     Format: ``"package.module:callable_name"`` (Python entry-
     point convention — colon separator between module path and
-    attribute).
+    attribute). Delegates parsing / import / validation to the
+    shared
+    :func:`volnix._internal.hook_resolver.resolve_dotted_hook`.
 
     Raises:
         LedgerRedactorError: on missing colon, invalid module,
             missing attribute, or non-callable resolved target.
     """
-    if hook is None or not hook.strip():
-        return identity_redactor
-    raw = hook.strip()
-    if ":" not in raw:
-        raise LedgerRedactorError(
-            f"ledger_redactor {raw!r}: expected 'package.module:callable_name' (colon separator)."
-        )
-    module_path, _, attr = raw.partition(":")
-    if not module_path or not attr:
-        raise LedgerRedactorError(
-            f"ledger_redactor {raw!r}: module path and callable name must both be non-empty."
-        )
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        raise LedgerRedactorError(f"ledger_redactor {raw!r}: import failed: {exc}") from exc
-    try:
-        resolved = getattr(module, attr)
-    except AttributeError as exc:
-        raise LedgerRedactorError(
-            f"ledger_redactor {raw!r}: module {module_path!r} has no attribute {attr!r}"
-        ) from exc
-    if not callable(resolved):
-        raise LedgerRedactorError(
-            f"ledger_redactor {raw!r}: resolved target is not "
-            f"callable (got {type(resolved).__name__})."
-        )
-    return resolved
+    return resolve_dotted_hook(
+        hook,
+        default=identity_redactor,
+        error_cls=LedgerRedactorError,
+        hook_name="ledger_redactor",
+    )
