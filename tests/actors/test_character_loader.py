@@ -7,7 +7,9 @@ Locks:
 - ``to_actor_spec()`` emits ``personality`` (not ``persona``) so
   ``SimpleActorGenerator`` picks it up (post-impl audit C1).
 - Loader: YAML files in a directory become
-  ``{id: CharacterDefinition}``.
+  ``{id: CharacterDefinition}``; file load order is
+  case-insensitive (post-impl audit M5 — cross-platform
+  determinism).
 - Error path: bad YAML, duplicate id, non-dict top-level, missing
   directory, empty-string path, directory-with-.yaml-suffix,
   non-UTF-8 encoding, oversize file, YAML alias amplification all
@@ -127,11 +129,17 @@ def test_positive_load_directory_happy_path(tmp_path: Path) -> None:
     assert catalog["bob"].activation_profile == "consumer_user"
 
 
-def test_positive_catalog_error_subclasses_volnix_error() -> None:
-    """Error-hierarchy lock: ``CharacterCatalogError`` must inherit
-    from ``VolnixError`` so consumers catching the root still catch
-    it."""
-    assert issubclass(CharacterCatalogError, VolnixError)
+def test_positive_catalog_error_constructor_accepts_no_args() -> None:
+    """The error class uses the default ``Exception`` constructor
+    via ``pass`` body — locking that instantiating without args
+    works. The architecture lock in ``test_public_api.py::
+    test_negative_every_exported_error_inherits_volnix_error``
+    already asserts ``VolnixError`` inheritance, so this test
+    avoids duplicating that check (Step 11 audit M7)."""
+    err = CharacterCatalogError("msg")
+    assert isinstance(err, VolnixError)
+    # No-arg construction also valid (inherits default __init__).
+    _ = CharacterCatalogError()
 
 
 # ─── Post-impl audit regression tests ──────────────────────────────
@@ -251,6 +259,61 @@ class TestMetadataDeepCopy:
         source["added"] = "later"
         assert c.metadata["nested"]["key"] == "orig"
         assert "added" not in c.metadata
+
+
+class TestLoaderDeterminism:
+    """Cleanup sweep (Step 11 audit M5): cross-platform sort
+    determinism so ``Alice.yaml`` and ``alice.yaml`` land in the
+    same order regardless of filesystem case sensitivity."""
+
+    def test_positive_sort_order_case_insensitive(self, tmp_path: Path) -> None:
+        # Mixed-case names that sort differently under byte-order
+        # vs lowercase-order.
+        _write(tmp_path / "Zebra.yaml", "id: zebra\nname: Z\n")
+        _write(tmp_path / "alice.yaml", "id: alice\nname: A\n")
+        _write(tmp_path / "BOB.yaml", "id: bob\nname: B\n")
+        catalog = CharacterLoader().load_directory(tmp_path)
+        # Dict insertion order reflects load order (Python 3.7+).
+        # Case-insensitive sort → alice, BOB, Zebra.
+        assert list(catalog.keys()) == ["alice", "bob", "zebra"]
+
+
+class TestWorldPlanCharacterValidation:
+    """Step 11 audit M3: ``WorldPlan.validate_character_refs``
+    returns dangling IDs so the consumer sees misconfiguration
+    at plan-assembly time, not at compile time."""
+
+    def test_positive_all_refs_resolved_returns_empty(self) -> None:
+        from volnix.engines.world_compiler.plan import WorldPlan
+
+        plan = WorldPlan(name="w", characters=["alice", "bob"])
+        catalog = {
+            "alice": CharacterDefinition(id="alice"),
+            "bob": CharacterDefinition(id="bob"),
+        }
+        assert plan.validate_character_refs(catalog) == []
+
+    def test_negative_missing_refs_returned(self) -> None:
+        from volnix.engines.world_compiler.plan import WorldPlan
+
+        plan = WorldPlan(name="w", characters=["alice", "ghost"])
+        catalog = {"alice": CharacterDefinition(id="alice")}
+        assert plan.validate_character_refs(catalog) == ["ghost"]
+
+    def test_negative_no_catalog_but_refs_set_returns_all_refs(self) -> None:
+        """``catalog=None`` with non-empty characters surfaces the
+        misconfiguration explicitly (vs silent accept)."""
+        from volnix.engines.world_compiler.plan import WorldPlan
+
+        plan = WorldPlan(name="w", characters=["alice"])
+        assert plan.validate_character_refs(None) == ["alice"]
+
+    def test_positive_empty_characters_empty_regardless_of_catalog(self) -> None:
+        from volnix.engines.world_compiler.plan import WorldPlan
+
+        plan = WorldPlan(name="w")
+        assert plan.validate_character_refs(None) == []
+        assert plan.validate_character_refs({}) == []
 
 
 class TestEndToEndWithGenerator:

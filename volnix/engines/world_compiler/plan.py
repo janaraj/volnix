@@ -108,6 +108,29 @@ class WorldPlan(BaseModel, frozen=True):
                     )
         return errors
 
+    def validate_character_refs(self, catalog: dict[str, Any] | None) -> list[str]:
+        """Validate that every entry in ``self.characters`` has a
+        matching entry in ``catalog`` (PMF Plan Phase 4C Step 11
+        post-impl audit M3).
+
+        Returns the list of dangling references — character IDs
+        that appear in ``self.characters`` but are NOT present as
+        keys in ``catalog``. Empty list = all references resolve.
+        ``catalog=None`` treats the check as "no catalog wired"
+        and returns ``self.characters`` if it's non-empty so the
+        consumer sees the misconfiguration explicitly rather
+        than silently accepting dangling refs.
+
+        The check is OPT-IN — ``WorldPlan`` doesn't hold a
+        reference to a character catalog, so this is a helper
+        the consumer calls at plan-assembly time.
+        """
+        if not self.characters:
+            return []
+        if catalog is None:
+            return list(self.characters)
+        return [cid for cid in self.characters if cid not in catalog]
+
     def get_service_names(self) -> list[str]:
         """All resolved service names."""
         return list(self.services.keys())

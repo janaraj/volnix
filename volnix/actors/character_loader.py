@@ -112,7 +112,15 @@ class CharacterLoader:
         # duplicate-id error names both files.
         id_sources: dict[str, str] = {}
 
-        for file in sorted(root.iterdir()):
+        # Post-impl audit M5: sort by lowercased name so catalog
+        # load order is deterministic across platforms. macOS
+        # APFS (case-insensitive by default) vs Linux ext4
+        # (case-sensitive) would otherwise produce different
+        # iteration orders for ``Alice.yaml`` vs ``alice.yaml``.
+        # Ties break on the original name preserving stable
+        # ordering when two files differ only in case — which
+        # on case-insensitive filesystems can't happen anyway.
+        for file in sorted(root.iterdir(), key=lambda p: (p.name.lower(), p.name)):
             # Post-impl audit H4: a directory named "alice.yaml"
             # matches the suffix but open() would leak
             # ``IsADirectoryError``. Require a regular file.
