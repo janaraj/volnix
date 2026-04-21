@@ -35,10 +35,18 @@ try:
 except PackageNotFoundError:  # running from source tree, unpackaged
     __version__ = "0.0.0+source"
 
+from volnix.actors.behavioral_signature import (
+    ActorBehaviorTraits,
+    BehavioralSignature,
+)
 from volnix.actors.character import CharacterDefinition
 from volnix.actors.character_loader import CharacterCatalogError, CharacterLoader
 from volnix.actors.definition import ActorDefinition
 from volnix.actors.state import ActorState
+from volnix.actors.trait_extractor import (
+    TraitExtractorHookError,
+    resolve_extractor_hook,
+)
 from volnix.app import VolnixApp
 from volnix.config.builder import ConfigBuilder
 from volnix.config.schema import PackSearchPath, VolnixConfig
@@ -170,6 +178,11 @@ __all__ = [
     "CharacterDefinition",
     "CharacterLoader",
     "CharacterCatalogError",
+    # Behavioral signature (PMF Plan Phase 4C Step 12)
+    "BehavioralSignature",
+    "ActorBehaviorTraits",
+    "TraitExtractorHookError",
+    "resolve_extractor_hook",
     # State trajectory (PMF Plan Phase 4C Step 9)
     "TrajectoryPoint",
     # Observation (PMF Plan Phase 4C Step 10)

@@ -1108,11 +1108,19 @@ class VolnixApp:
             result: The compilation result dict from generate_world().
         """
         from volnix.actors.state import ActorState
-        from volnix.actors.trait_extractor import extract_behavior_traits
+        from volnix.actors.trait_extractor import resolve_extractor_hook
         from volnix.engines.world_compiler.generation_context import (
             WorldGenerationContext,
         )
         from volnix.simulation.world_context import WorldContextBundle
+
+        # PMF Plan Phase 4C Step 12 post-impl audit C1: resolve the
+        # product-supplied hook ONCE here and use it for every actor
+        # in this configure pass. ``None`` (default) yields the
+        # bundled ``extract_behavior_traits``.
+        extract_behavior_traits = resolve_extractor_hook(
+            getattr(self._config, "trait_extractor_hook", None)
+        )
 
         try:
             agency = self._registry.get("agency")

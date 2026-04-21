@@ -208,6 +208,23 @@ class ConfigBuilder:
                     sys.path.insert(0, syspath_entry)
         return self
 
+    def trait_extractor_hook(self, hook: str | None) -> ConfigBuilder:
+        """Set the product-side trait extractor hook (PMF Plan
+        Phase 4C Step 12).
+
+        ``hook`` is a dotted-path string in the form
+        ``"package.module:callable_name"`` referring to a callable
+        that takes an ``ActorDefinition`` and returns a
+        ``BehavioralSignature``. Pass ``None`` to clear / revert
+        to the bundled default.
+
+        Resolution happens at engine-wiring time via
+        ``volnix.actors.trait_extractor.resolve_extractor_hook`` —
+        an invalid path raises there, not here.
+        """
+        self._overrides["trait_extractor_hook"] = hook
+        return self
+
     # ── Escape hatch ───────────────────────────────────────────────
 
     def raw(self, path: str, value: Any) -> ConfigBuilder:

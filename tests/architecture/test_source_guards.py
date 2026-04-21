@@ -46,9 +46,18 @@ def test_low_level_sql_connectors_are_confined_to_sqlite_backend():
 
 
 def test_dynamic_imports_are_confined_to_pack_loader():
-    """Pack discovery is the only sanctioned dynamic-import surface."""
+    """Dynamic imports are sanctioned only for:
+    - Pack discovery (``volnix/packs/loader.py``).
+    - Product-supplied hook resolution — ``trait_extractor_hook``
+      (Step 12) resolves a dotted-path string to a caller-provided
+      callable. Consumers pass a fully-qualified name; the platform
+      imports it lazily at hook-resolve time.
+    """
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"importlib.import_module"}))
-    assert offenders == {"volnix/packs/loader.py"}
+    assert offenders == {
+        "volnix/packs/loader.py",
+        "volnix/actors/trait_extractor.py",
+    }
 
 
 def test_external_entrypoints_do_not_call_state_read_apis():

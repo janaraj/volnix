@@ -10,7 +10,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+# PMF Plan Phase 4C Step 12: platform internals use
+# ``BehavioralSignature`` directly to avoid triggering the
+# ``ActorBehaviorTraits`` deprecation warning on every actor
+# construction. ``ActorBehaviorTraits`` is re-exported for
+# backwards-compat with pre-0.2.0 consumers importing from
+# ``volnix.actors.state`` (removed in 0.3.0).
+from volnix.actors.behavioral_signature import (
+    ActorBehaviorTraits,
+    BehavioralSignature,
+)
 from volnix.core.types import ActorId, EntityId
+
+__all__ = ["ActorBehaviorTraits", "BehavioralSignature"]
 
 
 class WaitingFor(BaseModel, frozen=True):
@@ -30,20 +42,6 @@ class ScheduledAction(BaseModel, frozen=True):
     description: str
     target_service: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class ActorBehaviorTraits(BaseModel, frozen=True):
-    """Normalized behavioral traits extracted from persona at compile time.
-
-    These structured fields are used for tier classification routing.
-    The persona dict remains freeform for LLM prompt realism.
-    """
-
-    cooperation_level: float = 0.5  # 0.0=hostile, 1.0=fully cooperative
-    deception_risk: float = 0.0  # 0.0=honest, 1.0=highly deceptive
-    authority_level: float = 0.0  # 0.0=no authority, 1.0=full authority
-    stakes_level: float = 0.3  # 0.0=trivial, 1.0=critical
-    ambient_activity_rate: float = 0.1  # 0.0=never initiates, 1.0=constantly active
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +116,7 @@ class ActorState(BaseModel):
 
     # Identity (generated at compile time, immutable during run)
     persona: dict[str, Any] = Field(default_factory=dict)
-    behavior_traits: ActorBehaviorTraits = Field(default_factory=ActorBehaviorTraits)
+    behavior_traits: BehavioralSignature = Field(default_factory=BehavioralSignature)
 
     # Goal (v1: single active goal)
     current_goal: str | None = None

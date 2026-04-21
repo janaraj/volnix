@@ -2,16 +2,87 @@
 
 No LLM calls. Maps friction_profile, permissions, personality, and metadata
 into normalized numeric traits used for tier classification routing.
+
+PMF Plan Phase 4C Step 12: the bundled ``extract_behavior_traits``
+is the DEFAULT extractor. Products can override via
+``VolnixConfig.trait_extractor_hook = "mypackage.module:my_fn"``
+— the composition root resolves the hook via
+:func:`resolve_extractor_hook` at engine-wiring time.
 """
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from volnix.actors.behavioral_signature import BehavioralSignature
 from volnix.actors.state import ActorBehaviorTraits
+from volnix.core.errors import VolnixError
 
 if TYPE_CHECKING:
     from volnix.actors.definition import ActorDefinition
+
+
+# Callable signature for a trait extractor. Defining the alias
+# here (rather than inline in consumer code) means a hook provider
+# can import it for type-hinting their own implementation.
+TraitExtractor = Callable[["ActorDefinition"], BehavioralSignature]
+
+
+class TraitExtractorHookError(VolnixError):
+    """Raised when a ``trait_extractor_hook`` config string cannot
+    be resolved to a callable. Surfaces AT RESOLVE TIME so the
+    misconfiguration fails at boot rather than silently falling
+    back to the default (post-impl audit-fold — products that
+    set a hook expect it to be honored).
+
+    Subclass of ``VolnixError`` per the error-hierarchy lock.
+    """
+
+
+def resolve_extractor_hook(hook: str | None) -> TraitExtractor:
+    """Resolve a dotted-path hook string to the underlying
+    callable. ``None`` returns the bundled default.
+
+    Format: ``"package.module:callable_name"`` (Python entry-point
+    convention — colon separator between module path and attribute).
+
+    Raises:
+        TraitExtractorHookError: on missing colon, invalid module,
+            missing attribute, or non-callable resolved target.
+    """
+    if hook is None or not hook.strip():
+        return extract_behavior_traits
+    raw = hook.strip()
+    if ":" not in raw:
+        raise TraitExtractorHookError(
+            f"trait_extractor_hook {raw!r}: expected "
+            f"'package.module:callable_name' (colon separator)."
+        )
+    module_path, _, attr = raw.partition(":")
+    if not module_path or not attr:
+        raise TraitExtractorHookError(
+            f"trait_extractor_hook {raw!r}: module path and callable name must both be non-empty."
+        )
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise TraitExtractorHookError(
+            f"trait_extractor_hook {raw!r}: import failed: {exc}"
+        ) from exc
+    try:
+        resolved = getattr(module, attr)
+    except AttributeError as exc:
+        raise TraitExtractorHookError(
+            f"trait_extractor_hook {raw!r}: module {module_path!r} has no attribute {attr!r}"
+        ) from exc
+    if not callable(resolved):
+        raise TraitExtractorHookError(
+            f"trait_extractor_hook {raw!r}: resolved target is not "
+            f"callable (got {type(resolved).__name__})."
+        )
+    return resolved
 
 
 # Friction category -> cooperation / deception mappings
@@ -139,7 +210,10 @@ def extract_behavior_traits(actor_def: ActorDefinition) -> ActorBehaviorTraits:
         except (ValueError, TypeError):
             pass
 
-    return ActorBehaviorTraits(
+    # Platform internals construct ``BehavioralSignature`` directly
+    # (the ``ActorBehaviorTraits`` alias is kept for external
+    # backwards-compat and fires a DeprecationWarning on use).
+    return BehavioralSignature(
         cooperation_level=_clamp(cooperation),
         deception_risk=_clamp(deception),
         authority_level=_clamp(authority),

@@ -186,6 +186,16 @@ class VolnixConfig(BaseModel):
     worlds: WorldsConfig = Field(default_factory=WorldsConfig)
     sessions: SessionsConfig = Field(default_factory=SessionsConfig)
 
+    # PMF Plan Phase 4C Step 12 — product-side extractor hook.
+    # Dotted-path string in the form ``"package.module:callable"``
+    # (colon separator per Python entry-point convention). Resolved
+    # via ``volnix.actors.trait_extractor.resolve_extractor_hook``
+    # at extract time; ``None`` (default) uses the bundled
+    # ``volnix.actors.trait_extractor.extract_behavior_traits``.
+    # Invalid paths raise a descriptive error AT RESOLVE TIME, not
+    # silently at extract time.
+    trait_extractor_hook: str | None = None
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VolnixConfig:
         """Construct a ``VolnixConfig`` from a nested dict.

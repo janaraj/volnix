@@ -87,6 +87,11 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "CharacterDefinition",
         "CharacterLoader",
         "CharacterCatalogError",
+        # Behavioral signature (Step 12)
+        "BehavioralSignature",
+        "ActorBehaviorTraits",
+        "TraitExtractorHookError",
+        "resolve_extractor_hook",
         # State trajectory (Step 9)
         "TrajectoryPoint",
         # Observation (Step 10)
