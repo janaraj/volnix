@@ -423,3 +423,113 @@ def test_lead_autonomous_still_gets_delegation_instructions():
     assert "team lead" in prompt.lower() or "orchestration" in prompt.lower(), (
         "Non-game autonomous lead agents should still get delegation instructions"
     )
+
+
+# ─── Phase 4B Step 11 closeout — recalled memories rendering ──────────────
+
+
+class _FakeRecord:
+    """Minimal shim for MemoryRecord — the prompt builder only reads
+    ``.content`` per D11-11, so we avoid the MemoryRecord validators
+    (content_hash matching sha256, etc.) that are irrelevant here."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _FakeRecall:
+    def __init__(self, records: list[_FakeRecord]) -> None:
+        self.records = records
+
+
+class TestActorPromptBuilderMemoriesRendering:
+    """D11-10 / D11-11 — recalled memories section render contract.
+
+    Negative-intent ratio: 2/4 = 50%.
+    """
+
+    def test_negative_none_renders_nothing(self) -> None:
+        """Phase 0 byte-identical: None → zero bytes added."""
+        ctx = _make_world_context()
+        builder = ActorPromptBuilder(ctx)
+        actor = _make_actor()
+
+        prompt_without = builder.build_individual_prompt(
+            actor=actor,
+            trigger_event=None,
+            activation_reason="autonomous_work",
+            available_actions=[],
+        )
+        prompt_with_none = builder.build_individual_prompt(
+            actor=actor,
+            trigger_event=None,
+            activation_reason="autonomous_work",
+            available_actions=[],
+            recalled_memories=None,
+        )
+        assert prompt_without == prompt_with_none
+
+    def test_negative_empty_records_renders_nothing(self) -> None:
+        """recall with ``.records == []`` also renders nothing —
+        guards against a stray empty section heading."""
+        ctx = _make_world_context()
+        builder = ActorPromptBuilder(ctx)
+        actor = _make_actor()
+        empty = _FakeRecall(records=[])
+
+        prompt = builder.build_individual_prompt(
+            actor=actor,
+            trigger_event=None,
+            activation_reason="autonomous_work",
+            available_actions=[],
+            recalled_memories=empty,
+        )
+        assert "Memories you recall" not in prompt
+
+    def test_positive_records_render_as_bullets(self) -> None:
+        ctx = _make_world_context()
+        builder = ActorPromptBuilder(ctx)
+        actor = _make_actor()
+        recall = _FakeRecall(
+            records=[
+                _FakeRecord("saw TK-9001 yesterday"),
+                _FakeRecord("customer is VIP"),
+            ]
+        )
+
+        prompt = builder.build_individual_prompt(
+            actor=actor,
+            trigger_event=None,
+            activation_reason="autonomous_work",
+            available_actions=[],
+            recalled_memories=recall,
+        )
+        assert "### Memories you recall" in prompt
+        assert "- saw TK-9001 yesterday" in prompt
+        assert "- customer is VIP" in prompt
+
+    def test_positive_records_appear_between_mission_and_pending_tasks(self) -> None:
+        """D11-10: ordering matches cognition order
+        (mission → memories → tasks → trigger). Uses unique markers
+        so offsets are unambiguous."""
+        ctx = _make_world_context()
+        builder = ActorPromptBuilder(ctx)
+        actor = _make_actor(
+            current_goal="MARKER-MISSION",
+            goal_context="MARKER-CONTEXT",
+            pending_tasks=["MARKER-TASK"],
+        )
+        recall = _FakeRecall(records=[_FakeRecord("MARKER-MEMORY")])
+
+        prompt = builder.build_individual_prompt(
+            actor=actor,
+            trigger_event=None,
+            activation_reason="autonomous_work",
+            available_actions=[],
+            recalled_memories=recall,
+        )
+        pos_mission = prompt.find("MARKER-CONTEXT")
+        pos_memory = prompt.find("MARKER-MEMORY")
+        pos_task = prompt.find("MARKER-TASK")
+        assert pos_mission >= 0 and pos_memory >= 0 and pos_task >= 0
+        assert pos_mission < pos_memory < pos_task

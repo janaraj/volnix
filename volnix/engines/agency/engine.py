@@ -26,6 +26,10 @@ from volnix.core.types import (
     SessionId,
     generate_activation_id,
 )
+from volnix.engines.agency._memory_hooks import (
+    implicit_remember_activation,
+    recall_for_activation,
+)
 from volnix.engines.agency.config import AgencyConfig
 from volnix.engines.agency.prompt_builder import ActorPromptBuilder
 from volnix.llm._history_compaction import compact_tool_results
@@ -1681,6 +1685,38 @@ class AgencyEngine(BaseEngine):
                 # Non-game: show all services in text prompt (existing behavior)
                 allowed_services = {t.service for t in actor_tools if t.service}
 
+            # Phase 4B Step 11 closeout — pre-activation recall for
+            # internal agents. NPCs get theirs in NPCActivator via the
+            # same shared helper; the early-return gate at line ~1604
+            # means NPCs never reach this branch.
+            #
+            # H1 (audit-fold): when an actor has ``activation_profile_name``
+            # but no NPCActivator is wired, the gate at line ~1604 lets
+            # it fall through to the agent path. That's a misconfiguration,
+            # not a double-fire — log loudly so operators can fix their
+            # wiring instead of silently treating an NPC as an agent.
+            if actor.activation_profile_name is not None and self._npc_activator is None:
+                logger.warning(
+                    "[AGENCY] actor %s (profile=%s) reached agent path "
+                    "because no NPCActivator is wired — check app.py. "
+                    "Falling through to agent activation.",
+                    actor.actor_id,
+                    actor.activation_profile_name,
+                )
+            # D10 safety assertion: loud failure if a future refactor
+            # of the gate lets an NPC through WITH an activator wired —
+            # prevents silent double-firing of memory entries.
+            assert actor.activation_profile_name is None or self._npc_activator is None, (
+                "NPC reached agent tool-loop path — double-fire risk"
+            )
+            recalled_memories = await recall_for_activation(
+                memory_engine=self._memory_engine,
+                actor=actor,
+                trigger_event=trigger_event,
+                prompt_describe=self._prompt_builder._describe,
+                tick=self._current_tick(),
+            )
+
             user_prompt = self._prompt_builder.build_individual_prompt(
                 actor=actor,
                 trigger_event=trigger_event,
@@ -1689,6 +1725,7 @@ class AgencyEngine(BaseEngine):
                 team_roster=team_roster,
                 allowed_services=allowed_services,
                 simulation_progress=self._simulation_progress,
+                recalled_memories=recalled_memories,
             )
 
             # Build messages: continue from persisted conversation or start fresh.
@@ -1755,6 +1792,11 @@ class AgencyEngine(BaseEngine):
             envelopes: list[ActionEnvelope] = []
             terminated_by = "max_tool_calls"
             total_tool_calls = 0
+            # Phase 4B Step 11 closeout — track invoked tool names so
+            # the post-activation implicit episodic record carries them
+            # as tags (parity with NPC path per D11-7). Real tools only;
+            # ``do_nothing`` is a sentinel captured via ``terminated_by``.
+            tool_names_invoked: list[str] = []
 
             # Outer loop: one LLM call per iteration. Each response may
             # contain multiple tool calls (OpenAI, Anthropic, and Google
@@ -1843,6 +1885,17 @@ class AgencyEngine(BaseEngine):
                         # calls in the same response still execute.
                         env = self._parse_tool_call(actor, tc, reason, trigger_event)
                         if env is None:
+                            # H2 (audit-fold): parse-failed calls are LLM
+                            # noise (hallucinated tool name, missing
+                            # required arg). Log for observability; we
+                            # deliberately do NOT advance total_tool_calls
+                            # or tool_names_invoked — parse failures
+                            # aren't billable actions.
+                            logger.debug(
+                                "[AGENCY.loop] actor=%s: parse_tool_call returned None for %s — skipping",
+                                actor.actor_id,
+                                tc.name,
+                            )
                             continue
 
                         # Execute through governance pipeline INLINE.
@@ -1879,6 +1932,7 @@ class AgencyEngine(BaseEngine):
                                 )
                             )
                             total_tool_calls += 1
+                            tool_names_invoked.append(tc.name)
                             continue
 
                         # Success — record envelope and append matching
@@ -1914,6 +1968,7 @@ class AgencyEngine(BaseEngine):
                             )
                         )
                         total_tool_calls += 1
+                        tool_names_invoked.append(tc.name)
 
                     # Commit the assistant message + tool results as a
                     # single coherent turn in the conversation history.
@@ -2042,6 +2097,29 @@ class AgencyEngine(BaseEngine):
                     terminated_by=terminated_by,
                     final_text=(actor.goal_context or "")[:200],
                 )
+            )
+
+            # Phase 4B Step 11 closeout — implicit episodic write for
+            # the agent path. Mirrors NPCActivator._implicit_remember.
+            # Never raises; failures log + continue (D11-9).
+            #
+            # M1 (audit-fold): use ``len(tool_names_invoked)`` as the
+            # tool-call count so the rendered content string and the
+            # tags list are derived from the SAME source. The ledger
+            # ``ActivationCompleteEntry`` above keeps its envelope-based
+            # count (a different semantic: "committed actions" excluding
+            # chat posts); the memory write captures the LLM's decision
+            # history, which is what ``tool_names_invoked`` tracks.
+            await implicit_remember_activation(
+                memory_engine=self._memory_engine,
+                actor_id=actor.actor_id,
+                activation_id=activation_id,
+                reason=reason,
+                terminated_by=terminated_by,
+                total_tool_calls=len(tool_names_invoked),
+                tool_names_invoked=tool_names_invoked,
+                final_text=(actor.goal_context or "")[:200],
+                tick=self._current_tick(),
             )
 
         logger.info(

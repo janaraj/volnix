@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from volnix.actors.state import ActorState, InteractionRecord
-from volnix.core.events import WorldEvent
+from volnix.core.events import Event, WorldEvent
 from volnix.simulation.world_context import WorldContextBundle
 
 # Compact output example shown to LLM (replaces verbose JSON Schema)
@@ -100,6 +100,8 @@ class ActorPromptBuilder:
         team_roster: list[dict[str, str]] | None = None,
         allowed_services: set[str] | None = None,
         simulation_progress: tuple[int, int] | None = None,
+        *,
+        recalled_memories: Any = None,
     ) -> str:
         """Build per-actor user prompt.
 
@@ -208,6 +210,17 @@ class ActorPromptBuilder:
             f"### Mission Context\n"
             f"{actor.goal_context or 'Not set — update via state_updates.goal_context'}"
         )
+
+        # Phase 4B Step 11 closeout — recalled memories block.
+        # Rendered between Mission Context and Pending Tasks per
+        # D11-10 cognition order (persona → memories → state → trigger).
+        # When recalled_memories is None or .records is empty, no
+        # section is appended — Phase 0 regression oracle byte-identical.
+        if recalled_memories and getattr(recalled_memories, "records", None):
+            mem_lines = ["### Memories you recall"]
+            for record in recalled_memories.records:
+                mem_lines.append(f"- {record.content}")
+            context_parts.append("\n".join(mem_lines))
 
         # Pending tasks
         if actor.pending_tasks:
@@ -463,6 +476,37 @@ class ActorPromptBuilder:
                 )
 
         return "\n".join(lines) if lines else ""
+
+    @staticmethod
+    def _describe(event: Event | None) -> str:
+        """One-line natural-language summary of a trigger event.
+
+        Phase 4B Step 11 closeout — used as the ``semantic_text``
+        signal for the pre-activation memory recall (via
+        ``_memory_hooks.recall_for_activation``). Kept terse (single
+        sentence) so the query text is focused; the persona text
+        from the actor supplies the other half of the signal.
+
+        Accepts ``Event | None`` (not ``WorldEvent | None``) so the
+        signature matches ``NPCPromptBuilder._describe`` and the
+        shared ``Callable[[Event | None], str]`` type in
+        ``_memory_hooks.py`` — avoids a contravariance mismatch
+        (M3 audit-fold).
+        """
+        if event is None:
+            return "(no specific trigger — routine activation)"
+        etype = getattr(event, "event_type", "") or "unknown"
+        actor_id = getattr(event, "actor_id", "?")
+        target = getattr(event, "target_entity", None)
+        action = getattr(event, "action", "") or ""
+        parts = [f"{etype}"]
+        if action:
+            parts.append(f"action={action}")
+        if target:
+            parts.append(f"target={target}")
+        if actor_id and actor_id != "?":
+            parts.append(f"from={actor_id}")
+        return " ".join(parts)
 
     @staticmethod
     def _build_trigger(trigger_event: WorldEvent) -> str:

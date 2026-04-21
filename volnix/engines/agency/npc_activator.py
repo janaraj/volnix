@@ -34,6 +34,10 @@ from volnix.actors.activation_profile import ActivationProfile, ToolScope
 from volnix.actors.state import ActorState
 from volnix.core.envelope import ActionEnvelope
 from volnix.core.events import Event, WorldEvent
+from volnix.engines.agency._memory_hooks import (
+    implicit_remember_activation,
+    recall_for_activation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -522,52 +526,21 @@ class NPCActivator:
         trigger_event: Event | None,
         host: Any,
     ) -> Any:
-        """Query ``host._memory_engine`` for records relevant to this
-        activation. Returns ``MemoryRecall`` or ``None``. Never raises
-        — failures log and return ``None`` (D11-6).
+        """Phase 4B Step 11 closeout — thin forwarder.
 
-        Semantic text is the trigger description concatenated with the
-        actor's persona description, capped at 1000 chars to stay
-        safely under ``SemanticQuery._MAX_QUERY_TEXT_LEN``.
+        The recall logic now lives in
+        :mod:`volnix.engines.agency._memory_hooks` so the agent tool
+        loop and this NPC path share one source of truth. The public
+        signature here is preserved so existing NPC-specific tests
+        keep working.
         """
-        memory_engine = getattr(host, "_memory_engine", None)
-        if memory_engine is None:
-            return None
-        from volnix.core.memory_types import HybridQuery
-
-        persona_text = ""
-        if actor.persona:
-            persona_text = actor.persona.get("description") or ""
-        trigger_text = self._prompt_builder._describe(trigger_event)
-        query_text = (trigger_text + " " + persona_text).strip()[:1000]
-        if not query_text:
-            query_text = f"activation for actor {actor.actor_id}"
-
-        top_k = int(
-            getattr(
-                getattr(memory_engine, "_memory_config", None),
-                "default_recall_top_k",
-                5,
-            )
+        return await recall_for_activation(
+            memory_engine=getattr(host, "_memory_engine", None),
+            actor=actor,
+            trigger_event=trigger_event,
+            prompt_describe=self._prompt_builder._describe,
+            tick=_current_tick(host),
         )
-        tick = _current_tick(host)
-
-        try:
-            return await memory_engine.recall(
-                caller=actor.actor_id,
-                target_scope="actor",
-                target_owner=str(actor.actor_id),
-                query=HybridQuery(semantic_text=query_text, top_k=top_k),
-                tick=tick,
-            )
-        except Exception as exc:  # noqa: BLE001 — D11-6
-            logger.warning(
-                "NPCActivator: memory recall failed for %s: %s — "
-                "continuing with no recalled memories.",
-                actor.actor_id,
-                exc,
-            )
-            return None
 
     async def _implicit_remember(
         self,
@@ -581,50 +554,29 @@ class NPCActivator:
         activation_id: str,
         host: Any,
     ) -> None:
-        """Write a raw episodic record summarising the activation.
+        """Phase 4B Step 11 closeout — thin forwarder.
 
-        One write per activation, no extra LLM call — Step 6's
-        Consolidator handles episodic→semantic distillation on
-        cohort rotation or periodic cadence. Never raises; failures
-        log + continue (D11-9).
+        See :func:`volnix.engines.agency._memory_hooks.implicit_remember_activation`
+        for the shared logic. Preserved signature keeps NPC tests green.
         """
-        memory_engine = getattr(host, "_memory_engine", None)
-        if memory_engine is None:
-            return
-        from volnix.core.memory_types import MemoryWrite
+        # L3 (audit-fold): cast the incoming ``str`` to ``ActivationId``
+        # so the shared helper enforces typed-ID discipline. This
+        # forwarder's public ``activation_id: str`` param is preserved
+        # per D11 (NPC test contract); the cast keeps the downstream
+        # typed-ID strict.
+        from volnix.core.types import ActivationId
 
-        content = (
-            f"{reason} → {terminated_by}: used {total_tool_calls} tool(s) "
-            f"{tool_names_invoked}. text={final_text[:120]!r}"
+        await implicit_remember_activation(
+            memory_engine=getattr(host, "_memory_engine", None),
+            actor_id=actor.actor_id,
+            activation_id=ActivationId(activation_id),
+            reason=reason,
+            terminated_by=terminated_by,
+            total_tool_calls=total_tool_calls,
+            tool_names_invoked=tool_names_invoked,
+            final_text=final_text,
+            tick=_current_tick(host),
         )
-        importance = 0.5 if total_tool_calls > 0 else 0.2
-        tags = [reason, *tool_names_invoked, terminated_by]
-        tick = _current_tick(host)
-
-        try:
-            await memory_engine.remember(
-                caller=actor.actor_id,
-                target_scope="actor",
-                target_owner=str(actor.actor_id),
-                write=MemoryWrite(
-                    content=content,
-                    kind="episodic",
-                    importance=importance,
-                    tags=tags,
-                    source="implicit",
-                    metadata={
-                        "activation_id": activation_id,
-                        "terminated_by": terminated_by,
-                    },
-                ),
-                tick=tick,
-            )
-        except Exception as exc:  # noqa: BLE001 — D11-9
-            logger.warning(
-                "NPCActivator: implicit remember failed for %s: %s",
-                actor.actor_id,
-                exc,
-            )
 
     # -- helpers ----------------------------------------------------------
 
