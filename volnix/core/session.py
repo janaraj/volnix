@@ -15,11 +15,12 @@ the full roadmap.
 
 from __future__ import annotations
 
+import copy
 import enum
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from volnix.core.types import SessionId, WorldId
 
@@ -179,6 +180,19 @@ class Session(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _deepcopy_metadata(cls, v: Any) -> Any:
+        """Phase 4C cleanup sweep: deep-copy the metadata dict at
+        construction so caller-side mutation of the source can't
+        leak into the frozen ``Session``. Pydantic ``frozen=True``
+        blocks ``session.metadata = {...}`` but not
+        ``source_dict["x"] = "y"`` after construction — this
+        closes the source-mutation half of the leak."""
+        if isinstance(v, dict):
+            return copy.deepcopy(v)
+        return v
 
     @model_validator(mode="before")
     @classmethod

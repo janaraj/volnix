@@ -135,6 +135,17 @@ class TestSessionValueObject:
         assert session.created_at == fixed
         assert session.updated_at == fixed
 
+    def test_negative_source_metadata_mutation_does_not_leak(self) -> None:
+        """Cleanup sweep: Session.metadata is deep-copied at
+        construction so mutation of the caller's source dict
+        cannot alter the frozen session."""
+        source: dict = {"nested": {"k": "orig"}}
+        session = _sample_session(metadata=source)
+        source["nested"]["k"] = "HIJACKED"
+        source["added"] = "later"
+        assert session.metadata["nested"]["k"] == "orig"
+        assert "added" not in session.metadata
+
 
 # ─── Enum strictness ──────────────────────────────────────────────
 

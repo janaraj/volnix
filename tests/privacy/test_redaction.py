@@ -136,6 +136,47 @@ async def test_negative_ephemeral_mode_skips_write() -> None:
     assert rows[0]["c"] == 0
 
 
+async def test_negative_redactor_object_setattr_bypass_does_not_leak() -> None:
+    """Post-impl audit H4: a buggy redactor that uses
+    ``object.__setattr__`` to mutate its input (bypassing
+    ``frozen=True``) MUST NOT alter the caller's reference. The
+    ledger passes a deep copy so any redactor-side mutation
+    stays inside the redactor's private view."""
+
+    def bypassing(entry: LedgerEntry) -> LedgerEntry:
+        # Frozen assignment would raise; object.__setattr__ bypasses.
+        object.__setattr__(entry, "provider", "REDACTED_BYPASS")
+        return entry
+
+    ledger = await _make_ledger(redactor=bypassing)
+    caller_entry = _sample_entry()
+    await ledger.append(caller_entry)
+    # The caller's original entry must remain unchanged — the
+    # redactor only saw a copy.
+    assert caller_entry.provider == "mock"
+
+
+async def test_negative_redactor_changing_entry_type_raises() -> None:
+    """Post-impl audit H2: a redactor that rewrites
+    ``entry_type`` would bypass the caller's
+    ``entry_types_enabled`` allowlist. Must raise ``TypeError``."""
+
+    def retyping(entry: LedgerEntry) -> LedgerEntry:
+        return entry.model_copy(update={"entry_type": "hijacked.type"})
+
+    ledger = await _make_ledger(redactor=retyping)
+    with pytest.raises(TypeError, match="entry_type"):
+        await ledger.append(_sample_entry())
+
+
+async def test_negative_non_callable_redactor_rejected_at_construction() -> None:
+    """Post-impl audit H5: ``Ledger.__init__`` validates the
+    redactor is callable — misinjection fails at boot, not at
+    first ``append``."""
+    with pytest.raises(TypeError, match="callable"):
+        await _make_ledger(redactor="not a callable")  # type: ignore[arg-type]
+
+
 # ─── Animator RNG stability (post-impl audit D17) ─────────────────
 
 

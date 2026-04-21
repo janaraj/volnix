@@ -275,9 +275,7 @@ def test_negative_grandfather_packs_fail_on_manifest_compat_at_future_volnix(
     # imported lazily).
     from volnix.packs import registry as registry_module
 
-    monkeypatch.setattr(
-        registry_module, "_current_volnix_version", lambda: "0.5.0"
-    )
+    monkeypatch.setattr(registry_module, "_current_volnix_version", lambda: "0.5.0")
     registry = PackRegistry()
     manifest = _manifest(compatible_with=">=0.1,<0.3")
     with pytest.raises(IncompatiblePackError):
@@ -321,3 +319,15 @@ def test_positive_find_pack_manifest_returns_none_when_no_sidecar() -> None:
     from volnix.packs.registry import _find_pack_manifest
 
     assert _find_pack_manifest(_MockPack()) is None
+
+
+def test_negative_source_extensions_mutation_does_not_leak() -> None:
+    """Cleanup sweep (audit M1): mutating the source ``extensions``
+    dict after ``PackManifest`` construction must NOT leak into
+    the frozen model."""
+    source = {"nested": {"key": "orig"}}
+    m = _manifest(extensions=source)
+    source["nested"]["key"] = "HIJACKED"
+    source["added"] = "later"
+    assert m.extensions["nested"]["key"] == "orig"
+    assert "added" not in m.extensions

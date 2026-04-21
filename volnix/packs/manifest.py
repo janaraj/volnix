@@ -32,6 +32,7 @@ pack against the same spec the registry's warning uses.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any, Final
 
@@ -131,6 +132,21 @@ class PackManifest(BaseModel):
     """Free-form product-scoped metadata — the platform ignores
     this but products can record release-notes URLs, changelog
     pointers, etc."""
+
+    @field_validator("extensions", mode="before")
+    @classmethod
+    def _deepcopy_extensions(cls, v: Any) -> Any:
+        """Step-13 post-impl audit M1: ``frozen=True`` only blocks
+        attribute reassignment, not mutation of nested containers.
+        Deep-copy the input at construction so mutation of the
+        caller's source dict doesn't leak into the frozen model.
+        (Consumer-side mutation of the stored dict is a separate
+        concern — documented as a known limitation of Pydantic v2
+        frozen semantics on container fields.)
+        """
+        if isinstance(v, dict):
+            return copy.deepcopy(v)
+        return v
 
     @field_validator("name")
     @classmethod

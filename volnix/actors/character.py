@@ -69,6 +69,17 @@ class CharacterDefinition(BaseModel):
     activation_profile: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _deepcopy_metadata(cls, v: Any) -> Any:
+        """Step-11 cleanup sweep: deep-copy at construction so
+        caller-side mutation of the source dict can't leak into
+        the frozen model. Complements the ``to_actor_spec()``
+        deep-copy which already protects the emitted dict."""
+        if isinstance(v, dict):
+            return copy.deepcopy(v)
+        return v
+
     @field_validator("id")
     @classmethod
     def _validate_id(cls, v: str) -> str:

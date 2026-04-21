@@ -118,7 +118,13 @@ class Ledger:
         # NoneType payload.
         if self._redactor is not None:
             _original_type = entry.entry_type
-            entry = self._redactor(entry)
+            # Post-impl audit H4: a buggy redactor can mutate the
+            # input entry via ``object.__setattr__`` and bypass
+            # ``frozen=True``. Pass a deep copy so the caller's
+            # reference is never touched; the redactor gets full
+            # freedom to mutate its private copy OR return a
+            # fresh model — either path is safe.
+            entry = self._redactor(entry.model_copy(deep=True))
             if entry is None:
                 raise TypeError(
                     "Ledger redactor returned None; the hook must "

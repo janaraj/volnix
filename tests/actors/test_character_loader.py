@@ -240,6 +240,18 @@ class TestMetadataDeepCopy:
         spec["metadata"]["nested"]["key"] = "HIJACKED"
         assert c.metadata["nested"]["key"] == "orig"
 
+    def test_negative_source_metadata_mutation_does_not_leak(self) -> None:
+        """Cleanup sweep: mutating the SOURCE dict after
+        construction must NOT alter the frozen model's stored
+        metadata. Construction-time deepcopy closes the upstream
+        half of the mutation leak."""
+        source: dict = {"nested": {"key": "orig"}}
+        c = CharacterDefinition(id="c-1", metadata=source)
+        source["nested"]["key"] = "HIJACKED"
+        source["added"] = "later"
+        assert c.metadata["nested"]["key"] == "orig"
+        assert "added" not in c.metadata
+
 
 class TestEndToEndWithGenerator:
     """Post-impl audit C1 / M4: end-to-end round-trip proves
