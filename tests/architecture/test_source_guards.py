@@ -57,10 +57,19 @@ def test_dynamic_imports_are_confined_to_pack_loader():
       duplication (Step 14 audit M4).
     """
     offenders = set(find_call_offenders(PRODUCT_ROOT, {"importlib.import_module"}))
-    assert offenders == {
+    allowed = {
         "volnix/packs/loader.py",
         "volnix/_internal/hook_resolver.py",
     }
+    # Step 14 audit M5: actionable diff on failure so a reviewer
+    # knows WHICH new caller broke the guard.
+    unexpected = offenders - allowed
+    missing = allowed - offenders
+    assert offenders == allowed, (
+        f"importlib.import_module allowlist violated. "
+        f"Unexpected new callers: {sorted(unexpected)}. "
+        f"Missing expected callers (did you delete the file?): {sorted(missing)}."
+    )
 
 
 def test_external_entrypoints_do_not_call_state_read_apis():

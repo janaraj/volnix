@@ -83,7 +83,10 @@ class TestResolveLedgerRedactor:
             resolve_ledger_redactor("volnix.privacy.redaction:does_not_exist")
 
     def test_negative_non_callable_raises(self) -> None:
-        with pytest.raises(LedgerRedactorError, match="not"):
+        # Tight match (Step 14 audit M1): "not callable" is the
+        # actual literal from the resolver; "not" alone would also
+        # match "no attribute".
+        with pytest.raises(LedgerRedactorError, match="not callable"):
             resolve_ledger_redactor("volnix.privacy.redaction:__name__")
 
 
@@ -126,12 +129,15 @@ async def test_negative_redactor_returning_none_raises_loudly() -> None:
 
 
 async def test_negative_ephemeral_mode_skips_write() -> None:
-    """Ephemeral mode returns ``-1`` (sentinel for "not persisted")
-    and the underlying log stays empty — load-bearing guarantee
-    for privacy-sensitive runs."""
+    """Ephemeral mode returns the ephemeral sentinel (``-2`` per
+    audit H3; distinct from the disabled-type ``-1``) and the
+    underlying log stays empty — load-bearing guarantee for
+    privacy-sensitive runs."""
+    from volnix.ledger.ledger import APPEND_SKIPPED_EPHEMERAL
+
     ledger = await _make_ledger(ephemeral=True)
     entry_id = await ledger.append(_sample_entry())
-    assert entry_id == -1
+    assert entry_id == APPEND_SKIPPED_EPHEMERAL
     rows = await ledger._db.fetchall("SELECT COUNT(*) as c FROM ledger_log")
     assert rows[0]["c"] == 0
 
@@ -175,6 +181,69 @@ async def test_negative_non_callable_redactor_rejected_at_construction() -> None
     first ``append``."""
     with pytest.raises(TypeError, match="callable"):
         await _make_ledger(redactor="not a callable")  # type: ignore[arg-type]
+
+
+# ─── Distinct sentinels (audit H3) ────────────────────────────────
+
+
+async def test_positive_disabled_type_and_ephemeral_have_distinct_sentinels() -> None:
+    """Post-impl audit H3: ``APPEND_SKIPPED_DISABLED_TYPE`` (-1)
+    and ``APPEND_SKIPPED_EPHEMERAL`` (-2) let observability code
+    distinguish the two skip paths — previously both returned -1."""
+    from volnix.ledger.ledger import (
+        APPEND_SKIPPED_DISABLED_TYPE,
+        APPEND_SKIPPED_EPHEMERAL,
+    )
+
+    assert APPEND_SKIPPED_DISABLED_TYPE != APPEND_SKIPPED_EPHEMERAL
+
+    ledger = await _make_ledger(ephemeral=True)
+    result = await ledger.append(_sample_entry())
+    assert result == APPEND_SKIPPED_EPHEMERAL
+
+    # Disabled-type path via config filtering.
+    from volnix.ledger.config import LedgerConfig
+    from volnix.persistence.manager import create_database
+
+    db = await create_database(":memory:", wal_mode=False)
+    cfg = LedgerConfig(entry_types_enabled=["other.type"])
+    ledger2 = Ledger(cfg, db)
+    await ledger2.initialize()
+    result2 = await ledger2.append(_sample_entry())
+    assert result2 == APPEND_SKIPPED_DISABLED_TYPE
+
+
+# ─── Observability API (audit M6) ─────────────────────────────────
+
+
+async def test_positive_is_redaction_active_false_for_default_ledger() -> None:
+    """``Ledger.is_redaction_active()`` answers 'is redaction
+    running?' without poking private attributes. No redactor =
+    not active."""
+    ledger = await _make_ledger()
+    assert ledger.is_redaction_active() is False
+
+
+async def test_positive_is_redaction_active_false_for_identity_redactor() -> None:
+    """Identity redactor means the consumer wired the feature
+    but hasn't pointed it at a real hook — still 'not active'."""
+    ledger = await _make_ledger(redactor=identity_redactor)
+    assert ledger.is_redaction_active() is False
+
+
+async def test_positive_is_redaction_active_true_for_real_redactor() -> None:
+    def my_redactor(entry):
+        return entry
+
+    ledger = await _make_ledger(redactor=my_redactor)
+    assert ledger.is_redaction_active() is True
+
+
+async def test_positive_is_ephemeral_reflects_constructor_kwarg() -> None:
+    ledger = await _make_ledger()
+    assert ledger.is_ephemeral() is False
+    ephem = await _make_ledger(ephemeral=True)
+    assert ephem.is_ephemeral() is True
 
 
 # ─── Animator RNG stability (post-impl audit D17) ─────────────────

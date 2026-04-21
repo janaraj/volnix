@@ -9,10 +9,14 @@ Two product-facing surfaces:
    on disk. Default is a no-op (``identity_redactor``).
 
 2. **Ephemeral mode** — ``VolnixConfig.privacy.ephemeral = True``
-   asks consumers (ledger, bus persistence, snapshot store) to
-   suppress disk writes. The minimum viable guard lives on
-   ``Ledger.append`` at 0.2.0; bus / snapshot ephemeral support
-   lands in a later step.
+   asks consumers to suppress disk writes. As of this ship the
+   guard lives ONLY on ``Ledger.append``; bus persistence,
+   snapshot stores, run-artifact sinks, and ``llm_debug``
+   flat-files continue to write. A privacy-sensitive consumer
+   who needs zero disk writes must also set
+   ``bus.persistence_enabled=False`` and disable the
+   run-artifact / snapshot sinks directly. Per-sink ephemeral
+   is a follow-up step.
 
 Composition root resolves the redactor once at boot via
 :func:`resolve_ledger_redactor` and injects the resolved

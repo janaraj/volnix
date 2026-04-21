@@ -11,13 +11,19 @@ by :class:`ConnectionManager`.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from volnix.ledger.config import LedgerConfig
 from volnix.ledger.entries import LedgerEntry, deserialize_entry
 from volnix.ledger.query import LedgerQuery
 from volnix.persistence.append_log import AppendOnlyLog
 from volnix.persistence.database import Database
+
+# Return-value sentinels for :meth:`Ledger.append` non-persist
+# branches. Distinct values so observability / telemetry code
+# can tell the two skip paths apart (Step 14 audit H3).
+APPEND_SKIPPED_DISABLED_TYPE: Final[int] = -1
+APPEND_SKIPPED_EPHEMERAL: Final[int] = -2
 
 
 class Ledger:
@@ -94,6 +100,30 @@ class Ledger:
         """No-op -- Database lifecycle is managed by ConnectionManager."""
         pass
 
+    def is_redaction_active(self) -> bool:
+        """Return ``True`` when a non-identity redactor is wired
+        for this ledger (Step 14 audit M6).
+
+        Observability / ops surface — lets a caller answer "is
+        privacy redaction actually running on this ledger?"
+        without poking at the private ``_redactor`` attribute.
+        Returns ``False`` when no redactor was injected OR when
+        the identity no-op redactor was registered (consumer opted
+        into the feature but hasn't pointed it at a real hook).
+        """
+        if self._redactor is None:
+            return False
+        # Lazy import so the ledger module doesn't depend on
+        # volnix.privacy at module load (composition isolation).
+        from volnix.privacy.redaction import identity_redactor
+
+        return self._redactor is not identity_redactor
+
+    def is_ephemeral(self) -> bool:
+        """Return ``True`` when ephemeral mode suppresses disk
+        writes for this ledger (Step 14 audit M6 companion)."""
+        return self._ephemeral
+
     async def append(self, entry: LedgerEntry) -> int:
         """Append an entry to the ledger.
 
@@ -101,15 +131,23 @@ class Ledger:
             entry: The ledger entry to persist.
 
         Returns:
-            The auto-assigned entry ID, or -1 if the entry type is disabled.
+            The auto-assigned entry ID (``>= 0``), or one of the
+            non-persist sentinels:
+
+            - ``APPEND_SKIPPED_DISABLED_TYPE`` (``-1``): the entry's
+              type is not in the ``entry_types_enabled`` allowlist.
+            - ``APPEND_SKIPPED_EPHEMERAL`` (``-2``): ``ephemeral``
+              mode is active — no disk write. Step 14 audit H3
+              replaced the shared ``-1`` sentinel so observability
+              code can distinguish the two skip paths.
         """
         if self._entry_types_enabled and entry.entry_type not in self._entry_types_enabled:
-            return -1
+            return APPEND_SKIPPED_DISABLED_TYPE
         # PMF Plan Phase 4C Step 14 — ephemeral mode suppresses
         # disk writes entirely so a consumer running a private
         # session never accidentally persists the ledger.
         if self._ephemeral:
-            return -1
+            return APPEND_SKIPPED_EPHEMERAL
         # PMF Plan Phase 4C Step 14 — run the redactor BEFORE
         # extracting indexed columns so redaction on fields like
         # ``actor_id`` / ``session_id`` propagates to the SQL

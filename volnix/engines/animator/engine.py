@@ -16,6 +16,7 @@ Controlled by behavior mode from WorldPlan:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 from datetime import UTC, datetime, timedelta
@@ -564,8 +565,6 @@ class WorldAnimatorEngine(BaseEngine):
         # simulation. blake2b of the isoformat is stable across
         # processes, preserving the replay determinism the engine
         # promises.
-        import hashlib
-
         digest = hashlib.blake2b(world_time.isoformat().encode("utf-8"), digest_size=8).digest()
         rng = random.Random(int.from_bytes(digest, "big"))
 
