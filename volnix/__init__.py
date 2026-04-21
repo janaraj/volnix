@@ -53,6 +53,8 @@ from volnix.config.schema import PackSearchPath, VolnixConfig
 from volnix.core.envelope import ActionEnvelope
 from volnix.core.errors import (
     DuplicatePackError,
+    IncompatiblePackError,
+    PackManifestMismatchError,
     PackNotFoundError,
     ReplayJournalMismatch,
     ReplayProviderNotFound,
@@ -110,6 +112,7 @@ from volnix.observation import (
     variant_delta,
 )
 from volnix.packs.base import ServicePack, ServiceProfile
+from volnix.packs.manifest import PackManifest, PackManifestLoadError
 from volnix.packs.registry import PackRegistry
 from volnix.sessions import SessionManager, SlotAssignment
 from volnix.simulation.config import SimulationRunnerConfig
@@ -160,6 +163,7 @@ __all__ = [
     "ServicePack",
     "ServiceProfile",
     "PackRegistry",
+    "PackManifest",
     # Protocols — prefer these over concrete engine classes when type-hinting
     # collaborators; concrete engines are imported only in composition roots.
     "MemoryEngineProtocol",
@@ -199,6 +203,9 @@ __all__ = [
     # Errors
     "VolnixError",
     "DuplicatePackError",
+    "IncompatiblePackError",
+    "PackManifestLoadError",
+    "PackManifestMismatchError",
     "PackNotFoundError",
     "ReplayJournalMismatch",
     "ReplayProviderNotFound",

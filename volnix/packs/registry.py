@@ -17,6 +17,13 @@ from typing import Any
 from volnix.core.errors import DuplicatePackError, PackNotFoundError
 from volnix.packs.base import ServicePack, ServiceProfile
 from volnix.packs.loader import discover_packs, discover_profiles
+from volnix.packs.manifest import (
+    GRANDFATHERED_COMPAT_SPEC,
+    PackManifest,
+    check_compatibility,
+    check_manifest_matches_pack,
+    load_manifest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +37,51 @@ class PackRegistry:
         self._category_index: dict[str, list[str]] = {}  # category -> [pack_name]
         self._profiles: dict[str, ServiceProfile] = {}
         self._profile_pack_index: dict[str, list[str]] = {}  # pack_name -> [profile_name]
+        # PMF Plan Phase 4C Step 13 — per-pack manifest lookup.
+        # Populated only when ``register(pack, manifest=...)`` is
+        # called with an explicit manifest; discovery with a
+        # ``pack.yaml`` sidecar populates it; bundled / pre-0.2
+        # packs without a manifest are grandfathered and absent
+        # from this dict.
+        self._manifests: dict[str, PackManifest] = {}
 
-    def register(self, pack: ServicePack) -> None:
+    def register(
+        self,
+        pack: ServicePack,
+        *,
+        manifest: PackManifest | None = None,
+    ) -> None:
         """Register a pack. Builds all indices from pack's ABC methods.
+
+        ``manifest`` (PMF Plan Phase 4C Step 13): optional
+        ``PackManifest`` loaded from the pack's ``pack.yaml``
+        sidecar. When present, the registry validates
+        ``manifest.compatible_with`` against the installed volnix
+        version AND that the manifest's ``name`` / ``category``
+        agree with the pack's ClassVars. When absent, the pack
+        is grandfathered under ``GRANDFATHERED_COMPAT_SPEC`` —
+        still subject to the volnix-version compatibility check
+        (so a 0.2.x volnix refuses a pre-0.2 pack at boot, not
+        at runtime).
 
         Raises:
             ValueError: If pack_name is empty.
             DuplicatePackError: If pack_name already registered.
+            IncompatiblePackError: If the pack's compatibility
+                specifier excludes the current volnix version.
+            PackManifestMismatchError: If manifest fields disagree
+                with pack ClassVars.
         """
         if not pack.pack_name:
             raise ValueError("ServicePack must have a non-empty pack_name")
         if pack.pack_name in self._packs:
             raise DuplicatePackError(f"Pack '{pack.pack_name}' is already registered")
+
+        # Phase 4C Step 13 — compatibility gate. Runs BEFORE any
+        # indexing so an incompatible pack leaves the registry
+        # untouched. Grandfathered packs (no manifest) use the
+        # module-level ``GRANDFATHERED_COMPAT_SPEC`` constant.
+        self._enforce_pack_compatibility(pack, manifest)
 
         # Store pack
         self._packs[pack.pack_name] = pack
@@ -75,6 +115,60 @@ class PackRegistry:
             pack.category,
             len(tools),
         )
+
+    def get_manifest(self, pack_name: str) -> PackManifest | None:
+        """Return the registered ``PackManifest`` for ``pack_name``,
+        or ``None`` if the pack was grandfathered (no sidecar).
+
+        PMF Plan Phase 4C Step 13.
+        """
+        return self._manifests.get(pack_name)
+
+    def _enforce_pack_compatibility(
+        self,
+        pack: ServicePack,
+        manifest: PackManifest | None,
+    ) -> None:
+        """Internal: run the compatibility gate before indexing.
+
+        Policy (post-impl audit C2):
+
+        - Manifest present → hard enforcement. ``compatible_with``
+          checked against installed volnix; mismatch raises
+          ``IncompatiblePackError`` at register time.
+        - Manifest absent → permissive. A ``DeprecationWarning``
+          recommends manifest authorship but the register
+          succeeds. Prevents a hard break on the 0.2.0 bump for
+          every bundled / third-party pack that hasn't migrated.
+          A future major release MAY flip this to hard-enforce.
+        """
+        if manifest is None:
+            import warnings
+
+            warnings.warn(
+                f"Pack {pack.pack_name!r} registered without a "
+                f"pack.yaml manifest. Manifest declaration will "
+                f"become required in a future volnix major release. "
+                f"Author a pack.yaml with compatible_with to pin "
+                f"the supported volnix range. "
+                f"(Grandfather reference spec: {GRANDFATHERED_COMPAT_SPEC})",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return
+
+        # Manifest + pack ClassVar agreement.
+        check_manifest_matches_pack(
+            manifest,
+            pack_name=pack.pack_name,
+            pack_category=pack.category,
+        )
+        check_compatibility(
+            _current_volnix_version(),
+            compatible_with=manifest.compatible_with,
+            pack_name=pack.pack_name,
+        )
+        self._manifests[pack.pack_name] = manifest
 
     def register_profile(self, profile: ServiceProfile) -> None:
         """Register a service profile. Validates extends_pack and uniqueness."""
@@ -121,13 +215,13 @@ class PackRegistry:
         for path in verified_paths:
             for pack in discover_packs(path):
                 if pack.pack_name not in self._packs:
-                    self.register(pack)
+                    self.register(pack, manifest=_find_pack_manifest(pack))
 
         if external_paths:
             for path, package_prefix in external_paths:
                 for pack in discover_packs(path, package_prefix=package_prefix):
                     if pack.pack_name not in self._packs:
-                        self.register(pack)
+                        self.register(pack, manifest=_find_pack_manifest(pack))
 
         if profiled_path:
             for profile in discover_profiles(profiled_path):
@@ -196,3 +290,59 @@ class PackRegistry:
 
     def has_tool(self, tool_name: str) -> bool:
         return tool_name in self._tool_index
+
+
+def _find_pack_manifest(pack: ServicePack) -> PackManifest | None:
+    """Return the ``PackManifest`` for ``pack`` if a ``pack.yaml``
+    sidecar exists next to the pack's Python module, else ``None``.
+
+    Post-impl audit C1: discovery previously registered every pack
+    without a manifest, making the feature effectively dead for
+    bundled packs. This helper locates the sidecar via the pack
+    class's source file so ``discover()`` can thread it through.
+    IO / parse failures bubble up as ``PackManifestLoadError`` to
+    make authoring errors visible at boot.
+    """
+    import inspect
+
+    try:
+        pack_file = Path(inspect.getfile(type(pack)))
+    except (TypeError, OSError):
+        return None
+    manifest_path = pack_file.parent / "pack.yaml"
+    if not manifest_path.exists():
+        return None
+    # Delegate to the loader — raises ``PackManifestLoadError`` on
+    # malformed YAML / schema violation / oversize file. The
+    # discovery path does NOT swallow those errors; a corrupt
+    # manifest SHOULD fail boot.
+    return load_manifest(manifest_path)
+
+
+def _current_volnix_version() -> str:
+    """Best-effort discovery of the installed ``volnix`` version
+    for compatibility-gate checks.
+
+    Reads ``importlib.metadata.version("volnix")`` directly on
+    every call. NOT cached via ``volnix.__version__`` because
+    that module-level string is captured once at import time and
+    can be polluted by unrelated tests that monkeypatch
+    ``importlib.metadata`` (Step-1 fallback regression test). A
+    fresh lookup here means the gate always reflects the current
+    package metadata.
+
+    Falls back to the ``"0.0.0+source"`` sentinel on
+    ``PackageNotFoundError`` — a sentinel that DELIBERATELY fails
+    any ``>=0.1`` specifier so source-tree runs against a
+    manifest-bearing pack surface "package not installed" at
+    register time rather than silently accepting (post-impl audit
+    C3).
+
+    PMF Plan Phase 4C Step 13.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("volnix")
+    except PackageNotFoundError:
+        return "0.0.0+source"

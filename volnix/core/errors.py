@@ -245,6 +245,31 @@ class DuplicatePackError(PackError):
     pass
 
 
+class IncompatiblePackError(PackError):
+    """A pack's declared ``compatible_with`` specifier does not
+    include the current ``volnix`` version. Raised at pack-
+    register time so a consumer upgrading volnix sees
+    incompatibility at boot, not at runtime.
+
+    PMF Plan Phase 4C Step 13.
+    """
+
+    pass
+
+
+class PackManifestMismatchError(PackError):
+    """A pack's ``pack.yaml`` declares fields that disagree with
+    the Python ``ServicePack`` / ``ServiceProfile`` ClassVars
+    (e.g., manifest says ``category: "communication"`` but the
+    class says ``category = "work-management"``). Raised on pack
+    load to force the manifest and class to stay in lockstep.
+
+    PMF Plan Phase 4C Step 13.
+    """
+
+    pass
+
+
 # ---------------------------------------------------------------------------
 # LLM errors
 # ---------------------------------------------------------------------------

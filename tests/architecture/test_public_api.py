@@ -70,6 +70,7 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "ServicePack",
         "ServiceProfile",
         "PackRegistry",
+        "PackManifest",
         # Protocols
         "MemoryEngineProtocol",
         "NPCActivatorProtocol",
@@ -108,6 +109,9 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         # Errors
         "VolnixError",
         "DuplicatePackError",
+        "IncompatiblePackError",
+        "PackManifestLoadError",
+        "PackManifestMismatchError",
         "PackNotFoundError",
         "ReplayJournalMismatch",
         "ReplayProviderNotFound",
