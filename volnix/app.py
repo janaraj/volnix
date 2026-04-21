@@ -499,6 +499,11 @@ class VolnixApp:
         agency._config["_actor_registry"] = actor_registry
         if self._llm_router:
             agency._config["_llm_router"] = self._llm_router
+        # PMF Plan Phase 4C Step 7 — inject UsageTracker so
+        # NPCActivator can call ``record_utterance`` during the
+        # activation loop when ``memory.utterance_journal_enabled``.
+        if self._usage_tracker is not None:
+            agency._config["_usage_tracker"] = self._usage_tracker
         agency._ledger = self._ledger
 
         # Feedback engine wiring

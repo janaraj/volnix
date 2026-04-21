@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from typing import Any
 
 from volnix.actors.activation_profile import ActivationProfile, ToolScope
@@ -172,7 +171,23 @@ class NPCActivator:
         )
         user_prompt = self._user_nudge(reason, trigger_event)
 
-        activation_id = uuid.uuid4().hex[:12]
+        # PMF Plan Phase 4C Step 7 — deterministic activation_id
+        # when a session is active so Step-8 ReplayLLMProvider can
+        # reproduce activations bit-identically. Outside a session
+        # falls back to uuid4 (matches pre-Step-7 behaviour).
+        from volnix.core.types import generate_activation_id as _gen_aid
+
+        _session_id = getattr(host, "_session_id", None)
+        _tick_now = 0
+        _progress = getattr(host, "_simulation_progress", None)
+        if _progress is not None:
+            _tick_now = _progress[0]
+        activation_id = _gen_aid(
+            session_id=_session_id,
+            actor_id=actor.actor_id,
+            tick=_tick_now,
+            activation_index=0,
+        )
         loop_start = time.monotonic()
         ledger = getattr(host, "_ledger", None)
 
@@ -285,6 +300,56 @@ class NPCActivator:
                 )
                 return envelopes
             llm_latency_ms = (time.monotonic() - llm_start) * 1000
+
+            # PMF Plan Phase 4C Step 7 — write per-role utterance
+            # journal entries when ``memory.utterance_journal_enabled``
+            # is set on the MemoryEngine's config. Gated here (not
+            # in UsageTracker) so the tracker stays side-effect-free
+            # of config state.
+            _memory_engine = getattr(host, "_memory_engine", None)
+            _journal_enabled = False
+            if _memory_engine is not None:
+                _mcfg = getattr(_memory_engine, "_memory_config", None)
+                if _mcfg is not None:
+                    _journal_enabled = getattr(_mcfg, "utterance_journal_enabled", False)
+            # ``host._config`` is a dict per composition-root
+            # convention (app.py injects cross-engine deps as keys).
+            _usage_tracker = host._config.get("_usage_tracker")
+            if _journal_enabled and _usage_tracker is not None:
+                _seq = 0
+                if system_prompt:
+                    await _usage_tracker.record_utterance(
+                        actor_id=actor.actor_id,
+                        activation_id=activation_id,
+                        session_id=_session_id,
+                        role="system",
+                        content=system_prompt,
+                        tokens=0,
+                        tick=_tick_now,
+                        sequence=_seq,
+                    )
+                    _seq += 1
+                await _usage_tracker.record_utterance(
+                    actor_id=actor.actor_id,
+                    activation_id=activation_id,
+                    session_id=_session_id,
+                    role="user",
+                    content=user_prompt,
+                    tokens=getattr(response.usage, "prompt_tokens", 0) or 0,
+                    tick=_tick_now,
+                    sequence=_seq,
+                )
+                _seq += 1
+                await _usage_tracker.record_utterance(
+                    actor_id=actor.actor_id,
+                    activation_id=activation_id,
+                    session_id=_session_id,
+                    role="assistant",
+                    content=response.content or "",
+                    tokens=getattr(response.usage, "completion_tokens", 0) or 0,
+                    tick=_tick_now,
+                    sequence=_seq,
+                )
 
             # M4: track LLM spend against the profile budget cap. The
             # router's own budget accounting is provider-wide; this cap

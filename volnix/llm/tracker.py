@@ -8,9 +8,10 @@ for persistent auditing.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 from volnix.core.protocols import LedgerProtocol
-from volnix.core.types import ActorId
+from volnix.core.types import ActivationId, ActorId, SessionId
 from volnix.ledger.entries import LLMCallEntry
 from volnix.llm.types import (
     EmbeddingRequest,
@@ -96,6 +97,49 @@ class UsageTracker:
             cached_tokens=a.cached_tokens + b.cached_tokens,
             cost_usd=a.cost_usd + b.cost_usd,
         )
+
+    async def record_utterance(
+        self,
+        *,
+        actor_id: ActorId,
+        activation_id: ActivationId,
+        session_id: SessionId | None,
+        role: str,  # Literal["system","user","assistant","tool"]
+        content: str,
+        tokens: int = 0,
+        tick: int = 0,
+        sequence: int = 0,
+    ) -> None:
+        """Write one ``LLMUtteranceEntry`` to the ledger.
+
+        PMF Plan Phase 4C Step 7. Caller is responsible for the
+        journal-enabled gate (keeps the tracker side-effect-free of
+        config state — one config read site at the call point,
+        matching the 4B narrow-except discipline).
+
+        The caller's ``role`` is validated by ``LLMUtteranceEntry``
+        (``Literal`` union rejects anything outside the four
+        allowed values). ``content_hash`` is computed here as
+        ``sha256:<hex>`` — matches Step 4's ``_CONTENT_HASH_RE``
+        format validator.
+        """
+        if self._ledger is None:
+            return
+        from volnix.ledger.entries import LLMUtteranceEntry
+
+        content_hash = "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+        entry = LLMUtteranceEntry(
+            actor_id=actor_id,
+            activation_id=activation_id,
+            session_id=session_id,
+            role=role,  # type: ignore[arg-type]
+            content=content,
+            content_hash=content_hash,
+            tokens=tokens,
+            tick=tick,
+            sequence=sequence,
+        )
+        await self._ledger.append(entry)
 
     async def get_usage_by_actor(self, actor_id: ActorId) -> LLMUsage:
         """Return aggregate LLM usage for a specific actor.

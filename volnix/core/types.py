@@ -11,6 +11,7 @@ representations.
 from __future__ import annotations
 
 import enum
+import uuid as _uuid
 from datetime import datetime
 from typing import Any, Literal, NewType
 
@@ -78,6 +79,41 @@ Phase 4B (PMF Plan)."""
 TeamId = NewType("TeamId", str)
 """Identifier for a collaborative actor team. Plumbed in Phase 4B
 for team-scope memory; exercised in Phase 4D."""
+
+# PMF Plan Phase 4C Step 7 — deterministic ``activation_id``
+# namespace. Stable UUID5 basis so replay-journal lookup keys are
+# reproducible across Python processes (independent of
+# PYTHONHASHSEED). The 12 trailing hex chars encode "volnix";
+# leading 20 hex chars are zero-padded to a valid UUID shape.
+SESSION_NAMESPACE: _uuid.UUID = _uuid.UUID("00000000-0000-0000-0000-766f6c6e6978")
+
+
+def generate_activation_id(
+    *,
+    session_id: SessionId | None,
+    actor_id: ActorId | str,
+    tick: int,
+    activation_index: int = 0,
+) -> ActivationId:
+    """Generate a 12-char ``ActivationId`` (PMF Plan D8 + Step 7).
+
+    - Session present: deterministic via
+      ``uuid5(SESSION_NAMESPACE, f"{session_id}:{actor_id}:{tick}:{activation_index}")``.
+      Two calls with the same tuple return the same id — the
+      replay-journal lookup key used by Step 8 ``ReplayLLMProvider``.
+    - Session absent: falls back to ``uuid4().hex[:12]`` — matches
+      pre-Step-7 behaviour so non-session runs stay identical.
+
+    ``activation_index`` disambiguates parallel activations of the
+    same actor at the same tick. Default ``0`` is correct for the
+    current single-activation-per-tick NPC path; parallel-activation
+    paths (future work) must supply a monotonic index.
+    """
+    if session_id is None:
+        return ActivationId(_uuid.uuid4().hex[:12])
+    key = f"{session_id}:{actor_id}:{tick}:{activation_index}"
+    return ActivationId(_uuid.uuid5(SESSION_NAMESPACE, key).hex[:12])
+
 
 # ---------------------------------------------------------------------------
 # Enumerations

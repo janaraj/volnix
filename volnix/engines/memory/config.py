@@ -244,6 +244,18 @@ class MemoryConfig(BaseModel):
     cross-run memory sharing is an opt-in feature, not an accidental
     byproduct of on-disk persistence (G15)."""
 
+    utterance_journal_enabled: bool = False
+    """PMF Plan Phase 4C Step 7 — enable the LLM utterance journal.
+
+    When True, every NPC activation writes ``LLMUtteranceEntry``
+    rows (per role) to the ledger, keyed on a deterministic
+    ``activation_id``. Step 8 ``ReplayLLMProvider`` reads these to
+    replay sessions without spending tokens.
+
+    Default False: the journal captures full prompts + responses,
+    which is sensitive data. Consumers (e.g., Rehearse) enable
+    explicitly in their bundled config."""
+
     # ── Schema ────────────────────────────────────────────────────
     schema_version: int = Field(default=1, ge=1)
     """SQLite schema version. 4B ships version 1; migrations land
