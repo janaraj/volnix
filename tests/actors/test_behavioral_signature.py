@@ -234,3 +234,57 @@ def test_positive_config_builder_hook_none_clears_override() -> None:
 
     cfg = ConfigBuilder().trait_extractor_hook(None).build()
     assert cfg.trait_extractor_hook is None
+
+
+# ─── Step 12 cleanup (audit L4 / M6 / L5) ─────────────────────────
+
+
+def test_positive_trait_extractor_hook_from_dict_roundtrip() -> None:
+    """Step 12 audit L4: ``VolnixConfig.from_dict`` with the
+    hook field must round-trip — locks the TOML → dict →
+    VolnixConfig path that a product consumer layering
+    ``volnix.{env}.toml`` overrides relies on."""
+    from volnix.config.schema import VolnixConfig
+
+    data = {"trait_extractor_hook": "mypkg.mod:fn"}
+    cfg = VolnixConfig.from_dict(data)
+    assert cfg.trait_extractor_hook == "mypkg.mod:fn"
+    # Round-trip through ``model_dump``: value survives.
+    dumped = cfg.model_dump(mode="python")
+    cfg2 = VolnixConfig.from_dict(dumped)
+    assert cfg2.trait_extractor_hook == "mypkg.mod:fn"
+
+
+def test_positive_extensions_int_normalizes_to_float_via_json_dump() -> None:
+    """Step 12 audit M6: ``model_dump(mode='json')`` yields
+    a stable wire shape regardless of whether the caller passed
+    int or float input. Locks the normalization contract the
+    docstring promises."""
+    sig_int = BehavioralSignature(extensions={"axis": 1})
+    sig_float = BehavioralSignature(extensions={"axis": 1.0})
+    assert sig_int.extensions == sig_float.extensions
+    assert sig_int.model_dump(mode="json") == sig_float.model_dump(mode="json")
+
+
+def test_positive_extensions_shallow_frozen_known_limitation() -> None:
+    """Step 12 audit L5: Pydantic ``frozen=True`` blocks
+    attribute reassignment (``sig.extensions = {...}`` raises)
+    but does NOT deep-freeze the stored dict — consumer-side
+    mutation via ``sig.extensions["new"] = 1.0`` succeeds.
+    Locks this as a KNOWN limitation so future consumers can't
+    claim surprise.
+
+    Closing the consumer-side mutation path requires
+    ``MappingProxyType`` which breaks JSON round-trip —
+    deferred for 0.2.0."""
+    from pydantic import ValidationError
+
+    sig = BehavioralSignature(extensions={"existing": 0.5})
+    # Attribute reassignment blocked (frozen=True).
+    with pytest.raises(ValidationError):
+        sig.extensions = {"replaced": 0.9}  # type: ignore[misc]
+    # Stored-dict mutation is NOT blocked. Consumers that need
+    # full immutability should deepcopy before exposing the
+    # dict to untrusted callers.
+    sig.extensions["new"] = 0.7
+    assert "new" in sig.extensions

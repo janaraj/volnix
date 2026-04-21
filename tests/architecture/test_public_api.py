@@ -245,6 +245,32 @@ def _exported_exception_names() -> list[str]:
     return names
 
 
+# Post-impl audit H4 (Step 12): public-API names scheduled for
+# removal in a future major release. Adding a name here is a
+# commitment to a deprecation path — at 0.3.0 planning, grep
+# this set to surface the removal list in one place. Keep the
+# set disjoint from ``_EXPECTED_PUBLIC_API`` additions (a name
+# cannot be both "expected" AND "deprecated" without a source of
+# truth for its current status).
+_DEPRECATED_PUBLIC_API: frozenset[str] = frozenset(
+    {
+        # ActorBehaviorTraits — alias of BehavioralSignature.
+        # Scheduled for removal in 0.3.0 per
+        # volnix/actors/behavioral_signature.py module docstring.
+        "ActorBehaviorTraits",
+    }
+)
+
+
+def test_positive_deprecated_public_api_is_subset_of_expected() -> None:
+    """H4 lock: every deprecated name MUST also be in
+    ``_EXPECTED_PUBLIC_API`` — a name is either exported or not.
+    The deprecation set is a marker overlay, not a separate
+    export channel."""
+    unexpected = _DEPRECATED_PUBLIC_API - _EXPECTED_PUBLIC_API
+    assert not unexpected, f"Deprecated names must also be in _EXPECTED_PUBLIC_API: {unexpected}"
+
+
 def test_negative_every_exported_error_inherits_volnix_error() -> None:
     """Locked hierarchy: every exported exception is a ``VolnixError``
     subclass. Prevents silent drift where a new 4C exception slips

@@ -46,9 +46,23 @@ class BehavioralSignature(BaseModel):
         ambient_activity_rate: 0.0 = never initiates, 1.0 = constantly active.
         extensions: Product-scoped axis bag. Keys are opaque to
             the platform; values must be floats in [0.0, 1.0].
-            Validator rejects non-float values at construction;
-            consumers reading an unknown axis should branch on
-            ``extensions.get(key, default)`` rather than raising.
+
+            Validator rejects (Step 12 audit M2):
+            - Non-float values: strings, ``None``, objects.
+            - Bool values: ``True`` / ``False`` — they're technically
+              int subclasses in Python but a typo like
+              ``{"flag": True}`` coercing to 1.0 would silently
+              corrupt numeric axes, so we reject explicitly.
+            - Out-of-range: values outside ``[0.0, 1.0]``.
+            - Empty keys / non-string keys.
+
+            Integers ARE accepted and normalized to float at
+            construction (``{"axis": 1}`` → stored as ``1.0``).
+            This means serialization round-trip via
+            ``model_dump(mode="python")`` returns ``{"axis": 1.0}``
+            — consumers computing hashes over the source dict vs
+            the stored dict see different representations. Use
+            ``model_dump(mode="json")`` for a stable wire shape.
     """
 
     model_config = ConfigDict(frozen=True)
