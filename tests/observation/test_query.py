@@ -265,6 +265,65 @@ async def test_positive_trajectory_source_pulls_from_state_engine() -> None:
     assert tl[0].payload["value"] == 42
 
 
+async def test_positive_ledger_source_pulls_typed_rows() -> None:
+    """Post-impl audit M7: the LEDGER source path is exercised
+    end-to-end. Previously only referenced via the empty-include
+    / 4-source tests without directly hitting
+    ``_collect_ledger_rows``."""
+    ledger = await _make_ledger()
+    # Seed two utterance rows — using "llm.utterance" as the
+    # ledger type filter lets us pull them via the ledger
+    # source without needing a separate entry type.
+    await _seed_utterance(ledger, tick=2, activation_id="act-a", content="first")
+    await _seed_utterance(ledger, tick=5, activation_id="act-b", content="second")
+    q = (
+        ObservationQuery(ledger=ledger, bus_persistence=None, state_engine=None)
+        .for_session("s-1")
+        .include([TimelineSource.LEDGER])
+        .add_ledger_type("llm.utterance")
+    )
+    tl = await q.build()
+    assert len(tl) == 2
+    assert all(e.source is TimelineSource.LEDGER for e in tl.events)
+    assert [e.tick for e in tl.events] == [2, 5]
+
+
+async def test_negative_actor_filter_excludes_events_without_actor_id() -> None:
+    """Post-impl audit L3: events lacking an ``actor_id``
+    attribute must be EXCLUDED when a for_actor filter is set.
+    Previously the ``actor is not None`` guard silently included
+    them."""
+    from datetime import UTC, datetime
+
+    from volnix.core.events import Event
+    from volnix.core.types import Timestamp
+
+    class _ActorlessBus:
+        async def query(self, **kwargs: Any) -> list[Any]:
+            # A lifecycle-style event with no actor_id attribute.
+            return [
+                Event(
+                    event_type="lifecycle.started",
+                    timestamp=Timestamp(
+                        world_time=datetime(2026, 1, 15, tzinfo=UTC),
+                        wall_time=datetime.now(UTC),
+                        tick=1,
+                    ),
+                    session_id=SessionId("s-1"),
+                )
+            ]
+
+    q = (
+        ObservationQuery(ledger=None, bus_persistence=_ActorlessBus(), state_engine=None)
+        .for_session("s-1")
+        .for_actor("alice")
+        .include([TimelineSource.EVENT])
+    )
+    tl = await q.build()
+    # Actor-filter set → actor-less events excluded.
+    assert len(tl) == 0
+
+
 # ─── Post-impl audit regression tests ─────────────────────────────
 
 

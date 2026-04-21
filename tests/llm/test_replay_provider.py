@@ -115,6 +115,29 @@ async def test_negative_no_assistant_role_in_journal_raises_mismatch() -> None:
         await provider.generate(req)
 
 
+async def test_negative_replay_actor_id_mismatch_raises_mismatch() -> None:
+    """Step 8 audit M4: when the journal has an assistant row for
+    ``activation_id`` but under a different ``actor_id`` than the
+    caller requested, the provider refuses rather than silently
+    returning the wrong actor's content."""
+    ledger = await _make_ledger()
+    await ledger.append(
+        _utter(
+            session_id="s-1",
+            actor_id="bob",  # journal has bob's row
+            activation_id="act-1",
+            role="assistant",
+            content="bob's reply",
+        )
+    )
+    provider = ReplayLLMProvider(ledger)
+    with pytest.raises(ReplayJournalMismatch):
+        # Caller asks for alice's content at activation act-1.
+        await provider.generate(
+            _replay_request(session_id="s-1", actor_id="alice", activation_id="act-1")
+        )
+
+
 async def test_positive_replay_reconstructs_assistant_content() -> None:
     """Happy path: pre-populated journal → replay returns the
     recorded assistant content, zero live calls."""

@@ -11,18 +11,15 @@ signatures; patch bumps (0.2.0 → 0.2.1) are bug-fix only.
 The ``__all__`` list below groups exports by category; imports below
 are sorted alphabetically by module path for linter compatibility.
 
-Additional exports land in later Phase 4C steps — see
-``internal_docs/pmf/phase-4c-platform-hardening.md`` for the roadmap.
-Reserved for future steps (not yet exported):
-    Step 9 — TrajectoryFieldNotFound
-    Step 10 — ObservationQuery, UnifiedTimeline, TrajectoryPoint,
-              IntentBehaviorGap, PersonaContribution,
-              VariantDeltaReport, intent_behavior_gap,
-              load_bearing_personas, variant_delta
-    Step 11 — CharacterDefinition, CharacterLoader
-    Step 12 — BehavioralSignature
-    Step 13 — PackManifest, IncompatiblePackError,
-              PackManifestMismatchError
+**Intentionally NOT exported** (implementation details — reach into
+the submodule only if you know what you're doing and accept the
+minor-release-break risk):
+
+- ``volnix.llm.providers.replay.ReplayLLMProvider`` — products that
+  want to register the replay provider directly can import it, but
+  the supported path is ``VolnixApp`` auto-registering it at start()
+  when both ``ledger`` and ``llm_router`` are wired.
+- ``volnix._internal.*`` — private helpers shared across the platform.
 """
 
 from __future__ import annotations

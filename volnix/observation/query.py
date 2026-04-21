@@ -360,8 +360,14 @@ class ObservationQuery:
             if not self._tick_in_range(tick):
                 continue
             if self._actor_id is not None:
+                # Post-impl audit L3: events without an ``actor_id``
+                # attribute (lifecycle / system events) are EXCLUDED
+                # when an actor filter is set. Previously the
+                # ``actor is not None`` guard silently included
+                # them, which surprised consumers filtering by
+                # actor.
                 actor = getattr(evt, "actor_id", None)
-                if actor is not None and str(actor) != str(self._actor_id):
+                if actor is None or str(actor) != str(self._actor_id):
                     continue
             # Post-impl audit C1: Event has no sequence_id attribute;
             # derive a deterministic tiebreak integer from the
