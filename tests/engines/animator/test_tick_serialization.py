@@ -14,8 +14,6 @@ import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
-import pytest
-
 from volnix.engines.animator.engine import WorldAnimatorEngine
 from volnix.engines.world_compiler.plan import WorldPlan
 from volnix.reality.dimensions import WorldConditions

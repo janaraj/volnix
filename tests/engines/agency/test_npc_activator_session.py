@@ -57,9 +57,7 @@ class TestNpcRecallForwarderThreadsSessionId:
             _session_id=SessionId("sess-npc"),
             _simulation_progress=[5],
         )
-        await _activator()._recall_for_activation(
-            actor=_actor(), trigger_event=None, host=host
-        )
+        await _activator()._recall_for_activation(actor=_actor(), trigger_event=None, host=host)
         # The real helper ran and forwarded session_id to engine.recall.
         assert eng.recall.await_count == 1
         assert eng.recall.await_args.kwargs["session_id"] == SessionId("sess-npc")
@@ -69,9 +67,7 @@ class TestNpcRecallForwarderThreadsSessionId:
     ) -> None:
         eng = _memory_engine_stub()
         host = SimpleNamespace(_memory_engine=eng, _simulation_progress=[0])
-        await _activator()._recall_for_activation(
-            actor=_actor(), trigger_event=None, host=host
-        )
+        await _activator()._recall_for_activation(actor=_actor(), trigger_event=None, host=host)
         assert eng.recall.await_args.kwargs["session_id"] is None
 
 
@@ -96,6 +92,4 @@ class TestNpcImplicitRememberForwarderThreadsSessionId:
             host=host,
         )
         assert eng.remember.await_count == 1
-        assert eng.remember.await_args.kwargs["session_id"] == SessionId(
-            "sess-npc-remember"
-        )
+        assert eng.remember.await_args.kwargs["session_id"] == SessionId("sess-npc-remember")

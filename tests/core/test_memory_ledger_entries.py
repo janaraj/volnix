@@ -41,24 +41,37 @@ class TestMemoryLedgerEntries:
 
     def test_positive_write_entry_shape(self) -> None:
         e = MemoryWriteEntry(
-            caller_actor_id=ActorId("npc-1"), target_scope="actor", target_owner="npc-1",
-            record_id="r1", kind="episodic", source="implicit",
-            importance=0.4, tick=0,
+            caller_actor_id=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-1",
+            record_id="r1",
+            kind="episodic",
+            source="implicit",
+            importance=0.4,
+            tick=0,
         )
         assert e.entry_type == "memory_write"
         assert e.model_config.get("frozen") is True
 
     def test_positive_recall_entry_shape(self) -> None:
         e = MemoryRecallEntry(
-            caller_actor_id=ActorId("npc-1"), target_scope="actor", target_owner="npc-1",
-            query_mode="hybrid", query_id="q1", result_count=3, tick=0,
+            caller_actor_id=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-1",
+            query_mode="hybrid",
+            query_id="q1",
+            result_count=3,
+            tick=0,
         )
         assert e.entry_type == "memory_recall"
 
     def test_positive_consolidation_entry_shape(self) -> None:
         e = MemoryConsolidationEntry(
             actor_id=ActorId("npc-1"),
-            episodic_consumed=10, semantic_produced=2, episodic_pruned=10, tick=50,
+            episodic_consumed=10,
+            semantic_produced=2,
+            episodic_pruned=10,
+            tick=50,
         )
         assert e.entry_type == "memory_consolidation"
 
@@ -70,8 +83,10 @@ class TestMemoryLedgerEntries:
 
     def test_positive_access_denied_entry_shape(self) -> None:
         e = MemoryAccessDeniedEntry(
-            caller_actor_id=ActorId("npc-1"), target_scope="actor",
-            target_owner="npc-2", op="read",
+            caller_actor_id=ActorId("npc-1"),
+            target_scope="actor",
+            target_owner="npc-2",
+            op="read",
         )
         assert e.entry_type == "memory_access_denied"
 
@@ -86,47 +101,65 @@ class TestTypedIdDiscipline:
         "factory",
         [
             lambda s: MemoryWriteEntry(
-                caller_actor_id=ActorId("a"), target_scope=s, target_owner="x",
-                record_id="r", kind="episodic", source="implicit",
-                importance=0.5, tick=0,
+                caller_actor_id=ActorId("a"),
+                target_scope=s,
+                target_owner="x",
+                record_id="r",
+                kind="episodic",
+                source="implicit",
+                importance=0.5,
+                tick=0,
             ),
             lambda s: MemoryRecallEntry(
-                caller_actor_id=ActorId("a"), target_scope=s, target_owner="x",
-                query_mode="hybrid", query_id="q", result_count=0, tick=0,
+                caller_actor_id=ActorId("a"),
+                target_scope=s,
+                target_owner="x",
+                query_mode="hybrid",
+                query_id="q",
+                result_count=0,
+                tick=0,
             ),
             lambda s: MemoryAccessDeniedEntry(
-                caller_actor_id=ActorId("a"), target_scope=s,
-                target_owner="x", op="read",
+                caller_actor_id=ActorId("a"),
+                target_scope=s,
+                target_owner="x",
+                op="read",
             ),
         ],
         ids=["write", "recall", "access_denied"],
     )
     @pytest.mark.parametrize("bad_scope", ["actos", "ACTOR", "global", ""])
-    def test_negative_invalid_target_scope_rejected(
-        self, factory, bad_scope: str
-    ) -> None:
+    def test_negative_invalid_target_scope_rejected(self, factory, bad_scope: str) -> None:
         with pytest.raises(ValidationError):
             factory(bad_scope)
 
     # C1/C2 — numeric range enforcement on ledger entries
     @pytest.mark.parametrize("bad_importance", [-0.1, 1.01])
-    def test_negative_write_entry_importance_out_of_range(
-        self, bad_importance: float
-    ) -> None:
+    def test_negative_write_entry_importance_out_of_range(self, bad_importance: float) -> None:
         with pytest.raises(ValidationError):
             MemoryWriteEntry(
-                caller_actor_id=ActorId("a"), target_scope="actor",
-                target_owner="x", record_id="r", kind="episodic",
-                source="implicit", importance=bad_importance, tick=0,
+                caller_actor_id=ActorId("a"),
+                target_scope="actor",
+                target_owner="x",
+                record_id="r",
+                kind="episodic",
+                source="implicit",
+                importance=bad_importance,
+                tick=0,
             )
 
     @pytest.mark.parametrize("bad_tick", [-1, -100])
     def test_negative_write_entry_tick_negative_rejected(self, bad_tick: int) -> None:
         with pytest.raises(ValidationError):
             MemoryWriteEntry(
-                caller_actor_id=ActorId("a"), target_scope="actor",
-                target_owner="x", record_id="r", kind="episodic",
-                source="implicit", importance=0.5, tick=bad_tick,
+                caller_actor_id=ActorId("a"),
+                target_scope="actor",
+                target_owner="x",
+                record_id="r",
+                kind="episodic",
+                source="implicit",
+                importance=0.5,
+                tick=bad_tick,
             )
 
     @pytest.mark.parametrize("bad_count", [-1, -5])
@@ -134,8 +167,10 @@ class TestTypedIdDiscipline:
         with pytest.raises(ValidationError):
             MemoryConsolidationEntry(
                 actor_id=ActorId("a"),
-                episodic_consumed=bad_count, semantic_produced=0,
-                episodic_pruned=0, tick=0,
+                episodic_consumed=bad_count,
+                semantic_produced=0,
+                episodic_pruned=0,
+                tick=0,
             )
 
 
@@ -149,29 +184,47 @@ class TestEntryRoundTrip:
         "entry",
         [
             MemoryWriteEntry(
-                caller_actor_id=ActorId("npc-1"), target_scope="actor",
-                target_owner="npc-1", record_id="r1", kind="episodic",
-                source="implicit", importance=0.4, tick=10,
+                caller_actor_id=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-1",
+                record_id="r1",
+                kind="episodic",
+                source="implicit",
+                importance=0.4,
+                tick=10,
             ),
             MemoryRecallEntry(
-                caller_actor_id=ActorId("npc-1"), target_scope="actor",
-                target_owner="npc-1", query_mode="hybrid",
-                query_id="q1", result_count=3, tick=10,
+                caller_actor_id=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-1",
+                query_mode="hybrid",
+                query_id="q1",
+                result_count=3,
+                tick=10,
             ),
             MemoryConsolidationEntry(
-                actor_id=ActorId("npc-1"), episodic_consumed=10,
-                semantic_produced=2, episodic_pruned=10, tick=50,
+                actor_id=ActorId("npc-1"),
+                episodic_consumed=10,
+                semantic_produced=2,
+                episodic_pruned=10,
+                tick=50,
             ),
             MemoryEvictionEntry(actor_id=ActorId("npc-1")),
             MemoryHydrationEntry(actor_id=ActorId("npc-1")),
             MemoryAccessDeniedEntry(
-                caller_actor_id=ActorId("npc-1"), target_scope="actor",
-                target_owner="npc-2", op="read",
+                caller_actor_id=ActorId("npc-1"),
+                target_scope="actor",
+                target_owner="npc-2",
+                op="read",
             ),
         ],
         ids=[
-            "write", "recall", "consolidation",
-            "eviction", "hydration", "access_denied",
+            "write",
+            "recall",
+            "consolidation",
+            "eviction",
+            "hydration",
+            "access_denied",
         ],
     )
     def test_round_trip_preserves_shape(self, entry) -> None:
