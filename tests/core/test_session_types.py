@@ -107,7 +107,7 @@ class TestSessionValueObject:
         """Serialise + reconstruct yields an equal instance. Locks the
         wire format used by ``SessionManager``'s SQLite store in Step
         5 — any change here is a schema bump, not a silent rewrite."""
-        session = _sample_session(metadata={"label": "rehearse-demo"})
+        session = _sample_session(metadata={"label": "sample-demo"})
         restored = Session.model_validate_json(session.model_dump_json())
         assert restored == session
         assert restored is not session

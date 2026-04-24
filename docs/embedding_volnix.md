@@ -1,6 +1,6 @@
 # Embedding Volnix
 
-**Audience:** Python library authors who want to bundle Volnix into a downstream product — Rehearse is the first such consumer, and this document is the contract the 0.2.0 release makes with you.
+**Audience:** Python library authors who want to bundle Volnix into a downstream product. This document is the contract the 0.2.0 release makes with you.
 
 **This doc does NOT cover:**
 
@@ -315,7 +315,7 @@ Concurrent callers (bus subscriber + background loop + SimulationRunner) would r
 | Animator generator prompt + similarity scoring | Internal; will change as diversity work lands. | Same as above. |
 | `VolnixApp._session_manager` underscore | The attribute is the supported handle today; public accessor likely in 0.3.0. | 0.3.0. |
 
-These are listed not as warnings against use, but so Rehearse (and you) know which parts to instrument carefully and which are safe to build directly on.
+These are listed not as warnings against use, but so library consumers know which parts to instrument carefully and which are safe to build directly on.
 
 ---
 

@@ -11,9 +11,9 @@ surfaces:
 dependencies: [workflow]
 
 intent:
-  Volnix 0.2.0 is the version Rehearse will bundle as
-  `pip install volnix`. Consumers (starting with Rehearse, but
-  any downstream library) need a single discoverable document
+  Volnix 0.2.0 is the first stable library release, installable
+  via `pip install volnix`. Downstream consumers need a single
+  discoverable document
   describing how to embed Volnix, what the stable surface is,
   what's still in flux, and how the features shipped in 0.2.0
   (session-scoped memory, animator event-volume controls,
@@ -46,4 +46,4 @@ non-goals:
   - No code changes in `volnix/` — if the guide needs to document an API that doesn't exist yet, we file that as a separate TNL, not quietly add it here.
 
 rationale:
-  Rehearse is the first external consumer of Volnix-as-library. Without a single canonical embedding document, every Rehearse-side decision about which Volnix API to call would be an archaeology exercise against docstrings. The guide crystallizes what 0.2.0 promises as stable vs what's still moving, so the Rehearse repo bootstrap can proceed with a clear contract. Everything beyond the guide (tag, PyPI release, main merge) is a release-pipeline concern and belongs in a separate step.
+  Downstream consumers need a canonical embedding document; without one, every consumer-side decision about which Volnix API to call would be an archaeology exercise against docstrings. The guide crystallizes what 0.2.0 promises as stable vs what's still moving, so consumer integrations can proceed against a clear contract. Everything beyond the guide (tag, PyPI release, main merge) is a release-pipeline concern and belongs in a separate step.

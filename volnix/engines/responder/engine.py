@@ -52,7 +52,7 @@ class WorldResponderEngine(BaseEngine):
         # Tier 1: Verified packs.
         # PMF Plan Phase 4C Step 2 — discovery accepts a list of paths
         # for bundled-mode AND an ``external_paths`` list of
-        # (path, package_prefix) pairs for Rehearse-style catalogs
+        # (path, package_prefix) pairs for external character catalogs
         # that live outside the volnix namespace. Both come from the
         # root VolnixConfig via engine_overrides (see VolnixApp.start).
         self._pack_registry = PackRegistry()

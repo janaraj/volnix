@@ -48,7 +48,7 @@ def test_positive_default_resolver_returns_bundled_extractor() -> None:
 
 def test_negative_custom_hook_produces_custom_traits(monkeypatch: pytest.MonkeyPatch) -> None:
     """A product-supplied extractor is honored end-to-end. This
-    simulates the Rehearse-shape override by registering a sentinel
+    simulates a downstream-product override by registering a sentinel
     extractor in a test module and wiring it via config."""
     import sys
     import types

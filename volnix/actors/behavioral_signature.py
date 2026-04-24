@@ -8,7 +8,7 @@ the platform; products layer additional axes via the
 required for vertical-specific vocabulary.
 
 Why a bag and not a generic / typed-union: product vocabularies
-evolve frequently (a new Rehearse vertical might add
+evolve frequently (a downstream vertical might add
 ``emotional_volatility``; a negotiation harness might add
 ``batna_strength``). A strict typed union forces a Volnix minor
 release per new axis. A plain ``extra="allow"`` would silently

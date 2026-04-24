@@ -321,7 +321,7 @@ class MemoryEngine(BaseEngine):
         Session scoping (``tnl/session-scoped-memory.tnl`` non-goal):
         only the ``session_id IS NULL`` slice is trimmed. Session-
         scoped episodic records accumulate indefinitely across
-        cohort demotes; per-session eviction lands when a Rehearse
+        cohort demotes; per-session eviction lands when a downstream
         consumer exercises cohort rotation with sessions.
         Audit-fold M2.
         """

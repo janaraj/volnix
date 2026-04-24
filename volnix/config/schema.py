@@ -145,13 +145,13 @@ class PackSearchPath(BaseModel):
       (``ConfigBuilder.pack_search_path(..., ensure_on_syspath=True)``
       does this automatically — see that method's docstring).
 
-    Example (Rehearse)::
+    Example::
 
         PackSearchPath(
-            path="/opt/rehearse/characters",
+            path="/opt/myproduct/characters",
             package_prefix="characters",
         )
-        # sys.path must contain /opt/rehearse; modules import as
+        # sys.path must contain /opt/myproduct; modules import as
         # characters.interviewer.pack, etc.
     """
 
@@ -166,8 +166,9 @@ class VolnixConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # PMF Plan Phase 4C Step 2 — additive pack search paths for library
-    # consumers (Rehearse-style embedding). Paths are searched on top of
-    # the bundled ``volnix/packs/verified/`` directory. Entries with
+    # consumers embedding Volnix into their own product. Paths are
+    # searched on top of the bundled ``volnix/packs/verified/``
+    # directory. Entries with
     # ``package_prefix`` are routed via the external-prefix loader;
     # entries without are treated as bundled-mode (rare for consumers).
     pack_search_paths: list[PackSearchPath] = Field(default_factory=list)

@@ -8,7 +8,8 @@ caller-extractor-driven primitives
 :func:`load_bearing_personas`) operate on.
 
 No PMF- or vertical-specific vocabulary — products layer their own
-signal primitives on top (e.g. Rehearse's ``rehearse.signals.pmf``).
+signal primitives on top (e.g. a downstream product's
+``myproduct.signals.pmf``).
 """
 
 from volnix.observation.primitives import (

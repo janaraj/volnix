@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-04-24
 
-Volnix's first stable library release — the version Rehearse bundles as
+Volnix's first stable library release — installable as
 `pip install volnix==0.2.0`. New embedding guide at
 [`docs/embedding_volnix.md`](docs/embedding_volnix.md) documents the
-library contract.
+library contract for downstream consumers.
 
 ### Added — Session-scoped memory (cross-session isolation)
 

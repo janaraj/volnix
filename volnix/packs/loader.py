@@ -155,9 +155,9 @@ def _module_path_from_filepath(
         return ".".join(module_parts)
 
     # External-pack mode: anchor at the final segment of package_prefix.
-    # Example: package_prefix="rehearse.characters" + file
-    # /opt/catalog/rehearse/characters/interviewer/pack.py →
-    # rehearse.characters.interviewer.pack. Consumer places
+    # Example: package_prefix="myproduct.characters" + file
+    # /opt/catalog/myproduct/characters/interviewer/pack.py →
+    # myproduct.characters.interviewer.pack. Consumer places
     # /opt/catalog on sys.path (done by ConfigBuilder.pack_search_path).
     if not package_prefix:
         return None

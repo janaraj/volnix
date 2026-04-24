@@ -1,7 +1,7 @@
 """Domain-neutral observation primitives (PMF Plan Phase 4C Step 10).
 
 Three pure functions on :class:`UnifiedTimeline`. No PMF-,
-Rehearse-, or vertical-specific vocabulary — each primitive takes
+product-, or vertical-specific vocabulary — each primitive takes
 caller-supplied extractor callables so the observer-domain stays
 product-side.
 

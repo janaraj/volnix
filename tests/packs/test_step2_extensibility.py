@@ -3,7 +3,7 @@
 Locks in the list-path signature of ``PackRegistry.discover`` and the
 ``package_prefix`` parameter on ``_module_path_from_filepath`` /
 ``discover_packs`` / ``discover_profiles``. The latter powers
-Rehearse-style catalogs loaded from outside the ``volnix`` namespace.
+external character catalogs loaded from outside the ``volnix`` namespace.
 
 Negative-first per test discipline.
 """
@@ -23,7 +23,7 @@ from volnix.packs.registry import PackRegistry
 
 class TestModulePathPackagePrefix:
     def test_negative_empty_package_prefix_returns_none(self) -> None:
-        p = Path("/opt/catalog/rehearse/characters/interviewer/pack.py")
+        p = Path("/opt/catalog/externalpkg/characters/interviewer/pack.py")
         assert _module_path_from_filepath(p, package_prefix="") is None
 
     def test_negative_anchor_missing_returns_best_effort_string(self) -> None:
@@ -34,8 +34,8 @@ class TestModulePathPackagePrefix:
         # if the consumer hasn't placed the synthetic prefix on
         # sys.path.
         p = Path("/mnt/weird/path/interviewer/pack.py")
-        result = _module_path_from_filepath(p, package_prefix="rehearse")
-        assert result == "rehearse.interviewer.pack"
+        result = _module_path_from_filepath(p, package_prefix="externalpkg")
+        assert result == "externalpkg.interviewer.pack"
 
     def test_negative_prefix_anchor_duplicates_in_path_uses_last_occurrence(
         self,
@@ -52,9 +52,9 @@ class TestModulePathPackagePrefix:
         assert result == "characters.alice.pack"
 
     def test_positive_anchor_found_in_path_yields_full_dotted_path(self) -> None:
-        p = Path("/opt/catalog/rehearse/characters/interviewer/pack.py")
-        result = _module_path_from_filepath(p, package_prefix="rehearse.characters")
-        assert result == "rehearse.characters.interviewer.pack"
+        p = Path("/opt/catalog/externalpkg/characters/interviewer/pack.py")
+        result = _module_path_from_filepath(p, package_prefix="externalpkg.characters")
+        assert result == "externalpkg.characters.interviewer.pack"
 
     def test_positive_bundled_mode_unchanged_when_prefix_absent(self) -> None:
         p = Path("/Users/jane/workspace/volnix/packs/verified/gmail/pack.py")
@@ -293,9 +293,9 @@ class TestVolnixAppPackSearchPathsIntegration:
         from volnix.config.builder import ConfigBuilder
 
         # Layout: <syspath_root>/<prefix_pkg>/<pack>/pack.py
-        syspath_root = tmp_path / "rehearse_root"
+        syspath_root = tmp_path / "externalpkg_root"
         syspath_root.mkdir()
-        prefix_pkg = syspath_root / "rehearse_catalog_step2"
+        prefix_pkg = syspath_root / "externalpkg_catalog_step2"
         prefix_pkg.mkdir()
         _ensure_init(prefix_pkg)
         _write_minimal_pack(prefix_pkg / "demo_pack", "e2e_demo_pack_step2")
@@ -308,7 +308,7 @@ class TestVolnixAppPackSearchPathsIntegration:
                 ConfigBuilder()
                 .pack_search_path(
                     str(prefix_pkg),
-                    package_prefix="rehearse_catalog_step2",
+                    package_prefix="externalpkg_catalog_step2",
                 )
                 .raw("persistence.base_dir", data_dir)
                 .raw("bus.db_path", f"{data_dir}/bus.db")

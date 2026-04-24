@@ -8,15 +8,15 @@ writing TOML, validate at ``.build()`` time.
 
 Example::
 
-    # Rehearse-style embedding: external catalog at
-    # /opt/rehearse/characters whose subdirectories contain pack.py
+    # Library-embedding style: external catalog at
+    # /opt/myproduct/characters whose subdirectories contain pack.py
     # files that import as ``characters.<name>.pack``. The parent
-    # (/opt/rehearse) is placed on sys.path automatically.
+    # (/opt/myproduct) is placed on sys.path automatically.
     config = (
         ConfigBuilder()
         .memory(enabled=True)
         .pack_search_path(
-            "/opt/rehearse/characters",
+            "/opt/myproduct/characters",
             package_prefix="characters",
         )
         .build()
@@ -124,7 +124,7 @@ class ConfigBuilder:
             path: Directory whose subdirectories contain ``pack.py``
                 modules. When ``package_prefix`` is supplied, the path
                 is typically the last segment of the prefix's dotted
-                name (e.g. ``/opt/rehearse/characters`` for
+                name (e.g. ``/opt/myproduct/characters`` for
                 ``package_prefix="characters"``).
             package_prefix: Dotted Python module prefix that maps to
                 ``path`` on import. Required for external catalogs

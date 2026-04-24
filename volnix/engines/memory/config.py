@@ -262,7 +262,7 @@ class MemoryConfig(BaseModel):
     replay sessions without spending tokens.
 
     Default False: the journal captures full prompts + responses,
-    which is sensitive data. Consumers (e.g., Rehearse) enable
+    which is sensitive data. Downstream consumers enable
     explicitly in their bundled config."""
 
     # ── Schema ────────────────────────────────────────────────────

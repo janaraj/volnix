@@ -60,8 +60,8 @@ class SessionType(enum.StrEnum):
     - ``OPEN``: no predetermined end; the consumer ends the session
       explicitly when the goal is reached.
     - ``RESUMABLE``: like ``OPEN`` but explicitly designed for
-      pause/resume cycles across process restarts (the Rehearse
-      multi-month-continuity use case).
+      pause/resume cycles across process restarts (multi-session
+      continuity use cases where a run spans process lifetimes).
     """
 
     BOUNDED = "bounded"
@@ -160,8 +160,8 @@ class Session(BaseModel):
     wrap the access in a helper that guarantees the post-validation
     invariant. ``SessionManager`` (Step 5) is the construction site
     for platform code and always supplies both timestamps.
-        metadata: Free-form per-session metadata bag. Consumers
-            (e.g., Rehearse) layer their own schema on top (e.g.,
+        metadata: Free-form per-session metadata bag. Downstream
+            consumers layer their own schema on top (e.g.,
             product-scoped labels for observability filters). Keep
             keys product-namespaced to avoid cross-consumer
             collisions.

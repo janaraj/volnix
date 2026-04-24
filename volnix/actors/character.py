@@ -1,7 +1,7 @@
 """CharacterDefinition — declarative YAML-loadable actor catalog
 entry (PMF Plan Phase 4C Step 11).
 
-Product repos (e.g. Rehearse) ship a directory of ``*.yaml``
+Product repos ship a directory of ``*.yaml``
 character files; ``CharacterLoader.load_directory`` reads them
 into a ``dict[str, CharacterDefinition]``. The platform stays
 domain-neutral — it doesn't care whether a character is an

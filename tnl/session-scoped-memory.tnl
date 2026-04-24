@@ -72,7 +72,7 @@ behaviors:
 
 non-goals:
   - No changes to the CLI surface (no `--resume-session` flag, no session-aware dashboard pages) in this unit of work.
-  - No changes to cohort-rotation consolidation to be session-aware; `MemoryEngine.consolidate` and `_on_cohort_rotated` remain session-agnostic and operate on the `session_id IS NULL` slice of an actor's records. Documented as a known limitation to be addressed when a Rehearse consumer exercises cohort rotation with sessions.
+  - No changes to cohort-rotation consolidation to be session-aware; `MemoryEngine.consolidate` and `_on_cohort_rotated` remain session-agnostic and operate on the `session_id IS NULL` slice of an actor's records. Documented as a known limitation to be addressed when a downstream consumer exercises cohort rotation with sessions.
   - No automatic session creation inside `configure_agency`. Sessions remain caller-driven via `SessionManager.start` / `.resume`.
   - No migration of existing session-less rows into any default session. They remain `session_id = NULL` forever.
   - No cross-session aggregate reporting or admin "show me all memory" surface. Isolation is the product, not a toggle.
