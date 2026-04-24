@@ -1,0 +1,49 @@
+id: embedding-volnix-guide
+title: docs/embedding_volnix.md — library-consumer contract for Volnix 0.2.0
+scope: feature
+owners: [@TODO]
+paths:
+  - docs/embedding_volnix.md
+  - CHANGELOG.md
+  - pyproject.toml
+surfaces:
+  - docs/embedding_volnix.md
+dependencies: [workflow]
+
+intent:
+  Volnix 0.2.0 is the version Rehearse will bundle as
+  `pip install volnix`. Consumers (starting with Rehearse, but
+  any downstream library) need a single discoverable document
+  describing how to embed Volnix, what the stable surface is,
+  what's still in flux, and how the features shipped in 0.2.0
+  (session-scoped memory, animator event-volume controls,
+  animator tick serialization) affect consumers. Today no such
+  guide exists — docs/ has a dozen user-facing files but nothing
+  framed for "I'm importing volnix into my Python library."
+
+behaviors:
+  - The file MUST live at `docs/embedding_volnix.md` (lowercase, underscore — matches the Python module naming convention callers search for, not the hyphenated style used by user-facing guides like `agent-integration.md`).
+  - The guide MUST open with a one-paragraph scope statement: who this document is for (library consumers, not end-users or CLI users) and what it does NOT cover (pointing to `docs/agent-integration.md` for external-agent integration, `docs/getting-started.md` for end-user onboarding).
+  - The guide MUST document installation: the `pip install volnix` command, required Python version (>= 3.12), and the optional extras (e.g., `volnix[embeddings]`).
+  - The guide MUST list the stable Python API surface for 0.2.0. At minimum: `VolnixApp`, `VolnixConfig`, `SessionManager`, `MemoryEngineProtocol`, and the relevant protocols from `volnix.core.protocols`. Each surface item MUST include a one-line intent and a code snippet showing typical construction / invocation.
+  - The guide MUST document the session lifecycle: how to call `SessionManager.start` / `.resume` / `.end`, what `session_id` represents, and the guarantee that two sessions against the same world cannot observe each other's memory.
+  - The guide MUST document the memory contract: that `MemoryRecord.session_id` is the isolation key, that `reset_on_world_start` is deprecated (removed in 0.3.0), that schema v1 DBs migrate in place to v2 on initialize, and that record IDs are `uuid.uuid4()` with no cross-run determinism contract.
+  - The guide MUST document the animator dynamic-mode changes: `creativity_budget_per_tick` default of 1 (down from 3), the activity-gated `_dynamic_tick_loop`, and the serialized `tick()` under `_tick_lock`. Consumers who want the legacy behavior MUST be told how to set `creativity_budget_per_tick` explicitly.
+  - The guide MUST include a minimal end-to-end "embed Volnix in 30 lines" example that constructs a VolnixConfig, starts a VolnixApp, creates a session, runs a simple world, and tears down cleanly. The example MUST be copy-paste runnable (no `...` elisions, real imports, real async entry point).
+  - The guide MUST include a short "what's in flux" section listing the surfaces that are NOT guaranteed stable across 0.2.x: in particular LLM `use_case` attribution (currently unattributed), organic-generator content diversity (currently repetitive), and cohort-rotation session-scope threading (non-goal of this release).
+  - The guide MUST NOT promise any API that isn't actually exposed from `volnix/__init__.py` or importable from a documented submodule. Every code snippet MUST type-check against the 0.2.0 code.
+  - [semantic] The guide's code snippets SHOULD be runnable as-is against a fresh `pip install volnix==0.2.0`. A reader SHOULD be able to follow the quickstart and have a working embedded run in under 10 minutes.
+
+  # CHANGELOG + version bump
+  - `pyproject.toml` version MUST change from `0.1.9` to `0.2.0`.
+  - `CHANGELOG.md` MUST gain a new `## [0.2.0] - 2026-04-24` section above the existing `[0.1.9]` entry. The section MUST cover, at minimum: session-scoped memory (with a "Breaking changes" note for `reset_on_world_start` deprecation and the record-id determinism contract change), animator tick serialization, animator event volume reduction, and the schema v1→v2 migration.
+
+non-goals:
+  - No tag `v0.2.0` in this change. Tagging follows main-merge; both are deferred pending explicit approval.
+  - No PyPI release, no publish pipeline change, no version.py touching — this commit only changes `pyproject.toml` + `CHANGELOG.md` + adds `docs/embedding_volnix.md`.
+  - No update to existing `docs/*.md` files. The new guide is additive; cross-linking happens only in one direction (new guide mentions existing guides, not the reverse — existing docs get a backlink when the ecosystem settles).
+  - No OpenAPI / auto-generated doc scaffolding. This is hand-authored Markdown.
+  - No code changes in `volnix/` — if the guide needs to document an API that doesn't exist yet, we file that as a separate TNL, not quietly add it here.
+
+rationale:
+  Rehearse is the first external consumer of Volnix-as-library. Without a single canonical embedding document, every Rehearse-side decision about which Volnix API to call would be an archaeology exercise against docstrings. The guide crystallizes what 0.2.0 promises as stable vs what's still moving, so the Rehearse repo bootstrap can proceed with a clear contract. Everything beyond the guide (tag, PyPI release, main merge) is a release-pipeline concern and belongs in a separate step.

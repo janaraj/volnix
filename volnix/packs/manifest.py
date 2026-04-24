@@ -49,11 +49,14 @@ from volnix.core.errors import (
 
 # Grandfather policy reference — pre-0.2.0 packs authored without
 # a ``pack.yaml`` are documented as belonging to this range. The
-# registry treats missing manifests permissively (deprecation
-# warning, not hard fail) regardless of this constant; the
-# string is kept as a documented reference for consumers who
-# want to audit grandfather-era packs explicitly.
-GRANDFATHERED_COMPAT_SPEC: Final[str] = ">=0.1,<0.2"
+# spec extends through the 0.2.x series because pre-manifest packs
+# remain permissive-registerable through the entire 0.2.x line;
+# 0.3.0 is the planned enforcement boundary. The registry treats
+# missing manifests permissively (deprecation warning, not hard
+# fail) regardless of this constant; the string is kept as a
+# documented reference for consumers who want to audit
+# grandfather-era packs explicitly.
+GRANDFATHERED_COMPAT_SPEC: Final[str] = ">=0.1,<0.3"
 
 
 class _NoAnchorPackLoader(yaml.SafeLoader):

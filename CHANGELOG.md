@@ -5,6 +5,127 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-24
+
+Volnix's first stable library release — the version Rehearse bundles as
+`pip install volnix==0.2.0`. New embedding guide at
+[`docs/embedding_volnix.md`](docs/embedding_volnix.md) documents the
+library contract.
+
+### Added — Session-scoped memory (cross-session isolation)
+
+- **`MemoryRecord.session_id: SessionId | None`** — memory writes and
+  recalls now scope to a platform `Session`. Two sessions against the
+  same world cannot observe each other's memory; resumed sessions
+  automatically recall their own earlier records. Session-less callers
+  (tests, background consolidation, pre-0.2.0 code paths) see only
+  `session_id IS NULL` rows — disjoint from any session's slice.
+- **`MemoryEngineProtocol.remember` / `recall`** accept a
+  `session_id: SessionId | None = None` kwarg; default `None` preserves
+  pre-0.2.0 behavior.
+- **Store surface** — `MemoryStoreProtocol.list_by_owner`,
+  `.fts_search`, and `.prune_oldest_episodic` all accept `session_id`
+  with NULL-safe predicates; ring-buffer caps enforced per
+  `(owner_id, session_id)` slice.
+- **Agency plumbing** — `_memory_hooks` helpers, `NPCActivator`
+  forwarders, and `AgencyEngine._activate_with_tool_loop` all thread
+  `session_id` end-to-end; when no session context exists, the flow
+  is byte-identical to pre-0.2.0.
+- **Ledger** — `MemoryWriteEntry` and `MemoryRecallEntry` carry
+  `session_id`, populated through the ledger's existing session_id
+  column.
+
+### Added — Animator concurrency + event-volume controls
+
+- **`AnimatorEngine.tick()` is serialized** by an internal
+  `asyncio.Lock`. In dynamic mode the animator is driven from
+  multiple concurrent sources (bus subscriber, background tick loop,
+  SimulationRunner); prior to this release, concurrent ticks raced
+  the state engine's commit transaction and produced
+  `sqlite3.OperationalError: cannot start a transaction within a
+  transaction`. Static mode keeps its lock-free early-return.
+- **Activity-gated `_dynamic_tick_loop`** — the background tick
+  fires only when a consumer event has landed since the last fired
+  tick. Eliminates "zombie" events that previously fired for
+  minutes after agents went quiet. Zero new config knobs.
+- Combined with the `creativity_budget_per_tick` default flip, the
+  measured organic-event rate drops ~6× (from ~502 to ~82 events per
+  representative run).
+
+### Added — Library-consumer documentation
+
+- **[`docs/embedding_volnix.md`](docs/embedding_volnix.md)** — single
+  canonical document for library consumers. Covers installation,
+  stable API surface, session lifecycle, memory contract, animator
+  dynamic-mode changes, and the "what's in flux" matrix.
+
+### Changed — Schema migration (automatic, in-place)
+
+- **Memory store schema v1 → v2** — `SQLiteMemoryStore.initialize()`
+  detects v1 DBs and migrates in place: adds `session_id TEXT`
+  column, replaces the two v1 owner-leading indexes with
+  session-leading ones, bumps `memory_schema_version.version` to 2.
+  Single transaction — a crash mid-migration leaves the DB at v1,
+  retryable. Existing rows retain `session_id = NULL` and remain
+  queryable via the session-less path.
+- **`MemoryConfig.schema_version`** default 1 → 2. Validator accepts
+  {1, 2} (regardless of `enabled`); any other value is rejected at
+  config-load time.
+- **`AnimatorConfig.creativity_budget_per_tick`** default 3 → 1.
+  Worlds that want higher ambient event volume set the value
+  explicitly in `animator_settings`.
+
+### Changed — Record-ID generation (breaking)
+
+- **`MemoryEngine._next_record_id()` now uses `uuid.uuid4()`.** The
+  0.1.x seeded-RNG contract (D7-5: same seed + same remember
+  sequence ⇒ same IDs) was incompatible with persistent memory under
+  `reset_on_world_start=False`: re-serving the same world at the
+  same seed reproduced the UUID sequence and collided against
+  persisted rows. Live-validation finding, folded pre-release.
+  Content hashes remain content-derived (unchanged).
+
+### Deprecated
+
+- **`MemoryConfig.reset_on_world_start`** — default flipped
+  `True → False`. When explicitly `True`, only `session_id IS NULL`
+  rows are truncated (session-scoped rows are never touched). A
+  one-shot deprecation warning fires at engine init. **Removed in
+  0.3.0.** Migrate by deleting the line from your `volnix.toml` (or
+  setting it to `false`).
+
+### Fixed
+
+- **State engine transaction race** (pre-existing on main):
+  concurrent `AnimatorEngine.tick()` invocations in dynamic mode
+  flushed organic events through the pipeline in parallel, racing
+  the state engine's commit transaction. Resolved by serializing
+  `tick()` (see "Added — Animator concurrency" above).
+
+### Verification
+
+- 4,682 tests pass across 16 suites (full regression plus the 30+
+  new tests added across this release — session scoping, uuid4
+  record IDs, animator tick serialization, activity gate, creativity
+  budget default).
+- Three adversarial reviews (one per shipped commit) completed
+  pre-release; every finding including Lows folded.
+- Live validation against the `demo_support_escalation` world under
+  `--behavior dynamic` with memory enabled: zero transaction errors,
+  zero UNIQUE-constraint collisions, ~6× reduction in organic event
+  volume, session-scoped rows survive `reset_on_world_start=True`
+  while session-less rows are truncated.
+- Phase 0 regression oracle byte-identical when memory is disabled.
+
+### Breaking changes summary
+
+| Change | Migration |
+|---|---|
+| `reset_on_world_start` default flipped to `False`; only truncates NULL-session rows when `True`; deprecated. | Delete the line from `volnix.toml` (or set `false`). Memory now isolates per-session; the flag's original purpose is obsolete. |
+| `MemoryEngine._next_record_id()` uses `uuid.uuid4()` — no cross-run determinism by seed. | If you rely on deterministic record IDs, switch the anchor to `(session_id, content_hash)` — session seed + content hash are stable, record IDs are not. |
+| `MemoryConfig.schema_version` default `1 → 2`; v1 DBs auto-migrate in place. | No action. Upgrade picks up migration on first `MemoryEngine._on_initialize`. |
+| `AnimatorConfig.creativity_budget_per_tick` default `3 → 1`. | If you want legacy volume, set `animator_settings.creativity_budget_per_tick = 3` in your world YAML. |
+
 ## [0.1.9] - 2026-04-19
 
 ### Added — Phase 4B: Actor Memory Engine (11th Volnix engine)
