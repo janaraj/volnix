@@ -1,0 +1,95 @@
+id: animator-tick-serialization
+title: Serialize Animator.tick() to prevent concurrent pipeline commits
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/engines/animator/engine.py
+surfaces:
+  - AnimatorEngine.tick
+dependencies: [workflow]
+
+intent:
+  `AnimatorEngine.tick()` currently has no concurrency guard. In
+  dynamic behavior mode the animator is driven from at least two
+  independent call sites: (1) a bus subscriber in
+  `VolnixApp._start_animator_bridge` that fires on every committed
+  event, and (2) a background `_dynamic_tick_loop` asyncio task that
+  fires on a timer. Both can enter `tick()` concurrently; each
+  generates organic events and each flushes them through
+  `_execute_pipeline()`, which leads to two concurrent `commit`
+  steps trying to `BEGIN` a transaction on the same state.db
+  connection. SQLite rejects the second with
+  `OperationalError: cannot start a transaction within a
+  transaction` and the pipeline run is lost. This change adds an
+  asyncio.Lock inside `AnimatorEngine` so `tick()` serializes
+  globally across all callers.
+
+behaviors:
+  - `AnimatorEngine` MUST own an `asyncio.Lock` instance
+    (`self._tick_lock`) created in `__init__` / `_on_initialize`.
+  - `AnimatorEngine.tick(world_time)` MUST acquire `_tick_lock`
+    around its entire body so at most one `tick()` is in flight at
+    any time, regardless of how many concurrent callers invoke it.
+  - The lock MUST be a non-reentrant asyncio.Lock — a reentrant
+    lock would mask the class of bugs this change is meant to
+    catch (a single code path calling tick() recursively is not a
+    legitimate pattern).
+  - The lock MUST NOT be exposed on the public interface. It is an
+    implementation detail of the animator's concurrency contract.
+  - `AnimatorEngine.notify_event` MUST NOT acquire this lock. It
+    is a lightweight bookkeeping method (records `_recent_actions`)
+    with no pipeline interaction and callers rely on it being
+    cheap.
+  - Behavior mode "static" MUST continue to early-return from
+    `tick()` without taking the lock, since static mode does no
+    work.
+  - When `tick()` holds the lock, subsequent callers MUST await
+    until the holder completes — they MUST NOT drop events or
+    silently skip their tick.
+  - The existing `SimulationRunner`, `_on_committed_event` bus
+    subscriber, and `_dynamic_tick_loop` call sites MUST continue
+    to work unchanged — they already `await animator.tick(...)`
+    and the lock is transparent to them.
+
+  # Phase 0 regression oracle
+  - When `behavior = static`, the system MUST produce byte-identical
+    oracle output to pre-change HEAD. The lock-acquisition branch
+    is unreachable in static mode.
+
+non-goals:
+  - No change to the pipeline executor, the state engine's
+    `transaction()` context manager, or the `_pipeline_lock` on
+    `AgencyEngine`. Those handle their own concurrency concerns;
+    this change does not touch them.
+  - No change to `animator.notify_event` — it is not part of the
+    race.
+  - No throttling or rate-limiting of `tick()` calls. Callers can
+    invoke `tick()` as often as they want; the lock only ensures
+    serial execution, not a rate cap.
+  - No cross-process coordination. This is a single-process
+    asyncio lock; multi-process orchestration is a separate concern
+    handled by the Gateway / slot manager.
+  - No new public API on `AnimatorProtocol`. The lock is internal.
+
+rationale:
+  The pipeline's `commit` step opens a SQLite transaction on the
+  state.db connection. aiosqlite serializes individual statements
+  on one connection via a worker thread, but does not serialize
+  logical transactions: two coroutines can both pass the
+  `_transaction_depth == 0` check (at different Database instance
+  identities or under rare interleaving) and both call `BEGIN`, at
+  which point SQLite rejects the second. Even where that specific
+  collision doesn't fire, two concurrent transactions on the same
+  connection corrupt each other's visibility. The animator is the
+  primary concurrent-pipeline-invoker because it is driven from
+  multiple schedulers at once in dynamic mode. Serializing
+  `tick()` removes the animator as a source of this race. Agent
+  and NPC paths already hold `_pipeline_lock` on the agency
+  engine, so they do not contribute.
+
+  We pick an instance lock on AnimatorEngine rather than a lock
+  on the pipeline executor because the animator is the clear
+  contention source and locking there keeps the pipeline executor
+  stateless and reusable. If a future non-animator caller also
+  turns out to race commits, that is a separate fix at that
+  caller's layer.

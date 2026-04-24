@@ -16,6 +16,7 @@ Controlled by behavior mode from WorldPlan:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import random
@@ -166,6 +167,15 @@ class WorldAnimatorEngine(BaseEngine):
         self._recent_actions: list[dict[str, Any]] = []
         self._creativity_used_this_tick: int = 0
         self._available_tools: list[dict[str, Any]] = []
+        # Serialize concurrent tick() invocations
+        # (``tnl/animator-tick-serialization.tnl``). In dynamic mode
+        # the animator is driven from multiple independent call sites
+        # — the bus subscriber on committed events, the background
+        # ``_dynamic_tick_loop``, and ``SimulationRunner``'s main loop.
+        # Without this lock, two concurrent ``tick()`` calls flush
+        # organic events through the pipeline in parallel, racing the
+        # state engine's commit transaction.
+        self._tick_lock = asyncio.Lock()
 
     async def configure(self, plan: WorldPlan, scheduler: WorldScheduler) -> None:
         """Configure from compiled world plan. Called after generate_world().
@@ -353,6 +363,15 @@ class WorldAnimatorEngine(BaseEngine):
         Layer 1b: Probabilistic events from per-attribute numbers
         Layer 2: Organic events (LLM, within creativity budget)
 
+        Concurrency: the body is serialized by ``_tick_lock`` so at
+        most one tick runs at a time regardless of how many
+        concurrent callers invoke it
+        (``tnl/animator-tick-serialization.tnl``). Without this
+        guard, the bus subscriber + ``_dynamic_tick_loop`` +
+        SimulationRunner can each flush organic events through the
+        pipeline in parallel, racing the state engine's commit
+        transaction.
+
         Args:
             world_time: Current simulation time.
 
@@ -360,68 +379,73 @@ class WorldAnimatorEngine(BaseEngine):
             List of result dicts from executed events (via pipeline).
             Empty list if behavior is "static".
         """
+        # Static mode does no work; keep it lock-free so the Phase 0
+        # regression oracle never touches the new code path.
         if self._behavior == "static":
             return []
 
-        results: list[dict[str, Any]] = []
-        self._creativity_used_this_tick = 0
+        async with self._tick_lock:
+            results: list[dict[str, Any]] = []
+            self._creativity_used_this_tick = 0
 
-        # Layer 1a: Time-based scheduled events (deterministic, no LLM)
-        if self._scheduler:
-            state_engine = self._dependencies.get("state")
-            scheduled = await self._scheduler.get_due_events(world_time, state_engine)
-            for event_def in scheduled:
-                result = await self._execute_event(event_def, world_time)
-                results.append(result)
-
-        # Layer 1c: PMF exposure events (deterministic, no LLM).
-        # Skipped entirely when ``expose_rate`` is 0 — the default —
-        # which keeps passive-NPC worlds untouched. When configured,
-        # publishes an ``NPCExposureEvent`` per tick with probability
-        # ``expose_rate``; the RNG is seeded from ``world_time`` so a
-        # fixed world replays identically.
-        if self._pmf_expose_rate > 0 and self._pmf_candidate_npcs and self._pmf_features:
-            await self._maybe_publish_exposure(world_time)
-
-        # Layer 2: Organic events (LLM, within creativity budget)
-        if self._generator and self._behavior in ("dynamic", "reactive"):
-            budget = self._typed_config.creativity_budget_per_tick - self._creativity_used_this_tick
-            if self._behavior == "reactive" and not self._recent_actions:
-                # Reactive mode: no events without recent agent actions
-                budget = 0
-            recent = self._recent_actions if self._behavior == "reactive" else None
-            if budget > 0:
-                logger.info(
-                    "Animator organic generation: budget=%d, behavior=%s, recent_actions=%d",
-                    budget,
-                    self._behavior,
-                    len(recent or []),
-                )
-                organic = await self._generator.generate(
-                    world_time,
-                    budget,
-                    recent,
-                    recent_organic=self._recent_organic_events,
-                )
-                logger.info("Animator organic generated %d events", len(organic))
-                for event_def in organic:
+            # Layer 1a: Time-based scheduled events (deterministic, no LLM)
+            if self._scheduler:
+                state_engine = self._dependencies.get("state")
+                scheduled = await self._scheduler.get_due_events(world_time, state_engine)
+                for event_def in scheduled:
                     result = await self._execute_event(event_def, world_time)
                     results.append(result)
-                    self._creativity_used_this_tick += 1
-                    # Track for next tick's context (keep last 10)
-                    self._recent_organic_events.append(
-                        {
-                            "actor": event_def.get("actor_id", "system"),
-                            "action": event_def.get("action", ""),
-                            "service": event_def.get("service_id", ""),
-                        }
-                    )
-                    self._recent_organic_events = self._recent_organic_events[-10:]
-        elif not self._generator and self._behavior != "static":
-            logger.warning("Animator: no organic generator available (LLM router missing?)")
 
-        self._recent_actions = []
-        return results
+            # Layer 1c: PMF exposure events (deterministic, no LLM).
+            # Skipped entirely when ``expose_rate`` is 0 — the default —
+            # which keeps passive-NPC worlds untouched. When configured,
+            # publishes an ``NPCExposureEvent`` per tick with probability
+            # ``expose_rate``; the RNG is seeded from ``world_time`` so a
+            # fixed world replays identically.
+            if self._pmf_expose_rate > 0 and self._pmf_candidate_npcs and self._pmf_features:
+                await self._maybe_publish_exposure(world_time)
+
+            # Layer 2: Organic events (LLM, within creativity budget)
+            if self._generator and self._behavior in ("dynamic", "reactive"):
+                budget = (
+                    self._typed_config.creativity_budget_per_tick - self._creativity_used_this_tick
+                )
+                if self._behavior == "reactive" and not self._recent_actions:
+                    # Reactive mode: no events without recent agent actions
+                    budget = 0
+                recent = self._recent_actions if self._behavior == "reactive" else None
+                if budget > 0:
+                    logger.info(
+                        "Animator organic generation: budget=%d, behavior=%s, recent_actions=%d",
+                        budget,
+                        self._behavior,
+                        len(recent or []),
+                    )
+                    organic = await self._generator.generate(
+                        world_time,
+                        budget,
+                        recent,
+                        recent_organic=self._recent_organic_events,
+                    )
+                    logger.info("Animator organic generated %d events", len(organic))
+                    for event_def in organic:
+                        result = await self._execute_event(event_def, world_time)
+                        results.append(result)
+                        self._creativity_used_this_tick += 1
+                        # Track for next tick's context (keep last 10)
+                        self._recent_organic_events.append(
+                            {
+                                "actor": event_def.get("actor_id", "system"),
+                                "action": event_def.get("action", ""),
+                                "service": event_def.get("service_id", ""),
+                            }
+                        )
+                        self._recent_organic_events = self._recent_organic_events[-10:]
+            elif not self._generator and self._behavior != "static":
+                logger.warning("Animator: no organic generator available (LLM router missing?)")
+
+            self._recent_actions = []
+            return results
 
     async def _execute_event(
         self, event_def: dict[str, Any], world_time: datetime
