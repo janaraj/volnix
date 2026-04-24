@@ -102,6 +102,13 @@ class VolnixApp:
         self._memory_engine: Any = None
         self._started = False
         self._last_action_time: datetime | None = None
+        # Activity gate for the animator's dynamic tick loop
+        # (``tnl/animator-event-volume-reduction.tnl``). True when a
+        # non-animator consumer event has landed since the last fired
+        # ``_dynamic_tick_loop`` tick; False after a tick fires.
+        # Starts True so the first scheduled tick after bridge-start
+        # always runs.
+        self._animator_has_activity_since_last_tick: bool = True
         self._idle_watcher_task: Any = None
         self._animator_tick_task: Any = None
         # F2 (P6.3-fix.3): game player actor IDs, populated by
@@ -2337,6 +2344,13 @@ class VolnixApp:
             # Always skip system/animator/compiler actors.
             if actor in ("system", "animator", "world_compiler"):
                 return
+            # Activity gate for the dynamic tick loop
+            # (``tnl/animator-event-volume-reduction.tnl``): any
+            # non-animator consumer event flips the flag so the next
+            # scheduled background tick will fire. The subscriber
+            # itself's reactive tick call (below) does NOT touch the
+            # flag — only genuine external consumer activity does.
+            self._animator_has_activity_since_last_tick = True
             # F2: in game mode, only trigger on PLAYER actions.
             if player_ids and actor not in player_ids:
                 return
@@ -2401,12 +2415,32 @@ class VolnixApp:
             )
 
             async def _dynamic_tick_loop() -> None:
-                """Independent tick for dynamic behavior mode."""
+                """Independent tick for dynamic behavior mode.
+
+                Activity-gated per
+                ``tnl/animator-event-volume-reduction.tnl``: fires
+                ``tick()`` only when a consumer event has landed
+                since the last fired tick. Eliminates the "zombie
+                tail" where the loop kept producing organic events
+                for minutes after agents went quiet.
+                """
                 while True:
                     try:
                         await asyncio.sleep(tick_secs)
                     except asyncio.CancelledError:
                         return
+                    if not self._animator_has_activity_since_last_tick:
+                        # No consumer activity since last fired tick —
+                        # skip this iteration entirely. DEBUG only so
+                        # the pause doesn't spam the log.
+                        logger.debug(
+                            "Animator dynamic tick: skipped (no consumer activity since last tick)"
+                        )
+                        continue
+                    # Atomically clear the flag BEFORE firing so any
+                    # consumer event arriving during the tick counts
+                    # toward the NEXT iteration.
+                    self._animator_has_activity_since_last_tick = False
                     try:
                         results = await animator.tick(datetime.now(UTC))
                         if results:

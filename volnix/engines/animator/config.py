@@ -26,6 +26,17 @@ class AnimatorConfig(BaseModel):
     event_frequency: Literal["rare", "moderate", "frequent"] = "moderate"
     contextual_targeting: bool = True
     escalation_on_inaction: bool = True
-    creativity_budget_per_tick: int = 3
+    creativity_budget_per_tick: int = 1
+    """Events generated per tick.
+
+    Default 1 (post-measurement lowering from 3 per
+    ``tnl/animator-event-volume-reduction.tnl``). The live run that
+    drove the change showed 95% of organic volume concentrated in
+    three action types and a 3:1 amplification factor vs agent
+    actions; dropping the default to 1 preserves ambient-world
+    signal while eliminating the "wall of repetitive events".
+    Worlds that truly want higher volume set
+    ``animator_settings.creativity_budget_per_tick`` explicitly.
+    """
     tick_interval_seconds: float = 60.0
     scheduled_events: list[dict[str, Any]] = Field(default_factory=list)

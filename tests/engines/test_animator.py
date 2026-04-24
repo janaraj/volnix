@@ -26,7 +26,9 @@ def test_animator_config_defaults():
     assert config.enabled is True
     assert config.creativity == "medium"
     assert config.event_frequency == "moderate"
-    assert config.creativity_budget_per_tick == 3
+    # Default lowered 3 → 1 per tnl/animator-event-volume-reduction.tnl
+    # (measured run showed 3:1 per-tick amplification was too noisy).
+    assert config.creativity_budget_per_tick == 1
     assert config.tick_interval_seconds == 60.0
 
 

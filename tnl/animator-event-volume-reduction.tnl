@@ -1,0 +1,57 @@
+id: animator-event-volume-reduction
+title: Reduce animator event volume via activity-gated ticks and lower creativity budget
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/engines/animator/engine.py
+  - volnix/engines/animator/config.py
+  - volnix/app.py
+surfaces:
+  - AnimatorConfig.creativity_budget_per_tick
+  - VolnixApp._start_animator_bridge (_on_committed_event subscriber, _dynamic_tick_loop)
+dependencies: [workflow, animator-tick-serialization]
+
+intent:
+  Live validation showed the animator committing ~500 organic events for
+  79 agent actions (6:1 amplification), and continuing to fire at ~3
+  events per 45s indefinitely after all agents went quiet — ~180+
+  "zombie" events across 9 minutes of post-activity drift. This change
+  lands two minimal fixes with zero new configuration knobs:
+  (A) the background tick loop fires tick() only when a consumer event
+  has landed since the last fired tick, eliminating zombie drift by
+  construction, and (B) the per-tick creativity budget default drops
+  from 3 to 1, cutting active-period amplification from 3:1 to 1:1.
+  Projected reduction: ~502 → ~82 organic events per run (~6×) for the
+  measured support-escalation scenario, with no configuration surface
+  change visible to existing world definitions.
+
+behaviors:
+  # A. Activity-gated dynamic tick loop
+  - `VolnixApp._start_animator_bridge` MUST maintain a boolean `_animator_has_activity_since_last_tick` flag on the app. The flag starts True at bridge-start so the first scheduled tick always fires.
+  - `_on_committed_event` MUST set this flag to True on every committed event whose actor is NOT in `{"system", "animator", "world_compiler"}`. Events from those three actors MUST NOT set the flag (they are outputs of the animator itself and would create a self-feedback loop).
+  - `_dynamic_tick_loop` MUST read the flag at the top of each loop iteration (after the sleep, before calling `animator.tick`). If the flag is True: call `tick()`, then atomically set the flag to False. If the flag is False: skip the tick entirely, leave the flag as False, go back to sleep.
+  - `_on_committed_event`'s own reactive tick call (the bridge subscriber path) MUST NOT set the flag. Only an agent/environment committed event sets it. This ensures the "any consumer activity" semantics: the flag represents "something externally interesting happened," not "the animator did something."
+  - [semantic] When no agent/environment events have committed since the last fired `_dynamic_tick_loop` tick, the next scheduled iteration MUST skip `tick()`. At most one "tail" tick fires after activity stops.
+
+  # B. Lower creativity budget default
+  - `AnimatorConfig.creativity_budget_per_tick` default MUST change from 3 to 1. Existing structural bounds (`Field(ge=...)`) stay. Worlds that want higher-volume ambient events set the value explicitly in their `animator_settings` YAML.
+  - `volnix.toml` MUST NOT hardcode this default — the AnimatorConfig pydantic model is the source of truth. No change to volnix.toml is required or permitted by this clause.
+
+  # Phase 0 regression oracle
+  - When `behavior = static`, both A and B are no-ops (the bridge never starts, the dynamic tick loop never fires, the creativity budget is never consulted). Phase 0 oracle output MUST remain byte-identical to pre-change HEAD for static-mode runs.
+  - When `behavior` is reactive or dynamic, these clauses DO change observable behavior. No byte-identical guarantee for those modes.
+
+non-goals:
+  - No new configuration knobs. `idle_pause_after_seconds`, `bridge_cooldown_seconds`, `recent_organic_history_size` — all proposed in the draft discussion — are explicitly dropped. If any prove necessary after shipping, they get their own TNL.
+  - No change to the committed-event bus subscriber's reactive tick firing. That path is unchanged; the subscriber still calls `animator.tick()` on every qualifying agent event. Only the background `_dynamic_tick_loop` gains the activity gate.
+  - No change to `OrganicGenerator`, `_recent_organic_events` window size, or prompt content. Generator-diversity concerns are orthogonal; a future TNL can address them if the post-fix run shows it's still a problem.
+  - No change to the LLM `use_case` attribution gap. LLMCallEntry rows continue to land with empty `use_case`. A future observability TNL can address that separately.
+  - No change to SimulationRunner's own tick cadence (6 ticks in 13 minutes in the measured run — not a spam source).
+  - No migration of existing worlds. Config defaults are backward-compatible; the creativity-budget default flip is the only observable change and worlds that explicitly set budget=3 in their YAML are unaffected.
+
+rationale:
+  Two fixes, two distinct pathologies:
+  - **Zombie-tail events** happen because `_dynamic_tick_loop` has no notion of "is anyone listening". Gating it on "activity since last tick fired" reduces that from "events forever" to "at most one tail tick per quiet period". A threshold-based idle-pause (e.g., pause-after-120s) was considered and rejected — introducing a new configurable threshold when a zero-config activity gate gives equivalent behavior is a violation of `workflow.tnl`'s "no premature configuration hooks" rule.
+  - **Per-tick amplification** was tuned for a different era when the organic generator produced more diverse output. The live run showed 95% of volume concentrated in three action types; dropping from 3 to 1 event per tick preserves the "ambient world reaction" signal while removing the "wall of repetitive events" problem. Worlds that truly want high-volume ambience can opt in via `animator_settings.creativity_budget_per_tick`.
+
+  Both fixes together produce a ~6× reduction in total organic event volume for the measured scenario. Neither alone achieves that — A alone eliminates the tail but leaves active-period 3:1 amplification; B alone fixes amplification but leaves zombie drift. Shipped together for coherent reviewer context.
