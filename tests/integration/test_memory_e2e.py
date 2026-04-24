@@ -277,10 +277,22 @@ class TestEngineInterleavedReadsWrites:
 # ---------------------------------------------------------------------------
 
 
-class TestEngineDeterminism:
-    """Two fresh engines, same seed, identical ``remember`` sequence
-    → identical record_ids + content_hashes. Engine-level guarantee
-    beyond Step 3's store-metadata ordering lock."""
+class TestEngineRecordIdUniqueness:
+    """Two fresh engines + identical ``remember`` sequence MUST
+    produce DISJOINT record-id sets so persistent memory (the
+    post-session-scoping default) cannot hit UNIQUE-constraint
+    collisions on re-serve. Content hashes remain content-derived,
+    so they DO match across runs by design.
+
+    Previously this suite (``TestEngineDeterminism``) asserted the
+    opposite for record_ids (seeded-RNG D7-5 contract). Live
+    validation of ``tnl/session-scoped-memory.tnl`` exposed that
+    contract as incompatible with ``reset_on_world_start=False``:
+    same seed reproduced the UUID sequence and the second run's
+    first insert failed with ``UNIQUE constraint failed:
+    memory_records.record_id``. ``_next_record_id`` now uses
+    ``uuid.uuid4()``; this suite pins the new contract.
+    """
 
     async def _run_sequence(self, seed: int) -> list[tuple[str, str]]:
         engine, store, db = await _make_engine(seed=seed)
@@ -289,7 +301,6 @@ class TestEngineDeterminism:
             for i in range(10):
                 rid = await engine.remember(**_write(f"actor-{i % 3}", f"c-{i}", tick=i))
                 rids.append(str(rid))
-            # Also collect content hashes by listing back.
             pairs: list[tuple[str, str]] = []
             for rid in rids:
                 for a in range(3):
@@ -301,22 +312,35 @@ class TestEngineDeterminism:
         finally:
             await db.close()
 
-    async def test_positive_two_runs_same_seed_identical_record_ids(self) -> None:
+    async def test_positive_two_runs_same_seed_disjoint_record_ids(self) -> None:
+        """Regression guard for the live-validation collision bug."""
         a = await self._run_sequence(seed=42)
         b = await self._run_sequence(seed=42)
-        assert [p[0] for p in a] == [p[0] for p in b]
+        ids_a = {p[0] for p in a}
+        ids_b = {p[0] for p in b}
+        assert ids_a.isdisjoint(ids_b), (
+            f"same-seed runs produced overlapping record IDs "
+            f"(would re-trigger UNIQUE constraint under persistent memory): "
+            f"{ids_a & ids_b}"
+        )
 
     async def test_positive_two_runs_same_seed_identical_content_hashes(self) -> None:
+        """Content hashes ARE content-derived (sha256(content)), so
+        identical write sequences produce identical hash sequences.
+        Unchanged by the record-id switch."""
         a = await self._run_sequence(seed=42)
         b = await self._run_sequence(seed=42)
         assert [p[1] for p in a] == [p[1] for p in b]
 
-    async def test_negative_different_seeds_different_record_ids(self) -> None:
-        """Different seed → different record_ids (seeded RNG is doing
-        something, not returning a constant)."""
+    async def test_negative_different_seeds_still_disjoint_record_ids(self) -> None:
+        """Sanity check: under ``uuid.uuid4`` the seed doesn't
+        influence record IDs at all — any two runs yield disjoint
+        ID sets."""
         a = await self._run_sequence(seed=42)
         b = await self._run_sequence(seed=9999)
-        assert [p[0] for p in a] != [p[0] for p in b]
+        ids_a = {p[0] for p in a}
+        ids_b = {p[0] for p in b}
+        assert ids_a.isdisjoint(ids_b)
 
 
 # ---------------------------------------------------------------------------
@@ -497,18 +521,20 @@ class TestRecallPerformance:
 
 
 # ---------------------------------------------------------------------------
-# 7. Seeded concurrent determinism — two runs of 50 concurrent writes
-#    with the same seed must produce the SAME set of record_ids (D7-5).
+# 7. Concurrent record-id uniqueness — two runs of 50 concurrent writes
+#    must produce DISJOINT id sets (regression guard for persistent-memory
+#    re-serve collisions; see TestEngineRecordIdUniqueness for rationale).
 # ---------------------------------------------------------------------------
 
 
-class TestConcurrentSeededDeterminism:
-    """PMF 4B cleanup commit 7 — locks the D7-5 claim under
-    concurrency. The existing ``test_negative_fifty_concurrent_writes_distinct_record_ids``
-    proved distinctness but not reproducibility. This test proves
-    two runs with the same seed + identical call sequence produce
-    the same ID set (asyncio + GIL serializing the RNG's
-    ``getrandbits`` call)."""
+class TestConcurrentRecordIdUniqueness:
+    """Mirrors ``TestEngineRecordIdUniqueness`` under concurrency.
+    Replaces the pre-session-scoping ``TestConcurrentSeededDeterminism``
+    suite (same-seed ⇒ identical ID sets) — that contract was
+    retired by the live-validation finding from
+    ``tnl/session-scoped-memory.tnl``; we now require the OPPOSITE
+    invariant: same-seed runs MUST produce disjoint ID sets so
+    persistent memory cannot collide on re-serve."""
 
     async def _run_concurrent(self, seed: int) -> set[str]:
         engine, _store, db = await _make_engine(seed=seed)
@@ -521,14 +547,24 @@ class TestConcurrentSeededDeterminism:
         finally:
             await db.close()
 
-    async def test_positive_two_concurrent_runs_same_seed_same_ids(self) -> None:
+    async def test_positive_two_concurrent_runs_same_seed_disjoint_ids(self) -> None:
+        """Regression guard for live-validation collision."""
         a = await self._run_concurrent(seed=42)
         b = await self._run_concurrent(seed=42)
-        assert a == b, f"seeded RNG under concurrency is NOT reproducible. symmetric diff: {a ^ b}"
+        assert a.isdisjoint(b), (
+            f"same-seed concurrent runs produced overlapping record IDs: {a & b}"
+        )
 
-    async def test_negative_two_concurrent_runs_different_seed_different_ids(
+    async def test_positive_concurrent_run_internal_ids_all_distinct(self) -> None:
+        """Within a single 50-write concurrent batch, every ID
+        MUST be distinct — proves the uuid4 + asyncio path doesn't
+        accidentally return duplicates under contention."""
+        ids = await self._run_concurrent(seed=42)
+        assert len(ids) == 50, f"expected 50 distinct IDs, got {len(ids)}"
+
+    async def test_negative_two_concurrent_runs_different_seed_disjoint_ids(
         self,
     ) -> None:
         a = await self._run_concurrent(seed=42)
         b = await self._run_concurrent(seed=9999)
-        assert a != b
+        assert a.isdisjoint(b)

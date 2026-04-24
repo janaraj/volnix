@@ -238,11 +238,20 @@ class MemoryConfig(BaseModel):
     the Phase 4B gap analysis).
     """
 
-    reset_on_world_start: bool = True
-    """When True, memory records for the current world are cleared
-    on MemoryEngine initialize. This keeps 4B's contract explicit:
-    cross-run memory sharing is an opt-in feature, not an accidental
-    byproduct of on-disk persistence (G15)."""
+    reset_on_world_start: bool = False
+    """**Deprecated** as of session-scoped memory
+    (``tnl/session-scoped-memory.tnl``). Session scoping is the
+    supported isolation mechanism — memory is scoped to
+    ``(session_id, owner_id)`` at the storage layer, so two parallel
+    sessions cannot observe each other's memories regardless of
+    this flag.
+
+    When True (legacy), ``MemoryEngine._on_initialize`` logs a
+    deprecation warning and clears **only session-less rows**
+    (``WHERE session_id IS NULL``) — session-scoped memory is
+    preserved unconditionally.
+
+    Removed in 0.3.0."""
 
     utterance_journal_enabled: bool = False
     """PMF Plan Phase 4C Step 7 — enable the LLM utterance journal.
@@ -257,9 +266,11 @@ class MemoryConfig(BaseModel):
     explicitly in their bundled config."""
 
     # ── Schema ────────────────────────────────────────────────────
-    schema_version: int = Field(default=1, ge=1)
-    """SQLite schema version. 4B ships version 1; migrations land
-    when a later phase needs them (G12)."""
+    schema_version: int = Field(default=2, ge=1)
+    """SQLite schema version. Default 2 in 0.2.0; the store migrates
+    v1 → v2 in place on initialize. Explicitly pinning to 1 in a TOML
+    is still accepted but triggers the same migration path at runtime
+    (the version check is for forward compat, not downgrade)."""
 
     @model_validator(mode="after")
     def _validate(self) -> MemoryConfig:
@@ -274,6 +285,20 @@ class MemoryConfig(BaseModel):
                 f"MemoryConfig.fts_tokenizer must start with one of "
                 f"{sorted(VALID_TOKENIZER_PREFIXES)}; got {first_prefix!r}. "
                 f"Full spec was {self.fts_tokenizer!r}."
+            )
+
+        # Schema-version bound runs regardless of ``enabled`` per
+        # ``tnl/session-scoped-memory.tnl`` — the validator MUST accept
+        # {1, 2} and reject any other value unconditionally. An unknown
+        # version sitting in a disabled config is a latent footgun: it
+        # passes silently, then the caller flips ``enabled=True`` and
+        # the engine construction fails at a surprising moment. Fail
+        # at config-load time instead (audit-fold M4).
+        if self.schema_version not in (1, 2):
+            raise ValueError(
+                f"MemoryConfig.schema_version: unsupported version "
+                f"{self.schema_version}; this library supports v1 and v2 "
+                f"only (v1 is auto-migrated to v2 in place)."
             )
 
         # Structural bounds (Field(ge=..., le=..., pattern=...))
@@ -332,13 +357,6 @@ class MemoryConfig(BaseModel):
                 f"MemoryConfig.consolidation_episodic_window "
                 f"({self.consolidation_episodic_window}) must not exceed "
                 f"max_episodic_per_actor ({self.max_episodic_per_actor})."
-            )
-
-        # 4B ships schema_version 1 only.
-        if self.schema_version != 1:
-            raise ValueError(
-                f"MemoryConfig.schema_version: unsupported version "
-                f"{self.schema_version}; Phase 4B ships v1 only."
             )
 
         return self

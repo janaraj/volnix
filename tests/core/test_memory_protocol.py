@@ -10,7 +10,7 @@ from typing import Any
 
 from volnix.core.memory_types import MemoryQuery, MemoryRecall, MemoryScope, MemoryWrite
 from volnix.core.protocols import MemoryEngineProtocol
-from volnix.core.types import ActorId, MemoryRecordId
+from volnix.core.types import ActorId, MemoryRecordId, SessionId
 
 
 class _StubMemoryEngine:
@@ -24,6 +24,7 @@ class _StubMemoryEngine:
         target_owner: str,
         write: MemoryWrite,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecordId:
         return MemoryRecordId("stub")
 
@@ -35,12 +36,11 @@ class _StubMemoryEngine:
         target_owner: str,
         query: MemoryQuery,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecall:
         return MemoryRecall(query_id="q", records=[], total_matched=0, truncated=False)
 
-    async def consolidate(
-        self, actor_id: ActorId, *, force: bool = False, tick: int = 0
-    ) -> Any:
+    async def consolidate(self, actor_id: ActorId, *, force: bool = False, tick: int = 0) -> Any:
         return None
 
     async def evict(self, actor_id: ActorId) -> None:
@@ -75,10 +75,6 @@ class TestMemoryEngineProtocol:
     def test_protocol_methods_documented(self) -> None:
         # Five public methods — any silent removal breaks consumers.
         expected = {"remember", "recall", "consolidate", "evict", "hydrate"}
-        actual = {
-            name
-            for name in dir(MemoryEngineProtocol)
-            if not name.startswith("_")
-        }
+        actual = {name for name in dir(MemoryEngineProtocol) if not name.startswith("_")}
         missing = expected - actual
         assert not missing, f"protocol missing methods: {missing}"

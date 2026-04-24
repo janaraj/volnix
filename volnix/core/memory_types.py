@@ -23,7 +23,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from volnix.core.types import ActorId, MemoryRecordId
+from volnix.core.types import ActorId, MemoryRecordId, SessionId
 
 # Bounds used by Field validators below. Kept as module-level
 # constants so tests and the store layer can reason about them without
@@ -119,6 +119,22 @@ class MemoryRecord(BaseModel):
     """0.0–1.0. Used by importance-mode recall and hybrid ranking (C1)."""
 
     tags: list[str]
+
+    session_id: SessionId | None = None
+    """The platform Session this record belongs to.
+
+    ``None`` for session-less flows (consolidation background passes,
+    pre-session-scoping test fixtures, legacy callers). When present,
+    memory reads filter on this field so two sessions against the
+    same world cannot observe each other's memories
+    (``tnl/session-scoped-memory.tnl``).
+
+    Immutable like the rest of the record. Two memories with the same
+    ``(scope, owner_id, session_id)`` are allowed — e.g. two distinct
+    activations produce two distinct episodic records in the same
+    session.
+    """
+
     created_tick: int = Field(ge=0)
     """Non-negative tick when the record was created (C2)."""
 

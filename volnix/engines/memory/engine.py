@@ -29,7 +29,7 @@ from volnix.core.memory_types import (
     MemoryWrite,
     content_hash_of,
 )
-from volnix.core.types import ActorId, MemoryRecordId
+from volnix.core.types import ActorId, MemoryRecordId, SessionId
 from volnix.engines.memory.config import MemoryConfig
 from volnix.engines.memory.consolidation import ConsolidationResult, Consolidator
 from volnix.engines.memory.embedder import EmbedderProtocol
@@ -85,9 +85,18 @@ class MemoryEngine(BaseEngine):
         self._recall = recall
         self._consolidator = consolidator
         self._seed = seed
-        # Seeded RNG for deterministic record_id generation (D7-5).
-        # Only the explicit-remember path uses this; the Consolidator
-        # has its own uuid.uuid4() (D7-6 — known limitation).
+        # ``seed`` retained on the engine for future deterministic
+        # pathways that want per-world reproducibility; the explicit-
+        # remember path now generates record IDs via ``uuid.uuid4()``
+        # (see ``_next_record_id``) to align with the Consolidator
+        # and avoid cross-run UNIQUE-constraint collisions when
+        # ``reset_on_world_start=False`` lets memory persist across
+        # re-serves of the same world
+        # (``tnl/session-scoped-memory.tnl``, audit-fold from live
+        # validation). The old seeded-RNG contract (D7-5) applied
+        # only inside a single run with a fresh DB; session scoping
+        # invalidates that scope so we converge on uuid4 for both
+        # write paths.
         self._rng = random.Random(seed)
         # ``_ledger`` is injected by app.py at wire time (D7-4).
         # Tests may also inject it directly.
@@ -98,13 +107,24 @@ class MemoryEngine(BaseEngine):
     # ------------------------------------------------------------------
 
     async def _on_initialize(self) -> None:
-        """Create schema on fresh DB; truncate data if
-        ``reset_on_world_start`` is configured (G15, D10-5).
+        """Create schema on fresh DB; run v1 → v2 migration if
+        needed; truncate only session-less data if
+        ``reset_on_world_start`` is set
+        (``tnl/session-scoped-memory.tnl`` — legacy compat).
 
-        Step 7 shipped this method without forwarding the flag,
-        so ``reset_on_world_start=True`` never fired. Step 10 plumbs
-        it; the paired regression test locks the branch.
+        Emits exactly one deprecation warning per engine
+        construction when ``reset_on_world_start=True`` because
+        session scoping replaces it as the isolation mechanism.
         """
+        if self._memory_config.reset_on_world_start:
+            logger.warning(
+                "MemoryConfig.reset_on_world_start is deprecated — session "
+                "scoping is the supported isolation mechanism. "
+                "This flag will be removed in 0.3.0. Set "
+                "``reset_on_world_start=False`` (the new default) to silence "
+                "this warning; cross-session isolation is preserved by "
+                "session-id scoping regardless of this flag's value."
+            )
         await self._store.initialize(reset=self._memory_config.reset_on_world_start)
 
     async def _on_start(self) -> None:
@@ -189,8 +209,10 @@ class MemoryEngine(BaseEngine):
         target_owner: str,
         write: MemoryWrite,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecordId:
-        """Persist a new memory record for ``target_owner``.
+        """Persist a new memory record for ``target_owner``, scoped
+        to ``session_id`` (``tnl/session-scoped-memory.tnl``).
 
         Gated by ``_gate`` — cross-scope writes raise
         ``MemoryAccessDenied`` and log a ledger row.
@@ -201,6 +223,7 @@ class MemoryEngine(BaseEngine):
             record_id=record_id,
             scope=target_scope,
             owner_id=target_owner,
+            session_id=session_id,
             kind=write.kind,
             tier="tier2",
             source=write.source,
@@ -218,6 +241,7 @@ class MemoryEngine(BaseEngine):
                 caller_actor_id=caller,
                 target_scope=target_scope,
                 target_owner=target_owner,
+                session_id=session_id,
                 record_id=str(record_id),
                 kind=write.kind,
                 source=write.source,
@@ -235,16 +259,19 @@ class MemoryEngine(BaseEngine):
         target_owner: str,
         query: MemoryQuery,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecall:
-        """Retrieve records from ``target_owner`` via the configured
-        ``Recall`` dispatcher. Gated by ``_gate``."""
+        """Retrieve records from ``target_owner`` scoped to
+        ``session_id`` via the configured ``Recall`` dispatcher.
+        Gated by ``_gate`` (``tnl/session-scoped-memory.tnl``)."""
         await self._gate(caller, target_scope, target_owner, op="read")
-        result = await self._recall.dispatch(target_owner, query, tick=tick)
+        result = await self._recall.dispatch(target_owner, query, tick=tick, session_id=session_id)
         await self._record_to_ledger(
             MemoryRecallEntry(
                 caller_actor_id=caller,
                 target_scope=target_scope,
                 target_owner=target_owner,
+                session_id=session_id,
                 query_mode=query.mode,
                 query_id=result.query_id,
                 result_count=len(result.records),
@@ -290,6 +317,13 @@ class MemoryEngine(BaseEngine):
         Writes ``MemoryEvictionEntry`` to the ledger regardless of
         how many records were actually dropped — the ledger row is
         the "eviction intent" signal, trimming is the mechanism.
+
+        Session scoping (``tnl/session-scoped-memory.tnl`` non-goal):
+        only the ``session_id IS NULL`` slice is trimmed. Session-
+        scoped episodic records accumulate indefinitely across
+        cohort demotes; per-session eviction lands when a Rehearse
+        consumer exercises cohort rotation with sessions.
+        Audit-fold M2.
         """
         keep = max(1, self._memory_config.max_episodic_per_actor // 2)
         try:
@@ -316,6 +350,14 @@ class MemoryEngine(BaseEngine):
         Lazy-on-first-recall remains the default (D7-10);
         ``hydrate_on_promote=True`` opts an actor into this eager
         path from ``_on_cohort_rotated``.
+
+        Session scoping (``tnl/session-scoped-memory.tnl`` non-goal):
+        ``hydrate`` is called from ``_on_cohort_rotated`` which the
+        TNL explicitly leaves session-agnostic. This method reads
+        only the ``session_id IS NULL`` slice; session-scoped
+        records do not receive eager cache-warm on promote. Callers
+        that need session-aware hydration should invoke recall
+        directly with an explicit ``session_id``. Audit-fold H1.
         """
         from volnix.engines.memory.embedder import FTS5Embedder
         from volnix.llm.types import EmbeddingRequest
@@ -404,13 +446,19 @@ class MemoryEngine(BaseEngine):
         )
 
     def _next_record_id(self) -> MemoryRecordId:
-        """Deterministic UUID-format record ID (D7-5).
+        """Globally unique record ID via ``uuid.uuid4()``.
 
-        Uses the engine's seeded ``random.Random`` so two runs with
-        the same seed + same remember() call sequence produce
-        byte-identical IDs.
+        Previously used a seeded RNG for per-run replay determinism
+        (D7-5), but that contract broke the moment
+        ``reset_on_world_start=False`` became the default under
+        session-scoped memory: re-serving the same world at the
+        same seed reproduces the UUID sequence, colliding against
+        persisted rows. Aligns with ``Consolidator`` which already
+        uses ``uuid.uuid4()`` (D7-6 — previously documented as a
+        known inconsistency). Live-validation finding from
+        ``tnl/session-scoped-memory.tnl`` drove this change.
         """
-        return MemoryRecordId(str(uuid.UUID(int=self._rng.getrandbits(128), version=4)))
+        return MemoryRecordId(str(uuid.uuid4()))
 
     async def _record_to_ledger(self, entry: Any) -> None:
         """No-op when no ledger is wired (test configurations);

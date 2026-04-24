@@ -229,8 +229,16 @@ class TestRemember:
         assert writes[0].kind == "episodic"
         assert writes[0].tick == 42
 
-    async def test_remember_record_id_is_deterministic_for_seed(self) -> None:
-        # D7-5: same seed + same call sequence → same IDs.
+    async def test_remember_same_seed_across_runs_produces_distinct_ids(self) -> None:
+        """Regression guard: under session-scoped memory, ``reset_on_world_start=False``
+        is the default so memory persists across re-serves of the same world. The
+        previous seeded-RNG record-id generator (D7-5) produced the same UUID sequence
+        on replay and hit ``UNIQUE constraint failed: memory_records.record_id`` on
+        the second insert. Live-validation finding drove the switch to ``uuid.uuid4``;
+        this test pins the new contract: two runs with the SAME seed MUST produce
+        disjoint record-id sets so persistence-across-runs is safe.
+        """
+
         async def _run() -> list[str]:
             engine, db = await _fresh_engine_with_seed(42)
             try:
@@ -250,7 +258,12 @@ class TestRemember:
 
         a = await _run()
         b = await _run()
-        assert a == b, f"non-deterministic IDs: {a} vs {b}"
+        # Distinct sets — no overlap. The whole point is to avoid
+        # the live-validation UNIQUE-constraint collision.
+        assert set(a).isdisjoint(set(b)), (
+            f"same-seed runs produced overlapping record IDs "
+            f"(would break re-serve of a persistent memory store): {set(a) & set(b)}"
+        )
 
     async def test_remember_duplicate_content_produces_distinct_records(
         self, engine_bundle
@@ -279,8 +292,14 @@ class TestRemember:
         writes = ledger.of_type(MemoryWriteEntry)
         assert len(writes) == 2
 
-    async def test_remember_different_seeds_produce_different_ids(self) -> None:
-        # Control: change the seed → different IDs.
+    async def test_remember_id_uniqueness_is_seed_independent(self) -> None:
+        """Under the post-live-validation contract, record IDs are generated via
+        ``uuid.uuid4()`` and are not derived from the engine's seed. Any two
+        ``remember()`` calls — same seed, different seed — MUST produce distinct
+        record IDs. Locks the uniqueness invariant without any seed-dependent
+        determinism assumption.
+        """
+
         async def _run(seed: int) -> str:
             engine, db = await _fresh_engine_with_seed(seed)
             try:

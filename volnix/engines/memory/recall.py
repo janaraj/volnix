@@ -40,6 +40,7 @@ from volnix.core.memory_types import (
     TemporalQuery,
     content_hash_of,
 )
+from volnix.core.types import SessionId
 from volnix.engines.memory.embedder import EmbedderProtocol
 from volnix.engines.memory.store import MemoryStoreProtocol
 from volnix.llm.types import EmbeddingRequest
@@ -79,14 +80,19 @@ class Recall:
         query: MemoryQuery,
         *,
         tick: int = 0,
+        session_id: SessionId | None = None,
     ) -> MemoryRecall:
-        """Route ``query`` to the right retrieval path.
+        """Route ``query`` to the right retrieval path, scoped to
+        ``session_id`` (``tnl/session-scoped-memory.tnl``).
 
         Args:
             owner_id: scope-owner identity (actor or team).
             query: tagged union from ``core.memory_types``.
             tick: current tick, consumed only by recency-weighted
                   hybrid retrieval. Other modes ignore it.
+            session_id: platform Session to scope reads to. ``None``
+                reads only session-less rows; otherwise reads only
+                that session's rows.
 
         Raises:
             NotImplementedError: for ``graph`` (Phase 4D), and for
@@ -96,15 +102,15 @@ class Recall:
         """
         mode = query.mode
         if mode == "structured":
-            return await self._structured(owner_id, query)
+            return await self._structured(owner_id, query, session_id=session_id)
         if mode == "temporal":
-            return await self._temporal(owner_id, query)
+            return await self._temporal(owner_id, query, session_id=session_id)
         if mode == "semantic":
-            return await self._semantic(owner_id, query)
+            return await self._semantic(owner_id, query, session_id=session_id)
         if mode == "importance":
-            return await self._importance(owner_id, query)
+            return await self._importance(owner_id, query, session_id=session_id)
         if mode == "hybrid":
-            return await self._hybrid(owner_id, query, tick=tick)
+            return await self._hybrid(owner_id, query, tick=tick, session_id=session_id)
         if mode == "graph":
             return await self._graph(owner_id, query)
         raise ValueError(f"unknown MemoryQuery.mode: {mode!r}")
@@ -113,11 +119,19 @@ class Recall:
     # Mode implementations
     # ------------------------------------------------------------------
 
-    async def _structured(self, owner_id: str, q: StructuredQuery) -> MemoryRecall:
+    async def _structured(
+        self,
+        owner_id: str,
+        q: StructuredQuery,
+        *,
+        session_id: SessionId | None = None,
+    ) -> MemoryRecall:
         """Tag-filter over semantic records. Returns every match
         (no ``top_k`` on this mode) so ``truncated`` is always False.
         """
-        semantic_records = await self._store.list_by_owner(owner_id, kind="semantic")
+        semantic_records = await self._store.list_by_owner(
+            owner_id, kind="semantic", session_id=session_id
+        )
         matched = [r for r in semantic_records if all(k in r.tags for k in q.keys)]
         matched.sort(key=lambda r: (-r.importance, r.record_id))
         return MemoryRecall(
@@ -127,9 +141,15 @@ class Recall:
             truncated=False,
         )
 
-    async def _temporal(self, owner_id: str, q: TemporalQuery) -> MemoryRecall:
+    async def _temporal(
+        self,
+        owner_id: str,
+        q: TemporalQuery,
+        *,
+        session_id: SessionId | None = None,
+    ) -> MemoryRecall:
         """Tick-window filter, newest-first. Truncates to ``q.limit``."""
-        all_records = await self._store.list_by_owner(owner_id)
+        all_records = await self._store.list_by_owner(owner_id, session_id=session_id)
         filtered = [
             r
             for r in all_records
@@ -146,7 +166,13 @@ class Recall:
             truncated=len(records) < total,
         )
 
-    async def _semantic(self, owner_id: str, q: SemanticQuery) -> MemoryRecall:
+    async def _semantic(
+        self,
+        owner_id: str,
+        q: SemanticQuery,
+        *,
+        session_id: SessionId | None = None,
+    ) -> MemoryRecall:
         """Dispatches on embedder provider.
 
         FTS5: calls ``store.fts_search``. ``min_score`` is **not**
@@ -167,7 +193,7 @@ class Recall:
                     "meaningful [0,1] threshold). Pass min_score=0.0 "
                     "or use a dense embedder (Step 13+)."
                 )
-            hits = await self._store.fts_search(owner_id, q.text, q.top_k)
+            hits = await self._store.fts_search(owner_id, q.text, q.top_k, session_id=session_id)
             records = [r for r, _score in hits]
             return MemoryRecall(
                 query_id=f"semantic:fts5:{content_hash_of(q.text)[:8]}",
@@ -182,7 +208,7 @@ class Recall:
 
         # Dense-embedder path (PMF 4B Step 13). Cosine-similarity
         # scoring with the embedding cache populated on-miss.
-        scored = await self._dense_score(owner_id, q.text)
+        scored = await self._dense_score(owner_id, q.text, session_id=session_id)
         # Filter by min_score threshold.
         filtered = [(r, s) for r, s in scored if s >= q.min_score]
         # Sort: similarity DESC, record_id ASC tie-break.
@@ -196,9 +222,15 @@ class Recall:
             truncated=len(records) < total,
         )
 
-    async def _importance(self, owner_id: str, q: ImportanceQuery) -> MemoryRecall:
+    async def _importance(
+        self,
+        owner_id: str,
+        q: ImportanceQuery,
+        *,
+        session_id: SessionId | None = None,
+    ) -> MemoryRecall:
         """Threshold-filter + importance-sort + top_k truncation."""
-        all_records = await self._store.list_by_owner(owner_id)
+        all_records = await self._store.list_by_owner(owner_id, session_id=session_id)
         filtered = [r for r in all_records if r.importance >= q.min_importance]
         filtered.sort(key=lambda r: (-r.importance, r.record_id))
         total = len(filtered)
@@ -210,7 +242,14 @@ class Recall:
             truncated=len(records) < total,
         )
 
-    async def _hybrid(self, owner_id: str, q: HybridQuery, *, tick: int) -> MemoryRecall:
+    async def _hybrid(
+        self,
+        owner_id: str,
+        q: HybridQuery,
+        *,
+        tick: int,
+        session_id: SessionId | None = None,
+    ) -> MemoryRecall:
         """Weighted combo: semantic + recency + importance.
 
         FTS5 path: candidates fetched at ``HYBRID_CANDIDATE_MULTIPLIER *
@@ -230,7 +269,9 @@ class Recall:
         # Fetch candidate (record, semantic_score) pairs — path-specific.
         if self._embedder.provider_id == "fts5":
             candidate_k = min(q.top_k * HYBRID_CANDIDATE_MULTIPLIER, _MAX_TOP_K)
-            raw_hits = await self._store.fts_search(owner_id, q.semantic_text, candidate_k)
+            raw_hits = await self._store.fts_search(
+                owner_id, q.semantic_text, candidate_k, session_id=session_id
+            )
             if not raw_hits:
                 return MemoryRecall(
                     query_id=query_id,
@@ -251,7 +292,7 @@ class Recall:
             # Dense path. Cosine is already in [-1, 1] (normalised
             # to [0, 1] by the scoring helper). No min/max rescale
             # needed. Candidate cap = _DENSE_MAX_CANDIDATES.
-            normalised = await self._dense_score(owner_id, q.semantic_text)
+            normalised = await self._dense_score(owner_id, q.semantic_text, session_id=session_id)
             if not normalised:
                 return MemoryRecall(
                     query_id=query_id,
@@ -287,14 +328,21 @@ class Recall:
         )
 
     async def _dense_score(
-        self, owner_id: str, query_text: str
+        self,
+        owner_id: str,
+        query_text: str,
+        *,
+        session_id: SessionId | None = None,
     ) -> list[tuple[MemoryRecord, float]]:
-        """Embed ``query_text`` + every candidate record for ``owner_id``;
-        return ``[(record, cosine_sim_in_0_1), ...]``.
+        """Embed ``query_text`` + every candidate record for
+        ``(owner_id, session_id)``; return
+        ``[(record, cosine_sim_in_0_1), ...]``.
 
         Record embeddings are cached in the store's ``embedding_cache``
         keyed by ``(content_hash, provider_id)`` — first recall pays
-        the embed cost, subsequent recalls hit the cache.
+        the embed cost, subsequent recalls hit the cache. The cache
+        is intentionally content-hash-keyed, not session-keyed, so
+        identical content across sessions shares one cached vector.
 
         Batch-embeds cache misses in a single call (ST + OpenAI both
         handle batches natively, much faster than per-text calls).
@@ -305,7 +353,9 @@ class Recall:
         """
         import numpy as np  # numpy ships with sentence-transformers
 
-        records = await self._store.list_by_owner(owner_id, limit=_DENSE_MAX_CANDIDATES)
+        records = await self._store.list_by_owner(
+            owner_id, limit=_DENSE_MAX_CANDIDATES, session_id=session_id
+        )
         if not records:
             return []
 

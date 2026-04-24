@@ -1715,6 +1715,7 @@ class AgencyEngine(BaseEngine):
                 trigger_event=trigger_event,
                 prompt_describe=self._prompt_builder._describe,
                 tick=self._current_tick(),
+                session_id=self._session_id,
             )
 
             user_prompt = self._prompt_builder.build_individual_prompt(
@@ -2120,6 +2121,7 @@ class AgencyEngine(BaseEngine):
                 tool_names_invoked=tool_names_invoked,
                 final_text=(actor.goal_context or "")[:200],
                 tick=self._current_tick(),
+                session_id=self._session_id,
             )
 
         logger.info(

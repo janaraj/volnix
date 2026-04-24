@@ -642,6 +642,7 @@ class MemoryWriteEntry(LedgerEntry):
     caller_actor_id: ActorId
     target_scope: MemoryScope
     target_owner: str
+    session_id: SessionId | None = None
     record_id: str
     kind: str
     source: str
@@ -660,6 +661,7 @@ class MemoryRecallEntry(LedgerEntry):
     caller_actor_id: ActorId
     target_scope: MemoryScope
     target_owner: str
+    session_id: SessionId | None = None
     query_mode: str
     query_id: str
     result_count: int = Field(ge=0)

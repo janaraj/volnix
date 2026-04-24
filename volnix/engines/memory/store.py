@@ -48,14 +48,14 @@ import logging
 from typing import Any, Protocol, runtime_checkable
 
 from volnix.core.memory_types import MemoryKind, MemoryRecord
-from volnix.core.types import MemoryRecordId
+from volnix.core.types import MemoryRecordId, SessionId
 from volnix.persistence.database import Database
 
 logger = logging.getLogger(__name__)
 
 # Module-level schema constants. Single source of truth — tests and
 # future migrations reference these by name instead of re-declaring.
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 TABLE_RECORDS: str = "memory_records"
 TABLE_FTS: str = "memory_fts"
 TABLE_EMBEDDING_CACHE: str = "embedding_cache"
@@ -85,12 +85,24 @@ class MemoryStoreProtocol(Protocol):
         *,
         kind: MemoryKind | None = None,
         limit: int | None = None,
+        session_id: SessionId | None = None,
     ) -> list[MemoryRecord]: ...
 
-    async def prune_oldest_episodic(self, owner_id: str, keep: int) -> list[MemoryRecordId]: ...
+    async def prune_oldest_episodic(
+        self,
+        owner_id: str,
+        keep: int,
+        *,
+        session_id: SessionId | None = None,
+    ) -> list[MemoryRecordId]: ...
 
     async def fts_search(
-        self, owner_id: str, query: str, top_k: int
+        self,
+        owner_id: str,
+        query: str,
+        top_k: int,
+        *,
+        session_id: SessionId | None = None,
     ) -> list[tuple[MemoryRecord, float]]: ...
 
     async def embedding_cache_get(self, content_hash: str, provider_id: str) -> bytes | None: ...
@@ -154,34 +166,41 @@ class SQLiteMemoryStore:
     # ------------------------------------------------------------------
 
     async def initialize(self, *, reset: bool = False) -> None:
-        """Create schema v1 on a fresh DB, refuse to proceed on a
-        version mismatch. When ``reset=True``, truncate data tables
-        after schema is present (G15 — ``reset_on_world_start``).
+        """Create schema v2 on a fresh DB, migrate v1 → v2 in place,
+        refuse to proceed on any other version. When ``reset=True``,
+        truncate only ``session_id IS NULL`` rows after schema is
+        present (``tnl/session-scoped-memory.tnl`` — legacy
+        ``reset_on_world_start`` compat).
         """
         has_version_table = await self._db.table_exists(TABLE_SCHEMA_VERSION)
         if not has_version_table:
-            await self._create_schema_v1()
+            await self._create_schema_v2()
             await self._db.execute(
                 f"INSERT INTO {TABLE_SCHEMA_VERSION} (version) VALUES (?)",
                 (SCHEMA_VERSION,),
             )
         else:
             installed = await self._read_schema_version()
-            if installed != SCHEMA_VERSION:
+            if installed == SCHEMA_VERSION:
+                pass  # up to date
+            elif installed == 1:
+                await self._migrate_v1_to_v2()
+            else:
                 raise RuntimeError(
                     f"MemoryStore schema version mismatch: DB has v{installed}, "
-                    f"code expects v{SCHEMA_VERSION}. Phase 4B ships v1 only; "
-                    f"no migration path is implemented yet. A later phase will "
-                    f"add upward migrations. Refusing to proceed."
+                    f"code expects v{SCHEMA_VERSION}. Only v1 → v2 is supported. "
+                    f"Refusing to proceed."
                 )
 
         if reset:
-            await self._truncate_data()
+            await self._truncate_session_less_data()
 
-    async def _create_schema_v1(self) -> None:
-        """Create all tables and indices. Each DDL is idempotent
-        (``IF NOT EXISTS``) so a partial prior initialise doesn't
-        cause a collision on rerun."""
+    async def _create_schema_v2(self) -> None:
+        """Create all tables and indices at schema v2. Each DDL is
+        idempotent (``IF NOT EXISTS``) so a partial prior initialise
+        doesn't cause a collision on rerun. v2 adds ``session_id``
+        column + session-leading indexes
+        (``tnl/session-scoped-memory.tnl``)."""
         ddls: list[str] = [
             f"""
             CREATE TABLE IF NOT EXISTS {TABLE_SCHEMA_VERSION} (
@@ -193,6 +212,7 @@ class SQLiteMemoryStore:
                 record_id TEXT PRIMARY KEY,
                 scope TEXT NOT NULL,
                 owner_id TEXT NOT NULL,
+                session_id TEXT,
                 kind TEXT NOT NULL,
                 tier TEXT NOT NULL,
                 source TEXT NOT NULL,
@@ -206,12 +226,12 @@ class SQLiteMemoryStore:
             )
             """,
             f"""
-            CREATE INDEX IF NOT EXISTS idx_memory_owner_kind
-            ON {TABLE_RECORDS}(owner_id, kind, created_tick DESC)
+            CREATE INDEX IF NOT EXISTS idx_memory_session_owner_kind
+            ON {TABLE_RECORDS}(session_id, owner_id, kind, created_tick DESC)
             """,
             f"""
-            CREATE INDEX IF NOT EXISTS idx_memory_importance
-            ON {TABLE_RECORDS}(owner_id, importance DESC)
+            CREATE INDEX IF NOT EXISTS idx_memory_session_owner_importance
+            ON {TABLE_RECORDS}(session_id, owner_id, importance DESC)
             """,
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS {TABLE_FTS} USING fts5(
@@ -233,13 +253,66 @@ class SQLiteMemoryStore:
             for ddl in ddls:
                 await self._db.execute(ddl)
 
-    async def _truncate_data(self) -> None:
-        """Clear data tables while preserving schema + version row.
-        Used by ``reset_on_world_start`` (G15)."""
+    async def _migrate_v1_to_v2(self) -> None:
+        """Migrate an existing v1 database to v2 in place.
+
+        Steps (single transaction so a crash mid-migration leaves the
+        DB at v1, retryable):
+          1. ``ALTER TABLE memory_records ADD COLUMN session_id TEXT``
+             (metadata-only; no row rewrite).
+          2. Drop v1 indexes.
+          3. Create v2 session-leading indexes.
+          4. Bump ``memory_schema_version.version`` from 1 to 2.
+
+        Existing rows retain ``session_id = NULL`` — the migration
+        MUST NOT rewrite them (``tnl/session-scoped-memory.tnl``).
+        """
         async with self._db.transaction():
-            await self._db.execute(f"DELETE FROM {TABLE_RECORDS}")
-            await self._db.execute(f"DELETE FROM {TABLE_FTS}")
-            await self._db.execute(f"DELETE FROM {TABLE_EMBEDDING_CACHE}")
+            await self._db.execute(f"ALTER TABLE {TABLE_RECORDS} ADD COLUMN session_id TEXT")
+            await self._db.execute("DROP INDEX IF EXISTS idx_memory_owner_kind")
+            await self._db.execute("DROP INDEX IF EXISTS idx_memory_importance")
+            await self._db.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_memory_session_owner_kind
+                ON {TABLE_RECORDS}(session_id, owner_id, kind, created_tick DESC)
+                """
+            )
+            await self._db.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_memory_session_owner_importance
+                ON {TABLE_RECORDS}(session_id, owner_id, importance DESC)
+                """
+            )
+            await self._db.execute(
+                f"UPDATE {TABLE_SCHEMA_VERSION} SET version = ?",
+                (SCHEMA_VERSION,),
+            )
+        logger.info("MemoryStore: migrated schema v1 → v2 (added session_id column + indexes)")
+
+    async def _truncate_session_less_data(self) -> None:
+        """Clear only ``session_id IS NULL`` memory records
+        (``tnl/session-scoped-memory.tnl`` — legacy
+        ``reset_on_world_start`` compat). Session-scoped rows MUST
+        NOT be truncated by this flag under any circumstance; the
+        embedding cache is content-hash keyed so safe to share
+        across sessions and is left untouched.
+
+        Audit-fold L1: uses direct predicates instead of an
+        ``IN (?,?,...)`` expansion so an N-row truncation cannot hit
+        SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` limit on large DBs.
+        The FTS delete joins on ``memory_records`` to stay in sync.
+        """
+        async with self._db.transaction():
+            await self._db.execute(
+                f"""
+                DELETE FROM {TABLE_FTS}
+                WHERE record_id IN (
+                    SELECT record_id FROM {TABLE_RECORDS}
+                    WHERE session_id IS NULL
+                )
+                """
+            )
+            await self._db.execute(f"DELETE FROM {TABLE_RECORDS} WHERE session_id IS NULL")
 
     async def _read_schema_version(self) -> int:
         row = await self._db.fetchone(f"SELECT version FROM {TABLE_SCHEMA_VERSION} LIMIT 1")
@@ -273,15 +346,16 @@ class SQLiteMemoryStore:
             await self._db.execute(
                 f"""
                 INSERT INTO {TABLE_RECORDS} (
-                    record_id, scope, owner_id, kind, tier, source,
+                    record_id, scope, owner_id, session_id, kind, tier, source,
                     content, content_hash, importance, tags_json,
                     created_tick, consolidated_from_json, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(record.record_id),
                     record.scope,
                     record.owner_id,
+                    str(record.session_id) if record.session_id is not None else None,
                     record.kind,
                     record.tier,
                     record.source,
@@ -303,47 +377,69 @@ class SQLiteMemoryStore:
         # insert committed, not inside the transaction, so the write
         # is observable before the trim — the "eventually consistent"
         # semantics are: any observer that reads mid-overflow sees
-        # cap+1 records, then cap. Tier-1 (pack_fixture) records are
-        # exempt from trimming — they are immutable pack-authored
-        # beliefs and must never be silently dropped.
+        # up to cap+N records, then cap, where N is the number of
+        # concurrent inserts against the same (owner, session) slice
+        # that all read COUNT(*) before any trim transaction runs
+        # (audit-fold L2). Tier-1 (pack_fixture) records are exempt
+        # from trimming — they are immutable pack-authored beliefs
+        # and must never be silently dropped.
+        #
+        # Caps are enforced per (owner_id, session_id) slice
+        # (``tnl/session-scoped-memory.tnl``): one session's overflow
+        # MUST NOT evict another session's records, and session-scoped
+        # records MUST NOT evict session-less records (nor vice versa).
         if (
             record.kind == "episodic"
             and self._max_episodic_per_owner is not None
             and record.tier != "tier1"
         ):
-            await self._trim_episodic_overflow(record.owner_id)
+            await self._trim_episodic_overflow(record.owner_id, record.session_id)
         elif (
             record.kind == "semantic"
             and self._max_semantic_per_owner is not None
             and record.tier != "tier1"
         ):
-            await self._trim_semantic_overflow(record.owner_id)
+            await self._trim_semantic_overflow(record.owner_id, record.session_id)
 
-    async def _trim_episodic_overflow(self, owner_id: str) -> None:
-        """If tier-2 episodic count for ``owner_id`` exceeds the cap,
-        drop the oldest tier-2 episodic records until it doesn't.
-        Tier-1 records are never pruned."""
+    async def _trim_episodic_overflow(
+        self,
+        owner_id: str,
+        session_id: SessionId | None,
+    ) -> None:
+        """If tier-2 episodic count for ``(owner_id, session_id)``
+        exceeds the cap, drop the oldest tier-2 episodic records
+        within that same slice until it doesn't. Tier-1 records are
+        never pruned. Sessions are independent ring-buffers — a
+        large session can't evict a smaller session's records
+        (``tnl/session-scoped-memory.tnl``)."""
         assert self._max_episodic_per_owner is not None
+        if session_id is None:
+            where_session = "AND session_id IS NULL"
+            count_params: tuple[Any, ...] = (owner_id,)
+        else:
+            where_session = "AND session_id = ?"
+            count_params = (owner_id, str(session_id))
         count_row = await self._db.fetchone(
             f"""
             SELECT COUNT(*) AS n FROM {TABLE_RECORDS}
             WHERE owner_id = ? AND kind = 'episodic' AND tier != 'tier1'
+            {where_session}
             """,
-            (owner_id,),
+            count_params,
         )
         count = int(count_row["n"]) if count_row else 0
         if count <= self._max_episodic_per_owner:
             return
-        # Select the oldest overflow rows explicitly + delete by ID.
         overflow = count - self._max_episodic_per_owner
         rows = await self._db.fetchall(
             f"""
             SELECT record_id FROM {TABLE_RECORDS}
             WHERE owner_id = ? AND kind = 'episodic' AND tier != 'tier1'
+            {where_session}
             ORDER BY created_tick ASC, record_id ASC
             LIMIT ?
             """,
-            (owner_id, overflow),
+            (*count_params, overflow),
         )
         if not rows:
             return
@@ -359,18 +455,31 @@ class SQLiteMemoryStore:
                 tuple(ids),
             )
 
-    async def _trim_semantic_overflow(self, owner_id: str) -> None:
-        """If tier-2 semantic count for ``owner_id`` exceeds the cap,
-        drop the lowest-importance tier-2 semantic records until it
-        doesn't. Ties broken by oldest-first, then record_id ASC for
-        determinism. Tier-1 records are never pruned."""
+    async def _trim_semantic_overflow(
+        self,
+        owner_id: str,
+        session_id: SessionId | None,
+    ) -> None:
+        """If tier-2 semantic count for ``(owner_id, session_id)``
+        exceeds the cap, drop the lowest-importance tier-2 semantic
+        records within that slice until it doesn't. Ties broken by
+        oldest-first, then record_id ASC for determinism. Tier-1
+        records are never pruned. Sessions are independent
+        ring-buffers (``tnl/session-scoped-memory.tnl``)."""
         assert self._max_semantic_per_owner is not None
+        if session_id is None:
+            where_session = "AND session_id IS NULL"
+            count_params: tuple[Any, ...] = (owner_id,)
+        else:
+            where_session = "AND session_id = ?"
+            count_params = (owner_id, str(session_id))
         count_row = await self._db.fetchone(
             f"""
             SELECT COUNT(*) AS n FROM {TABLE_RECORDS}
             WHERE owner_id = ? AND kind = 'semantic' AND tier != 'tier1'
+            {where_session}
             """,
-            (owner_id,),
+            count_params,
         )
         count = int(count_row["n"]) if count_row else 0
         if count <= self._max_semantic_per_owner:
@@ -380,10 +489,11 @@ class SQLiteMemoryStore:
             f"""
             SELECT record_id FROM {TABLE_RECORDS}
             WHERE owner_id = ? AND kind = 'semantic' AND tier != 'tier1'
+            {where_session}
             ORDER BY importance ASC, created_tick ASC, record_id ASC
             LIMIT ?
             """,
-            (owner_id, overflow),
+            (*count_params, overflow),
         )
         if not rows:
             return
@@ -416,14 +526,26 @@ class SQLiteMemoryStore:
         *,
         kind: MemoryKind | None = None,
         limit: int | None = None,
+        session_id: SessionId | None = None,
     ) -> list[MemoryRecord]:
-        """List records for ``owner_id`` ordered newest-first with
-        deterministic tie-break on ``record_id ASC``."""
+        """List records for ``(owner_id, session_id)`` ordered
+        newest-first with deterministic tie-break on ``record_id ASC``.
+
+        Session semantics (``tnl/session-scoped-memory.tnl``):
+        ``session_id=None`` matches ONLY session-less rows; a
+        specific session_id matches ONLY that session's rows. There
+        is no "read everything" mode — isolation is non-negotiable.
+        """
         clauses = ["owner_id = ?"]
         params: list[Any] = [owner_id]
         if kind is not None:
             clauses.append("kind = ?")
             params.append(kind)
+        if session_id is None:
+            clauses.append("session_id IS NULL")
+        else:
+            clauses.append("session_id = ?")
+            params.append(str(session_id))
         where = " AND ".join(clauses)
         sql = (
             f"SELECT * FROM {TABLE_RECORDS} WHERE {where} ORDER BY created_tick DESC, record_id ASC"
@@ -435,25 +557,39 @@ class SQLiteMemoryStore:
         rows = await self._db.fetchall(sql, tuple(params))
         return [self._row_to_record(r) for r in rows]
 
-    async def prune_oldest_episodic(self, owner_id: str, keep: int) -> list[MemoryRecordId]:
-        """Remove episodic records beyond the ``keep`` most recent.
+    async def prune_oldest_episodic(
+        self,
+        owner_id: str,
+        keep: int,
+        *,
+        session_id: SessionId | None = None,
+    ) -> list[MemoryRecordId]:
+        """Remove episodic records beyond the ``keep`` most recent
+        for ``(owner_id, session_id)``.
 
         Ring-buffer enforcement for ``max_episodic_per_actor``.
         Returns the pruned IDs (for observability / test assertions).
+        Session-scoped (``tnl/session-scoped-memory.tnl``).
         """
         if keep < 0:
             raise ValueError(f"prune_oldest_episodic: keep must be >= 0, got {keep}")
+        if session_id is None:
+            session_clause = "AND session_id IS NULL"
+            session_params: tuple[Any, ...] = ()
+        else:
+            session_clause = "AND session_id = ?"
+            session_params = (str(session_id),)
         # Select IDs to prune first (so we can return them), then
         # delete by explicit IDs — avoids any dependence on the
         # LIMIT/OFFSET ordering inside a DELETE.
         rows = await self._db.fetchall(
             f"""
             SELECT record_id FROM {TABLE_RECORDS}
-            WHERE owner_id = ? AND kind = 'episodic'
+            WHERE owner_id = ? AND kind = 'episodic' {session_clause}
             ORDER BY created_tick DESC, record_id ASC
             LIMIT -1 OFFSET ?
             """,
-            (owner_id, keep),
+            (owner_id, *session_params, keep),
         )
         pruned_ids = [MemoryRecordId(r["record_id"]) for r in rows]
         if not pruned_ids:
@@ -471,29 +607,42 @@ class SQLiteMemoryStore:
         return pruned_ids
 
     async def fts_search(
-        self, owner_id: str, query: str, top_k: int
+        self,
+        owner_id: str,
+        query: str,
+        top_k: int,
+        *,
+        session_id: SessionId | None = None,
     ) -> list[tuple[MemoryRecord, float]]:
-        """FTS5 BM25 search scoped to ``owner_id``. Sorted by score
-        (lower bm25 = better match) with deterministic tie-break.
+        """FTS5 BM25 search scoped to ``(owner_id, session_id)``.
+        Sorted by score (lower bm25 = better match) with deterministic
+        tie-break.
 
         Query text is tokenised on whitespace and OR-joined so
         arbitrary prose is safe against FTS5 operator parsing.
+        Session-scoped (``tnl/session-scoped-memory.tnl``).
         """
         if top_k <= 0:
             return []
         match_expr = self._build_fts_match(query)
         if not match_expr:
             return []
+        if session_id is None:
+            session_clause = "AND r.session_id IS NULL"
+            session_params: tuple[Any, ...] = ()
+        else:
+            session_clause = "AND r.session_id = ?"
+            session_params = (str(session_id),)
         rows = await self._db.fetchall(
             f"""
             SELECT r.*, bm25({TABLE_FTS}) AS score
             FROM {TABLE_FTS}
             JOIN {TABLE_RECORDS} r ON r.record_id = {TABLE_FTS}.record_id
-            WHERE r.owner_id = ? AND {TABLE_FTS} MATCH ?
+            WHERE r.owner_id = ? AND {TABLE_FTS} MATCH ? {session_clause}
             ORDER BY score ASC, r.record_id ASC
             LIMIT ?
             """,
-            (owner_id, match_expr, int(top_k)),
+            (owner_id, match_expr, *session_params, int(top_k)),
         )
         return [(self._row_to_record(r), float(r["score"])) for r in rows]
 
@@ -553,10 +702,13 @@ class SQLiteMemoryStore:
         raw = row.get("consolidated_from_json")
         if raw:
             consolidated = [MemoryRecordId(x) for x in json.loads(raw)]
+        raw_sid = row.get("session_id")
+        sid: SessionId | None = SessionId(raw_sid) if raw_sid else None
         return MemoryRecord(
             record_id=MemoryRecordId(row["record_id"]),
             scope=row["scope"],
             owner_id=row["owner_id"],
+            session_id=sid,
             kind=row["kind"],
             tier=row["tier"],
             source=row["source"],

@@ -132,20 +132,26 @@ class TestInitialize:
             await fresh_store.initialize()
 
     async def test_reset_on_initialize_truncates_data(self, db) -> None:
-        # G15: reset_on_world_start wires to initialize(reset=True).
-        # Schema + version row survive; data tables are emptied.
+        # Legacy ``reset_on_world_start`` wires to initialize(reset=True).
+        # Under session-scoped memory (tnl/session-scoped-memory.tnl):
+        #   - Only rows with session_id IS NULL are truncated.
+        #   - The embedding cache is content-hash-keyed, session-agnostic,
+        #     and preserved across resets so cached vectors stay reusable.
+        #   - Schema + version row survive (reset ≠ destroy).
         store = SQLiteMemoryStore(db)
         await store.initialize()
-        await store.insert(_record())
+        await store.insert(_record())  # session_id=None by default
         await store.embedding_cache_put(_SAMPLE_CACHE_HASH, "fts5", b"\x00")
         # Confirm populated
         assert await store.get(MemoryRecordId("r1")) is not None
         assert await store.embedding_cache_get(_SAMPLE_CACHE_HASH, "fts5") == b"\x00"
         # Reset
         await store.initialize(reset=True)
+        # Session-less record wiped:
         assert await store.get(MemoryRecordId("r1")) is None
-        assert await store.embedding_cache_get(_SAMPLE_CACHE_HASH, "fts5") is None
-        # Version preserved (reset ≠ destroy).
+        # Embedding cache preserved (safe to share across sessions):
+        assert await store.embedding_cache_get(_SAMPLE_CACHE_HASH, "fts5") == b"\x00"
+        # Version preserved.
         assert await store.schema_version() == SCHEMA_VERSION
 
     async def test_reset_leaves_schema_version_row_intact(self, db) -> None:

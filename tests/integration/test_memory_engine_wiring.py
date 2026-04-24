@@ -153,11 +153,15 @@ class TestEnabledPath:
 class TestResetOnWorldStart:
     async def test_negative_reset_enabled_leaves_empty_store(self, tmp_path: Path) -> None:
         """Engine's _on_initialize must forward the reset flag so
-        existing records are wiped when reset_on_world_start=True.
-        Pre-Step-10 code passed no flag, so this test LOCKS the fix —
-        the store is LEFT empty after re-initialise."""
+        existing session-less records are wiped when
+        ``reset_on_world_start=True``.
+
+        Also locks the ``tnl/session-scoped-memory.tnl`` MUST clause:
+        **session-scoped rows MUST NOT be truncated by this flag under
+        any circumstance** — the audit-fold M3 regression guard.
+        """
         from volnix.core.memory_types import MemoryRecord, content_hash_of
-        from volnix.core.types import MemoryRecordId
+        from volnix.core.types import MemoryRecordId, SessionId
 
         app = VolnixApp(
             config=_volnix_config(tmp_path, memory_enabled=True, reset_on_world_start=True)
@@ -169,9 +173,9 @@ class TestResetOnWorldStart:
             engine = app._memory_engine
             assert engine is not None
 
-            # Write a record then trigger a second _on_initialize.
-            record = MemoryRecord(
-                record_id=MemoryRecordId("r-reset-test-1"),
+            # Session-less record — should be wiped on reset.
+            session_less = MemoryRecord(
+                record_id=MemoryRecordId("r-reset-test-null"),
                 scope="actor",
                 owner_id="actor-alpha",
                 kind="episodic",
@@ -184,11 +188,40 @@ class TestResetOnWorldStart:
                 created_tick=1,
                 consolidated_from=None,
             )
-            await engine._store.insert(record)
+            await engine._store.insert(session_less)
+
+            # Session-scoped record — MUST survive the reset. This is
+            # the isolation-guard clause (audit-fold M3).
+            session_scoped = MemoryRecord(
+                record_id=MemoryRecordId("r-reset-test-sess"),
+                scope="actor",
+                owner_id="actor-alpha",
+                session_id=SessionId("sess-survives-reset"),
+                kind="episodic",
+                tier="tier2",
+                source="explicit",
+                content="should survive",
+                content_hash=content_hash_of("should survive"),
+                importance=0.5,
+                tags=[],
+                created_tick=1,
+                consolidated_from=None,
+            )
+            await engine._store.insert(session_scoped)
 
             await engine._on_initialize()
-            rows = await engine._store.list_by_owner("actor-alpha", kind="episodic")
-            assert rows == []
+
+            # Session-less slice emptied.
+            null_rows = await engine._store.list_by_owner("actor-alpha", kind="episodic")
+            assert null_rows == []
+            # Session-scoped slice preserved.
+            sess_rows = await engine._store.list_by_owner(
+                "actor-alpha",
+                kind="episodic",
+                session_id=SessionId("sess-survives-reset"),
+            )
+            assert len(sess_rows) == 1
+            assert str(sess_rows[0].record_id) == "r-reset-test-sess"
         finally:
             await app.stop()
 

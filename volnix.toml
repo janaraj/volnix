@@ -238,8 +238,8 @@ storage_db_name = "volnix_memory"
 # when tier_mode == "mixed". Leave unset (null/absent) for packs that
 # ship no fixtures. Example:
 #   tier1_fixtures_path = "/abs/path/to/pack/memory_fixtures.yaml"
-reset_on_world_start = true         # cross-run memory reuse is opt-in only
-schema_version = 1
+reset_on_world_start = false        # deprecated — session scoping is the isolation mechanism (0.2.0); removed in 0.3.0
+schema_version = 2                  # v1 DBs migrate in place to v2 on initialize
 # FTS5 tokenizer spec — substituted into virtual-table DDL.
 # Default combines: porter (stemming) + unicode61 (tokenisation + case
 # fold) + remove_diacritics 2 (fold accented chars: café -> cafe).

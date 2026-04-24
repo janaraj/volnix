@@ -28,6 +28,7 @@ from volnix.core.types import (
     PolicyId,
     RunResult,
     ServiceId,
+    SessionId,
     SnapshotId,
     StateDelta,
     ToolName,
@@ -936,8 +937,14 @@ class MemoryEngineProtocol(Protocol):
         target_owner: str,
         write: MemoryWrite,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecordId:
-        """Persist a new memory record.
+        """Persist a new memory record, scoped to ``session_id``.
+
+        ``session_id=None`` writes a session-less row; callers in a
+        platform Session context pass their current session_id so
+        two sessions against the same world cannot observe each
+        other's memories (``tnl/session-scoped-memory.tnl``).
 
         Raises :class:`volnix.core.memory_types.MemoryAccessDenied`
         when ``caller`` lacks permission to write to the target scope.
@@ -952,8 +959,15 @@ class MemoryEngineProtocol(Protocol):
         target_owner: str,
         query: MemoryQuery,
         tick: int,
+        session_id: SessionId | None = None,
     ) -> MemoryRecall:
-        """Retrieve records matching ``query`` from the target scope.
+        """Retrieve records matching ``query`` scoped to ``session_id``.
+
+        Session-less callers (``session_id=None``) see ONLY
+        session-less rows; session callers see ONLY their own
+        session's rows. There is no "read everything" mode —
+        isolation is non-negotiable
+        (``tnl/session-scoped-memory.tnl``).
 
         Graph-mode queries raise ``NotImplementedError`` in 4B
         (schema plumbed, traversal arrives in 4D).

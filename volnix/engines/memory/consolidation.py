@@ -147,10 +147,31 @@ class Consolidator:
         (D6-9) — useful for tests that want to exercise the LLM
         call path with no input.
         """
+        # Session-agnostic read — ``tnl/session-scoped-memory.tnl``
+        # non-goal: consolidation operates on the ``session_id IS
+        # NULL`` slice only. An actor whose episodic memory is
+        # entirely session-scoped will see this pass no-op; log once
+        # so operators can distinguish "no episodes at all" from
+        # "episodes exist but are session-scoped and skipped"
+        # (audit-fold M1).
         episodes = await self._store.list_by_owner(
             owner_id, kind="episodic", limit=self._episodic_window
         )
         if not episodes and not force:
+            # Probe whether the actor has any session-scoped episodic
+            # records we deliberately skipped — cheap visibility win.
+            any_records = await self._store.list_by_owner(owner_id, kind="episodic")
+            if not any_records:
+                sess_only = await self._probe_any_session_scoped_episodic(owner_id)
+                if sess_only:
+                    logger.info(
+                        "Consolidator: no session-less episodics for %s, "
+                        "but %d session-scoped episodic record(s) exist — "
+                        "skipped by session-agnostic consolidation "
+                        "(tnl/session-scoped-memory.tnl non-goal).",
+                        owner_id,
+                        sess_only,
+                    )
             return ConsolidationResult(
                 actor_id=owner_id,
                 episodic_consumed=0,
@@ -198,6 +219,24 @@ class Consolidator:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    async def _probe_any_session_scoped_episodic(self, owner_id: str) -> int:
+        """Return how many session-scoped episodic records exist for
+        ``owner_id``. Observability helper for the empty-NULL-slice
+        log message (audit-fold M1). Goes through the store's own
+        DB handle rather than relying on a list-everything API that
+        would violate the "no cross-session read" MUST clause from
+        ``tnl/session-scoped-memory.tnl``.
+        """
+        db = getattr(self._store, "_db", None)
+        if db is None:
+            return 0
+        row = await db.fetchone(
+            "SELECT COUNT(*) AS n FROM memory_records "
+            "WHERE owner_id = ? AND kind = 'episodic' AND session_id IS NOT NULL",
+            (owner_id,),
+        )
+        return int(row["n"]) if row else 0
 
     async def _distill(self, episodes: list[MemoryRecord], *, tick: int) -> list[dict[str, Any]]:
         """Call the LLM router to distill episodes into facts.

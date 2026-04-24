@@ -1,0 +1,83 @@
+id: session-scoped-memory
+title: Session-scoped memory isolation
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/core/memory_types.py
+  - volnix/core/protocols.py
+  - volnix/engines/memory/store.py
+  - volnix/engines/memory/engine.py
+  - volnix/engines/memory/recall.py
+  - volnix/engines/memory/config.py
+  - volnix/engines/agency/_memory_hooks.py
+  - volnix/engines/agency/engine.py
+  - volnix/engines/agency/npc_activator.py
+  - volnix/ledger/entries.py
+surfaces:
+  - MemoryEngineProtocol.remember
+  - MemoryEngineProtocol.recall
+  - MemoryStoreProtocol.list_by_owner
+  - MemoryStoreProtocol.fts_search
+  - MemoryStoreProtocol.prune_oldest_episodic
+  - MemoryRecord
+  - MemoryWriteEntry
+  - MemoryRecallEntry
+dependencies: [workflow]
+
+intent:
+  Memory records are scoped to a platform Session so two sessions run
+  against the same world cannot observe each other's memory, and a
+  resumed session automatically recalls its own earlier memories.
+  Session-less callers (tests, legacy paths, background consolidation)
+  continue to work unchanged, isolated on a separate slice. The
+  `reset_on_world_start` flag is deprecated because session scoping
+  replaces it as the isolation mechanism.
+
+behaviors:
+  # Data model
+  - `MemoryRecord` MUST carry a `session_id: SessionId | None` field. `None` means "session-less row."
+  - `MemoryWrite` MUST NOT carry a `session_id` field. Session context is passed to `MemoryEngine.remember` as a kwarg, never as write payload.
+
+  # Engine protocol surface
+  - `MemoryEngineProtocol.remember` MUST accept `session_id: SessionId | None = None` as a keyword argument and stamp it onto the persisted record.
+  - `MemoryEngineProtocol.recall` MUST accept `session_id: SessionId | None = None` as a keyword argument and return only records matching that session_id.
+  - When `session_id` is `None` on any read path, the system MUST return ONLY rows where `session_id IS NULL`. Session-less reads MUST NOT observe session-scoped rows.
+  - When `session_id` is a concrete `SessionId` on any read path, the system MUST return ONLY rows whose `session_id` column equals that value. Session reads MUST NOT observe rows from any other session, nor session-less rows.
+  - The system MUST NOT expose any "read across sessions" mode on public recall/list surfaces. Isolation is non-negotiable on the read boundary.
+
+  # Store layer
+  - `MemoryStoreProtocol.list_by_owner`, `.fts_search`, and `.prune_oldest_episodic` MUST accept `session_id: SessionId | None = None` as a keyword argument and apply the filter described above.
+  - Ring-buffer caps (`max_episodic_per_owner`, `max_semantic_per_owner`) MUST be enforced per `(owner_id, session_id)` slice. One session's overflow MUST NOT evict another session's records, and session-scoped records MUST NOT evict session-less records (nor vice versa).
+  - Schema v1 → v2 migration MUST run in place on `SQLiteMemoryStore.initialize()` when the installed version is 1, adding the `session_id` column, replacing the two existing indexes with session-leading indexes, and updating `memory_schema_version.version` to 2. The migration MUST run inside a single transaction so a crash mid-migration leaves the database at v1 (retryable). The migration MUST NOT rewrite existing rows — they keep `session_id = NULL`.
+  - The store MUST refuse to initialize against any `memory_schema_version.version` other than 1 or 2, raising a RuntimeError that names both the installed version and the expected version.
+
+  # Agency + NPC plumbing
+  - `_memory_hooks.recall_for_activation` and `_memory_hooks.implicit_remember_activation` MUST accept `session_id: SessionId | None = None` and forward it verbatim to the memory engine.
+  - `AgencyEngine._activate_with_tool_loop` MUST pass `self._session_id` to both helpers on every call.
+  - `NPCActivator._recall_for_activation` and `NPCActivator._implicit_remember` MUST pass `getattr(host, "_session_id", None)` to both helpers on every call.
+
+  # Ledger
+  - `MemoryWriteEntry` and `MemoryRecallEntry` MUST carry a `session_id: SessionId | None` field. The engine MUST populate it on every write and every recall. The ledger's existing `session_id` column and index cover these entries with no schema change.
+
+  # Configuration and deprecation
+  - `MemoryConfig.reset_on_world_start` default MUST be `False`. The field MUST be documented as deprecated and slated for removal in 0.3.0.
+  - When `reset_on_world_start=True` AND `enabled=True`, `MemoryEngine._on_initialize` MUST log exactly one deprecation warning and then truncate ONLY rows where `session_id IS NULL`. Session-scoped rows MUST NOT be truncated by this flag under any circumstance.
+  - `MemoryConfig.schema_version` default MUST be `2`. The validator MUST accept `1` or `2` and reject any other value.
+
+  # Phase 0 regression oracle
+  - When `config.memory.enabled = False`, the system MUST produce byte-identical oracle output to the pre-change HEAD (`4ce0835`). No code path introduced by this change may execute when memory is disabled.
+
+  # Observability
+  - [semantic] Every memory `remember` call MUST write exactly one `MemoryWriteEntry` to the ledger. Every `recall` call MUST write exactly one `MemoryRecallEntry`. Neither MUST fire on caller-failure paths that short-circuit before the store is touched.
+
+non-goals:
+  - No changes to the CLI surface (no `--resume-session` flag, no session-aware dashboard pages) in this unit of work.
+  - No changes to cohort-rotation consolidation to be session-aware; `MemoryEngine.consolidate` and `_on_cohort_rotated` remain session-agnostic and operate on the `session_id IS NULL` slice of an actor's records. Documented as a known limitation to be addressed when a Rehearse consumer exercises cohort rotation with sessions.
+  - No automatic session creation inside `configure_agency`. Sessions remain caller-driven via `SessionManager.start` / `.resume`.
+  - No migration of existing session-less rows into any default session. They remain `session_id = NULL` forever.
+  - No cross-session aggregate reporting or admin "show me all memory" surface. Isolation is the product, not a toggle.
+
+rationale:
+  Actor IDs are deterministically derived from role names (`{role}-{md5(role)[:8]}`), so two worlds or two sessions sharing a role name collide in memory. Today `reset_on_world_start=True` papers over this by wiping the whole table on every run — which also makes session resume impossible. Session scoping solves both problems: fresh sessions start empty by construction (no rows match a fresh session_id), resumed sessions pick up their own history, and parallel sessions are isolated at the storage layer. The change is additive for session-less callers (existing tests, the consolidator background loop) because `session_id IS NULL` behaves identically to the pre-change world.
+
+  The migration is in place and idempotent because the store ships to external users (via the `pip install volnix` library) and a destructive v1 → v2 path would mean data loss on upgrade. `ALTER TABLE ADD COLUMN` without `NOT NULL`/`DEFAULT` is metadata-only in SQLite, so the migration is also O(1) regardless of table size.

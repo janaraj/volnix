@@ -24,7 +24,7 @@ from typing import Any, Final
 from volnix.actors.state import ActorState
 from volnix.core.events import Event
 from volnix.core.protocols import MemoryEngineProtocol
-from volnix.core.types import ActivationId, ActorId
+from volnix.core.types import ActivationId, ActorId, SessionId
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,7 @@ async def recall_for_activation(
     trigger_event: Event | None,
     prompt_describe: Callable[[Event | None], str],
     tick: int,
+    session_id: SessionId | None = None,
 ) -> Any | None:
     """Pre-activation memory recall shared by both activation paths.
 
@@ -85,6 +86,11 @@ async def recall_for_activation(
     Query shape follows Phase 4B D11-3: ``HybridQuery`` with
     trigger-description + persona as semantic text. ``top_k`` read
     from the engine's memory config (default 5 when unset).
+
+    Scoping: ``session_id`` is forwarded verbatim to
+    ``MemoryEngine.recall`` — ``None`` reads session-less rows, a
+    concrete SessionId reads only that session's rows
+    (``tnl/session-scoped-memory.tnl``).
     """
     if memory_engine is None:
         return None
@@ -111,6 +117,7 @@ async def recall_for_activation(
             target_owner=str(actor.actor_id),
             query=HybridQuery(semantic_text=query_text, top_k=top_k),
             tick=tick,
+            session_id=session_id,
         )
     except Exception as exc:  # noqa: BLE001 — D11-6
         logger.warning(
@@ -132,6 +139,7 @@ async def implicit_remember_activation(
     tool_names_invoked: list[str],
     final_text: str,
     tick: int,
+    session_id: SessionId | None = None,
 ) -> None:
     """Post-activation raw episodic write shared by both paths.
 
@@ -145,6 +153,9 @@ async def implicit_remember_activation(
 
     Importance: ``0.5`` when tools were used, else ``0.2`` (abstained)
     — matches D11-7.
+
+    Scoping: ``session_id`` is forwarded verbatim to
+    ``MemoryEngine.remember`` (``tnl/session-scoped-memory.tnl``).
     """
     if memory_engine is None:
         return
@@ -176,6 +187,7 @@ async def implicit_remember_activation(
                 },
             ),
             tick=tick,
+            session_id=session_id,
         )
     except Exception as exc:  # noqa: BLE001 — D11-9
         logger.warning(

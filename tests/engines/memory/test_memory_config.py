@@ -29,7 +29,9 @@ class TestDefaultsDisabled:
         assert cfg.tier_mode == "tier2_only"
         assert cfg.embedder == "fts5"
         assert cfg.storage_db_name == "volnix_memory"
-        assert cfg.schema_version == 1
+        # Default bumped 1 → 2 for session-scoped memory
+        # (tnl/session-scoped-memory.tnl). v1 DBs are migrated in place.
+        assert cfg.schema_version == 2
 
     def test_disabled_skips_model_validator_not_field_bounds(self) -> None:
         # When disabled, the ``model_validator`` (semantic cross-field
@@ -253,11 +255,12 @@ class TestRecallBudget:
 
 class TestSchemaVersion:
     """G12: schema versioning is plumbed now so migrations are
-    possible later. Only version 1 ships in 4B."""
+    possible later. 0.2.0 ships versions 1 + 2 (v1 auto-migrates to
+    v2 in place on initialize); tnl/session-scoped-memory.tnl."""
 
     def test_negative_future_schema_version_rejected(self) -> None:
         with pytest.raises(ValidationError, match="unsupported version"):
-            MemoryConfig(enabled=True, schema_version=2)
+            MemoryConfig(enabled=True, schema_version=3)
 
     def test_negative_zero_schema_version_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -266,6 +269,10 @@ class TestSchemaVersion:
     def test_positive_version_1_accepted(self) -> None:
         cfg = MemoryConfig(enabled=True, schema_version=1)
         assert cfg.schema_version == 1
+
+    def test_positive_version_2_accepted(self) -> None:
+        cfg = MemoryConfig(enabled=True, schema_version=2)
+        assert cfg.schema_version == 2
 
 
 class TestTierMode:
@@ -349,8 +356,11 @@ class TestTomlRoundTrip:
         assert cfg.memory.hydrate_on_promote is False
         assert cfg.memory.tier1_fixtures_path is None
         assert cfg.memory.storage_db_name == "volnix_memory"
-        assert cfg.memory.reset_on_world_start is True
-        assert cfg.memory.schema_version == 1
+        # Defaults flipped for session-scoped memory
+        # (tnl/session-scoped-memory.tnl): reset_on_world_start
+        # deprecated → False; schema_version 1 → 2 with in-place migration.
+        assert cfg.memory.reset_on_world_start is False
+        assert cfg.memory.schema_version == 2
         assert cfg.memory.fts_tokenizer == "porter unicode61 remove_diacritics 2"
 
 

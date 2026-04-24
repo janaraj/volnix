@@ -430,9 +430,9 @@ class TestHybrid:
         captured: dict[str, int] = {}
         original = store.fts_search
 
-        async def _spy(owner_id: str, query: str, top_k: int):
+        async def _spy(owner_id: str, query: str, top_k: int, *, session_id=None):
             captured["top_k"] = top_k
-            return await original(owner_id, query, top_k)
+            return await original(owner_id, query, top_k, session_id=session_id)
 
         monkeypatch.setattr(store, "fts_search", _spy)
         await r.dispatch(

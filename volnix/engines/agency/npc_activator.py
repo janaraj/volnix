@@ -533,6 +533,11 @@ class NPCActivator:
         loop and this NPC path share one source of truth. The public
         signature here is preserved so existing NPC-specific tests
         keep working.
+
+        Reads ``host._session_id`` if present and forwards it so
+        recall is session-scoped
+        (``tnl/session-scoped-memory.tnl``). Session-less hosts pass
+        ``None``, matching the legacy scoping-free behavior.
         """
         return await recall_for_activation(
             memory_engine=getattr(host, "_memory_engine", None),
@@ -540,6 +545,7 @@ class NPCActivator:
             trigger_event=trigger_event,
             prompt_describe=self._prompt_builder._describe,
             tick=_current_tick(host),
+            session_id=getattr(host, "_session_id", None),
         )
 
     async def _implicit_remember(
@@ -576,6 +582,7 @@ class NPCActivator:
             tool_names_invoked=tool_names_invoked,
             final_text=final_text,
             tick=_current_tick(host),
+            session_id=getattr(host, "_session_id", None),
         )
 
     # -- helpers ----------------------------------------------------------
