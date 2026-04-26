@@ -212,7 +212,17 @@ class WorldCompilerEngine(BaseEngine):
     # -- D4b: Generation (entity creation + population) -----------------------
 
     async def generate_world(self, plan: WorldPlan) -> dict[str, Any]:
-        """Generate entities from WorldPlan and snapshot only after hard validation."""
+        """Generate entities from WorldPlan and snapshot only after hard validation.
+
+        When ``plan.lightweight is True``, short-circuits to a
+        pass-through path: validates ``actor_specs`` only, returns
+        a result dict with empty entities + actors expanded from the
+        consumer-supplied specs. No LLM calls. <100ms compile.
+        Surfaces ``tnl/world-plan-lightweight-mode.tnl``.
+        """
+        if plan.lightweight:
+            return await self._generate_lightweight_world(plan)
+
         if not self._llm_router:
             raise CompilerError(
                 "Cannot generate world without LLM. "
@@ -594,6 +604,154 @@ class WorldCompilerEngine(BaseEngine):
                     "actor_count": len(actors),
                     "seeds_processed": len(plan.seeds),
                     "snapshot_id": str(snapshot_id) if snapshot_id else None,
+                },
+            )
+        )
+
+        return result
+
+    async def _generate_lightweight_world(self, plan: WorldPlan) -> dict[str, Any]:
+        """Lightweight short-circuit for chat-only worlds
+        (``tnl/world-plan-lightweight-mode.tnl``).
+
+        Skips every LLM-driven step in ``generate_world``:
+        no NL policy compilation, no entity generation, no role-batch
+        personality LLM call, no entity-section repair, no seed
+        injection. Validates ``actor_specs`` via the existing
+        non-LLM ``CompilerPersonalityGenerator.expand_actor_structure``
+        path, populates the state engine with an empty entity set,
+        registers actors, snapshots the initial (empty) world, and
+        returns a result dict shaped like the heavyweight path's
+        return value with empty/pass-through values where entities
+        would have been.
+
+        Works without an LLM router configured — see the heavy
+        path's guard which is bypassed for lightweight plans.
+        """
+        import time as _time
+
+        from volnix.engines.world_compiler.personality_generator import (
+            CompilerPersonalityGenerator,
+        )
+
+        _compile_start = _time.monotonic()
+        logger.info(
+            "Generating lightweight world '%s' (no entities, no LLM calls)",
+            plan.name,
+        )
+
+        # Step 4b only — non-LLM actor structure expansion.
+        # ``CompilerPersonalityGenerator.expand_actor_structure`` calls
+        # ``SimpleActorGenerator.generate_batch`` which does not require
+        # an LLM router (verified at personality_generator.py:48).
+        ctx = WorldGenerationContext(plan)
+        personality_gen = CompilerPersonalityGenerator(
+            llm_router=self._llm_router,  # may be None — not used by lightweight path
+            seed=plan.seed,
+        )
+        actors = await personality_gen.expand_actor_structure(
+            plan.actor_specs,
+            plan.conditions,
+            ctx,
+        )
+
+        # Step 8 (lightweight): populate state with empty entity set,
+        # register actors, snapshot initial world. Same downstream
+        # surface as the heavy path so consumers (run_manager,
+        # state.db setup) see a normal world.
+        all_entities: dict[str, list[dict[str, Any]]] = {}
+        snapshot_id = None
+        state_engine = self._config.get("_state_engine")
+        actor_registry = self._config.get("_actor_registry")
+
+        if state_engine and hasattr(state_engine, "populate_entities"):
+            await state_engine.populate_entities(all_entities)
+            snapshot_id = await state_engine.snapshot("initial_world")
+        else:
+            logger.warning("No state engine available — lightweight world not persisted")
+
+        if actor_registry and actors:
+            actor_registry.register_batch(actors)
+            logger.info("Registered %d actors (lightweight)", len(actors))
+            now = datetime.now(UTC)
+            for actor in actors:
+                event = WorldEvent(
+                    event_type="world.actor_registered",
+                    timestamp=Timestamp(world_time=now, wall_time=now, tick=0),
+                    actor_id=ActorId("world_compiler"),
+                    service_id=ServiceId("world_compiler"),
+                    action="register_actor",
+                    input_data={"actor_id": str(actor.id), "role": actor.role},
+                )
+                await self.publish(event)
+
+        # Build result dict with the same key set as the heavy path,
+        # but with empty/pass-through values where entities would
+        # have been.
+        result: dict[str, Any] = {
+            "entities": {},
+            "actors": actors,
+            "subscriptions": {},
+            "warnings": [],
+            "seeds_processed": 0,
+            "snapshot_id": str(snapshot_id) if snapshot_id else None,
+            "validation_report": {
+                "sections": {},
+                "final_world": {},
+            },
+            "retry_counts": {},
+            "compiled_policies": list(plan.policies),
+            "applied_seed_invariants": {},
+        }
+
+        # Ledger entry mirrors the heavy path (for audit + consistency
+        # of the world record). entity_count=0 for lightweight worlds
+        # is the truthful signal downstream consumers can filter on.
+        _compile_ms = (_time.monotonic() - _compile_start) * 1000
+        _ledger = getattr(self, "_ledger", None)
+        if _ledger is not None:
+            from volnix.ledger.entries import WorldCompilationEntry
+
+            try:
+                await _ledger.append(
+                    WorldCompilationEntry(
+                        plan_name=plan.name,
+                        behavior=plan.behavior,
+                        seed=plan.seed,
+                        services=list(plan.services.keys()),
+                        entity_count=0,
+                        entity_types=[],
+                        actor_count=len(actors),
+                        seeds_processed=0,
+                        total_retries=0,
+                        warnings_count=0,
+                        snapshot_id=str(snapshot_id) if snapshot_id else "",
+                        duration_ms=_compile_ms,
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Lightweight compilation ledger entry failed: %s", exc)
+
+        # Symmetric world.generation_complete event so downstream
+        # subscribers (animator bridge, observers) see the world
+        # come alive even when nothing was generated.
+        await self.publish(
+            WorldEvent(
+                event_type="world.generation_complete",
+                timestamp=Timestamp(
+                    world_time=datetime.now(UTC),
+                    wall_time=datetime.now(UTC),
+                    tick=0,
+                ),
+                actor_id=ActorId("world_compiler"),
+                service_id=ServiceId("world_compiler"),
+                action="generate_world",
+                input_data={
+                    "entity_count": 0,
+                    "actor_count": len(actors),
+                    "seeds_processed": 0,
+                    "snapshot_id": str(snapshot_id) if snapshot_id else None,
+                    "lightweight": True,
                 },
             )
         )

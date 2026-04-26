@@ -45,6 +45,21 @@ class WorldPlan(BaseModel, frozen=True):
     behavior: Literal["static", "reactive", "dynamic"] = "dynamic"
     fidelity: Literal["auto", "strict", "exploratory"] = "auto"
     mode: Literal["governed", "ungoverned"] = "governed"
+    lightweight: bool = False
+    """When True, ``WorldCompilerEngine.generate_world`` short-circuits
+    to a pass-through path: validates ``actor_specs`` only, returns
+    a result dict with empty entities + actors expanded from the
+    consumer-supplied specs. No LLM calls, no entity generation, no
+    seed processing. Default ``False`` preserves the existing
+    heavyweight pipeline byte-identical.
+
+    Use case: chat-only worlds where the consumer (typically a
+    downstream library) has already supplied complete actor specs
+    and there are no entities, services, or seeds to populate. A
+    lightweight world compiles in <100ms and works without an LLM
+    router configured. Surfaces
+    ``tnl/world-plan-lightweight-mode.tnl``.
+    """
 
     # ── Resolved services (D4a fills) ──
     services: dict[str, ServiceResolution] = Field(default_factory=dict)
