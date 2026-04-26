@@ -96,6 +96,7 @@ from volnix.core.types import (
 from volnix.engines.state.trajectory import TrajectoryPoint
 from volnix.ledger.entries import LedgerEntry, UnknownLedgerEntry
 from volnix.ledger.query import LedgerQuery
+from volnix.llm.types import LLMStreamChunk
 from volnix.observation import (
     IntentBehaviorGap,
     ObservationQuery,
@@ -196,6 +197,7 @@ __all__ = [
     "resolve_ledger_redactor",
     # State trajectory (PMF Plan Phase 4C Step 9)
     "TrajectoryPoint",
+    "LLMStreamChunk",
     # Observation (PMF Plan Phase 4C Step 10)
     "ObservationQuery",
     "UnifiedTimeline",

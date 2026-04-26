@@ -8,6 +8,7 @@ uniformly.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import ClassVar
 
 from volnix.llm.types import (
@@ -15,6 +16,7 @@ from volnix.llm.types import (
     EmbeddingResponse,
     LLMRequest,
     LLMResponse,
+    LLMStreamChunk,
     ProviderInfo,
 )
 
@@ -35,6 +37,44 @@ class LLMProvider(ABC):
             The LLM response including content, usage, and latency.
         """
         ...
+
+    async def stream_generate(self, request: LLMRequest) -> AsyncIterator[LLMStreamChunk]:
+        """Stream the LLM response chunk-by-chunk
+        (``tnl/llm-router-streaming-surface.tnl``).
+
+        Default implementation: delegates to :meth:`generate`,
+        wraps the resulting ``LLMResponse`` into a single
+        ``LLMStreamChunk`` with ``is_final=True``, and yields
+        exactly that one chunk. Providers that support native
+        SDK streaming override this method to yield true
+        per-token chunks.
+
+        On exception during the underlying ``generate(...)`` call,
+        yields ONE ``LLMStreamChunk`` with ``error`` populated,
+        ``is_final=True``, ``content_delta=""``, then stops.
+        Callers MUST inspect the last chunk's ``error`` field
+        rather than relying on exception propagation.
+        """
+        try:
+            response = await self.generate(request)
+        except Exception as exc:  # noqa: BLE001 — caller contract: error in chunk
+            yield LLMStreamChunk(
+                content_delta="",
+                usage_delta=None,
+                is_final=True,
+                provider=self.provider_name,
+                model=request.model_override or "",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return
+        yield LLMStreamChunk(
+            content_delta=response.content,
+            usage_delta=response.usage,
+            is_final=True,
+            provider=response.provider,
+            model=response.model,
+            error=response.error,
+        )
 
     async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
         """Produce embeddings for the input texts.

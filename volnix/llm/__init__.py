@@ -21,7 +21,14 @@ from volnix.llm.registry import ProviderRegistry
 from volnix.llm.router import LLMRouter
 from volnix.llm.secrets import ChainResolver, EnvVarResolver, FileResolver, SecretResolver
 from volnix.llm.tracker import UsageTracker
-from volnix.llm.types import LLMRequest, LLMResponse, LLMUsage, ProviderInfo, ProviderType
+from volnix.llm.types import (
+    LLMRequest,
+    LLMResponse,
+    LLMStreamChunk,
+    LLMUsage,
+    ProviderInfo,
+    ProviderType,
+)
 
 __all__ = [
     "ACPClientProvider",
@@ -36,6 +43,7 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "LLMRouter",
+    "LLMStreamChunk",
     "LLMUsage",
     "ProviderInfo",
     "ProviderRegistry",

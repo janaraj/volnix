@@ -1,0 +1,185 @@
+id: llm-router-streaming-surface
+title: LLMRouter.route_streaming + LLMStreamChunk + provider fallback
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/llm/types.py
+  - volnix/llm/provider.py
+  - volnix/llm/router.py
+  - volnix/llm/tracker.py
+  - volnix/llm/__init__.py
+  - volnix/__init__.py
+surfaces:
+  - LLMStreamChunk (new value type)
+  - LLMProvider.stream_generate (new abstract w/ default fallback)
+  - LLMRouter.route_streaming (new public method)
+  - UsageTracker.record (called once at stream end, unchanged signature)
+dependencies: [workflow]
+
+intent:
+  Volnix's LLM call surface is one-shot — ``LLMRouter.route(...)``
+  returns a single complete ``LLMResponse``. Consumers that want
+  to render character responses token-by-token (live chat UIs,
+  voice-mode TTS, "typing indicator" UX) currently have to wait
+  for the entire response then render it at once.
+
+  This change adds a streaming variant at the contract layer:
+  ``LLMRouter.route_streaming(...)`` returns an async iterator of
+  ``LLMStreamChunk``. Every existing provider gets a default
+  fallback implementation (one chunk at end, derived from the
+  existing ``generate(...)`` call) so the new surface works
+  uniformly across all providers. Native per-token streaming for
+  Anthropic, OpenAI-compatible, and Google providers lands as
+  follow-up TNLs — each is a distinct decision about a distinct
+  SDK shape and approves separately.
+
+  The fallback gives downstream consumers a stable API to build
+  against today; native impls are pure UX improvements that
+  require no consumer-side change.
+
+behaviors:
+  # Value type
+  - ``volnix/llm/types.py`` MUST gain an ``LLMStreamChunk`` frozen
+    Pydantic model with these fields:
+    - ``content_delta: str`` — incremental content text. May be
+      empty (e.g., a chunk that carries only metadata).
+    - ``usage_delta: LLMUsage | None`` — incremental usage
+      contribution from this chunk. ``None`` when the provider
+      doesn't report mid-stream usage; the FINAL chunk MUST
+      carry the cumulative ``LLMUsage`` for the whole stream so
+      callers can total spend without re-aggregating.
+    - ``is_final: bool`` — ``True`` only on the last chunk.
+      Lets callers detect end-of-stream without relying on
+      iterator exhaustion (which catches ``StopAsyncIteration``
+      late in some async frameworks).
+    - ``provider: str``, ``model: str`` — populated on every
+      chunk; redundant for the caller but lets observability
+      tag chunks individually.
+    - ``error: str | None`` — populated when the stream fails
+      mid-flight. The chunk-with-error MUST be the LAST chunk
+      yielded; the iterator stops after it. ``content_delta``
+      MAY be partial (whatever arrived before the error).
+
+  - ``LLMStreamChunk`` MUST be exported from ``volnix.llm`` AND
+    from the top-level ``volnix`` namespace via ``volnix/__init__.py``
+    (added to ``__all__``), so library consumers can type-hint
+    against it without reaching into submodules.
+
+  # Provider base-class abstract + fallback default
+  - ``LLMProvider`` (in ``volnix/llm/provider.py``) MUST gain a
+    ``stream_generate(request: LLMRequest) -> AsyncIterator[LLMStreamChunk]``
+    method. NOT marked ``@abstractmethod`` — providers that don't
+    override get a usable fallback.
+  - The default implementation MUST call ``self.generate(request)``,
+    wrap the resulting ``LLMResponse`` into a single
+    ``LLMStreamChunk`` (``content_delta = response.content``,
+    ``usage_delta = response.usage``, ``is_final = True``,
+    carrying ``provider``/``model``/``error`` from the response),
+    and yield exactly that one chunk. Pure delegation — no
+    duplication of provider logic.
+  - When the underlying ``generate(...)`` call raises, the
+    default implementation MUST yield ONE ``LLMStreamChunk``
+    with ``error`` populated, ``is_final=True``,
+    ``content_delta=""``, then stop iteration. No exception
+    propagates out of the iterator. (Caller's contract: read the
+    final chunk, check ``error``, decide what to do.)
+
+  # Router-side public method
+  - ``LLMRouter`` (in ``volnix/llm/router.py``) MUST gain a
+    ``route_streaming(request, engine_name, use_case="default") -> AsyncIterator[LLMStreamChunk]``
+    method. Same routing logic as ``route()`` (engine + use_case
+    → provider+model selection, request overrides, semaphore
+    discipline) but yields chunks instead of returning a single
+    response.
+  - The router MUST acquire ``self._semaphore`` BEFORE yielding
+    the first chunk and release it AFTER the iterator is
+    exhausted. (One semaphore slot held for the whole stream
+    duration — same as ``route()`` holds it for the whole
+    ``generate()`` call.)
+  - The router MUST forward provider/model overrides
+    (``request.provider_override``, ``request.model_override``,
+    routing-table model resolution) the same way ``route()``
+    does. Any override that ``route()`` honors,
+    ``route_streaming()`` honors identically.
+  - When the resolved provider's ``stream_generate(...)`` raises
+    (NOT errors-via-final-chunk — actual exceptions during
+    iteration), the router MUST propagate the exception. The
+    fallback implementation never raises, so this only fires for
+    native impls that misbehave (out of scope for Wave 1).
+  - The router's existing retry+fallback logic for ``route()``
+    MUST NOT apply to ``route_streaming()`` in this TNL. Streaming
+    retry is its own design problem (caller may have already
+    consumed partial output) and ships in a follow-up TNL if
+    needed.
+
+  # Ledger entry timing
+  - ``LLMRouter.route_streaming`` MUST call
+    ``self._tracker.record(request, final_response, engine_name, use_case=use_case)``
+    EXACTLY ONCE per stream, AFTER the iterator is exhausted (or
+    the error chunk has been yielded). The tracker call uses a
+    synthesized ``LLMResponse`` built from accumulated chunks
+    (concatenated ``content_delta``, last ``usage_delta`` as
+    ``usage``, last ``error`` as ``error``).
+  - One ``LLMCallEntry`` ledger row per stream. Same shape as
+    non-streaming. ``use_case`` attribution
+    (``tnl/llm-call-entry-use-case-attribution.tnl``) flows
+    through identically.
+
+  # Phase 0 regression oracle
+  - ``LLMRouter.route(...)`` (the existing one-shot method) MUST
+    be byte-identical. New code paths are additive; nothing in
+    the route() code path is touched.
+  - ``LLMProvider.generate(...)`` MUST be byte-identical for
+    every existing provider — the new ``stream_generate`` is a
+    sibling method, not a wrapper.
+
+non-goals:
+  - **No native streaming implementations on Anthropic, OpenAI-
+    compatible, or Google providers.** Each lands as its own
+    follow-up TNL because each SDK has unique chunk shape
+    (Anthropic's event-based stream, OpenAI's AsyncStream,
+    Google's generate_content_stream) and unique tool-call
+    chunking semantics that warrant separate review.
+  - No streaming retry/fallback logic in the router. Streaming
+    retry has design tradeoffs (re-stream from scratch vs surface
+    partial+error vs caller decides) that warrant their own TNL
+    once a real consumer needs the behavior.
+  - No streaming for embeddings (``LLMProvider.embed`` /
+    ``LLMRouter.embed``). Embeddings are batch-shaped; streaming
+    doesn't apply.
+  - No bus events on chunk boundaries (e.g.,
+    ``LLMStreamChunkEvent``). Caller-facing iterator is the
+    surface; bus integration is a separate observability
+    decision.
+  - No new replay-mode handling for streaming.
+    ``ReplayLLMProvider`` inherits the fallback default (one
+    chunk at end from its existing ``generate``), which preserves
+    deterministic replay byte-for-byte. Native streaming replay
+    is out of scope.
+  - No CLI surface change. Library consumers consume the new
+    method programmatically.
+  - No update to ``docs/embedding_volnix.md`` "what's in flux"
+    section mentioning the streaming gap. That note can land in
+    a separate documentation pass once at least one native impl
+    ships and the streaming UX is genuinely available.
+
+rationale:
+  Splitting Wave 1 (contract) from Wave 2 (per-provider native
+  impls) follows the "one coherent surface per TNL" rule from
+  ``workflow.tnl``. The contract is one decision: "do we add
+  streaming to the LLM router?" Native impls are N decisions:
+  "how do we adapt provider X's SDK to our chunk shape?" Each
+  provider's SDK has unique tool-call streaming behavior, unique
+  usage-data delivery, unique error semantics — bundling them
+  into one TNL makes the review intractable.
+
+  The fallback-by-default approach means downstream consumers
+  can adopt the streaming API today and get incremental UX wins
+  as native impls land per provider. They never need to refactor
+  consumer code; the contract is stable.
+
+  The "one ledger row per stream, written at end" decision keeps
+  the ledger semantics identical between streaming and
+  non-streaming calls. One LLM call = one LLMCallEntry. Caller
+  can attribute spend, count calls, debug retries with the same
+  query patterns regardless of which method fired.
