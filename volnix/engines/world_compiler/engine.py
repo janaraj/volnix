@@ -53,6 +53,12 @@ class WorldCompilerEngine(BaseEngine):
             logger.warning("WorldCompiler: no LLM router — NL parsing will be unavailable")
         self._nl_parser = NLParser(self._llm_router) if self._llm_router else None
 
+        # Optional CharacterLoader catalog wired via VolnixApp.set_character_catalog
+        # before start. When present, generate_world auto-dereferences
+        # WorldPlan.characters into actor_specs at entry. Surfaces
+        # tnl/world-plan-character-auto-dereference.tnl.
+        self._character_catalog = self._config.get("_character_catalog")
+
         # Service resolution (optional — needs kernel + packs)
         self._compiler_resolver = None
         kernel = self._config.get("_kernel")
@@ -220,6 +226,11 @@ class WorldCompilerEngine(BaseEngine):
         consumer-supplied specs. No LLM calls. <100ms compile.
         Surfaces ``tnl/world-plan-lightweight-mode.tnl``.
         """
+        # Auto-dereference plan.characters when a catalog is wired
+        # (tnl/world-plan-character-auto-dereference.tnl). Heavy and
+        # lightweight paths share this entry point so both benefit.
+        plan = self._maybe_dereference_characters(plan)
+
         if plan.lightweight:
             return await self._generate_lightweight_world(plan)
 
@@ -609,6 +620,34 @@ class WorldCompilerEngine(BaseEngine):
         )
 
         return result
+
+    def _maybe_dereference_characters(self, plan: WorldPlan) -> WorldPlan:
+        """Auto-dereference ``plan.characters`` when a CharacterLoader
+        catalog is wired (``tnl/world-plan-character-auto-dereference.tnl``).
+
+        - When BOTH ``self._character_catalog`` is set AND
+          ``plan.characters`` is non-empty: returns
+          ``plan.dereference_characters(self._character_catalog)``,
+          which appends each catalog entry's ``to_actor_spec()`` to
+          ``actor_specs`` and resets ``characters`` to ``[]``.
+        - When ``self._character_catalog`` is None but
+          ``plan.characters`` is non-empty: log one warning per
+          ``generate_world`` call and pass the plan through
+          unchanged (preserves backward compat for callers that
+          pre-dereference).
+        - When ``plan.characters`` is empty: pass through unchanged
+          (the dereference helper is a no-op).
+        """
+        if not plan.characters:
+            return plan
+        if self._character_catalog is None:
+            logger.warning(
+                "WorldPlan.characters populated but no CharacterLoader "
+                "catalog wired — entries will not be dereferenced. Wire "
+                "via VolnixApp.set_character_catalog before app.start()."
+            )
+            return plan
+        return plan.dereference_characters(self._character_catalog)
 
     async def _generate_lightweight_world(self, plan: WorldPlan) -> dict[str, Any]:
         """Lightweight short-circuit for chat-only worlds

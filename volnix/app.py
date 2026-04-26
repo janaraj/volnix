@@ -110,6 +110,12 @@ class VolnixApp:
         # Starts True so the first scheduled tick after bridge-start
         # always runs.
         self._animator_has_activity_since_last_tick: bool = True
+        # Optional CharacterLoader catalog wired by library consumers
+        # via ``set_character_catalog`` BEFORE ``start()``. When set,
+        # ``WorldCompilerEngine`` auto-dereferences ``WorldPlan.characters``
+        # against this catalog at ``generate_world`` entry. Surfaces
+        # ``tnl/world-plan-character-auto-dereference.tnl``.
+        self._character_catalog: dict[str, Any] | None = None
         self._idle_watcher_task: Any = None
         self._animator_tick_task: Any = None
         # F2 (P6.3-fix.3): game player actor IDs, populated by
@@ -120,6 +126,32 @@ class VolnixApp:
         # Run lifecycle notification queues — WebSocket handlers register
         # here to receive completion signals without polluting the event bus.
         self._lifecycle_queues: dict[str, list[asyncio.Queue]] = {}
+
+    def set_character_catalog(self, catalog: dict[str, Any] | None) -> None:
+        """Wire a CharacterLoader catalog so the world compiler
+        auto-dereferences ``WorldPlan.characters`` at
+        ``generate_world`` entry. Surfaces
+        ``tnl/world-plan-character-auto-dereference.tnl``.
+
+        ``catalog`` is the dict returned by
+        ``CharacterLoader.load_directory(path)`` — keys are
+        ``CharacterDefinition.id`` strings, values are
+        ``CharacterDefinition`` instances. Pass ``None`` to clear.
+
+        MUST be called BEFORE ``await app.start()``. Late-wired
+        catalogs raise ``RuntimeError`` because the value flows
+        into the compiler's config dict at startup; setting it
+        later would silently miss the auto-dereference and create
+        a confusing "sometimes works" failure mode.
+
+        Idempotent — calling twice replaces the catalog silently.
+        """
+        if self._started:
+            raise RuntimeError(
+                "set_character_catalog must be called before app.start(); "
+                "the catalog flows into the compiler config at startup."
+            )
+        self._character_catalog = catalog
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -214,6 +246,14 @@ class VolnixApp:
             engine_overrides: dict[str, dict[str, Any]] = {
                 "state": {"_db": state_db},
             }
+            # CharacterLoader catalog (if wired via set_character_catalog
+            # BEFORE start). Compiler reads this at _on_initialize and
+            # auto-dereferences plan.characters at generate_world entry.
+            # tnl/world-plan-character-auto-dereference.tnl.
+            if self._character_catalog is not None:
+                engine_overrides["world_compiler"] = {
+                    "_character_catalog": self._character_catalog,
+                }
             if self._config.pack_search_paths:
                 bundled: list[str] = []
                 external: list[tuple[str, str]] = []
