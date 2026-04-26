@@ -1,0 +1,107 @@
+id: llm-call-entry-use-case-attribution
+title: Persist use_case on LLMCallEntry through the UsageTracker
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/llm/tracker.py
+  - volnix/llm/router.py
+surfaces:
+  - UsageTracker.record
+  - LLMCallEntry (use_case field already exists; just plumbing the value through)
+dependencies: [workflow]
+
+intent:
+  ``LLMRouter.route(request, engine_name, use_case="default")`` accepts
+  a ``use_case`` argument so callers can attribute LLM spend by purpose
+  (``"npc_decision"``, ``"agency_personality"``, ``"memory_distill"``,
+  ``"world_compiler"``, etc.). The router uses the value for routing
+  decisions, but it is dropped before reaching ``LLMCallEntry``: the
+  router calls ``self._tracker.record(request, response, engine_name)``
+  without passing ``use_case``, and ``UsageTracker.record(...)`` doesn't
+  accept it as a parameter. ``LLMCallEntry.use_case`` is already a
+  declared field with default ``""`` — the value just never gets there.
+  This change adds ``use_case`` as a kwarg on ``UsageTracker.record``
+  and threads it through from the router. Three-line plumbing fix; no
+  new public surface, no new field, no schema change.
+
+behaviors:
+  # UsageTracker
+  - ``UsageTracker.record`` MUST accept ``use_case: str = ""`` as a
+    keyword-only argument. The default empty string preserves
+    backward compatibility for any external caller (none in-tree
+    today, but downstream products may construct their own tracker).
+  - ``UsageTracker.record`` MUST forward the ``use_case`` value into
+    the constructed ``LLMCallEntry``. The argument's value lands
+    verbatim on ``LLMCallEntry.use_case`` — no normalization, no
+    truncation, no validation beyond what Pydantic does on the
+    field today.
+  - When ``use_case`` is the empty string (default), the resulting
+    ``LLMCallEntry.use_case`` MUST also be the empty string,
+    matching the field's existing default. This is the legacy
+    pre-attribution behavior.
+
+  # LLMRouter
+  - ``LLMRouter.route(...)`` MUST pass its ``use_case`` argument to
+    ``self._tracker.record(...)`` as a keyword argument. The router's
+    public signature does NOT change.
+  - If a route variant calls ``record`` more than once per request
+    (retry path), each ``record`` call MUST forward the same
+    ``use_case``. (Note: in 0.2.x, ``LLMRouter`` only exposes
+    ``route(...)`` and ``embed(...)``; there is no
+    ``route_with_tools`` variant. ``embed`` uses
+    ``UsageTracker.record_embedding`` which is a separate code path
+    OUT OF SCOPE for this TNL — embeddings populate
+    ``LLMEmbeddingEntry``, not ``LLMCallEntry``.)
+
+  # LLMCallEntry
+  - The ``use_case`` field already exists on ``LLMCallEntry`` with
+    default ``""``. This change does NOT modify the entry model.
+    Existing rows in the ledger with ``use_case == ""`` remain
+    valid; ledger forward-compat (``UnknownLedgerEntry``) is
+    untouched.
+
+  # Phase 0 regression oracle
+  - Callers that don't pass ``use_case`` (existing in-tree code
+    that calls ``router.route(request, engine_name)`` without the
+    third positional arg) MUST continue to behave identically.
+    The router's ``use_case`` parameter still defaults to
+    ``"default"``, so the value flowing into the ledger becomes
+    the literal string ``"default"`` for those callers. **This
+    is a single-character behavioral delta on the ledger**:
+    previously the field was empty string; now it carries the
+    router's default value. Phase 0 oracle output that asserts on
+    ``LLMCallEntry.use_case`` content (if any) must be updated.
+
+non-goals:
+  - No new ``use_case`` constants, no enum, no validation against
+    a known set of values. The field is and remains free-form
+    ``str`` — callers pick whatever attribution string they want.
+  - No backfill of historical ``LLMCallEntry`` rows. Old rows
+    stay with whatever they have today (``""`` for entries
+    persisted before this change).
+  - No retroactive update of in-tree callers to pass meaningful
+    ``use_case`` values. Callers that pass ``"default"`` (the
+    router's default) keep doing so. Callers can opt into
+    attribution incrementally as they touch the call site.
+  - No new ledger query helpers (e.g., ``LedgerQueryBuilder.by_use_case``).
+    Queries via the existing ``LedgerQueryBuilder.by_payload(...)``
+    or raw SQL work; a dedicated builder method is a separate
+    decision.
+  - No documentation update to ``docs/embedding_volnix.md``'s
+    "what's in flux" section. That note about empty ``use_case``
+    becomes stale once this lands; updating it belongs in a
+    separate documentation pass.
+  - No change to ``UsageTracker.record_embedding`` or the
+    embedding-specific ledger entry. Embeddings are a separate
+    surface.
+
+rationale:
+  ``LLMCallEntry.use_case`` was wired as a field on the entry model
+  in Phase 4C but the persistence path was never connected. The
+  field exists; the router's argument exists; only the kwarg
+  forwarding through ``UsageTracker.record`` is missing. Fixing
+  this in one TNL keeps the change tight and lets downstream
+  consumers (Rehearse, future analytics) build on a populated
+  field without first requesting it. The default empty string
+  preserves backward compatibility for any consumer who constructs
+  their own tracker or calls ``record`` directly.

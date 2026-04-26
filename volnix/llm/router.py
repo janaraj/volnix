@@ -210,7 +210,7 @@ class LLMRouter:
             await asyncio.sleep(delay)
 
         if self._tracker:
-            await self._tracker.record(request, response, engine_name)
+            await self._tracker.record(request, response, engine_name, use_case=use_case)
 
         # Write LLM request/response to file when llm_debug is enabled
         if getattr(self._config, "llm_debug", False):
