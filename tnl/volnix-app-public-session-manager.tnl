@@ -1,0 +1,93 @@
+id: volnix-app-public-session-manager
+title: Expose SessionManager via a public VolnixApp property
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/app.py
+surfaces:
+  - VolnixApp.session_manager
+dependencies: [workflow]
+
+intent:
+  ``SessionManager`` is the lifecycle handle for platform sessions
+  (start / resume / pause / end / checkpoint / pin_slot). It is
+  exported from ``volnix`` as a value type, but the running instance
+  inside ``VolnixApp`` lives on the underscore-prefixed
+  ``_session_manager`` attribute. External library consumers that
+  drive sessions (downstream products embedding Volnix) currently
+  reach into a private attribute, which is fragile across minor
+  releases. This change exposes ``VolnixApp.session_manager`` as a
+  public ``@property`` mirroring the existing access pattern used
+  by ``bus``, ``ledger``, ``gateway``, ``pipeline``, ``run_manager``,
+  ``artifact_store``, ``config``, and the other public attributes
+  on the same class.
+
+behaviors:
+  - ``VolnixApp`` MUST expose ``session_manager`` as a ``@property``
+    on the class (decorator-defined, not a dataclass field).
+  - The property MUST return the same instance the engine uses
+    internally — that is, ``self._session_manager``. No wrapping,
+    no copy, no proxy.
+  - The property's return-type annotation MUST be ``SessionManager``
+    (not ``SessionManager | None``), matching the optimistic typing
+    convention used by every other public property on
+    ``VolnixApp``. ``bus``, ``ledger``, ``gateway``, ``pipeline``,
+    ``run_manager``, ``artifact_store``, ``scheduler``, ``registry``,
+    and ``actor_registry`` all annotate as the non-Optional type
+    even though the backing private field is ``None`` before
+    ``start()`` runs.
+  - The property MUST NOT raise, log, or emit a warning when
+    accessed before ``start()`` has run. Pre-start access returns
+    whatever ``_session_manager`` currently holds (``None``),
+    matching every other property's behavior. Caller is responsible
+    for calling ``await app.start()`` before depending on the
+    instance.
+  - ``_session_manager`` MUST remain present as an attribute. The
+    new property is additive — internal callers that already access
+    the underscore name continue to work unchanged.
+  - The property MUST live alongside the other ``@property``
+    declarations in the file's "Properties" section (currently
+    around line 2509 of ``volnix/app.py``), ordered next to
+    ``run_manager`` since both are run/session lifecycle handles.
+
+  # Phase 0 regression oracle
+  - This change is purely additive (new read-only accessor on an
+    existing class) and does not alter any code path. Phase 0
+    oracle output MUST remain byte-identical for every behavior
+    mode regardless of whether memory or other engines are
+    enabled.
+
+non-goals:
+  - No new public export for ``SessionStore``. Standalone
+    construction of ``SessionManager`` outside ``VolnixApp``
+    remains unsupported in this TNL. If a library consumer needs
+    that path, it gets its own TNL.
+  - No deprecation of ``_session_manager`` access. Internal
+    callers (composition root, configuration paths, lifecycle
+    hooks) continue using the underscore name. This change does
+    not enforce migration to the public property internally.
+  - No behavior change for the lifecycle methods themselves
+    (``SessionManager.start``, ``.end``, etc.). Their signatures,
+    error semantics, and event emission are unchanged.
+  - No CLI surface change. The CLI does not call the new property;
+    this is a library-consumer ergonomic.
+  - No type-stub or .pyi updates. The class is annotated inline.
+
+rationale:
+  Every other engine handle on ``VolnixApp`` is reachable via a
+  one-line public property that returns the underscore-prefixed
+  internal field. ``session_manager`` is the lone lifecycle handle
+  missing this accessor — likely an oversight when the session
+  layer landed in Phase 4C Step 5. The fix is mechanical (one
+  property declaration), the convention is established and visible
+  in the same file, and consumer impact is immediate (downstream
+  products stop reaching into private attributes). No new
+  abstraction, no new dependency, no new error surface.
+
+  The "no guard" decision intentionally matches existing properties
+  rather than introducing a new pattern. Pre-start access returning
+  ``None`` is the documented behavior for every other handle
+  (``bus``, ``ledger``, etc.); making ``session_manager`` raise
+  would create a guarded-vs-ungaurded asymmetry that would need to
+  spread to the other properties to stay consistent — a much
+  larger change than this TNL contracts for.

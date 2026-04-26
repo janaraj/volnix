@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from volnix.runs.artifacts import ArtifactStore
     from volnix.runs.manager import RunManager
     from volnix.scheduling.scheduler import WorldScheduler
+    from volnix.sessions.manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -2536,6 +2537,23 @@ class VolnixApp:
     @property
     def run_manager(self) -> RunManager:
         return self._run_manager
+
+    @property
+    def session_manager(self) -> SessionManager:
+        """The platform ``SessionManager`` used for session lifecycle
+        (``start`` / ``resume`` / ``pause`` / ``end`` / ``checkpoint`` /
+        ``pin_slot``).
+
+        Returns the same instance the engine uses internally. Pre-start
+        access returns ``None`` — caller is responsible for awaiting
+        ``start()`` before depending on the instance, matching the
+        convention used by every other public property on this class
+        (``bus``, ``ledger``, ``gateway``, ``pipeline``, ``run_manager``,
+        ``artifact_store``).
+
+        Surfaces ``tnl/volnix-app-public-session-manager.tnl``.
+        """
+        return self._session_manager
 
     @property
     def artifact_store(self) -> ArtifactStore:
