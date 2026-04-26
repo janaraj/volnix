@@ -31,6 +31,7 @@ from volnix.validation.step import ValidationStep
 
 if TYPE_CHECKING:
     from volnix.gateway.gateway import Gateway
+    from volnix.llm.router import LLMRouter
     from volnix.runs.artifacts import ArtifactStore
     from volnix.runs.manager import RunManager
     from volnix.scheduling.scheduler import WorldScheduler
@@ -2594,6 +2595,27 @@ class VolnixApp:
         Surfaces ``tnl/volnix-app-public-session-manager.tnl``.
         """
         return self._session_manager
+
+    @property
+    def llm_router(self) -> LLMRouter:
+        """The shared ``LLMRouter`` instance.
+
+        Returns the same instance internal callers see at
+        ``self._llm_router``. Pre-start access returns ``None``
+        because the router is constructed during step 4 of
+        ``start()`` (``_initialize_llm()``); caller is responsible
+        for awaiting ``start()`` before depending on the instance,
+        matching every other public engine accessor on this class.
+
+        Exposed so library consumers can construct router-backed
+        components (custom bridge providers, observability shims,
+        cassette-recording providers like Rehearse's
+        ``VolnixLiveProvider``) without reaching into the
+        underscore-prefixed private attribute.
+
+        Surfaces ``tnl/volnix-app-public-llm-router.tnl``.
+        """
+        return self._llm_router
 
     @property
     def artifact_store(self) -> ArtifactStore:
