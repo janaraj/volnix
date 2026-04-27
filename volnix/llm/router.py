@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,14 @@ from volnix.llm.config import LLMConfig, LLMRoutingEntry
 from volnix.llm.provider import LLMProvider
 from volnix.llm.registry import ProviderRegistry
 from volnix.llm.tracker import UsageTracker
-from volnix.llm.types import EmbeddingRequest, EmbeddingResponse, LLMRequest, LLMResponse
+from volnix.llm.types import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    LLMStreamChunk,
+    LLMUsage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -210,13 +218,128 @@ class LLMRouter:
             await asyncio.sleep(delay)
 
         if self._tracker:
-            await self._tracker.record(request, response, engine_name)
+            await self._tracker.record(request, response, engine_name, use_case=use_case)
 
         # Write LLM request/response to file when llm_debug is enabled
         if getattr(self._config, "llm_debug", False):
             self._write_debug_response(engine_name, use_case, request, response)
 
         return response
+
+    async def route_streaming(
+        self,
+        request: LLMRequest,
+        engine_name: str,
+        use_case: str = "default",
+    ) -> AsyncIterator[LLMStreamChunk]:
+        """Stream an LLM response chunk-by-chunk
+        (``tnl/llm-router-streaming-surface.tnl``).
+
+        Mirrors :meth:`route` for routing-table lookup, request
+        overrides, replay-mode interception, and semaphore
+        discipline, but yields ``LLMStreamChunk`` instances
+        instead of returning a single ``LLMResponse``. The
+        semaphore is held for the full iteration; the ledger row
+        is written once after the stream is exhausted.
+
+        Providers that don't override ``stream_generate`` get the
+        base-class fallback (one chunk at end). Providers with
+        native SDK streaming yield true per-token chunks.
+
+        No retry/fallback logic: streaming retry has design
+        tradeoffs the caller may want to control (re-stream from
+        scratch vs. surface partial output) and ships in a
+        separate TNL when needed.
+        """
+        # Replay-mode interception (mirrors route()'s shape).
+        if request.replay_mode:
+            if request.provider_override and request.provider_override != "replay":
+                from volnix.core.errors import ReplayProviderNotFound
+
+                raise ReplayProviderNotFound(
+                    f"LLMRouter: replay_mode=True with "
+                    f"provider_override={request.provider_override!r} "
+                    f"is ambiguous — clear provider_override or set "
+                    f"replay_mode=False."
+                )
+            try:
+                replay_provider = self._registry.get("replay")
+            except KeyError as exc:
+                from volnix.core.errors import ReplayProviderNotFound
+
+                raise ReplayProviderNotFound(
+                    "LLMRouter: 'replay' provider not registered; "
+                    "cannot service replay_mode=True request."
+                ) from exc
+            provider = replay_provider
+            provider_name = "replay"
+            model = request.model_override or ""
+        else:
+            routing = self._resolve_routing(engine_name, use_case)
+            if routing:
+                provider_name = routing.provider or self._config.defaults.type
+                model = routing.model or self._config.defaults.default_model
+                updates: dict[str, Any] = {}
+                if routing.temperature is not None:
+                    updates["temperature"] = routing.temperature
+                if routing.max_tokens is not None:
+                    updates["max_tokens"] = routing.max_tokens
+                if updates:
+                    request = request.model_copy(update=updates)
+            else:
+                provider_name = self._config.defaults.type
+                model = self._config.defaults.default_model
+
+            if request.provider_override:
+                provider_name = request.provider_override
+            if request.model_override:
+                model = request.model_override
+
+            try:
+                provider = self._registry.get(provider_name)
+            except KeyError:
+                routing_key = f"{engine_name}_{use_case}" if use_case != "default" else engine_name
+                raise KeyError(
+                    f"No provider '{provider_name}' registered. "
+                    f"Routing: {routing_key} -> "
+                    f"{'matched' if routing else 'fell through to defaults'}. "
+                    f"Check [llm.routing.{routing_key}] or [llm.defaults] in volnix.toml."
+                )
+
+            if not request.model_override:
+                request = request.model_copy(update={"model_override": model})
+
+        # Iterate the stream under the semaphore. Accumulate for
+        # the post-stream ledger write.
+        accumulated_content: list[str] = []
+        final_usage: LLMUsage | None = None
+        final_error: str | None = None
+        final_provider = provider_name
+        final_model = model
+
+        async with self._semaphore:
+            async for chunk in provider.stream_generate(request):
+                accumulated_content.append(chunk.content_delta)
+                if chunk.usage_delta is not None:
+                    final_usage = chunk.usage_delta
+                if chunk.error is not None:
+                    final_error = chunk.error
+                if chunk.provider:
+                    final_provider = chunk.provider
+                if chunk.model:
+                    final_model = chunk.model
+                yield chunk
+
+        # One ledger row per stream — written after iteration.
+        if self._tracker:
+            synthesized = LLMResponse(
+                content="".join(accumulated_content),
+                usage=final_usage or LLMUsage(),
+                model=final_model,
+                provider=final_provider,
+                error=final_error,
+            )
+            await self._tracker.record(request, synthesized, engine_name, use_case=use_case)
 
     _TRANSIENT_PATTERNS = (
         "timeout",

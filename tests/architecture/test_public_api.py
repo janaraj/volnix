@@ -100,6 +100,8 @@ _EXPECTED_PUBLIC_API: frozenset[str] = frozenset(
         "resolve_ledger_redactor",
         # State trajectory (Step 9)
         "TrajectoryPoint",
+        # LLM streaming surface (Rehearse gap 5; tnl/llm-router-streaming-surface.tnl)
+        "LLMStreamChunk",
         # Observation (Step 10)
         "ObservationQuery",
         "UnifiedTimeline",

@@ -1,0 +1,162 @@
+id: volnix-app-public-memory-engine
+title: VolnixApp.memory property + enable_memory() helper
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/app.py
+  - tests/integration/test_app_memory_engine.py
+surfaces:
+  - VolnixApp.memory (new public @property)
+  - VolnixApp.enable_memory (new public async helper)
+dependencies: [workflow, volnix-app-public-llm-router]
+
+intent:
+  ``MemoryEngine`` (the 11th engine, the one that gives NPCs
+  episodic recall + persona drift) is currently only constructed
+  inside ``configure_agency()`` and only when
+  ``config.memory.enabled=True``. Library consumers who want
+  memory WITHOUT spinning up the full agency stack (Rehearse's
+  persona moat, cassette-replay-with-memory tests, any product
+  that wants character continuity without the agency engine's
+  activation lifecycle) have no way in.
+
+  This TNL adds two surfaces:
+
+  1. ``VolnixApp.memory`` — a public ``@property`` returning the
+     constructed ``MemoryEngine`` (or ``None`` before
+     construction). Symmetric with every other engine accessor.
+
+  2. ``VolnixApp.enable_memory(world_seed: int)`` — an async
+     helper that explicitly constructs the memory engine without
+     requiring ``configure_agency``. The helper IS the explicit
+     opt-in: it bypasses the ``config.memory.enabled`` toggle
+     (which only governs the auto-construction path inside
+     ``configure_agency``).
+
+  After ``enable_memory(...)`` returns, ``app.memory`` is the
+  constructed engine. If ``configure_agency()`` runs later, it
+  detects the existing engine and skips reconstruction (idempotent).
+
+behaviors:
+  # Property
+  - ``VolnixApp`` MUST expose ``memory`` as a ``@property``.
+    Class-level descriptor MUST be ``isinstance(..., property)``.
+  - The property MUST return the same instance internal callers
+    see at ``self._memory_engine``. Identity holds:
+    ``app.memory is app._memory_engine``.
+  - Pre-construction access (before ``enable_memory`` OR
+    ``configure_agency`` has wired memory) MUST NOT raise; returns
+    ``None``. Same convention as every other public engine
+    accessor.
+  - Return-type annotation MUST be ``MemoryEngine | None`` (memory
+    is optional unlike the always-present session_manager / bus /
+    ledger).
+  - The property MUST be additive — ``self._memory_engine``
+    remains accessible. Existing internal reads
+    (``configure_agency`` line ~1729, ``stop()`` line ~652) MUST
+    continue to work unchanged.
+
+  # enable_memory helper
+  - ``VolnixApp`` MUST gain an async method
+    ``enable_memory(self, world_seed: int) -> MemoryEngine``.
+  - The helper MUST raise ``RuntimeError`` if called before
+    ``start()`` has wired the LLM router (i.e.,
+    ``self._llm_router is None``). MemoryEngine's Consolidator
+    requires the router; failing fast beats a confusing downstream
+    crash. Error message MUST instruct the caller to call
+    ``await app.start()`` first.
+  - The helper MUST raise ``RuntimeError`` if called before the
+    connection manager is initialised (i.e., ``self._conn_mgr is
+    None``). Same fast-fail rationale.
+  - The helper MUST construct the engine via the same code path
+    ``configure_agency`` uses (``build_memory_engine`` from
+    ``volnix.registry.composition``), passing ``memory_config``,
+    ``world_seed``, ``llm_router=self._llm_router``,
+    ``connection_manager=self._conn_mgr``.
+  - The helper MUST construct the engine even when
+    ``self._config.memory.enabled is False``. The helper is the
+    explicit opt-in — config is bypassed by passing a copy with
+    ``enabled=True`` (``self._config.memory.model_copy(update={"enabled": True})``).
+    Rationale: callers shouldn't have to flip TWO knobs.
+  - After construction, the helper MUST run the same
+    initialisation sequence ``configure_agency`` runs:
+    1. attach the ledger (``engine._ledger = self._ledger``)
+    2. ``await engine.initialize({}, self._bus)``
+    3. ``await engine.start()``
+    4. stash on ``self._memory_engine``
+  - The helper MUST be idempotent w.r.t. ``world_seed``: when
+    called a second time with the SAME ``world_seed`` and the
+    engine is already constructed, return the existing engine
+    (no reconstruction). When called a second time with a
+    DIFFERENT ``world_seed``, raise ``RuntimeError`` (memory is
+    seeded to a single world; reseeding mid-run is a wiring bug).
+  - The helper MUST return the constructed (or already-existing)
+    ``MemoryEngine`` instance. Return type is ``MemoryEngine``,
+    not ``MemoryEngine | None`` — if construction fails for any
+    reason the helper raises, never returns ``None``.
+
+  # configure_agency interaction (idempotence)
+  - When ``configure_agency`` runs and detects
+    ``self._memory_engine is not None`` (because ``enable_memory``
+    ran first), it MUST skip the construction block and proceed
+    directly to the agency-injection step
+    (``agency.set_memory_engine(self._memory_engine)``). No
+    duplicate-construction, no error.
+  - When ``configure_agency`` runs first (existing path), then
+    ``enable_memory`` is called later, the helper detects
+    ``self._memory_engine is not None`` with a matching seed (or
+    no recorded seed yet) and returns the existing engine.
+
+  # Test coverage in tests/integration/test_app_memory_engine.py
+  - ``test_positive_memory_property_exists_on_class``
+  - ``test_negative_memory_property_returns_none_before_construction``
+  - ``test_positive_enable_memory_constructs_engine`` — happy path
+  - ``test_negative_enable_memory_before_start_raises`` — guard
+    fires when ``_llm_router`` is None
+  - ``test_positive_enable_memory_bypasses_config_memory_enabled``
+    — works even with ``config.memory.enabled=False``
+  - ``test_positive_enable_memory_idempotent_same_seed``
+  - ``test_negative_enable_memory_different_seed_raises``
+  - ``test_positive_property_returns_engine_after_enable_memory``
+    — ``app.memory is app._memory_engine`` after ``enable_memory``
+  - ``test_positive_configure_agency_after_enable_memory_skips_construction``
+    — agency injection still happens; no duplicate
+    ``build_memory_engine`` call (assert via spy / call count)
+  - ``test_positive_underscore_attribute_remains_accessible``
+
+non-goals:
+  - No refactor of ``configure_agency``'s memory-construction
+    block beyond the idempotence guard. Extracting a shared
+    private helper (``_construct_memory_engine``) is reasonable
+    if it keeps both paths in sync, but is an implementation
+    detail — the public surface is what this TNL locks.
+  - No public re-export of ``MemoryEngine`` from
+    ``volnix.__init__`` in this TNL. The class is reachable via
+    ``app.memory`` instances; consumers type-hint with
+    ``volnix.engines.memory.MemoryEngine`` if needed. Public
+    re-export is a separate decision (touches semver pin
+    surface).
+  - No persistence of "which seed was enable_memory called with"
+    in any storage layer. The seed match is in-process only via
+    the constructed engine's state.
+  - No support for multiple MemoryEngine instances per app.
+    ``enable_memory`` is a single-engine accessor; multi-world
+    apps are out of scope.
+  - No CLI surface change.
+  - No changes to ``MemoryEngine`` itself.
+
+rationale:
+  Mirrors Rehearse gap 1 (``session_manager``) for the property
+  half. The helper half is the new piece: it lifts the
+  construction trigger out of ``configure_agency`` so consumers
+  can opt into memory without opting into agency. The
+  ``config.memory.enabled`` bypass is the opinionated call —
+  one knob, not two. Keeping ``configure_agency``'s auto-path
+  unchanged means existing apps that toggle config keep working
+  byte-identically; the new path is purely additive.
+
+  Idempotence both directions (``enable_memory`` then
+  ``configure_agency``, OR vice versa) means the order doesn't
+  matter and consumers can mix the two without surprise. The
+  seed-mismatch guard catches the "two worlds in one app" wiring
+  bug at the earliest possible point.

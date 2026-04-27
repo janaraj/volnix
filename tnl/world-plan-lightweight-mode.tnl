@@ -1,0 +1,145 @@
+id: world-plan-lightweight-mode
+title: WorldPlan.lightweight=True skips LLM-driven entity generation
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/engines/world_compiler/plan.py
+  - volnix/engines/world_compiler/engine.py
+surfaces:
+  - WorldPlan.lightweight
+  - WorldCompilerEngine.generate_world (lightweight branch)
+dependencies: [workflow]
+
+intent:
+  Volnix's ``WorldCompilerEngine.generate_world`` runs an LLM-driven
+  multi-step pipeline (compile NL policy triggers, generate entities
+  per section, expand actor personalities per role, validate +
+  repair, inject seeds). For chat-only worlds — where the consumer
+  has already supplied complete actor specs and there are no
+  entities, no policies, no seeds, and no services to populate —
+  this pipeline is dead overhead. Every step burns LLM budget +
+  multi-second latency for output the consumer doesn't need. This
+  change adds a ``WorldPlan.lightweight: bool = False`` opt-in flag
+  that short-circuits ``generate_world`` to a pass-through path:
+  validate the actor_specs the consumer supplied, then return a
+  result dict with the same shape downstream code expects but with
+  empty/pass-through values. No LLM calls. <100ms compile.
+
+behaviors:
+  # Plan field
+  - ``WorldPlan`` MUST gain a ``lightweight: bool = False`` field.
+    Default ``False`` preserves every existing call site
+    byte-identical. Frozen-Pydantic discipline unchanged.
+  - The field MUST be plain ``bool`` (not ``Literal``, not ``Enum``).
+    "Is this a lightweight world" is a binary, no future enum
+    members anticipated.
+  - The field MUST appear in the documented WorldPlan ordering
+    next to the other behavior-mode fields (``behavior``,
+    ``fidelity``, ``mode``) — it's a peer mode flag.
+
+  # Compiler short-circuit
+  - When ``plan.lightweight is True``, ``generate_world(plan)``
+    MUST return immediately after ``actor_specs`` validation, with
+    a result dict of the shape downstream callers expect.
+    Specifically:
+    - ``result["entities"] = {}`` (empty dict, not absent)
+    - ``result["actors"] = list[ActorDefinition]`` produced from
+      ``plan.actor_specs`` via the existing
+      ``CompilerPersonalityGenerator.expand_actor_structure(...)``
+      call WITHOUT the LLM personality-batch generation step. Actor
+      personality is taken from whatever the consumer included in
+      ``actor_specs`` (typically via
+      ``CharacterDefinition.to_actor_spec()``). If a personality
+      field is missing on a passed actor_spec, the actor lands with
+      ``personality=None`` rather than failing.
+    - ``result["validation_sections"] = {}``
+    - ``result["retry_counts"] = {}``
+    - ``result["applied_seed_invariants"] = {}``
+    - any other keys downstream callers look up under
+      ``.get(key, {})`` MUST return an empty container of the
+      expected type
+  - The lightweight branch MUST NOT require ``self._llm_router``.
+    The current ``if not self._llm_router: raise CompilerError``
+    guard at the top of ``generate_world`` MUST be moved INSIDE the
+    non-lightweight path, so a lightweight compile succeeds even
+    when no LLM provider is configured.
+  - The lightweight branch MUST log one ``logger.info`` line
+    naming the world and the lightweight mode (``"Generating
+    lightweight world '%s' (no entities, no LLM calls)"``).
+  - The lightweight branch MUST NOT call:
+    - ``_compile_policy_triggers`` (skips NL policy compilation)
+    - ``WorldDataGenerator.iter_generation_specs`` /
+      ``_generate_validated_entity_section`` (skips entity gen)
+    - ``CompilerPersonalityGenerator``'s LLM-driven role-batch
+      personality generation (skips
+      ``_generate_validated_role_batch``)
+    - ``_repair_world_entity_sections`` (nothing to repair)
+    - ``CompilerSeedProcessor.process_seeds`` (no seeds to inject)
+  - Plan-level ``actor_specs`` MUST still be validated for
+    structural correctness (each entry has ``id``, ``role``, etc.).
+    Validation reuses whatever the existing
+    ``expand_actor_structure`` does today; lightweight does not
+    introduce new validation, only skips the LLM-augmented bits.
+
+  # App-facade pass-through
+  - ``VolnixApp.create_world(plan)`` MUST work unchanged when
+    ``plan.lightweight is True``. The world manager still creates
+    the world directory + state.db, the state engine still
+    reconfigures, generation.json still gets written. The
+    ``total_entities`` count in metadata MUST be 0 for a
+    lightweight world; ``actor_count`` reflects ``len(actors)``.
+
+  # Phase 0 regression oracle
+  - ``WorldPlan(...)`` calls without an explicit ``lightweight``
+    argument MUST be byte-identical to today (default ``False`` →
+    existing path). Phase 0 oracle output MUST remain
+    byte-identical.
+
+non-goals:
+  - No new public method on ``VolnixApp`` (no ``create_chat_world``
+    parallel API). The flag rides on the existing plan, the
+    existing ``create_world`` call works unchanged.
+  - No deprecation of the heavy path. Heavy compilation remains
+    the default and the recommended path for worlds with real
+    entities, policies, services, or LLM-driven personalities.
+  - No new dependency injection for the lightweight branch. It
+    consumes the same ``CompilerPersonalityGenerator`` /
+    ``CompilerWorldValidator`` infrastructure but skips the
+    LLM-call branches inside them.
+  - No change to ``compile_from_yaml`` / ``compile_from_nl``.
+    Those produce ``WorldPlan`` instances; whether the resulting
+    plan has ``lightweight=True`` is the consumer's decision at
+    plan-construction time. (Optional follow-up TNL: a YAML-side
+    ``lightweight: true`` shorthand. Not in this scope.)
+  - No interaction with ``WorldPlan.characters`` auto-dereference
+    (Gap 4) — that's a separate TNL. If a lightweight world uses
+    the ``characters`` field, it still needs the consumer to have
+    dereferenced into ``actor_specs`` until Gap 4 ships.
+  - No CLI surface change. Library consumers set the flag
+    programmatically via ``WorldPlan(..., lightweight=True)`` or
+    ``ConfigBuilder``-style construction.
+
+rationale:
+  Two design options were on the table: (a) a ``lightweight: bool``
+  flag on ``WorldPlan``, or (b) a separate
+  ``VolnixApp.create_chat_world(plan)`` entry point. Option (a) was
+  chosen because:
+  - The "is this a chat-only world" question is a property of the
+    world definition, not a separate operation. Plan-driven matches
+    the existing flag pattern (``behavior``, ``fidelity``, ``mode``
+    are all plan-level mode flags).
+  - Single API surface means downstream consumers don't need to
+    branch their call site between two entry points.
+  - The flag travels with the plan into ``world_manager``,
+    metadata, generation.json, and any future audit/replay path —
+    "this world was generated as lightweight" is preserved
+    structurally rather than implied by the entry point used.
+  - Adding a parallel entry point would create a maintenance burden
+    every time the heavy path's signature evolves.
+
+  Skipping the LLM-router-required guard in the lightweight branch
+  is intentional. It enables fully offline / no-API-key consumers
+  (test harnesses, CI without provider creds, downstream products
+  that ship without LLM defaults) to compile lightweight worlds for
+  the chat-only workflow. Consumers who later decide they need a
+  heavyweight world get the existing loud failure.

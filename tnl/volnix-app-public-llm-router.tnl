@@ -1,0 +1,77 @@
+id: volnix-app-public-llm-router
+title: Expose VolnixApp.llm_router as a public property
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/app.py
+  - tests/integration/test_app_llm_router_property.py
+surfaces:
+  - VolnixApp.llm_router (new public @property)
+dependencies: [workflow]
+
+intent:
+  ``VolnixApp`` constructs an ``LLMRouter`` during ``start()`` and
+  stashes it at ``self._llm_router``. Library consumers that want
+  to construct a higher-level LLM-backed component (Rehearse's
+  ``VolnixLiveProvider`` for cassette recording, custom
+  bridge providers, observability shims) currently have to reach
+  into the underscore-prefixed private attribute, which makes
+  their code break on every minor release.
+
+  This TNL exposes ``llm_router`` as a public ``@property`` that
+  returns the same instance the engine uses internally. It is the
+  exact same pattern as ``session_manager`` (Rehearse gap 1):
+  pre-start access returns ``None`` (router is constructed during
+  ``start()``); post-start access returns the live ``LLMRouter``.
+  No new construction logic; pure accessor exposure.
+
+behaviors:
+  - ``VolnixApp`` MUST expose ``llm_router`` as a ``@property``.
+    The class-level descriptor MUST be ``isinstance(..., property)``
+    so consumers can detect it as a public surface.
+  - The property MUST return the same instance internal callers
+    see at ``self._llm_router`` (identity check, not a copy or
+    proxy). After ``start()``, ``app.llm_router is app._llm_router``
+    MUST hold.
+  - Pre-start access MUST NOT raise. Returns ``None`` because
+    ``_llm_router`` starts at ``None`` and is only wired during
+    ``_initialize_llm()`` (step 4 of ``start()``). Matches the
+    ``session_manager`` / ``bus`` / ``ledger`` / ``run_manager``
+    convention — every public engine accessor on ``VolnixApp``
+    is unguarded and optimistically typed, with the contract
+    that callers await ``start()`` before depending on the
+    instance.
+  - The new property MUST be additive — ``self._llm_router``
+    remains accessible to internal callers (no rename, no
+    deletion). Existing reads like
+    ``runtime._llm_router = self._llm_router`` (app.py:1119) MUST
+    continue to work unchanged.
+  - The property's return-type annotation MUST be the concrete
+    ``LLMRouter`` class (mirroring ``session_manager: SessionManager``,
+    not ``Any``). Consumer type-checking is the whole point of
+    exposing it.
+  - Test coverage in ``tests/integration/test_app_llm_router_property.py``
+    MUST mirror ``test_app_session_manager_property.py``'s four
+    tests:
+    - ``test_positive_property_exists_on_class`` (descriptor check)
+    - ``test_negative_property_returns_none_before_start``
+    - ``test_positive_property_returns_router_after_start`` (also
+      asserts ``isinstance(app.llm_router, LLMRouter)`` and
+      ``app.llm_router is app._llm_router``)
+    - ``test_positive_underscore_attribute_remains_accessible``
+
+non-goals:
+  - No new construction logic. The router is already built by
+    ``_initialize_llm()``; this TNL is pure accessor exposure.
+  - No changes to ``LLMRouter`` itself.
+  - No changes to ``register_provider`` (that public wrapper
+    already exists from PMF 4C Step 8).
+  - No deprecation of ``self._llm_router`` — internal callers
+    keep using it; the property is purely additive.
+
+rationale:
+  Identical pattern to Rehearse gap 1 (``session_manager``). The
+  router is the public seam through which every LLM call flows;
+  exposing it as a property lets downstream products construct
+  router-backed components without import-path-violating reaches
+  into private state.

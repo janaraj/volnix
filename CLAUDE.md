@@ -188,3 +188,65 @@ All LLM calls go through the router (`llm/router.py`), which handles provider se
 - Shared test fixtures in `tests/conftest.py`: `mock_event_bus`, `mock_ledger`, `stub_state_engine`, `mock_llm_provider`, `make_action_context`, `make_world_event`.
 - **Ruff** for linting/formatting: Python 3.12 target, 100-char line length, rules: E, F, I, N, W, UP.
 - **Mypy** with strict mode enabled.
+
+<!-- tnl:workflow-stanza:start hash=467d7cfd -->
+## TNL — Typed Natural Language
+
+This repository uses TNL (Typed Natural Language): structured English contracts that describe behavioral surfaces for agent-written code. TNL files live in [`tnl/`](./tnl/).
+
+**Session start.** Read [`tnl/workflow.tnl`](./tnl/workflow.tnl) for baseline coding principles, plus any `tnl/*.tnl` file whose `paths:` or `surfaces:` overlap with the code you are about to touch.
+
+**Task flow.**
+1. **Scope.** Check `tnl/` for existing TNLs covering the request. If the task modifies behavior already described, the output is an *edit* to that file; if it introduces a genuinely new behavioral surface, the output is a *new TNL*. Property changes to existing surfaces (new validation rule, tightened constraint, new input/output on an existing route) are edits, not new files.
+2. **Clarify.** If the request admits multiple reasonable interpretations, ask targeted clarifying questions first. Do not silently pick one. When your tool surface supports structured multiple-choice prompts (e.g. Claude Code's `AskUserQuestion` tool), use them instead of free text so the user can select rather than type.
+3. **Propose the TNL inline in the chat reply.** Output the full proposed TNL content as a fenced code block in your chat reply. Do NOT write it to a file yet. Keep it concrete: real paths, named function signatures, edge cases as MUST clauses.
+4. **Wait for user approval.** Nothing is written to disk — including the TNL file itself — until the user approves. Incorporate any edits the user requests before proceeding.
+5. **Save the approved TNL** to `tnl/<slug>.tnl` (kebab-case, matching the `id:` field). For edits, update the existing file in place.
+6. **Implement against the approved TNL.** Every MUST clause must map to specific code or tests. Do not modify files outside `paths:` unless the user explicitly agrees.
+7. **Self-attest.** List each MUST clause from `workflow.tnl` plus the feature TNL(s) touched. For each, state: (a) satisfied — by which file/function/test, (b) could not satisfy — why, or (c) did not apply — why. Exhaustive; silent omission counts as a miss.
+
+### When a new TNL file is justified
+
+Only for:
+- A genuinely new behavioral surface (new CLI subcommand, new MCP tool, new subsystem)
+- A cross-cutting policy that spans multiple existing TNLs (the model: `workflow.tnl`)
+- A feature with a clear boundary not already covered by any existing TNL
+
+Any other change — modifying inputs, outputs, semantics, validation, constraints, or identity rules of an existing surface — is an edit to the existing file. Do not create a new TNL to patch an existing one.
+
+### TNL format
+
+```
+id: <kebab-case-slug>         # matches filename, lowercase, hyphenated
+title: <short human-readable>
+scope: repo-wide | feature    # repo-wide applies always; feature applies when paths match
+owners: [@<handle>]
+paths: [<file paths>]         # omit for scope: repo-wide
+surfaces: [<CLI cmds, MCP tools, events>]  # optional
+dependencies: [<other tnl ids>]            # optional
+
+intent:
+  One-paragraph plain-English description of what this unit is for.
+
+behaviors:
+  - The system MUST <specific, testable behavior>.
+  - When <condition>, the system MUST <response>.
+  - [semantic] The system MUST <invariant that needs judgment to verify>.
+  - The system SHOULD <strong preference, non-blocking>.
+
+non-goals:
+  - <what this feature deliberately does NOT do>
+
+rationale:
+  Optional prose — tradeoffs, gotchas, or the "why" behind choices.
+```
+
+### RFC 2119 keywords
+
+- **MUST / MUST NOT** — hard requirement. If you cannot satisfy it, flag explicitly.
+- **SHOULD / SHOULD NOT** — strong preference. Deviate only with stated reason.
+- **MAY** — permission, not requirement.
+- **`[semantic]`** prefix — clause requires judgment to verify rather than a structural check. Confirm in self-attestation.
+
+See [`tnl/workflow.tnl`](./tnl/workflow.tnl) for the full baseline.
+<!-- tnl:workflow-stanza:end -->

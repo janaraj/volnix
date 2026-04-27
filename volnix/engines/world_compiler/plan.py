@@ -45,6 +45,21 @@ class WorldPlan(BaseModel, frozen=True):
     behavior: Literal["static", "reactive", "dynamic"] = "dynamic"
     fidelity: Literal["auto", "strict", "exploratory"] = "auto"
     mode: Literal["governed", "ungoverned"] = "governed"
+    lightweight: bool = False
+    """When True, ``WorldCompilerEngine.generate_world`` short-circuits
+    to a pass-through path: validates ``actor_specs`` only, returns
+    a result dict with empty entities + actors expanded from the
+    consumer-supplied specs. No LLM calls, no entity generation, no
+    seed processing. Default ``False`` preserves the existing
+    heavyweight pipeline byte-identical.
+
+    Use case: chat-only worlds where the consumer (typically a
+    downstream library) has already supplied complete actor specs
+    and there are no entities, services, or seeds to populate. A
+    lightweight world compiles in <100ms and works without an LLM
+    router configured. Surfaces
+    ``tnl/world-plan-lightweight-mode.tnl``.
+    """
 
     # ── Resolved services (D4a fills) ──
     services: dict[str, ServiceResolution] = Field(default_factory=dict)
@@ -107,6 +122,79 @@ class WorldPlan(BaseModel, frozen=True):
                         f"Service '{svc_name}' below strict fidelity (confidence={res.surface.confidence})"
                     )
         return errors
+
+    def dereference_characters(self, catalog: dict[str, Any]) -> WorldPlan:
+        """Resolve every entry in ``self.characters`` against
+        ``catalog`` and append the corresponding ``to_actor_spec()``
+        outputs to ``actor_specs``. Returns a NEW frozen
+        ``WorldPlan`` with ``characters=[]`` (the dereference has
+        been applied).
+
+        ``catalog`` is the dict produced by
+        ``CharacterLoader.load_directory(path)`` — keys are
+        ``CharacterDefinition.id`` strings, values are
+        ``CharacterDefinition`` instances. Typed ``Any`` here to
+        avoid pulling the ``volnix.actors`` import into the world
+        compiler's type surface; the value's ``to_actor_spec()``
+        method is duck-typed.
+
+        Surfaces ``tnl/world-plan-character-auto-dereference.tnl``.
+
+        Raises:
+            WorldPlanValidationError: if any entry in
+                ``self.characters`` has no matching key in
+                ``catalog`` (lists every dangling reference, not
+                just the first), OR if a catalog entry's
+                ``to_actor_spec()`` output's ``id`` collides with
+                an existing ``actor_specs[*]["id"]``.
+        """
+        if not self.characters:
+            return self
+
+        from volnix.core.errors import WorldPlanValidationError
+
+        # Stage 1: catch all dangling references at once so the
+        # caller fixes the catalog in one pass instead of
+        # whack-a-mole.
+        dangling = [cid for cid in self.characters if cid not in catalog]
+        if dangling:
+            raise WorldPlanValidationError(
+                f"WorldPlan.characters contains {len(dangling)} "
+                f"reference(s) with no matching catalog entry: "
+                f"{dangling!r}. Fix the CharacterLoader catalog or "
+                f"the plan's characters list before re-compiling."
+            )
+
+        # Stage 2: dereference + collect new actor_specs. Detect
+        # collisions against existing actor_specs ids.
+        existing_ids = {spec.get("id") for spec in self.actor_specs if isinstance(spec, dict)}
+        new_specs: list[dict[str, Any]] = []
+        conflicts: list[str] = []
+        for cid in self.characters:
+            spec = catalog[cid].to_actor_spec()
+            spec_id = spec.get("id")
+            if spec_id is not None and spec_id in existing_ids:
+                conflicts.append(spec_id)
+            else:
+                new_specs.append(spec)
+                if spec_id is not None:
+                    existing_ids.add(spec_id)
+
+        if conflicts:
+            raise WorldPlanValidationError(
+                f"WorldPlan.dereference_characters: {len(conflicts)} "
+                f"character id(s) collide with existing actor_specs "
+                f"entries: {conflicts!r}. Either remove the duplicate "
+                f"actor_specs entry or remove the character reference "
+                f"from plan.characters."
+            )
+
+        return self.model_copy(
+            update={
+                "actor_specs": list(self.actor_specs) + new_specs,
+                "characters": [],
+            }
+        )
 
     def validate_character_refs(self, catalog: dict[str, Any] | None) -> list[str]:
         """Validate that every entry in ``self.characters`` has a

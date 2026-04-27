@@ -30,10 +30,13 @@ from volnix.registry.wiring import shutdown_engines, wire_engines
 from volnix.validation.step import ValidationStep
 
 if TYPE_CHECKING:
+    from volnix.core.protocols import MemoryEngineProtocol
     from volnix.gateway.gateway import Gateway
+    from volnix.llm.router import LLMRouter
     from volnix.runs.artifacts import ArtifactStore
     from volnix.runs.manager import RunManager
     from volnix.scheduling.scheduler import WorldScheduler
+    from volnix.sessions.manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +101,14 @@ class VolnixApp:
         self._hold_store: Any = None
         self._hold_expiry_task: Any = None
         # PMF 4B Step 10 — MemoryEngine (opt-in, constructed per-world
-        # in configure_agency when ``config.memory.enabled=True``).
+        # in configure_agency when ``config.memory.enabled=True`` OR
+        # explicitly via ``enable_memory(world_seed)``
+        # — ``tnl/volnix-app-public-memory-engine.tnl``).
         self._memory_engine: Any = None
+        # World seed memory was constructed for — set by
+        # ``_build_and_start_memory_engine``. Used by ``enable_memory``
+        # to detect seed-mismatch reconstruction attempts.
+        self._memory_world_seed: int | None = None
         self._started = False
         self._last_action_time: datetime | None = None
         # Activity gate for the animator's dynamic tick loop
@@ -109,6 +118,12 @@ class VolnixApp:
         # Starts True so the first scheduled tick after bridge-start
         # always runs.
         self._animator_has_activity_since_last_tick: bool = True
+        # Optional CharacterLoader catalog wired by library consumers
+        # via ``set_character_catalog`` BEFORE ``start()``. When set,
+        # ``WorldCompilerEngine`` auto-dereferences ``WorldPlan.characters``
+        # against this catalog at ``generate_world`` entry. Surfaces
+        # ``tnl/world-plan-character-auto-dereference.tnl``.
+        self._character_catalog: dict[str, Any] | None = None
         self._idle_watcher_task: Any = None
         self._animator_tick_task: Any = None
         # F2 (P6.3-fix.3): game player actor IDs, populated by
@@ -119,6 +134,32 @@ class VolnixApp:
         # Run lifecycle notification queues — WebSocket handlers register
         # here to receive completion signals without polluting the event bus.
         self._lifecycle_queues: dict[str, list[asyncio.Queue]] = {}
+
+    def set_character_catalog(self, catalog: dict[str, Any] | None) -> None:
+        """Wire a CharacterLoader catalog so the world compiler
+        auto-dereferences ``WorldPlan.characters`` at
+        ``generate_world`` entry. Surfaces
+        ``tnl/world-plan-character-auto-dereference.tnl``.
+
+        ``catalog`` is the dict returned by
+        ``CharacterLoader.load_directory(path)`` — keys are
+        ``CharacterDefinition.id`` strings, values are
+        ``CharacterDefinition`` instances. Pass ``None`` to clear.
+
+        MUST be called BEFORE ``await app.start()``. Late-wired
+        catalogs raise ``RuntimeError`` because the value flows
+        into the compiler's config dict at startup; setting it
+        later would silently miss the auto-dereference and create
+        a confusing "sometimes works" failure mode.
+
+        Idempotent — calling twice replaces the catalog silently.
+        """
+        if self._started:
+            raise RuntimeError(
+                "set_character_catalog must be called before app.start(); "
+                "the catalog flows into the compiler config at startup."
+            )
+        self._character_catalog = catalog
 
     async def start(self) -> None:
         """Bootstrap the full system: persistence, bus, ledger, LLM, engines, pipeline."""
@@ -213,6 +254,14 @@ class VolnixApp:
             engine_overrides: dict[str, dict[str, Any]] = {
                 "state": {"_db": state_db},
             }
+            # CharacterLoader catalog (if wired via set_character_catalog
+            # BEFORE start). Compiler reads this at _on_initialize and
+            # auto-dereferences plan.characters at generate_world entry.
+            # tnl/world-plan-character-auto-dereference.tnl.
+            if self._character_catalog is not None:
+                engine_overrides["world_compiler"] = {
+                    "_character_catalog": self._character_catalog,
+                }
             if self._config.pack_search_paths:
                 bundled: list[str] = []
                 external: list[tuple[str, str]] = []
@@ -1109,6 +1158,190 @@ class VolnixApp:
 
         await animator.configure(plan, self._scheduler)
 
+    async def _build_and_start_memory_engine(
+        self,
+        world_seed: int,
+        *,
+        force_enable: bool,
+    ) -> MemoryEngineProtocol | None:
+        """Construct, initialize, and start a ``MemoryEngine``
+        (``tnl/volnix-app-public-memory-engine.tnl``).
+
+        Single source of truth for the memory engine construction
+        sequence — used by both:
+
+        - ``configure_agency`` (``force_enable=False``): honor the
+          ``config.memory.enabled`` toggle. If the toggle is off,
+          ``build_memory_engine`` returns ``None`` and this helper
+          short-circuits.
+        - ``enable_memory(world_seed)`` (``force_enable=True``):
+          explicit opt-in that bypasses the config toggle by passing
+          a copy of ``MemoryConfig`` with ``enabled=True``.
+
+        Returns the started engine, or ``None`` only when
+        ``force_enable=False`` and the config is disabled (so the
+        caller can branch). Stashes the engine on
+        ``self._memory_engine`` and records the world seed on
+        ``self._memory_world_seed`` for ``enable_memory``'s
+        idempotence guard.
+
+        Raises:
+            RuntimeError: if the LLM router or connection manager
+                hasn't been wired (``start()`` not yet awaited).
+        """
+        if self._llm_router is None:
+            raise RuntimeError(
+                "MemoryEngine requires ``self._llm_router``; the LLM "
+                "router was never initialised. This is a wiring-order "
+                "bug — memory depends on step 4 of VolnixApp.start(). "
+                "Call ``await app.start()`` first."
+            )
+        if self._conn_mgr is None:
+            raise RuntimeError(
+                "MemoryEngine requires ``self._conn_mgr``; the "
+                "connection manager was never initialised. Call "
+                "``await app.start()`` first."
+            )
+
+        memory_config = self._config.memory
+        if force_enable and not memory_config.enabled:
+            memory_config = memory_config.model_copy(update={"enabled": True})
+
+        from volnix.registry.composition import build_memory_engine
+
+        memory_engine = await build_memory_engine(
+            memory_config=memory_config,
+            world_seed=int(world_seed),
+            llm_router=self._llm_router,
+            connection_manager=self._conn_mgr,
+        )
+        if memory_engine is None:
+            return None
+
+        # D10-4: ledger BEFORE start() so the EngineLifecycleEntry
+        # row from ``_record_lifecycle("start")`` lands on the ledger.
+        memory_engine._ledger = self._ledger
+        await memory_engine.initialize({}, self._bus)
+
+        # PMF 4B cleanup commit 3 — load Tier-1 pack fixtures
+        # between initialize() and start(). Ordering matters:
+        # initialize runs store.initialize(reset=...) first
+        # (Commit 2's reset behaviour), THEN the loader populates
+        # tier-1 rows, THEN start() wires the cohort-rotated
+        # subscription. Load failures are raised loudly — a bad
+        # fixtures file is a pack-authoring bug that should surface
+        # at startup, not silently skip.
+        if memory_config.tier_mode == "mixed" and memory_config.tier1_fixtures_path:
+            from pathlib import Path as _Path
+
+            from volnix.engines.memory.tier1_loader import load_tier1_fixtures
+
+            count = await load_tier1_fixtures(
+                _Path(memory_config.tier1_fixtures_path),
+                memory_engine._store,
+            )
+            logger.info(
+                "MemoryEngine: loaded %d Tier-1 fixture records from %s",
+                count,
+                memory_config.tier1_fixtures_path,
+            )
+
+        await memory_engine.start()
+        self._memory_engine = memory_engine
+        self._memory_world_seed = int(world_seed)
+        return memory_engine
+
+    async def enable_memory(self, world_seed: int) -> MemoryEngineProtocol:
+        """Construct ``MemoryEngine`` without going through
+        ``configure_agency`` (``tnl/volnix-app-public-memory-engine.tnl``).
+
+        The explicit opt-in for products that want episodic memory
+        + persona drift WITHOUT the full agency stack (Rehearse's
+        persona moat, cassette-replay-with-memory tests, any
+        consumer that needs character continuity without
+        activation orchestration).
+
+        Bypasses ``config.memory.enabled``: this method IS the
+        explicit opt-in, so callers don't have to flip TWO knobs.
+
+        Idempotent on the same ``world_seed``: a second call with
+        the same seed returns the existing engine. A second call
+        with a DIFFERENT seed raises ``RuntimeError`` — memory is
+        seeded to a single world; reseeding mid-run is a wiring bug.
+
+        After this returns, ``app.memory`` is the constructed
+        engine. If ``configure_agency`` runs later, it detects
+        the existing engine and skips reconstruction.
+
+        Args:
+            world_seed: Determinism seed for memory consolidation
+                + recall. Must match ``WorldPlan.seed`` if
+                ``configure_agency`` will run later.
+
+        Returns:
+            The started ``MemoryEngine`` instance (never ``None`` —
+            failures raise).
+
+        Raises:
+            RuntimeError: if ``await app.start()`` has not been
+                called (no ``_llm_router`` or ``_conn_mgr`` yet),
+                or if memory is already constructed for a
+                different seed.
+        """
+        if self._memory_engine is not None:
+            if self._memory_world_seed == int(world_seed):
+                return self._memory_engine
+            raise RuntimeError(
+                f"enable_memory(world_seed={world_seed}) but MemoryEngine "
+                f"is already constructed for world_seed={self._memory_world_seed}. "
+                f"One MemoryEngine per VolnixApp; reseeding is a wiring bug."
+            )
+
+        engine = await self._build_and_start_memory_engine(int(world_seed), force_enable=True)
+        # force_enable=True passes a config copy with enabled=True,
+        # so build_memory_engine never short-circuits to None.
+        assert engine is not None, (
+            "_build_and_start_memory_engine returned None despite "
+            "force_enable=True — invariant violated"
+        )
+        return engine
+
+    async def _maybe_setup_memory_engine(self, plan: Any, agency: Any) -> None:
+        """Memory-engine wiring step of ``configure_agency``
+        (``tnl/volnix-app-public-memory-engine.tnl``).
+
+        - If ``enable_memory(world_seed)`` was called before
+          ``configure_agency``, the engine already exists on
+          ``self._memory_engine``; this method skips construction
+          and proceeds directly to the agency-injection step.
+        - Otherwise, the auto-path is gated by
+          ``config.memory.enabled`` and constructs the engine here
+          using ``plan.seed``.
+        - In either case, when ``self._memory_engine`` is non-``None``
+          and the agency exposes ``set_memory_engine``, the agency
+          is wired so ``NPCActivator`` sees the engine via
+          ``host._memory_engine`` during every activation.
+
+        Extracted into a separate method so the
+        already-constructed-engine guard can be tested in isolation
+        without driving the full ``configure_agency`` setup.
+        """
+        if self._memory_engine is None and self._config.memory.enabled:
+            if not hasattr(plan, "seed") or getattr(plan, "seed") is None:
+                raise RuntimeError(
+                    "MemoryEngine requires ``plan.seed``; WorldPlan was "
+                    "constructed without one — this is a wiring bug."
+                )
+            await self._build_and_start_memory_engine(int(plan.seed), force_enable=False)
+
+        if self._memory_engine is not None:
+            # PMF 4B Step 11 — inject into AgencyEngine so
+            # NPCActivator sees it via ``host._memory_engine``
+            # during every activation. ``hasattr`` guard mirrors
+            # the Step-10 cohort-manager wiring pattern.
+            if hasattr(agency, "set_memory_engine"):
+                agency.set_memory_engine(self._memory_engine)
+
     async def configure_agency(
         self,
         plan: Any,
@@ -1633,65 +1866,7 @@ class VolnixApp:
         # AgencyEngine injection. Tier-1 fixture loading via
         # ``fixtures_path`` is reserved for Step 11 / Phase 4C once
         # pack composition surfaces the path.
-        if self._config.memory.enabled:
-            if not hasattr(plan, "seed") or getattr(plan, "seed") is None:
-                raise RuntimeError(
-                    "MemoryEngine requires ``plan.seed``; WorldPlan was "
-                    "constructed without one — this is a wiring bug."
-                )
-            if self._llm_router is None:
-                raise RuntimeError(
-                    "MemoryEngine requires ``self._llm_router``; the LLM "
-                    "router was never initialised. This is a wiring-order "
-                    "bug — memory depends on step 4 of VolnixApp.start()."
-                )
-            from volnix.registry.composition import build_memory_engine
-
-            memory_engine = await build_memory_engine(
-                memory_config=self._config.memory,
-                world_seed=int(plan.seed),
-                llm_router=self._llm_router,
-                connection_manager=self._conn_mgr,
-            )
-            if memory_engine is not None:
-                # D10-4: ledger BEFORE start() so the EngineLifecycleEntry
-                # row from ``_record_lifecycle("start")`` lands on the ledger.
-                memory_engine._ledger = self._ledger
-                await memory_engine.initialize({}, self._bus)
-                # PMF 4B cleanup commit 3 — load Tier-1 pack fixtures
-                # between initialize() and start(). Ordering matters:
-                # initialize runs store.initialize(reset=...) first
-                # (Commit 2's reset behaviour), THEN the loader
-                # populates tier-1 rows, THEN start() wires the
-                # cohort-rotated subscription. Load failures are
-                # raised loudly — a bad fixtures file is a pack-
-                # authoring bug that should surface at startup, not
-                # silently skip.
-                mem_cfg = self._config.memory
-                if mem_cfg.tier_mode == "mixed" and mem_cfg.tier1_fixtures_path:
-                    from pathlib import Path as _Path
-
-                    from volnix.engines.memory.tier1_loader import (
-                        load_tier1_fixtures,
-                    )
-
-                    count = await load_tier1_fixtures(
-                        _Path(mem_cfg.tier1_fixtures_path),
-                        memory_engine._store,
-                    )
-                    logger.info(
-                        "MemoryEngine: loaded %d Tier-1 fixture records from %s",
-                        count,
-                        mem_cfg.tier1_fixtures_path,
-                    )
-                await memory_engine.start()
-                self._memory_engine = memory_engine
-                # PMF 4B Step 11 — inject into AgencyEngine so
-                # NPCActivator sees it via ``host._memory_engine``
-                # during every activation. ``hasattr`` guard mirrors
-                # the Step-10 cohort-manager wiring pattern.
-                if hasattr(agency, "set_memory_engine"):
-                    agency.set_memory_engine(memory_engine)
+        await self._maybe_setup_memory_engine(plan, agency)
 
         await agency.configure(actor_states, world_context, available_actions)
 
@@ -2536,6 +2711,69 @@ class VolnixApp:
     @property
     def run_manager(self) -> RunManager:
         return self._run_manager
+
+    @property
+    def session_manager(self) -> SessionManager:
+        """The platform ``SessionManager`` used for session lifecycle
+        (``start`` / ``resume`` / ``pause`` / ``end`` / ``checkpoint`` /
+        ``pin_slot``).
+
+        Returns the same instance the engine uses internally. Pre-start
+        access returns ``None`` — caller is responsible for awaiting
+        ``start()`` before depending on the instance, matching the
+        convention used by every other public property on this class
+        (``bus``, ``ledger``, ``gateway``, ``pipeline``, ``run_manager``,
+        ``artifact_store``).
+
+        Surfaces ``tnl/volnix-app-public-session-manager.tnl``.
+        """
+        return self._session_manager
+
+    @property
+    def memory(self) -> MemoryEngineProtocol | None:
+        """The ``MemoryEngine`` instance, or ``None`` if memory has
+        not been wired (``tnl/volnix-app-public-memory-engine.tnl``).
+
+        Two construction paths populate this property:
+
+        - ``await app.enable_memory(world_seed)`` — explicit opt-in,
+          bypasses ``config.memory.enabled``.
+        - ``await app.configure_agency(plan, ...)`` — implicit
+          construction when ``config.memory.enabled=True`` and
+          ``plan.seed`` is present.
+
+        Pre-construction access returns ``None`` (memory is
+        optional — unlike ``bus`` / ``ledger`` / ``session_manager``
+        which are always present after ``start()``). The annotation
+        uses ``MemoryEngineProtocol`` (from ``volnix.core.protocols``,
+        already exported in ``volnix.__all__``) rather than the
+        concrete class, matching the architectural rule that
+        callers depend on the protocol surface and the concrete
+        ``MemoryEngine`` is reached only inside the composition
+        root (``volnix.registry.composition``).
+        """
+        return self._memory_engine
+
+    @property
+    def llm_router(self) -> LLMRouter:
+        """The shared ``LLMRouter`` instance.
+
+        Returns the same instance internal callers see at
+        ``self._llm_router``. Pre-start access returns ``None``
+        because the router is constructed during step 4 of
+        ``start()`` (``_initialize_llm()``); caller is responsible
+        for awaiting ``start()`` before depending on the instance,
+        matching every other public engine accessor on this class.
+
+        Exposed so library consumers can construct router-backed
+        components (custom bridge providers, observability shims,
+        cassette-recording providers like Rehearse's
+        ``VolnixLiveProvider``) without reaching into the
+        underscore-prefixed private attribute.
+
+        Surfaces ``tnl/volnix-app-public-llm-router.tnl``.
+        """
+        return self._llm_router
 
     @property
     def artifact_store(self) -> ArtifactStore:

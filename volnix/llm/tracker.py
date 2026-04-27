@@ -38,6 +38,8 @@ class UsageTracker:
         response: LLMResponse,
         engine_name: str,
         actor_id: ActorId | None = None,
+        *,
+        use_case: str = "",
     ) -> None:
         """Record usage from a completed LLM request/response pair.
 
@@ -46,6 +48,10 @@ class UsageTracker:
             response: The LLM response received.
             engine_name: Name of the engine that initiated the request.
             actor_id: Optional actor who triggered the request.
+            use_case: Caller-supplied attribution string forwarded to
+                ``LLMCallEntry.use_case`` verbatim. Default empty
+                string preserves the legacy pre-attribution behavior.
+                See ``tnl/llm-call-entry-use-case-attribution.tnl``.
         """
         async with self._lock:
             # Append ledger entry if a ledger is configured
@@ -60,6 +66,7 @@ class UsageTracker:
                     latency_ms=response.latency_ms,
                     success=response.error is None,
                     engine_name=engine_name,
+                    use_case=use_case,
                 )
                 await self._ledger.append(entry)
 

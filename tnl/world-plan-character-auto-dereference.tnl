@@ -1,0 +1,141 @@
+id: world-plan-character-auto-dereference
+title: Compiler auto-dereferences WorldPlan.characters via a wired CharacterLoader catalog
+scope: feature
+owners: [@TODO]
+paths:
+  - volnix/engines/world_compiler/plan.py
+  - volnix/engines/world_compiler/engine.py
+  - volnix/app.py
+surfaces:
+  - WorldPlan.dereference_characters
+  - VolnixApp.set_character_catalog
+  - WorldCompilerEngine (auto-dereference at generate_world entry)
+dependencies: [workflow]
+
+intent:
+  ``WorldPlan.characters: list[str]`` references character IDs from a
+  consumer-side ``CharacterLoader`` catalog. Today the field is a
+  documented marker only — the compiler doesn't dereference it; every
+  consumer must call ``CharacterDefinition.to_actor_spec()`` themselves
+  and manually append to ``actor_specs`` before passing the plan in.
+  The plan.py docstring explicitly notes: *"Compiler integration
+  (auto-dereference) is deferred to a later step; until then the field
+  is a structured marker."* This change closes that gap: when a
+  CharacterLoader catalog is wired into the app, the compiler resolves
+  every entry in ``plan.characters`` against the catalog and appends
+  the corresponding actor specs at ``generate_world`` entry. Heavy
+  and lightweight paths both auto-dereference.
+
+behaviors:
+  # Value-object helper — usable without compiler integration too
+  - ``WorldPlan`` MUST gain a ``dereference_characters(catalog: dict[str, CharacterDefinition]) -> WorldPlan`` method.
+    Returns a NEW frozen WorldPlan (via ``model_copy(update=...)``)
+    with each entry in ``self.characters`` resolved against
+    ``catalog`` and the resulting ``CharacterDefinition.to_actor_spec()``
+    output appended to ``actor_specs``. The returned plan's
+    ``characters`` list is reset to ``[]`` (the dereference has been
+    applied; no need to re-resolve).
+  - When ``self.characters`` is empty, ``dereference_characters``
+    MUST be a no-op — return ``self`` unchanged. Frozen-Pydantic
+    instance identity is acceptable; no need to construct a copy.
+  - When an entry in ``self.characters`` has no matching key in
+    ``catalog``, ``dereference_characters`` MUST raise
+    ``WorldPlanValidationError`` listing every dangling reference
+    (not just the first). The message MUST name the dangling IDs
+    so the caller can fix the catalog.
+  - When a character id appears in BOTH ``self.characters`` AND in
+    an existing ``actor_specs`` entry's ``id`` field,
+    ``dereference_characters`` MUST raise
+    ``WorldPlanValidationError``. Conflict detection compares the
+    catalog entry's ``to_actor_spec()`` output's ``id`` against
+    every existing ``actor_specs[*]["id"]``. Duplicates fail loud.
+
+  # App-facade catalog wiring
+  - ``VolnixApp`` MUST gain a ``set_character_catalog(catalog: dict[str, CharacterDefinition]) -> None``
+    method. Stores the catalog on ``self._character_catalog`` (a new
+    private attribute initialized to ``None`` in ``__init__``).
+    Setter is idempotent — calling it twice replaces the catalog
+    silently. Calling it with ``None`` clears the catalog.
+  - The setter MAY be called before OR after ``await app.start()``
+    — but only catalogs set BEFORE ``start()`` flow into the
+    compiler's config. Late-wired catalogs MUST raise
+    ``RuntimeError("set_character_catalog must be called before app.start()")``
+    so consumers don't silently miss the auto-dereference.
+  - On ``app.start()``, the catalog (if set) MUST be passed into
+    the world compiler's config dict as ``_character_catalog``.
+    The composition-root pattern matches how ``_kernel``,
+    ``_pack_registry``, ``_state_engine``, ``_actor_registry`` are
+    wired: a config key the engine reads at ``_on_initialize``.
+
+  # Compiler-side hook
+  - ``WorldCompilerEngine`` MUST read ``_character_catalog`` from
+    its config at ``_on_initialize`` and store it on
+    ``self._character_catalog`` (default ``None`` if absent).
+  - At the top of ``generate_world(plan)`` AND at the top of
+    ``_generate_lightweight_world(plan)``, when BOTH
+    ``self._character_catalog is not None`` AND ``plan.characters``
+    is non-empty, the compiler MUST call ``plan = plan.dereference_characters(self._character_catalog)``.
+    The dereferenced plan is what flows through the rest of the
+    pipeline (heavy or lightweight).
+  - When ``self._character_catalog is None`` but ``plan.characters``
+    is non-empty, the compiler MUST log a single
+    ``logger.warning`` line per ``generate_world`` call
+    (``"WorldPlan.characters populated but no CharacterLoader catalog wired — entries will not be dereferenced"``).
+    Compilation proceeds unchanged. This preserves backward
+    compat for callers that pre-dereference themselves.
+
+  # Phase 0 regression oracle
+  - Existing callers that don't wire a catalog AND don't populate
+    ``plan.characters`` MUST be byte-identical (no warning, no
+    dereference, no behavior change). The two added attributes
+    (``WorldPlan.dereference_characters`` method,
+    ``VolnixApp._character_catalog``) are dormant when neither
+    side is exercised.
+
+non-goals:
+  - No new ``CharacterLoader`` exports or path-discovery helpers.
+    The consumer still constructs the loader and calls
+    ``load_directory(...)`` themselves; ``set_character_catalog``
+    just receives the resulting dict.
+  - No ``VolnixConfig`` field for a catalog directory path. The
+    consumer wires the catalog programmatically via the setter,
+    not through TOML. Adding a config field would couple Volnix
+    to filesystem-discovery semantics that downstream products
+    may want to override (e.g., catalog from API, from DB, from
+    embedded resources).
+  - No catalog-update events on the bus when ``set_character_catalog``
+    fires. The setter is plumbing, not behavior.
+  - No batch-dereference helper that operates on multiple plans.
+    One plan, one call.
+  - No retroactive update of ``plan.characters`` on the
+    compiler-pass-through path (when no catalog is wired). The
+    field is left as-is; the warning surfaces the misconfiguration
+    so the caller fixes it explicitly.
+  - No change to ``validate_character_refs`` (the existing
+    consumer-side validation helper). It remains useful for
+    consumers who want to validate before constructing the
+    compiler.
+
+rationale:
+  Two pieces of plumbing for one feature. The value-object helper
+  (``dereference_characters``) is independently useful — consumers
+  who don't want compiler-side auto-dereference (e.g., they
+  validate the plan before pickling and shipping it across a
+  process boundary) can call it explicitly. The compiler-side hook
+  is the convenience: when the catalog is wired, plans with
+  ``characters`` "just work" without per-call boilerplate.
+
+  The setter-on-VolnixApp wiring matches how the consumer already
+  thinks about the catalog — they construct a CharacterLoader,
+  load it, and hand it to the platform. No config-file path,
+  no env var, no implicit discovery. The setter's
+  before-start-only constraint protects against the silent-miss
+  failure mode (consumer wires catalog after start, dereference
+  has already happened or hasn't, behavior depends on timing).
+
+  The "no catalog wired" warning (rather than error) preserves
+  backward compat: existing code that pre-dereferences and never
+  populates ``plan.characters`` is byte-identical. Existing code
+  that populates ``plan.characters`` AND pre-dereferences (the
+  current "structured marker" usage) gets a warning pointing at
+  the misconfiguration but continues to work.

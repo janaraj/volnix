@@ -183,6 +183,41 @@ class LLMResponse(BaseModel, frozen=True):
     latency_ms: float = 0.0
     error: str | None = None
     provider_metadata: dict[str, Any] | None = None
+
+
+class LLMStreamChunk(BaseModel, frozen=True):
+    """One chunk yielded by ``LLMProvider.stream_generate`` /
+    ``LLMRouter.route_streaming``.
+
+    Surfaces ``tnl/llm-router-streaming-surface.tnl``.
+
+    Attributes:
+        content_delta: Incremental content text for this chunk. May
+            be empty (e.g., a chunk that carries only metadata or a
+            usage update).
+        usage_delta: Incremental usage from this chunk. ``None``
+            when the provider doesn't report mid-stream usage; the
+            FINAL chunk always carries the cumulative ``LLMUsage``
+            so callers can total spend without re-aggregating.
+        is_final: ``True`` only on the last chunk. Lets callers
+            detect end-of-stream without relying on iterator
+            exhaustion.
+        provider: The provider that produced this chunk. Stamped on
+            every chunk for observability.
+        model: The model that produced this chunk. Stamped on every
+            chunk for observability.
+        error: Populated when the stream fails mid-flight. The
+            error-bearing chunk is the LAST chunk yielded; the
+            iterator stops after it. ``content_delta`` may be
+            partial (whatever arrived before the error).
+    """
+
+    content_delta: str = ""
+    usage_delta: LLMUsage | None = None
+    is_final: bool = False
+    provider: str = ""
+    model: str = ""
+    error: str | None = None
     # Opaque per-turn metadata the provider wants round-tripped on the next
     # request. Anthropic uses this to carry extended-thinking blocks
     # (``{"thinking_blocks": [{"type": "thinking", ...}, ...]}``). The agency
